@@ -1,0 +1,73 @@
+name = "evavo-outbound-agent"
+main = "src/index.ts"
+compatibility_date = "2026-02-27"
+
+# Enable workers.dev URL (your deployed endpoint)
+workers_dev = true
+
+# Disable preview URLs noise
+preview_urls = false
+
+#################################################
+# CRON SCHEDULE
+#################################################
+
+# Runs hourly + once daily
+# Times are UTC
+# 02:15 UTC ≈ 1:15pm Melbourne (AEDT)
+triggers = { crons = ["0 * * * *", "15 2 * * *"] }
+
+#################################################
+# D1 DATABASE
+#################################################
+
+[[d1_databases]]
+binding = "DB"
+database_name = "evavo_outbound_agent"
+database_id = "45de1891-75df-44ae-9b7e-9a17f139c426"
+
+#################################################
+# CLOUDFLARE AI
+#################################################
+
+[ai]
+binding = "AI"
+
+#################################################
+# ENVIRONMENT VARIABLES
+#################################################
+
+[vars]
+
+# Public display name
+PUBLIC_ENGINE_NAME = "EVAVO Outbound Assistant"
+
+# Safety caps
+CAP_CRAWL_PER_DAY = "60"
+CAP_DRAFTS_PER_DAY = "25"
+CAP_SEND_PER_DAY = "12"
+
+# Lead weighting
+WEIGHT_PARTNER = "1.35"
+WEIGHT_REBUILD = "1.0"
+WEIGHT_TEARDOWN = "0.9"
+
+# Brand identity
+BRAND_NAME = "EVAVO Studio"
+BRAND_DOMAIN = "evavo.com.au"
+BRAND_COUNTRIES = "AU,NZ"
+
+#################################################
+# SECRETS (set via wrangler secret put)
+#################################################
+
+# Required:
+# ADMIN_TOKEN
+
+# Optional (used only for nicer unsubscribe messaging / future website integration):
+# PUBLIC_BASE_URL
+
+# Optional (only if email sending enabled):
+# MAILCHANNELS_API_KEY
+# FROM_EMAIL
+# REPLY_TO_EMAIL

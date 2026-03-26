@@ -8,11 +8,6 @@ import {
   setSetting,
 } from "../db";
 
-/**
- * Apply CORS headers to a response. Public API responses always include CORS
- * headers allowing any origin. The caller’s origin header is echoed if
- * present; otherwise '*' is used.
- */
 function withCors(res: Response, origin: string | null): Response {
   const headers = new Headers(res.headers);
   headers.set("access-control-allow-origin", origin || "*");
@@ -50,29 +45,20 @@ export async function handlePublic(
   json: (data: any, init?: ResponseInit) => Response
 ): Promise<Response> {
   const origin = req.headers.get("origin");
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return withCors(new Response(null, { status: 204 }), origin);
-  }
+  if (req.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
   const path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
 
   if (req.method === "GET" && path === "public/status") {
-    // Gather engine status and budgets
     const stats = await getTodayStats(env);
     const lastRunRaw = (await getSetting(env, "last_engine_run")) || null;
     let lastRun: any = null;
     if (lastRunRaw) {
-      try {
-        lastRun = JSON.parse(lastRunRaw);
-      } catch {
-        lastRun = null;
-      }
+      try { lastRun = JSON.parse(lastRunRaw); } catch {}
     }
-    // Daily caps (default values if missing)
-    const crawlCap = Number((await getSetting(env, "crawl_cap_per_day")) || 50);
-    const aiCap = Number((await getSetting(env, "draft_cap_per_day")) || 30);
-    const sendCap = Number((await getSetting(env, "send_cap_per_day")) || 25);
-    // Compute budgets
+    const crawlCap = Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60);
+    const aiCap = Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25);
+    const sendCap = Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12);
+
     const budgets = {
       crawl: {
         scannedToday: stats.leadsNewToday,
@@ -85,53 +71,53 @@ export async function handlePublic(
         remaining: Math.max(0, aiCap - stats.draftsCreatedToday),
       },
       send: {
-        // Use approvalsToday as a proxy for sent emails since sends follow approvals
-        sentToday: stats.approvalsToday,
+        sentToday: stats.sendsSentToday,
         capPerDay: sendCap,
-        remaining: Math.max(0, sendCap - stats.approvalsToday),
+        remaining: Math.max(0, sendCap - stats.sendsSentToday),
       },
     };
-    // Compute top slices (classification distribution)
-    async function computeTopSlices(): Promise<{ label: string; value: number }[]> {
+
+    const topSlices = await (async () => {
       try {
         const { results } = (await env.DB.prepare(
-          `SELECT json_extract(data, '$.classification') as class, COUNT(*) as count FROM leads WHERE data IS NOT NULL GROUP BY class`
+          `SELECT json_extract(data, '$.classification') as class, COUNT(*) as count
+           FROM leads
+           WHERE data IS NOT NULL
+           GROUP BY class`
         ).all()) as { results: any[] };
-        const total = results.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0;
-        const slices = results
-          .map((r) => ({ label: r.class || "unknown", value: total ? Math.round((Number(r.count) / total) * 100) : 0 }))
-          .filter((r) => r.value > 0)
+        const total = results.reduce((sum, row) => sum + Number(row.count || 0), 0) || 0;
+        return results
+          .map((row) => ({
+            label: row.class || "unknown",
+            value: total ? Math.round((Number(row.count) / total) * 100) : 0,
+          }))
+          .filter((row) => row.value > 0)
           .sort((a, b) => b.value - a.value)
-          .slice(0, 3);
-        return slices;
+          .slice(0, 6);
       } catch {
         return [];
       }
-    }
-    const topSlices = await computeTopSlices();
-    const response = json({
+    })();
+
+    return withCors(json({
       ok: true,
       nowISO: new Date().toISOString(),
       engine: {
         enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
-        sendingEnabled:
-          ((await getSetting(env, "sending_enabled")) || "0") !== "0" &&
-          !!env.MAILCHANNELS_API_KEY &&
-          !!env.FROM_EMAIL,
+        sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") !== "0" && !!env.MAILCHANNELS_API_KEY && !!env.FROM_EMAIL,
         pausedReason: (await getSetting(env, "engine_paused_reason")) || null,
         lastRun,
       },
       budgets,
       stats,
       topSlices,
-    });
-    return withCors(response, origin);
+    }), origin);
   }
 
   if (req.method === "GET" && path === "public/events") {
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 18)));
     const events = await listEvents(env, limit);
-    const response = json({
+    return withCors(json({
       ok: true,
       events: events.map((event) => ({
         id: event.id,
@@ -139,12 +125,11 @@ export async function handlePublic(
         message: humanizePublicEvent(event.type, event.message),
         created_at_iso: event.created_at_iso,
       })),
-    });
-    return withCors(response, origin);
+    }), origin);
   }
 
   if (req.method === "GET" && path === "public/unsubscribe") {
-    const email = (url.searchParams.get("email") || "").trim().toLowerCase();
+    const email = String(url.searchParams.get("email") || "").trim().toLowerCase();
     if (!email) return withCors(json({ ok: false, error: "missing_email" }, { status: 400 }), origin);
     await addSuppression(env, email, "unsubscribed");
     await logEvent(env, "unsubscribe", `Unsubscribed ${email}`);

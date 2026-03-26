@@ -1,32 +1,38 @@
 import type { Env } from "../db";
-import { addSuppression, getSetting, listEvents, logEvent, setSetting } from "../db";
-import { getTodayStats } from "../engine";
+import {
+  getTodayStats,
+  getSetting,
+  listEvents,
+  addSuppression,
+  logEvent,
+  setSetting,
+} from "../db";
 
-function withCors(res: Response, origin: string | null) {
+/**
+ * Apply CORS headers to a response. Public API responses always include CORS
+ * headers allowing any origin. The caller’s origin header is echoed if
+ * present; otherwise '*' is used.
+ */
+function withCors(res: Response, origin: string | null): Response {
   const headers = new Headers(res.headers);
   headers.set("access-control-allow-origin", origin || "*");
   headers.set("access-control-allow-credentials", "true");
   headers.set("access-control-allow-headers", "Content-Type, Authorization");
   headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
   headers.set("vary", "Origin");
-  headers.set("content-type", "application/json; charset=utf-8");
   return new Response(res.body, { status: res.status, headers });
 }
 
-function humanizePublicEvent(type: string, message: string) {
+function humanizePublicEvent(type: string, message: string): string {
   switch (type) {
     case "tick_ok":
       return "System cycle completed.";
-    case "discover_summary":
-      return message.replace(/^Seed processed:\s*/i, "Discovery cycle: ");
+    case "tick_fail":
+      return "System cycle failed.";
     case "scan_ok":
       return message.replace(/^Scanned\s+/i, "Site scanned: ");
-    case "scan_fail":
-      return "A site scan failed.";
     case "draft_created":
       return "A draft was prepared for review.";
-    case "draft_skip":
-      return message;
     case "send_ok":
       return "An approved email was sent.";
     case "send_fail":
@@ -44,53 +50,80 @@ export async function handlePublic(
   json: (data: any, init?: ResponseInit) => Response
 ): Promise<Response> {
   const origin = req.headers.get("origin");
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return withCors(new Response(null, { status: 204 }), origin);
   }
-
   const path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
 
   if (req.method === "GET" && path === "public/status") {
+    // Gather engine status and budgets
     const stats = await getTodayStats(env);
+    const lastRunRaw = (await getSetting(env, "last_engine_run")) || null;
+    let lastRun: any = null;
+    if (lastRunRaw) {
+      try {
+        lastRun = JSON.parse(lastRunRaw);
+      } catch {
+        lastRun = null;
+      }
+    }
+    // Daily caps (default values if missing)
+    const crawlCap = Number((await getSetting(env, "crawl_cap_per_day")) || 50);
+    const aiCap = Number((await getSetting(env, "draft_cap_per_day")) || 30);
+    const sendCap = Number((await getSetting(env, "send_cap_per_day")) || 25);
+    // Compute budgets
+    const budgets = {
+      crawl: {
+        scannedToday: stats.leadsNewToday,
+        capPerDay: crawlCap,
+        remaining: Math.max(0, crawlCap - stats.leadsNewToday),
+      },
+      ai: {
+        usedToday: stats.draftsCreatedToday,
+        capPerDay: aiCap,
+        remaining: Math.max(0, aiCap - stats.draftsCreatedToday),
+      },
+      send: {
+        // Use approvalsToday as a proxy for sent emails since sends follow approvals
+        sentToday: stats.approvalsToday,
+        capPerDay: sendCap,
+        remaining: Math.max(0, sendCap - stats.approvalsToday),
+      },
+    };
+    // Compute top slices (classification distribution)
+    async function computeTopSlices(): Promise<{ label: string; value: number }[]> {
+      try {
+        const { results } = (await env.DB.prepare(
+          `SELECT json_extract(data, '$.classification') as class, COUNT(*) as count FROM leads WHERE data IS NOT NULL GROUP BY class`
+        ).all()) as { results: any[] };
+        const total = results.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0;
+        const slices = results
+          .map((r) => ({ label: r.class || "unknown", value: total ? Math.round((Number(r.count) / total) * 100) : 0 }))
+          .filter((r) => r.value > 0)
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 3);
+        return slices;
+      } catch {
+        return [];
+      }
+    }
+    const topSlices = await computeTopSlices();
     const response = json({
       ok: true,
       nowISO: new Date().toISOString(),
       engine: {
         enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
         sendingEnabled:
-          ((await getSetting(env, "sending_enabled")) || "0") !== "0" && !!env.MAILCHANNELS_API_KEY && !!env.FROM_EMAIL,
+          ((await getSetting(env, "sending_enabled")) || "0") !== "0" &&
+          !!env.MAILCHANNELS_API_KEY &&
+          !!env.FROM_EMAIL,
         pausedReason: (await getSetting(env, "engine_paused_reason")) || null,
+        lastRun,
       },
-      budgets: {
-        ai: {
-          usedToday: Number((await getSetting(env, "ai_used_today")) || 0),
-          capPerDay: Number((await getSetting(env, "draft_cap_per_day")) || 25),
-          remaining: Math.max(0, Number((await getSetting(env, "draft_cap_per_day")) || 25) - Number((await getSetting(env, "ai_used_today")) || 0)),
-        },
-        crawl: {
-          scannedToday: Number((await getSetting(env, "crawl_scanned_today")) || 0),
-          capPerDay: Number((await getSetting(env, "crawl_cap_per_day")) || 60),
-          remaining: Math.max(0, Number((await getSetting(env, "crawl_cap_per_day")) || 60) - Number((await getSetting(env, "crawl_scanned_today")) || 0)),
-        },
-        send: {
-          sentToday: Number((await getSetting(env, "send_sent_today")) || 0),
-          capPerDay: Number((await getSetting(env, "send_cap_per_day")) || 12),
-          remaining: Math.max(0, Number((await getSetting(env, "send_cap_per_day")) || 12) - Number((await getSetting(env, "send_sent_today")) || 0)),
-        },
-      },
-      stats: {
-        leadsNewToday: stats.leadsNewToday,
-        draftsCreatedToday: stats.draftsCreatedToday,
-        approvalsToday: stats.approvalsToday,
-        repliesToday: stats.repliesToday,
-        bouncesToday: stats.bouncesToday,
-        unsubscribesToday: stats.unsubscribesToday,
-      },
-      topSlices: [
-        { label: "Partner overflow", value: 38 },
-        { label: "Rebuilds", value: 34 },
-        { label: "Teardowns", value: 28 },
-      ],
+      budgets,
+      stats,
+      topSlices,
     });
     return withCors(response, origin);
   }

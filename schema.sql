@@ -1,70 +1,51 @@
-PRAGMA foreign_keys = ON;
+-- Schema for the EVAVO outbound worker
+-- This file defines all tables and indexes used by the application. Run it
+-- against your D1 database using `wrangler d1 execute`.
 
+-- Settings table stores arbitrary key/value pairs. Also used to persist
+-- distributed locks when the key starts with `lock:`.
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+  value TEXT,
+  updated_at_iso TEXT
 );
 
+-- Leads table tracks discovered websites and the pipeline status for each.
 CREATE TABLE IF NOT EXISTS leads (
   id TEXT PRIMARY KEY,
-  company_name TEXT NOT NULL,
-  website_url TEXT NOT NULL,
-  country TEXT NOT NULL DEFAULT 'UNK',
-  region TEXT,
-  category TEXT NOT NULL DEFAULT 'other',
-  discovery_source TEXT,
-  contact_email TEXT,
-  contact_page_url TEXT,
-  has_contact_form INTEGER NOT NULL DEFAULT 0,
-  signals_json TEXT NOT NULL DEFAULT '[]',
-  score_fit INTEGER NOT NULL DEFAULT 0,
-  score_contact INTEGER NOT NULL DEFAULT 0,
-  score_risk INTEGER NOT NULL DEFAULT 0,
-  score_total INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'new',
+  website TEXT NOT NULL,
+  status TEXT NOT NULL,
+  data TEXT,
   created_at_iso TEXT NOT NULL,
-  updated_at_iso TEXT NOT NULL,
-  lead_class TEXT DEFAULT 'low_signal',
-  all_emails_json TEXT DEFAULT '[]',
-  lead_brief_json TEXT DEFAULT '{}',
-  score_breakdown_json TEXT DEFAULT '{}',
-  last_scanned_at_iso TEXT
+  updated_at_iso TEXT NOT NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
-CREATE INDEX IF NOT EXISTS idx_leads_score ON leads(score_total);
-CREATE INDEX IF NOT EXISTS idx_leads_class ON leads(lead_class);
 
+-- Drafts table stores email drafts prepared for leads.
 CREATE TABLE IF NOT EXISTS drafts (
   id TEXT PRIMARY KEY,
-  lead_id TEXT NOT NULL,
-  mode TEXT NOT NULL DEFAULT 'email',
+  lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
   subject TEXT NOT NULL,
-  body_text TEXT NOT NULL,
-  followup_text TEXT NOT NULL DEFAULT '',
-  why_json TEXT NOT NULL DEFAULT '[]',
-  status TEXT NOT NULL DEFAULT 'queued',
+  body TEXT NOT NULL,
   created_at_iso TEXT NOT NULL,
-  updated_at_iso TEXT NOT NULL,
-  FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
+  updated_at_iso TEXT NOT NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
-CREATE INDEX IF NOT EXISTS idx_drafts_lead ON drafts(lead_id);
 
+-- Events table logs system actions and errors for observability.
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
   message TEXT NOT NULL,
-  lead_id TEXT,
+  meta TEXT,
   created_at_iso TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at_iso);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 
-CREATE TABLE IF NOT EXISTS suppressions (
+-- Suppression list stores unsubscribed email addresses.
+CREATE TABLE IF NOT EXISTS suppression (
   email TEXT PRIMARY KEY,
-  reason TEXT NOT NULL,
+  reason TEXT,
   created_at_iso TEXT NOT NULL
 );

@@ -1,540 +1,398 @@
-// src/db.ts
-// D1 helpers for EVAVO Outbound Agent
+import { randomUUID } from "crypto";
 
-export interface Env {
-  DB: D1Database;
-  AI: any;
-
-  ADMIN_TOKEN?: string;
-  MAILCHANNELS_API_KEY?: string;
-  FROM_EMAIL?: string;
-  REPLY_TO_EMAIL?: string;
-  PUBLIC_BASE_URL?: string;
-
-  PUBLIC_ENGINE_NAME?: string;
-  WORKER_PUBLIC_ORIGIN?: string;
-  BRAND_NAME?: string;
-  BRAND_DOMAIN?: string;
-  BRAND_COUNTRIES?: string;
-  CAP_CRAWL_PER_DAY?: string;
-  CAP_DRAFTS_PER_DAY?: string;
-  CAP_SEND_PER_DAY?: string;
-
-  WEIGHT_PARTNER?: string;
-  WEIGHT_REBUILD?: string;
-  WEIGHT_TEARDOWN?: string;
-
-  PUBLIC_CONTROL_KEY?: string;
-}
+/**
+ * Database helper module for the Outbound Agent.
+ *
+ * This module centralises all reads and writes to the underlying D1 database and
+ * exposes a strongly‑typed interface. It also introduces simple locking
+ * primitives to prevent concurrent runs of the engine. Each function
+ * documents the expected semantics and returns plain objects rather than
+ * exposing raw SQL statements. Any schema changes should be performed in
+ * `schema.sql` and mirrored here.
+ */
 
 export type LeadStatus =
   | "new"
   | "scanned"
-  | "qualified"
   | "drafted"
   | "approved"
   | "sent"
-  | "replied"
-  | "bounced"
-  | "unsubscribed"
-  | "do_not_contact"
-  | "rejected";
+  | "failed";
 
-export type DraftStatus = "queued" | "approved" | "sent" | "failed" | "rejected";
-export type LeadClass = "ideal_client" | "possible_partner" | "agency_peer" | "low_signal" | "do_not_contact";
+export type DraftStatus = "created" | "approved" | "sent" | "failed";
 
-export type LeadBrief = {
-  companyName: string | null;
-  businessType: string | null;
-  geoHint: string | null;
-  summary: string;
-  siteQualitySummary: string;
-  siteFlags: string[];
-  serviceTags: string[];
-  techTags: string[];
-  outreachAngles: string[];
-  groundedFacts: string[];
-  avoidSaying: string[];
-  contactSummary: string;
-  confidence: "low" | "medium" | "high";
-};
+export type SendStatus = "pending" | "sent" | "failed";
 
-export type ScoreBreakdown = {
-  fit: number;
-  contactability: number;
-  opportunity: number;
-  risk: number;
-  total: number;
-};
-
-export type LeadRow = {
+export interface LeadRow {
   id: string;
-  company_name: string;
-  website_url: string;
-  country: string;
-  region: string | null;
-  category: string;
-  discovery_source: string | null;
-  contact_email: string | null;
-  contact_page_url: string | null;
-  has_contact_form: number;
-  signals_json: string;
-  score_fit: number;
-  score_contact: number;
-  score_risk: number;
-  score_total: number;
+  website: string;
   status: LeadStatus;
   created_at_iso: string;
   updated_at_iso: string;
-  lead_class?: LeadClass | null;
-  all_emails_json?: string | null;
-  lead_brief_json?: string | null;
-  score_breakdown_json?: string | null;
-  last_scanned_at_iso?: string | null;
-};
+  // Additional fields parsed from JSON columns (score, brief, etc.) are
+  // intentionally omitted here for brevity. Consumers should parse these
+  // properties via the `safeJsonParse` helper when needed.
+  data?: any;
+}
 
-export type DraftRow = {
+export interface DraftRow {
   id: string;
   lead_id: string;
-  subject: string;
-  body: string;
-  followup_text?: string;
-  why_json?: string;
   status: DraftStatus;
   created_at_iso: string;
   updated_at_iso: string;
-};
+  subject: string;
+  body: string;
+}
 
-export type EventRow = {
-  id: string;
-  type: string;
-  message: string;
-  lead_id: string | null;
-  created_at_iso: string;
-};
+export interface Env {
+  DB: D1Database;
+  KV?: any;
+  // Settings for sending emails
+  MAILCHANNELS_API_KEY?: string;
+  FROM_EMAIL?: string;
+  REPLY_TO_EMAIL?: string;
+  BRAND_NAME?: string;
+  PUBLIC_CONTROL_KEY?: string;
+}
 
-export function nowISO() {
+// -----------------------------------------------------------------------------
+// Helpers
+//
+// A handful of helper functions make it safer to work with JSON columns and
+// timestamps. Use these helpers throughout the worker rather than ad‑hoc
+// implementations scattered in different modules.
+
+/**
+ * Attempt to parse a JSON value, returning undefined if parsing fails.
+ */
+export function safeJsonParse<T>(value: unknown): T | undefined {
+  try {
+    if (typeof value === "string") return JSON.parse(value) as T;
+    return value as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Generate a RFC4122 v4 UUID using the crypto module. Workers
+ * polyfill crypto.randomUUID by default, but Node’s implementation is used
+ * here to keep parity in test environments.
+ */
+export function uuid(): string {
+  return randomUUID();
+}
+
+/**
+ * Return the current ISO timestamp. All dates persisted to the DB should
+ * originate from this helper to enforce consistent formatting.
+ */
+export function nowISO(): string {
   return new Date().toISOString();
 }
 
-export function uuid() {
-  return crypto.randomUUID();
+// -----------------------------------------------------------------------------
+// Settings and Locks
+//
+// Settings are stored in a generic key/value table (`settings`) and typed
+// accordingly. Locks live in the same table with a special prefix and an
+// expiration timestamp. The helper functions below abstract reading and
+// writing to this table and apply simple TTL semantics for locks.
+
+const LOCK_PREFIX = "lock:";
+
+interface SettingRow {
+  key: string;
+  value: string | null;
+  updated_at_iso: string;
 }
 
-type TableInfoRow = {
-  cid: number;
-  name: string;
-  type: string;
-  notnull: number;
-  dflt_value: string | null;
-  pk: number;
-};
-
-type LeadSchema = {
-  hasLeadClass: boolean;
-  hasAllEmails: boolean;
-  hasLeadBrief: boolean;
-  hasScoreBreakdown: boolean;
-  hasLastScanned: boolean;
-};
-
-type DraftSchema = {
-  bodyColumn: string;
-  followupColumn: string | null;
-  whyJsonColumn: string | null;
-  modeColumn: string | null;
-  statusColumn: string | null;
-};
-
-let leadSchemaCache: LeadSchema | null = null;
-let draftSchemaCache: DraftSchema | null = null;
-
-async function loadLeadSchema(env: Env): Promise<LeadSchema> {
-  if (leadSchemaCache) return leadSchemaCache;
-  const info = await env.DB.prepare("PRAGMA table_info(leads)").all<TableInfoRow>();
-  const rows = (info.results || []) as TableInfoRow[];
-  const names = new Set(rows.map((r) => String(r.name || "").toLowerCase()));
-  leadSchemaCache = {
-    hasLeadClass: names.has("lead_class"),
-    hasAllEmails: names.has("all_emails_json"),
-    hasLeadBrief: names.has("lead_brief_json"),
-    hasScoreBreakdown: names.has("score_breakdown_json"),
-    hasLastScanned: names.has("last_scanned_at_iso"),
-  };
-  return leadSchemaCache;
-}
-
-async function loadDraftSchema(env: Env): Promise<DraftSchema> {
-  if (draftSchemaCache) return draftSchemaCache;
-  const info = await env.DB.prepare("PRAGMA table_info(drafts)").all<TableInfoRow>();
-  const rows = (info.results || []) as TableInfoRow[];
-  const names = new Set(rows.map((r) => String(r.name || "").toLowerCase()));
-  draftSchemaCache = {
-    bodyColumn: names.has("body_text") ? "body_text" : names.has("body") ? "body" : "body_text",
-    followupColumn: names.has("followup_text") ? "followup_text" : null,
-    whyJsonColumn: names.has("why_json") ? "why_json" : null,
-    modeColumn: names.has("mode") ? "mode" : null,
-    statusColumn: names.has("status") ? "status" : null,
-  };
-  return draftSchemaCache;
-}
-
-export function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
+/**
+ * Retrieve a setting by key. Missing keys resolve to undefined.
+ */
 export async function getSetting(env: Env, key: string): Promise<string | null> {
-  const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<any>();
-  return (row?.value ?? null) as string | null;
+  const { results } = (await env.DB.prepare(
+    `SELECT value FROM settings WHERE key = ? LIMIT 1`
+  )
+    .bind(key)
+    .all()) as { results: SettingRow[] };
+  return results.length ? (results[0].value ?? null) : null;
 }
 
+/**
+ * Persist a setting. If the key exists, its value and updated_at timestamp
+ * are replaced.
+ */
 export async function setSetting(env: Env, key: string, value: string): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    `INSERT INTO settings (key, value, updated_at_iso) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at_iso=excluded.updated_at_iso`
   )
-    .bind(key, value)
+    .bind(key, value, nowISO())
     .run();
 }
 
-export async function setSettings(env: Env, patch: Record<string, string>): Promise<void> {
-  for (const [key, value] of Object.entries(patch)) {
-    await setSetting(env, key, value);
+/**
+ * Acquire a lock for a given key. Returns a token if the lock is acquired or
+ * null if it is currently held. Locks expire automatically after `ttlSeconds`.
+ */
+export async function tryAcquireLock(
+  env: Env,
+  key: string,
+  ttlSeconds: number
+): Promise<string | null> {
+  const lockKey = `${LOCK_PREFIX}${key}`;
+  // Clear expired lock
+  const existing = await getSetting(env, lockKey);
+  if (existing) {
+    const { token, expires }: { token: string; expires: number } = safeJsonParse(existing) || {};
+    const now = Date.now();
+    if (expires > now) {
+      return null;
+    }
   }
+  const token = uuid();
+  const expires = Date.now() + ttlSeconds * 1000;
+  await setSetting(env, lockKey, JSON.stringify({ token, expires }));
+  return token;
 }
 
-export async function listSettings(env: Env): Promise<Record<string, string>> {
-  const rows = await env.DB.prepare("SELECT key, value FROM settings ORDER BY key ASC").all<any>();
-  const out: Record<string, string> = {};
-  for (const row of rows.results || []) out[String(row.key)] = String(row.value ?? "");
-  return out;
+/**
+ * Release a previously acquired lock. Only the lock holder (identified by
+ * matching token) can release it. Returns true if released.
+ */
+export async function releaseLock(
+  env: Env,
+  key: string,
+  token: string | null
+): Promise<boolean> {
+  if (!token) return false;
+  const lockKey = `${LOCK_PREFIX}${key}`;
+  const existing = await getSetting(env, lockKey);
+  if (existing) {
+    const { token: storedToken } = safeJsonParse(existing) || {};
+    if (storedToken === token) {
+      await env.DB.prepare(`DELETE FROM settings WHERE key = ?`).bind(lockKey).run();
+      return true;
+    }
+  }
+  return false;
 }
 
-export async function logEvent(env: Env, type: string, message: string, leadId?: string | null): Promise<void> {
+// -----------------------------------------------------------------------------
+// Event Logging
+//
+// Events are used to track system behaviour for debugging and analytics. Each
+// log entry records a type, a message, optional JSON metadata and a timestamp.
+
+export async function logEvent(
+  env: Env,
+  type: string,
+  message: string,
+  meta: Record<string, any> | null = null
+): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO events(id, type, message, lead_id, created_at_iso) VALUES (?, ?, ?, ?, ?)"
+    `INSERT INTO events (id, type, message, meta, created_at_iso)
+     VALUES (?, ?, ?, ?, ?)`
   )
-    .bind(uuid(), type, message.slice(0, 5000), leadId ?? null, nowISO())
+    .bind(uuid(), type, message, JSON.stringify(meta || {}), nowISO())
     .run();
 }
 
-export async function bump(env: Env, key: string, delta = 1): Promise<number> {
-  const current = parseInt((await getSetting(env, key)) || "0", 10) || 0;
-  const next = current + delta;
-  await setSetting(env, key, String(next));
-  return next;
+export async function listEvents(env: Env, limit = 50): Promise<Array<{ id: string; type: string; message: string; created_at_iso: string }>> {
+  const { results } = (await env.DB.prepare(
+    `SELECT id, type, message, created_at_iso FROM events ORDER BY created_at_iso DESC LIMIT ?`
+  )
+    .bind(limit)
+    .all()) as { results: any[] };
+  return results;
 }
 
-export async function addSuppression(env: Env, email: string, reason = "unsubscribed"): Promise<void> {
-  const cleaned = (email || "").trim().toLowerCase();
-  if (!cleaned) return;
+// -----------------------------------------------------------------------------
+// Suppression
+//
+// The suppression list stores unsubscribed email addresses along with a reason.
+
+export async function addSuppression(env: Env, email: string, reason: string): Promise<void> {
+  const now = nowISO();
   await env.DB.prepare(
-    "INSERT INTO suppressions(email, reason, created_at_iso) VALUES (?, ?, ?) ON CONFLICT(email) DO UPDATE SET reason = excluded.reason, created_at_iso = excluded.created_at_iso"
+    `INSERT INTO suppression (email, reason, created_at_iso)
+     VALUES (?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET reason = excluded.reason, created_at_iso = excluded.created_at_iso`
   )
-    .bind(cleaned, reason.slice(0, 200), nowISO())
+    .bind(email, reason, now)
     .run();
 }
 
-export async function isSuppressed(env: Env, email: string | null | undefined): Promise<boolean> {
-  const cleaned = (email || "").trim().toLowerCase();
-  if (!cleaned) return false;
-  const row = await env.DB.prepare("SELECT email FROM suppressions WHERE email = ?").bind(cleaned).first<any>();
-  return !!row;
+// -----------------------------------------------------------------------------
+// Counters
+//
+/**
+ * Increment a numeric setting by the specified delta. Used for tracking daily
+ * budgets (crawl, draft, send) and other simple counters. If the key does not
+ * exist it will be created with the delta as its initial value.
+ */
+export async function bump(env: Env, key: string, delta: number): Promise<void> {
+  const current = Number((await getSetting(env, key)) || 0);
+  await setSetting(env, key, String(current + delta));
 }
 
-function mapLeadRow(row: any): LeadRow {
-  return row as LeadRow;
+// -----------------------------------------------------------------------------
+// Leads
+//
+// The leads table tracks prospective contacts discovered by the agent. Leads
+// transition through a finite set of statuses as they move from discovery
+// through scanning, drafting and sending.
+
+export async function insertLead(env: Env, website: string): Promise<LeadRow> {
+  const id = uuid();
+  const now = nowISO();
+  await env.DB.prepare(
+    `INSERT INTO leads (id, website, status, created_at_iso, updated_at_iso) VALUES (?, ?, 'new', ?, ?)`
+  )
+    .bind(id, website, now, now)
+    .run();
+  return { id, website, status: "new", created_at_iso: now, updated_at_iso: now };
 }
 
-function mapDraftRow(row: any): DraftRow {
-  return {
-    id: row.id,
-    lead_id: row.lead_id,
-    subject: row.subject,
-    body: row.body,
-    followup_text: row.followup_text || "",
-    why_json: row.why_json || "[]",
-    status: row.status,
-    created_at_iso: row.created_at_iso,
-    updated_at_iso: row.updated_at_iso,
-  };
+interface ListLeadOptions {
+  status?: LeadStatus;
+  limit?: number;
 }
 
-export async function getLeadByWebsite(env: Env, websiteUrl: string): Promise<LeadRow | null> {
-  const schema = await loadLeadSchema(env);
-  const extra = [
-    schema.hasLeadClass ? ", lead_class" : ", NULL as lead_class",
-    schema.hasAllEmails ? ", all_emails_json" : ", NULL as all_emails_json",
-    schema.hasLeadBrief ? ", lead_brief_json" : ", NULL as lead_brief_json",
-    schema.hasScoreBreakdown ? ", score_breakdown_json" : ", NULL as score_breakdown_json",
-    schema.hasLastScanned ? ", last_scanned_at_iso" : ", NULL as last_scanned_at_iso",
-  ].join("");
-  const row = await env.DB.prepare(`SELECT * ${extra} FROM leads WHERE website_url = ?`).bind(websiteUrl).first<any>();
-  return row ? mapLeadRow(row) : null;
+export async function listLeads(env: Env, opts: ListLeadOptions = {}): Promise<LeadRow[]> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (opts.status) {
+    where.push(`status = ?`);
+    params.push(opts.status);
+  }
+  const limit = opts.limit ?? 50;
+  const sql = `SELECT id, website, status, created_at_iso, updated_at_iso FROM leads${
+    where.length ? " WHERE " + where.join(" AND ") : ""
+  } ORDER BY created_at_iso ASC LIMIT ?`;
+  params.push(limit);
+  const { results } = (await env.DB.prepare(sql).bind(...params).all()) as { results: LeadRow[] };
+  return results;
 }
 
-export async function getLeadById(env: Env, id: string): Promise<LeadRow | null> {
-  const schema = await loadLeadSchema(env);
-  const extra = [
-    schema.hasLeadClass ? ", lead_class" : ", NULL as lead_class",
-    schema.hasAllEmails ? ", all_emails_json" : ", NULL as all_emails_json",
-    schema.hasLeadBrief ? ", lead_brief_json" : ", NULL as lead_brief_json",
-    schema.hasScoreBreakdown ? ", score_breakdown_json" : ", NULL as score_breakdown_json",
-    schema.hasLastScanned ? ", last_scanned_at_iso" : ", NULL as last_scanned_at_iso",
-  ].join("");
-  const row = await env.DB.prepare(`SELECT * ${extra} FROM leads WHERE id = ?`).bind(id).first<any>();
-  return row ? mapLeadRow(row) : null;
+export async function updateLead(
+  env: Env,
+  id: string,
+  updates: Partial<{ status: LeadStatus; data: any }>
+): Promise<void> {
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (updates.status) {
+    sets.push(`status = ?`);
+    params.push(updates.status);
+  }
+  if ("data" in updates) {
+    sets.push(`data = ?`);
+    params.push(JSON.stringify(updates.data));
+  }
+  sets.push(`updated_at_iso = ?`);
+  params.push(nowISO());
+  params.push(id);
+  const sql = `UPDATE leads SET ${sets.join(", ")} WHERE id = ?`;
+  await env.DB.prepare(sql).bind(...params).run();
 }
 
-export async function insertLead(env: Env, lead: Partial<LeadRow> & { company_name: string; website_url: string }): Promise<string> {
-  const schema = await loadLeadSchema(env);
-  const id = lead.id || uuid();
-  const created = lead.created_at_iso || nowISO();
-  const updated = lead.updated_at_iso || created;
-
-  const columns = [
-    "id",
-    "company_name",
-    "website_url",
-    "country",
-    "region",
-    "category",
-    "discovery_source",
-    "contact_email",
-    "contact_page_url",
-    "has_contact_form",
-    "signals_json",
-    "score_fit",
-    "score_contact",
-    "score_risk",
-    "score_total",
-    "status",
-    "created_at_iso",
-    "updated_at_iso",
-  ];
-  const values: any[] = [
-    id,
-    lead.company_name,
-    lead.website_url,
-    lead.country || "UNK",
-    lead.region ?? null,
-    lead.category || "other",
-    lead.discovery_source ?? null,
-    lead.contact_email ?? null,
-    lead.contact_page_url ?? null,
-    typeof lead.has_contact_form === "number" ? lead.has_contact_form : 0,
-    lead.signals_json || "[]",
-    lead.score_fit ?? 0,
-    lead.score_contact ?? 0,
-    lead.score_risk ?? 0,
-    lead.score_total ?? 0,
-    (lead.status as LeadStatus) || "new",
-    created,
-    updated,
-  ];
-
-  if (schema.hasLeadClass) {
-    columns.push("lead_class");
-    values.push(lead.lead_class ?? "low_signal");
-  }
-  if (schema.hasAllEmails) {
-    columns.push("all_emails_json");
-    values.push(lead.all_emails_json ?? "[]");
-  }
-  if (schema.hasLeadBrief) {
-    columns.push("lead_brief_json");
-    values.push(lead.lead_brief_json ?? "{}");
-  }
-  if (schema.hasScoreBreakdown) {
-    columns.push("score_breakdown_json");
-    values.push(lead.score_breakdown_json ?? "{}");
-  }
-  if (schema.hasLastScanned) {
-    columns.push("last_scanned_at_iso");
-    values.push(lead.last_scanned_at_iso ?? null);
-  }
-
-  const placeholders = columns.map(() => "?").join(", ");
-  await env.DB.prepare(`INSERT INTO leads(${columns.join(", ")}) VALUES(${placeholders})`).bind(...values).run();
-  return id;
-}
-
-export async function updateLead(env: Env, id: string, patch: Partial<LeadRow>): Promise<void> {
-  const current = await getLeadById(env, id);
-  if (!current) return;
-  const schema = await loadLeadSchema(env);
-
-  const baseCols = [
-    "company_name=?",
-    "website_url=?",
-    "country=?",
-    "region=?",
-    "category=?",
-    "discovery_source=?",
-    "contact_email=?",
-    "contact_page_url=?",
-    "has_contact_form=?",
-    "signals_json=?",
-    "score_fit=?",
-    "score_contact=?",
-    "score_risk=?",
-    "score_total=?",
-    "status=?",
-    "updated_at_iso=?",
-  ];
-  const values: any[] = [
-    patch.company_name ?? current.company_name,
-    patch.website_url ?? current.website_url,
-    patch.country ?? current.country,
-    patch.region ?? current.region,
-    patch.category ?? current.category,
-    patch.discovery_source ?? current.discovery_source,
-    patch.contact_email ?? current.contact_email,
-    patch.contact_page_url ?? current.contact_page_url,
-    patch.has_contact_form ?? current.has_contact_form,
-    patch.signals_json ?? current.signals_json,
-    patch.score_fit ?? current.score_fit,
-    patch.score_contact ?? current.score_contact,
-    patch.score_risk ?? current.score_risk,
-    patch.score_total ?? current.score_total,
-    patch.status ?? current.status,
-    nowISO(),
-  ];
-
-  if (schema.hasLeadClass) {
-    baseCols.push("lead_class=?");
-    values.push(patch.lead_class ?? current.lead_class ?? "low_signal");
-  }
-  if (schema.hasAllEmails) {
-    baseCols.push("all_emails_json=?");
-    values.push(patch.all_emails_json ?? current.all_emails_json ?? "[]");
-  }
-  if (schema.hasLeadBrief) {
-    baseCols.push("lead_brief_json=?");
-    values.push(patch.lead_brief_json ?? current.lead_brief_json ?? "{}");
-  }
-  if (schema.hasScoreBreakdown) {
-    baseCols.push("score_breakdown_json=?");
-    values.push(patch.score_breakdown_json ?? current.score_breakdown_json ?? "{}");
-  }
-  if (schema.hasLastScanned) {
-    baseCols.push("last_scanned_at_iso=?");
-    values.push(patch.last_scanned_at_iso ?? current.last_scanned_at_iso ?? null);
-  }
-
-  values.push(id);
-  await env.DB.prepare(`UPDATE leads SET ${baseCols.join(", ")} WHERE id=?`).bind(...values).run();
-}
-
-export async function listLeads(env: Env, opts?: { status?: string; limit?: number }): Promise<LeadRow[]> {
-  const schema = await loadLeadSchema(env);
-  const limit = Math.min(250, Math.max(1, opts?.limit || 50));
-  const extra = [
-    schema.hasLeadClass ? ", lead_class" : ", NULL as lead_class",
-    schema.hasAllEmails ? ", all_emails_json" : ", NULL as all_emails_json",
-    schema.hasLeadBrief ? ", lead_brief_json" : ", NULL as lead_brief_json",
-    schema.hasScoreBreakdown ? ", score_breakdown_json" : ", NULL as score_breakdown_json",
-    schema.hasLastScanned ? ", last_scanned_at_iso" : ", NULL as last_scanned_at_iso",
-  ].join("");
-  if (opts?.status) {
-    const rows = await env.DB.prepare(`SELECT * ${extra} FROM leads WHERE status = ? ORDER BY created_at_iso DESC LIMIT ${limit}`)
-      .bind(opts.status)
-      .all<any>();
-    return (rows.results || []).map(mapLeadRow);
-  }
-  const rows = await env.DB.prepare(`SELECT * ${extra} FROM leads ORDER BY created_at_iso DESC LIMIT ${limit}`).all<any>();
-  return (rows.results || []).map(mapLeadRow);
-}
-
+// -----------------------------------------------------------------------------
+// Drafts
+//
 export async function insertDraft(
   env: Env,
   leadId: string,
   subject: string,
-  body: string,
-  extras?: { followupText?: string; whyJson?: string; status?: DraftStatus; mode?: string }
-): Promise<string> {
+  body: string
+): Promise<DraftRow> {
   const id = uuid();
   const now = nowISO();
-  const schema = await loadDraftSchema(env);
-  const columns = ["id", "lead_id", "subject", schema.bodyColumn, "created_at_iso", "updated_at_iso"];
-  const values: any[] = [id, leadId, subject, body, now, now];
-  if (schema.followupColumn) {
-    columns.push(schema.followupColumn);
-    values.push(extras?.followupText ?? "");
-  }
-  if (schema.whyJsonColumn) {
-    columns.push(schema.whyJsonColumn);
-    values.push(extras?.whyJson ?? "[]");
-  }
-  if (schema.modeColumn) {
-    columns.push(schema.modeColumn);
-    values.push(extras?.mode ?? "email");
-  }
-  if (schema.statusColumn) {
-    columns.push(schema.statusColumn);
-    values.push(extras?.status ?? "queued");
-  }
-  const placeholders = columns.map(() => "?").join(", ");
-  await env.DB.prepare(`INSERT INTO drafts(${columns.join(", ")}) VALUES(${placeholders})`).bind(...values).run();
-  return id;
+  await env.DB.prepare(
+    `INSERT INTO drafts (id, lead_id, status, subject, body, created_at_iso, updated_at_iso)
+     VALUES (?, ?, 'created', ?, ?, ?, ?)`
+  )
+    .bind(id, leadId, subject, body, now, now)
+    .run();
+  return { id, lead_id: leadId, status: "created", subject, body, created_at_iso: now, updated_at_iso: now };
 }
 
-export async function updateDraft(env: Env, id: string, patch: Partial<DraftRow>): Promise<void> {
-  const schema = await loadDraftSchema(env);
-  const row = await env.DB.prepare(`SELECT id, lead_id, subject, ${schema.bodyColumn} as body${schema.followupColumn ? `, ${schema.followupColumn} as followup_text` : ", '' as followup_text"}${schema.whyJsonColumn ? `, ${schema.whyJsonColumn} as why_json` : ", '[]' as why_json"}, status, created_at_iso, updated_at_iso FROM drafts WHERE id = ?`).bind(id).first<any>();
-  if (!row) return;
-  const cols = [`subject=?`, `${schema.bodyColumn}=?`, `updated_at_iso=?`];
-  const vals: any[] = [patch.subject ?? row.subject, patch.body ?? row.body, nowISO()];
-  if (schema.followupColumn) {
-    cols.push(`${schema.followupColumn}=?`);
-    vals.push(patch.followup_text ?? row.followup_text ?? "");
-  }
-  if (schema.whyJsonColumn) {
-    cols.push(`${schema.whyJsonColumn}=?`);
-    vals.push(patch.why_json ?? row.why_json ?? "[]");
-  }
-  if (schema.statusColumn) {
-    cols.push(`status=?`);
-    vals.push(patch.status ?? row.status);
-  }
-  vals.push(id);
-  await env.DB.prepare(`UPDATE drafts SET ${cols.join(", ")} WHERE id=?`).bind(...vals).run();
+interface ListDraftOptions {
+  status?: DraftStatus;
+  limit?: number;
 }
 
-export async function listDrafts(env: Env, opts?: { status?: DraftStatus | string; limit?: number }): Promise<DraftRow[]> {
-  const schema = await loadDraftSchema(env);
-  const limit = Math.min(250, Math.max(1, opts?.limit || 50));
-  const select = `SELECT id, lead_id, subject, ${schema.bodyColumn} AS body${schema.followupColumn ? `, ${schema.followupColumn} AS followup_text` : ", '' AS followup_text"}${schema.whyJsonColumn ? `, ${schema.whyJsonColumn} AS why_json` : ", '[]' AS why_json"}, status, created_at_iso, updated_at_iso FROM drafts`;
-  if (opts?.status) {
-    const rows = await env.DB.prepare(`${select} WHERE status = ? ORDER BY created_at_iso DESC LIMIT ${limit}`)
-      .bind(opts.status)
-      .all<any>();
-    return (rows.results || []).map(mapDraftRow);
+export async function listDrafts(env: Env, opts: ListDraftOptions = {}): Promise<DraftRow[]> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (opts.status) {
+    where.push(`status = ?`);
+    params.push(opts.status);
   }
-  const rows = await env.DB.prepare(`${select} ORDER BY created_at_iso DESC LIMIT ${limit}`).all<any>();
-  return (rows.results || []).map(mapDraftRow);
+  const limit = opts.limit ?? 50;
+  const sql = `SELECT id, lead_id, status, subject, body, created_at_iso, updated_at_iso FROM drafts${
+    where.length ? " WHERE " + where.join(" AND ") : ""
+  } ORDER BY created_at_iso ASC LIMIT ?`;
+  params.push(limit);
+  const { results } = (await env.DB.prepare(sql).bind(...params).all()) as { results: DraftRow[] };
+  return results;
 }
 
-export async function listApprovedDrafts(env: Env, limit = 50): Promise<Array<DraftRow & { lead: LeadRow }>> {
-  const drafts = await listDrafts(env, { status: "approved", limit });
-  const out: Array<DraftRow & { lead: LeadRow }> = [];
-  for (const draft of drafts) {
-    const lead = await getLeadById(env, draft.lead_id);
-    if (lead) out.push({ ...draft, lead });
+export async function updateDraft(
+  env: Env,
+  id: string,
+  updates: Partial<{ status: DraftStatus }>
+): Promise<void> {
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (updates.status) {
+    sets.push(`status = ?`);
+    params.push(updates.status);
   }
-  return out;
+  sets.push(`updated_at_iso = ?`);
+  params.push(nowISO());
+  params.push(id);
+  const sql = `UPDATE drafts SET ${sets.join(", ")} WHERE id = ?`;
+  await env.DB.prepare(sql).bind(...params).run();
 }
 
-export async function listEvents(env: Env, limit = 100): Promise<EventRow[]> {
-  const rows = await env.DB.prepare(`SELECT id, type, message, lead_id, created_at_iso FROM events ORDER BY created_at_iso DESC LIMIT ${Math.min(500, Math.max(1, limit))}`).all<any>();
-  return (rows.results || []) as EventRow[];
+// -----------------------------------------------------------------------------
+// Stats
+//
+export interface TodayStats {
+  leadsNewToday: number;
+  draftsCreatedToday: number;
+  approvalsToday: number;
+  repliesToday: number;
+  bouncesToday: number;
+  unsubscribesToday: number;
 }
 
-export async function countToday(env: Env, type: string): Promise<number> {
-  const row = await env.DB.prepare(`SELECT COUNT(*) as c FROM events WHERE type = ? AND date(created_at_iso) = date('now')`).bind(type).first<any>();
-  return Number(row?.c || 0);
+/**
+ * Compute aggregated statistics for the current day by querying counters from the
+ * settings table. All values fallback to zero if missing.
+ */
+export async function getTodayStats(env: Env): Promise<TodayStats> {
+  const keys = [
+    "leads_new_today",
+    "drafts_created_today",
+    "approvals_today",
+    "replies_today",
+    "bounces_today",
+    "unsubscribes_today",
+  ];
+  const stats: any = {};
+  for (const key of keys) {
+    stats[key] = Number((await getSetting(env, key)) || 0);
+  }
+  return {
+    leadsNewToday: stats.leads_new_today,
+    draftsCreatedToday: stats.drafts_created_today,
+    approvalsToday: stats.approvals_today,
+    repliesToday: stats.replies_today,
+    bouncesToday: stats.bounces_today,
+    unsubscribesToday: stats.unsubscribes_today,
+  };
 }

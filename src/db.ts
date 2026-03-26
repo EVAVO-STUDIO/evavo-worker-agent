@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 /**
  * Database helper module for the Outbound Agent.
  *
@@ -76,12 +74,10 @@ export function safeJsonParse<T>(value: unknown): T | undefined {
 }
 
 /**
- * Generate a RFC4122 v4 UUID using the crypto module. Workers
- * polyfill crypto.randomUUID by default, but Node’s implementation is used
- * here to keep parity in test environments.
+ * Generate a RFC4122 v4 UUID using the Worker runtime.
  */
 export function uuid(): string {
-  return randomUUID();
+  return crypto.randomUUID();
 }
 
 /**

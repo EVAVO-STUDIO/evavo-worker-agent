@@ -29,29 +29,49 @@ function getBearerToken(req: Request): string {
 
 function mapLead(lead: LeadRow) {
   const info = safeJsonParse<any>(lead.data) || lead.data || {};
+  const domain = String(lead.website).replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  const scoreTotal = Number(info.scoreTotal || 0);
+
   return {
     id: lead.id,
-    domain: String(lead.website).replace(/^https?:\/\//i, "").replace(/\/$/, ""),
+    website_url: lead.website,
     website: lead.website,
-    status: lead.status,
-    lead_class: info.classification || "low_signal",
-    score_total: info.scoreTotal ?? 0,
-    score_breakdown: {
-      fit: info.fitScore ?? 0,
-      contactability: info.contactabilityScore ?? 0,
-      risk: info.riskScore ?? 0,
-    },
+    domain,
+    title: info.title || "",
     summary: info.brief || "",
+    category: info.classification || "general",
+    status: lead.status,
+    contact_email: info.contactEmail || null,
+    contact_emails: info.contactEmail ? JSON.stringify([info.contactEmail]) : null,
+    contact_page_url: null,
+    has_contact_form: /contact/i.test(info.contactSummary || ""),
+    score: scoreTotal,
+    score_total: scoreTotal,
+    score_breakdown: {
+      fit: Number(info.fitScore || 0),
+      contactability: Number(info.contactabilityScore || 0),
+      risk: Number(info.riskScore || 0),
+      total: scoreTotal,
+    },
+    country: null,
+    region: null,
+    mode: "heuristic",
+    tech_stack: Array.isArray(info.techTags) ? info.techTags.join(", ") : null,
     brief: {
       summary: info.brief || "",
-      contactSummary: info.contactSummary || "",
       siteQualitySummary: info.siteQualitySummary || "",
-      groundedFacts: Array.isArray(info.groundedFacts) ? info.groundedFacts : [],
-      outreachAngles: Array.isArray(info.outreachAngles) ? info.outreachAngles : [],
-      avoidSaying: Array.isArray(info.avoidSaying) ? info.avoidSaying : [],
       serviceTags: Array.isArray(info.serviceTags) ? info.serviceTags : [],
       techTags: Array.isArray(info.techTags) ? info.techTags : [],
+      outreachAngles: Array.isArray(info.outreachAngles) ? info.outreachAngles : [],
+      groundedFacts: Array.isArray(info.groundedFacts) ? info.groundedFacts : [],
+      avoidSaying: Array.isArray(info.avoidSaying) ? info.avoidSaying : [],
+      contactSummary: info.contactSummary || "",
+      confidence: scoreTotal >= 0.75 ? "high" : scoreTotal >= 0.45 ? "medium" : "low",
     },
+    lead_class: info.classification || "general",
+    created_at_iso: lead.created_at_iso,
+    updated_at_iso: lead.updated_at_iso,
+    last_scanned_at_iso: lead.updated_at_iso,
   };
 }
 
@@ -64,10 +84,12 @@ async function mapDraft(env: Env, draft: DraftRow) {
     status: draft.status === "created" ? "queued" : draft.status,
     subject: draft.subject,
     body_text: draft.body,
-    followup_text: "",
+    followup_text: null,
+    why_json: null,
     to_name: String(lead?.website || draft.lead_id).replace(/^https?:\/\//i, "").replace(/\/$/, ""),
-    to_email: info.contactEmail || "",
+    to_email: info.contactEmail || null,
     created_at_iso: draft.created_at_iso,
+    updated_at_iso: draft.updated_at_iso,
   };
 }
 
@@ -76,6 +98,17 @@ async function getCaps(env: Env) {
     crawl: Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60),
     drafts: Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25),
     send: Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12),
+  };
+}
+
+function mapEvent(event: { id: string; type: string; message: string; meta?: string; created_at_iso: string }) {
+  const meta = safeJsonParse<any>(event.meta) || {};
+  return {
+    id: event.id,
+    type: event.type,
+    message: event.message,
+    lead_id: meta.leadId || null,
+    created_at_iso: event.created_at_iso,
   };
 }
 
@@ -107,6 +140,7 @@ export async function handleAdmin(
         drafts_created: stats.draftsCreatedToday,
         sends_sent: stats.sendsSentToday,
         approvals: stats.approvalsToday,
+        replies: stats.repliesToday,
         ai_calls: Number((await getSetting(env, "ai_calls")) || 0),
         bounces: stats.bouncesToday,
         unsubscribes: stats.unsubscribesToday,
@@ -165,7 +199,8 @@ export async function handleAdmin(
 
   if (req.method === "GET" && path === "admin/events") {
     const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
-    return json({ ok: true, events: await listEvents(env, limit) });
+    const events = await listEvents(env, limit);
+    return json({ ok: true, events: events.map(mapEvent) });
   }
 
   if (req.method === "GET" && path === "admin/settings") {
@@ -212,27 +247,39 @@ export async function handleAdmin(
 
   if (req.method === "GET" && path === "admin/insights") {
     const leads = await listLeads(env, { limit: 500 });
-    const summary: Record<string, number> = {};
+    let contactableLeads = 0;
+    let totalScore = 0;
     const leadClasses: Record<string, number> = {};
+    const statuses: Record<string, number> = {};
+
     for (const lead of leads) {
-      summary[lead.status] = (summary[lead.status] || 0) + 1;
       const info = safeJsonParse<any>(lead.data) || lead.data || {};
-      const classification = info.classification || "unknown";
+      if (info.contactEmail) contactableLeads += 1;
+      totalScore += Number(info.scoreTotal || 0);
+
+      const classification = String(info.classification || "unknown");
       leadClasses[classification] = (leadClasses[classification] || 0) + 1;
+      statuses[lead.status] = (statuses[lead.status] || 0) + 1;
     }
-    return json({ ok: true, summary, leadClasses });
+
+    return json({
+      ok: true,
+      summary: {
+        totalLeads: leads.length,
+        contactableLeads,
+        directEmailRate: leads.length ? Number(((contactableLeads / leads.length) * 100).toFixed(1)) : 0,
+        averageScore: leads.length ? Number((totalScore / leads.length).toFixed(2)) : 0,
+      },
+      leadClasses,
+      statuses,
+    });
   }
 
   if (req.method === "GET" && path === "admin/runs") {
     const events = await listEvents(env, 100);
     const runs = events
       .filter((event) => ["tick_ok", "tick_fail", "scan_ok", "draft_ok", "send_ok"].includes(event.type))
-      .map((event) => ({
-        id: event.id,
-        type: event.type,
-        message: event.message,
-        created_at_iso: event.created_at_iso,
-      }));
+      .map(mapEvent);
     return json({ ok: true, runs });
   }
 

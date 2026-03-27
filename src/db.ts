@@ -1,6 +1,3 @@
-/**
- * Database helper module for the Outbound Agent.
- */
 export type LeadStatus =
   | "new"
   | "scanned"
@@ -68,25 +65,26 @@ const LOCK_PREFIX = "lock:";
 interface SettingRow {
   key: string;
   value: string | null;
+  updated_at_iso: string;
 }
 
 export async function getSetting(env: Env, key: string): Promise<string | null> {
   const { results } = (await env.DB.prepare(
     `SELECT value FROM settings WHERE key = ? LIMIT 1`
-  ).bind(key).all()) as { results: SettingRow[] };
+  )
+    .bind(key)
+    .all()) as { results: SettingRow[] };
   return results.length ? (results[0].value ?? null) : null;
 }
 
 export async function setSetting(env: Env, key: string, value: string): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO settings (key, value, updated_at_iso) VALUES (?, ?, ?)
+    `INSERT INTO settings (key, value, updated_at_iso)
+     VALUES (?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_iso = excluded.updated_at_iso`
-  ).bind(key, value, nowISO()).run();
-}
-
-export async function bump(env: Env, key: string, delta: number): Promise<void> {
-  const current = Number((await getSetting(env, key)) || 0);
-  await setSetting(env, key, String(current + delta));
+  )
+    .bind(key, value, nowISO())
+    .run();
 }
 
 export async function tryAcquireLock(env: Env, key: string, ttlSeconds: number): Promise<string | null> {
@@ -106,10 +104,14 @@ export async function releaseLock(env: Env, key: string, token: string | null): 
   if (!token) return false;
   const lockKey = `${LOCK_PREFIX}${key}`;
   const existing = await getSetting(env, lockKey);
-  const parsed = existing ? safeJsonParse<{ token: string }>(existing) : undefined;
-  if (parsed?.token !== token) return false;
-  await env.DB.prepare(`DELETE FROM settings WHERE key = ?`).bind(lockKey).run();
-  return true;
+  if (existing) {
+    const parsed = safeJsonParse<{ token: string }>(existing);
+    if (parsed?.token === token) {
+      await env.DB.prepare(`DELETE FROM settings WHERE key = ?`).bind(lockKey).run();
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function logEvent(
@@ -121,7 +123,9 @@ export async function logEvent(
   await env.DB.prepare(
     `INSERT INTO events (id, type, message, meta, created_at_iso)
      VALUES (?, ?, ?, ?, ?)`
-  ).bind(uuid(), type, message, JSON.stringify(meta || {}), nowISO()).run();
+  )
+    .bind(uuid(), type, message, JSON.stringify(meta || {}), nowISO())
+    .run();
 }
 
 export async function listEvents(
@@ -133,16 +137,26 @@ export async function listEvents(
      FROM events
      ORDER BY created_at_iso DESC
      LIMIT ?`
-  ).bind(limit).all()) as { results: any[] };
+  )
+    .bind(limit)
+    .all()) as { results: any[] };
   return results;
 }
 
 export async function addSuppression(env: Env, email: string, reason: string): Promise<void> {
+  const now = nowISO();
   await env.DB.prepare(
     `INSERT INTO suppression (email, reason, created_at_iso)
      VALUES (?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET reason = excluded.reason, created_at_iso = excluded.created_at_iso`
-  ).bind(email, reason, nowISO()).run();
+  )
+    .bind(email, reason, now)
+    .run();
+}
+
+export async function bump(env: Env, key: string, delta: number): Promise<void> {
+  const current = Number((await getSetting(env, key)) || 0);
+  await setSetting(env, key, String(current + delta));
 }
 
 export async function insertLead(env: Env, website: string): Promise<LeadRow> {
@@ -151,7 +165,9 @@ export async function insertLead(env: Env, website: string): Promise<LeadRow> {
      FROM leads
      WHERE website = ?
      LIMIT 1`
-  ).bind(website).first<any>();
+  )
+    .bind(website)
+    .first<any>();
 
   if (existing) {
     return {
@@ -169,7 +185,9 @@ export async function insertLead(env: Env, website: string): Promise<LeadRow> {
   await env.DB.prepare(
     `INSERT INTO leads (id, website, status, created_at_iso, updated_at_iso)
      VALUES (?, ?, 'new', ?, ?)`
-  ).bind(id, website, now, now).run();
+  )
+    .bind(id, website, now, now)
+    .run();
 
   return { id, website, status: "new", created_at_iso: now, updated_at_iso: now };
 }
@@ -187,12 +205,12 @@ export async function listLeads(env: Env, opts: ListLeadOptions = {}): Promise<L
     params.push(opts.status);
   }
   const limit = opts.limit ?? 50;
-  const sql = `SELECT id, website, status, data, created_at_iso, updated_at_iso FROM leads${
-    where.length ? " WHERE " + where.join(" AND ") : ""
-  } ORDER BY created_at_iso ASC LIMIT ?`;
+  const sql = `SELECT id, website, status, data, created_at_iso, updated_at_iso
+               FROM leads${where.length ? " WHERE " + where.join(" AND ") : ""}
+               ORDER BY created_at_iso ASC
+               LIMIT ?`;
   params.push(limit);
-  const stmt = env.DB.prepare(sql);
-  const { results } = (await stmt.bind(...params).all()) as { results: LeadRow[] };
+  const { results } = (await env.DB.prepare(sql).bind(...params).all()) as { results: LeadRow[] };
   return results;
 }
 
@@ -214,8 +232,7 @@ export async function updateLead(
   sets.push(`updated_at_iso = ?`);
   params.push(nowISO());
   params.push(id);
-  const sql = `UPDATE leads SET ${sets.join(", ")} WHERE id = ?`;
-  await env.DB.prepare(sql).bind(...params).run();
+  await env.DB.prepare(`UPDATE leads SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
 }
 
 export async function insertDraft(env: Env, leadId: string, subject: string, body: string): Promise<DraftRow> {
@@ -224,8 +241,19 @@ export async function insertDraft(env: Env, leadId: string, subject: string, bod
   await env.DB.prepare(
     `INSERT INTO drafts (id, lead_id, status, subject, body, created_at_iso, updated_at_iso)
      VALUES (?, ?, 'created', ?, ?, ?, ?)`
-  ).bind(id, leadId, subject, body, now, now).run();
-  return { id, lead_id: leadId, status: "created", subject, body, created_at_iso: now, updated_at_iso: now };
+  )
+    .bind(id, leadId, subject, body, now, now)
+    .run();
+
+  return {
+    id,
+    lead_id: leadId,
+    status: "created",
+    subject,
+    body,
+    created_at_iso: now,
+    updated_at_iso: now,
+  };
 }
 
 interface ListDraftOptions {
@@ -241,12 +269,12 @@ export async function listDrafts(env: Env, opts: ListDraftOptions = {}): Promise
     params.push(opts.status);
   }
   const limit = opts.limit ?? 50;
-  const sql = `SELECT id, lead_id, status, subject, body, created_at_iso, updated_at_iso FROM drafts${
-    where.length ? " WHERE " + where.join(" AND ") : ""
-  } ORDER BY created_at_iso ASC LIMIT ?`;
+  const sql = `SELECT id, lead_id, status, subject, body, created_at_iso, updated_at_iso
+               FROM drafts${where.length ? " WHERE " + where.join(" AND ") : ""}
+               ORDER BY created_at_iso ASC
+               LIMIT ?`;
   params.push(limit);
-  const stmt = env.DB.prepare(sql);
-  const { results } = (await stmt.bind(...params).all()) as { results: DraftRow[] };
+  const { results } = (await env.DB.prepare(sql).bind(...params).all()) as { results: DraftRow[] };
   return results;
 }
 
@@ -264,8 +292,7 @@ export async function updateDraft(
   sets.push(`updated_at_iso = ?`);
   params.push(nowISO());
   params.push(id);
-  const sql = `UPDATE drafts SET ${sets.join(", ")} WHERE id = ?`;
-  await env.DB.prepare(sql).bind(...params).run();
+  await env.DB.prepare(`UPDATE drafts SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
 }
 
 export interface TodayStats {
@@ -287,11 +314,13 @@ export async function getTodayStats(env: Env): Promise<TodayStats> {
     "replies_today",
     "bounces_today",
     "unsubscribes_today",
-  ];
+  ] as const;
+
   const stats: Record<string, number> = {};
   for (const key of keys) {
     stats[key] = Number((await getSetting(env, key)) || 0);
   }
+
   return {
     leadsNewToday: stats.leads_new_today,
     draftsCreatedToday: stats.drafts_created_today,

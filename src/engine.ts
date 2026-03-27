@@ -11,8 +11,8 @@ import {
   logEvent,
   setSetting,
   getSetting,
-  uuid,
   nowISO,
+  uuid,
   bump,
   insertLead,
   safeJsonParse,
@@ -41,7 +41,8 @@ export interface ScanResult {
 function extractEmails(html: string): string[] {
   const set = new Set<string>();
   const regex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  for (const email of html.match(regex) || []) {
+  const matches = html.match(regex) || [];
+  for (const email of matches) {
     const lower = email.toLowerCase();
     if (/\.(jpg|jpeg|png|gif|webp)$/i.test(lower)) continue;
     set.add(lower);
@@ -122,11 +123,13 @@ async function heuristicScan(domain: string, url: string): Promise<ScanResult> {
   const brief = classification === "general"
     ? `General business with ${serviceTags.join(", ") || "unspecified offerings"}`
     : `${classification} company`;
+
   const contactSummary = contactEmail
     ? `Found contact email: ${contactEmail}`
     : hasContactPage
     ? "Contact page present but no email extracted"
     : "No obvious contact details";
+
   const siteQualitySummary = html ? "Site loaded successfully" : "Could not fetch site";
 
   const outreachAngles: string[] = [];
@@ -162,15 +165,9 @@ async function heuristicScan(domain: string, url: string): Promise<ScanResult> {
   };
 }
 
-function normaliseWebsite(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) throw new Error("Missing website URL");
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
-
 function buildEmailForLead(lead: LeadRow & { data: any }): { to: string; subject: string; body: string } {
   const data: ScanResult | undefined = lead.data as any;
-  const domain = lead.website.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  const domain = lead.website.replace(/https?:\/\//, "").replace(/\/$/, "");
   const to = (data?.contactEmail || `info@${domain}`).toLowerCase();
 
   let subject = `Let's elevate ${domain} together`;
@@ -178,25 +175,30 @@ function buildEmailForLead(lead: LeadRow & { data: any }): { to: string; subject
   else if (data?.classification === "saas") subject = `Design & dev support for ${domain}`;
   else if (data?.classification === "agency") subject = `Collaboration opportunity with EVAVO`;
 
-  const lines = [
-    "Hi there,",
-    "",
-    `We recently explored ${domain} and were impressed by your ${data?.serviceTags?.join(", ") || "work"}.`,
-    data?.groundedFacts?.length ? `A couple of standout facts: ${data.groundedFacts.join("; ")}.` : "",
-    "",
-    `As a creative studio, EVAVO specialises in bespoke websites and digital systems. I noticed potential to ${data?.outreachAngles?.join(" and ") || "improve your online presence"}.`,
-    "We'd love to share a few grounded ideas tailored to your site and goals.",
-    "",
-    "If you're interested, we can set up a quick call.",
-    "",
-    "Best regards,",
-    "The EVAVO Team",
-  ].filter(Boolean);
+  const lines: string[] = [];
+  lines.push("Hi there,");
+  lines.push("");
+  lines.push(`We recently explored ${domain} and were impressed by your ${data?.serviceTags?.join(", ") || "work"}.`);
+  if (data?.groundedFacts?.length) {
+    lines.push(`A couple of grounded facts: ${data.groundedFacts.join("; ")}.`);
+  }
+  lines.push("");
+  lines.push(`As a creative studio, EVAVO specialises in bespoke websites and digital systems. I noticed potential to ${data?.outreachAngles?.join(" and ") || "improve your online presence"}.`);
+  lines.push("We'd love to share a few useful ideas tailored to your site and goals.");
+  lines.push("");
+  lines.push("If you're interested, we can set up a quick call.");
+  lines.push("");
+  lines.push("Best regards,");
+  lines.push("The EVAVO Team");
 
   return { to, subject, body: lines.join("\n") };
 }
 
-async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, initialDelayMs = 250): Promise<T> {
+async function executeWithRetry<T>(
+  task: () => Promise<T>,
+  maxRetries = 3,
+  initialDelayMs = 250
+): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
@@ -212,10 +214,18 @@ async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, initi
   }
 }
 
+function normaliseWebsite(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) throw new Error("Missing website URL");
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> {
   const website = normaliseWebsite(websiteInput);
   const lead = await insertLead(env, website);
-  const scan = await heuristicScan(new URL(website).hostname, website);
+  const domain = new URL(website).hostname;
+  const scan = await heuristicScan(domain, website);
   await updateLead(env, lead.id, { status: "scanned", data: scan });
   await bump(env, "leads_new_today", 1);
   await logEvent(env, "scan_ok", `Scanned ${website}`, {
@@ -223,7 +233,13 @@ export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<Le
     classification: scan.classification,
     score: scan.scoreTotal,
   });
-  return { ...lead, status: "scanned", data: scan, updated_at_iso: nowISO() };
+
+  return {
+    ...lead,
+    status: "scanned",
+    updated_at_iso: nowISO(),
+    data: scan,
+  };
 }
 
 async function runScan(env: Env, runId: string): Promise<number> {
@@ -232,7 +248,8 @@ async function runScan(env: Env, runId: string): Promise<number> {
   for (const lead of leads) {
     try {
       const website = normaliseWebsite(lead.website);
-      const scan = await heuristicScan(new URL(website).hostname, website);
+      const domain = new URL(website).hostname;
+      const scan = await heuristicScan(domain, website);
       await updateLead(env, lead.id, { status: "scanned", data: scan });
       await bump(env, "leads_new_today", 1);
       await logEvent(env, "scan_ok", `Scanned ${lead.website}`, {
@@ -253,11 +270,16 @@ async function runDraft(env: Env, runId: string): Promise<number> {
   const minimumScore = Number((await getSetting(env, "min_score_for_draft")) || 0.45);
   const leads = await listLeads(env, { status: "scanned", limit: 5 });
   let created = 0;
+
   for (const lead of leads) {
     try {
-      const leadWithData: LeadRow & { data: any } = { ...lead, data: safeJsonParse(lead.data) || lead.data };
+      const leadWithData: LeadRow & { data: any } = {
+        ...lead,
+        data: safeJsonParse(lead.data) || lead.data,
+      };
       const scan: ScanResult | undefined = leadWithData.data;
-      if (!scan || scan.scoreTotal < minimumScore) continue;
+      if (!scan || Number(scan.scoreTotal || 0) < minimumScore) continue;
+
       const email = buildEmailForLead(leadWithData);
       const draft = await insertDraft(env, lead.id, email.subject, email.body);
       await updateLead(env, lead.id, { status: "drafted" });
@@ -274,6 +296,7 @@ async function runDraft(env: Env, runId: string): Promise<number> {
       await logEvent(env, "draft_fail", `Error drafting for ${lead.website}: ${String(err)}`, { runId, leadId: lead.id });
     }
   }
+
   return created;
 }
 
@@ -284,33 +307,55 @@ async function runSend(env: Env, runId: string): Promise<{ sent: number; failed:
     return { sent: 0, failed: 0 };
   }
 
+  const minimumScore = Number((await getSetting(env, "min_score_for_send")) || 0.75);
   const drafts = await listDrafts(env, { status: "approved", limit: 5 });
   let sent = 0;
   let failed = 0;
 
   for (const draft of drafts) {
     try {
-      const leadRow = await env.DB.prepare(`SELECT website, data FROM leads WHERE id = ?`).bind(draft.lead_id).first<any>();
-      const dataObj = leadRow?.data ? JSON.parse(leadRow.data) : {};
-      const domain = String(leadRow?.website || "").replace(/^https?:\/\//i, "").replace(/\/$/, "");
-      const to = String(dataObj?.contactEmail || `info@${domain}`).toLowerCase();
+      const leadRow = await env.DB.prepare(
+        `SELECT website, data FROM leads WHERE id = ?`
+      )
+        .bind(draft.lead_id)
+        .first<any>();
+
+      let to = "";
+      let scoreTotal = 0;
+      if (leadRow) {
+        const dataObj = leadRow.data ? JSON.parse(leadRow.data) : undefined;
+        to = (dataObj?.contactEmail || `info@${String(leadRow.website).replace(/https?:\/\//, "").replace(/\/$/, "")}`).toLowerCase();
+        scoreTotal = Number(dataObj?.scoreTotal || 0);
+      }
+
+      if (!to || scoreTotal < minimumScore) {
+        await logEvent(env, "send_skip", "Lead below send threshold or missing contact.", {
+          runId,
+          leadId: draft.lead_id,
+          draftId: draft.id,
+          to,
+          scoreTotal,
+        });
+        continue;
+      }
+
       const res = await executeWithRetry(() => sendEmail(env, { to, subject: draft.subject, bodyText: draft.body }));
       if (res.ok) {
         await updateDraft(env, draft.id, { status: "sent" });
         await updateLead(env, draft.lead_id, { status: "sent" });
         await bump(env, "sends_sent_today", 1);
-        await logEvent(env, "send_ok", "Email sent", { runId, draftId: draft.id, leadId: draft.lead_id, to });
+        await logEvent(env, "send_ok", "Email sent", { runId, leadId: draft.lead_id, draftId: draft.id, to });
         sent += 1;
       } else {
         await updateDraft(env, draft.id, { status: "failed" });
         await updateLead(env, draft.lead_id, { status: "failed" });
-        await logEvent(env, "send_fail", res.error || "Unknown error", { runId, draftId: draft.id, leadId: draft.lead_id, to });
+        await logEvent(env, "send_fail", res.error || "Unknown error", { runId, leadId: draft.lead_id, draftId: draft.id, to });
         failed += 1;
       }
     } catch (err) {
       await updateDraft(env, draft.id, { status: "failed" });
       await updateLead(env, draft.lead_id, { status: "failed" });
-      await logEvent(env, "send_fail", String(err), { runId, draftId: draft.id, leadId: draft.lead_id });
+      await logEvent(env, "send_fail", String(err), { runId, leadId: draft.lead_id, draftId: draft.id });
       failed += 1;
     }
   }
@@ -334,22 +379,35 @@ export async function dailyTick(env: Env): Promise<void> {
   try {
     await logEvent(env, "tick_ok", "Engine cycle started", { runId });
     scanned = await runScan(env, runId);
+
     const draftingEnabled = ((await getSetting(env, "drafting_enabled")) || "1") !== "0";
     if (draftingEnabled) drafted = await runDraft(env, runId);
+
     sendResult = await runSend(env, runId);
-    await logEvent(env, "tick_ok", "Engine cycle completed", { runId, scanned, drafted, sent: sendResult.sent, failed: sendResult.failed });
-  } catch (err) {
-    await logEvent(env, "tick_fail", String(err), { runId });
-  } finally {
-    await releaseLock(env, "engine-cycle", lockToken);
-    await setSetting(env, "last_engine_run", JSON.stringify({
+
+    await logEvent(env, "tick_ok", "Engine cycle completed", {
       runId,
-      started_at: cycleStart,
       scanned,
       drafted,
       sent: sendResult.sent,
       failed: sendResult.failed,
-    }));
+    });
+  } catch (err) {
+    await logEvent(env, "tick_fail", String(err), { runId });
+  } finally {
+    await releaseLock(env, "engine-cycle", lockToken);
+    await setSetting(
+      env,
+      "last_engine_run",
+      JSON.stringify({
+        runId,
+        started_at: cycleStart,
+        scanned,
+        drafted,
+        sent: sendResult.sent,
+        failed: sendResult.failed,
+      })
+    );
   }
 }
 

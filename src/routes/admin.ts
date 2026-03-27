@@ -101,13 +101,12 @@ async function getCaps(env: Env) {
   };
 }
 
-function mapEvent(event: { id: string; type: string; message: string; meta?: string; created_at_iso: string }) {
-  const meta = safeJsonParse<any>(event.meta) || {};
+function mapEvent(event: { id: string; type: string; message: string; created_at_iso: string }) {
   return {
     id: event.id,
     type: event.type,
     message: event.message,
-    lead_id: meta.leadId || null,
+    lead_id: null,
     created_at_iso: event.created_at_iso,
   };
 }
@@ -171,7 +170,7 @@ export async function handleAdmin(
     const status = requested === "queued" ? "created" : requested || undefined;
     const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
     const drafts = await listDrafts(env, { status: status as any, limit });
-    const out: any[] = [];
+    const out: any[] = []
     for (const draft of drafts) out.push(await mapDraft(env, draft));
     return json({ ok: true, drafts: out });
   }
@@ -183,7 +182,7 @@ export async function handleAdmin(
     await updateDraft(env, draftId, { status: "approved" });
     await updateLead(env, draft.lead_id, { status: "approved" });
     await bump(env, "approvals_today", 1);
-    await logEvent(env, "draft_approved", `Draft approved ${draftId}`, { draftId, leadId: draft.lead_id });
+    await logEvent(env, "draft_approved", `Draft approved ${draftId}`);
     return json({ ok: true });
   }
 
@@ -193,7 +192,7 @@ export async function handleAdmin(
     if (!draft) return json({ ok: false, error: "draft_not_found" }, { status: 404 });
     await updateDraft(env, draftId, { status: "rejected" });
     await updateLead(env, draft.lead_id, { status: "rejected" });
-    await logEvent(env, "draft_rejected", `Draft rejected ${draftId}`, { draftId, leadId: draft.lead_id });
+    await logEvent(env, "draft_rejected", `Draft rejected ${draftId}`);
     return json({ ok: true });
   }
 

@@ -121,19 +121,19 @@ export async function logEvent(
   meta: Record<string, any> | null = null
 ): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO events (id, type, message, meta, created_at_iso)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO events (id, type, message, created_at_iso)
+     VALUES (?, ?, ?, ?)`
   )
-    .bind(uuid(), type, message, JSON.stringify(meta || {}), nowISO())
+    .bind(uuid(), type, message, nowISO())
     .run();
 }
 
 export async function listEvents(
   env: Env,
   limit = 50
-): Promise<Array<{ id: string; type: string; message: string; meta?: string; created_at_iso: string }>> {
+): Promise<Array<{ id: string; type: string; message: string; created_at_iso: string }>> {
   const { results } = (await env.DB.prepare(
-    `SELECT id, type, message, meta, created_at_iso
+    `SELECT id, type, message, created_at_iso
      FROM events
      ORDER BY created_at_iso DESC
      LIMIT ?`

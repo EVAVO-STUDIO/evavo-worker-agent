@@ -19,12 +19,22 @@ function humanizePublicEvent(type: string, message: string): string {
       return "System cycle failed.";
     case "scan_ok":
       return message.replace(/^Scanned\s+/i, "Site scanned: ");
+    case "scan_fail":
+      return "A site scan failed and was logged for review.";
     case "draft_created":
       return "A draft was prepared for review.";
+    case "draft_ok":
+      return "Manual draft run completed.";
+    case "draft_fail":
+      return "A draft attempt failed and was logged.";
     case "send_ok":
       return "An approved email was sent.";
     case "send_fail":
       return "A send attempt failed.";
+    case "send_skip":
+      return "A send was skipped because controls blocked it.";
+    case "unsubscribe":
+      return "An unsubscribe request was recorded.";
     default:
       return message;
   }
@@ -34,6 +44,122 @@ async function getNumericSetting(env: Env, key: string, fallback = 0): Promise<n
   const raw = await getSetting(env, key);
   const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
+}
+
+async function buildPipeline(env: Env) {
+  try {
+    const leadStatusResult = (await env.DB.prepare(
+      `SELECT status, COUNT(*) AS count
+       FROM leads
+       GROUP BY status`
+    ).all()) as { results: Array<{ status: string | null; count: number }> };
+
+    const draftStatusResult = (await env.DB.prepare(
+      `SELECT status, COUNT(*) AS count
+       FROM drafts
+       GROUP BY status`
+    ).all()) as { results: Array<{ status: string | null; count: number }> };
+
+    const contactableRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS count
+       FROM leads
+       WHERE COALESCE(TRIM(contact_email), '') <> ''
+          OR has_contact_form = 1`
+    ).first<{ count: number }>();
+
+    const topLeadRow = await env.DB.prepare(
+      `SELECT website_url, company_name, category, score_total, status, updated_at_iso
+       FROM leads
+       ORDER BY score_total DESC, updated_at_iso DESC
+       LIMIT 1`
+    ).first<{
+      website_url: string;
+      company_name: string | null;
+      category: string | null;
+      score_total: number;
+      status: string;
+      updated_at_iso: string;
+    }>();
+
+    const byLeadStatus: Record<string, number> = {};
+    for (const row of leadStatusResult.results || []) {
+      byLeadStatus[String(row.status || "unknown")] = Number(row.count || 0);
+    }
+
+    const byDraftStatus: Record<string, number> = {};
+    for (const row of draftStatusResult.results || []) {
+      byDraftStatus[String(row.status || "unknown")] = Number(row.count || 0);
+    }
+
+    const totalLeads = Object.values(byLeadStatus).reduce((sum, count) => sum + Number(count || 0), 0);
+
+    return {
+      totalLeads,
+      contactableLeads: Number(contactableRow?.count || 0),
+      leads: byLeadStatus,
+      drafts: byDraftStatus,
+      readyToSend: Number(byDraftStatus.approved || 0),
+      queuedDrafts: Number(byDraftStatus.created || 0) + Number(byDraftStatus.queued || 0),
+      topLead: topLeadRow
+        ? {
+            website_url: topLeadRow.website_url,
+            company_name: topLeadRow.company_name,
+            category: topLeadRow.category,
+            score_total: Number(topLeadRow.score_total || 0),
+            status: topLeadRow.status,
+            updated_at_iso: topLeadRow.updated_at_iso,
+          }
+        : null,
+    };
+  } catch {
+    return {
+      totalLeads: 0,
+      contactableLeads: 0,
+      leads: {},
+      drafts: {},
+      readyToSend: 0,
+      queuedDrafts: 0,
+      topLead: null,
+    };
+  }
+}
+
+async function buildTopSlices(env: Env) {
+  try {
+    const { results } = (await env.DB.prepare(
+      `SELECT category, COUNT(*) as count
+       FROM leads
+       GROUP BY category
+       ORDER BY count DESC
+       LIMIT 6`
+    ).all()) as { results: Array<{ category: string | null; count: number }> };
+    const total = (results || []).reduce((sum, row) => sum + Number(row.count || 0), 0);
+    return (results || []).map((row) => ({
+      label: row.category || "unknown",
+      value: total ? Math.round((Number(row.count || 0) / total) * 100) : 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function publicModeSummary(input: {
+  engineEnabled: boolean;
+  sendingEnabled: boolean;
+  readyToSend: number;
+  queuedDrafts: number;
+}): string {
+  if (!input.engineEnabled) return "Engine paused. Discovery and drafting are currently disabled.";
+  if (!input.sendingEnabled) {
+    if (input.readyToSend > 0) {
+      return "The assistant is running in review mode. It can discover and draft, but approved sending is still gated.";
+    }
+    if (input.queuedDrafts > 0) {
+      return "The assistant is currently gathering and drafting opportunities while sending remains gated.";
+    }
+    return "The assistant is operating inside conservative discovery and drafting limits while sending remains gated.";
+  }
+  return "The assistant is operating inside conservative discovery, drafting, and approved sending limits.";
 }
 
 export async function handlePublic(
@@ -71,89 +197,29 @@ export async function handlePublic(
     const bouncesToday = await getNumericSetting(env, "bounces_today", stats.bouncesToday || 0);
     const unsubscribesToday = await getNumericSetting(env, "unsubscribes_today", stats.unsubscribesToday || 0);
 
-    const pipeline = await (async () => {
-      try {
-        const leadStatusResult = (await env.DB.prepare(
-          `SELECT status, COUNT(*) AS count
-           FROM leads
-           GROUP BY status`
-        ).all()) as { results: Array<{ status: string | null; count: number }> };
+    const pipeline = await buildPipeline(env);
+    const topSlices = await buildTopSlices(env);
 
-        const draftStatusResult = (await env.DB.prepare(
-          `SELECT status, COUNT(*) AS count
-           FROM drafts
-           GROUP BY status`
-        ).all()) as { results: Array<{ status: string | null; count: number }> };
-
-        const contactableRow = await env.DB.prepare(
-          `SELECT COUNT(*) AS count
-           FROM leads
-           WHERE COALESCE(TRIM(contact_email), '') <> ''
-              OR has_contact_form = 1`
-        ).first<{ count: number }>();
-
-        const byLeadStatus: Record<string, number> = {};
-        for (const row of leadStatusResult.results || []) {
-          byLeadStatus[String(row.status || "unknown")] = Number(row.count || 0);
-        }
-
-        const byDraftStatus: Record<string, number> = {};
-        for (const row of draftStatusResult.results || []) {
-          byDraftStatus[String(row.status || "unknown")] = Number(row.count || 0);
-        }
-
-        const totalLeads = Object.values(byLeadStatus).reduce((sum, count) => sum + Number(count || 0), 0);
-
-        return {
-          totalLeads,
-          contactableLeads: Number(contactableRow?.count || 0),
-          leads: byLeadStatus,
-          drafts: byDraftStatus,
-          readyToSend: Number(byDraftStatus.approved || 0),
-          queuedDrafts: Number(byDraftStatus.created || 0) + Number(byDraftStatus.queued || 0),
-        };
-      } catch {
-        return {
-          totalLeads: 0,
-          contactableLeads: 0,
-          leads: {},
-          drafts: {},
-          readyToSend: 0,
-          queuedDrafts: 0,
-        };
-      }
-    })();
-
-    const topSlices = await (async () => {
-      try {
-        const { results } = (await env.DB.prepare(
-          `SELECT category, COUNT(*) as count
-           FROM leads
-           GROUP BY category
-           ORDER BY count DESC
-           LIMIT 6`
-        ).all()) as { results: Array<{ category: string | null; count: number }> };
-        const total = (results || []).reduce((sum, row) => sum + Number(row.count || 0), 0);
-        return (results || []).map((row) => ({
-          label: row.category || "unknown",
-          value: total ? Math.round((Number(row.count || 0) / total) * 100) : 0,
-        }));
-      } catch {
-        return [];
-      }
-    })();
+    const engineEnabled = ((await getSetting(env, "engine_enabled")) || "1") !== "0";
+    const sendingEnabled =
+      ((await getSetting(env, "sending_enabled")) || "0") !== "0" &&
+      !!env.MAILCHANNELS_API_KEY &&
+      !!env.FROM_EMAIL;
 
     return withCors(
       json({
         ok: true,
         nowISO: new Date().toISOString(),
         engine: {
-          enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
-          sendingEnabled:
-            ((await getSetting(env, "sending_enabled")) || "0") !== "0" &&
-            !!env.MAILCHANNELS_API_KEY &&
-            !!env.FROM_EMAIL,
+          enabled: engineEnabled,
+          sendingEnabled,
           pausedReason: (await getSetting(env, "engine_paused_reason")) || null,
+          modeSummary: publicModeSummary({
+            engineEnabled,
+            sendingEnabled,
+            readyToSend: Number(pipeline.readyToSend || 0),
+            queuedDrafts: Number(pipeline.queuedDrafts || 0),
+          }),
           lastRun,
         },
         budgets: {

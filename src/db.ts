@@ -1,3 +1,4 @@
+
 export type LeadStatus =
   | "new"
   | "scanned"
@@ -46,7 +47,7 @@ export interface LeadSignals {
 
 export interface LeadRow {
   id: string;
-  company_name: string | null;
+  company_name: string;
   website_url: string;
   country: string | null;
   region: string | null;
@@ -120,13 +121,8 @@ export function parseLeadSignals(row: Pick<LeadRow, "signals_json"> | { signals_
 
 export async function getSetting(env: Env, key: string): Promise<string | null> {
   const result = await env.DB.prepare(
-    `SELECT key, value
-     FROM settings
-     WHERE key = ?
-     LIMIT 1`
-  )
-    .bind(key)
-    .first<SettingRow>();
+    `SELECT key, value FROM settings WHERE key = ? LIMIT 1`
+  ).bind(key).first<SettingRow>();
   return result?.value ?? null;
 }
 
@@ -134,11 +130,8 @@ export async function setSetting(env: Env, key: string, value: string): Promise<
   await env.DB.prepare(
     `INSERT INTO settings (key, value)
      VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value`
-  )
-    .bind(key, value)
-    .run();
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).bind(key, value).run();
 }
 
 export async function bump(env: Env, key: string, delta: number): Promise<number> {
@@ -155,16 +148,8 @@ export async function tryAcquireLock(env: Env, key: string, ttlSeconds: number):
     const parsed = safeJsonParse<{ token: string; expires: number }>(existing);
     if (parsed && parsed.expires > Date.now()) return null;
   }
-
   const token = uuid();
-  await setSetting(
-    env,
-    lockKey,
-    JSON.stringify({
-      token,
-      expires: Date.now() + ttlSeconds * 1000,
-    })
-  );
+  await setSetting(env, lockKey, JSON.stringify({ token, expires: Date.now() + ttlSeconds * 1000 }));
   return token;
 }
 
@@ -174,7 +159,6 @@ export async function releaseLock(env: Env, key: string, token: string | null): 
   const existing = await getSetting(env, lockKey);
   const parsed = safeJsonParse<{ token: string }>(existing);
   if (!parsed || parsed.token !== token) return false;
-
   await env.DB.prepare(`DELETE FROM settings WHERE key = ?`).bind(lockKey).run();
   return true;
 }
@@ -183,9 +167,7 @@ export async function logEvent(env: Env, type: string, message: string, leadId: 
   await env.DB.prepare(
     `INSERT INTO events (id, type, message, lead_id, created_at_iso)
      VALUES (?, ?, ?, ?, ?)`
-  )
-    .bind(uuid(), type, message, leadId, nowISO())
-    .run();
+  ).bind(uuid(), type, message, leadId, nowISO()).run();
 }
 
 export async function listEvents(env: Env, limit = 50): Promise<EventRow[]> {
@@ -194,9 +176,7 @@ export async function listEvents(env: Env, limit = 50): Promise<EventRow[]> {
      FROM events
      ORDER BY created_at_iso DESC
      LIMIT ?`
-  )
-    .bind(limit)
-    .all()) as { results: EventRow[] };
+  ).bind(limit).all()) as { results: EventRow[] };
   return results || [];
 }
 
@@ -205,30 +185,33 @@ export async function addSuppression(env: Env, email: string, reason: string): P
   await env.DB.prepare(
     `INSERT INTO suppression (email, reason, created_at_iso)
      VALUES (?, ?, ?)
-     ON CONFLICT(email) DO UPDATE SET
-       reason = excluded.reason,
-       created_at_iso = excluded.created_at_iso`
-  )
-    .bind(normalized, reason, nowISO())
-    .run();
+     ON CONFLICT(email) DO UPDATE SET reason = excluded.reason, created_at_iso = excluded.created_at_iso`
+  ).bind(normalized, reason, nowISO()).run();
 }
 
 export async function isSuppressed(env: Env, email: string | null | undefined): Promise<boolean> {
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
-  const row = await env.DB.prepare(`SELECT email FROM suppression WHERE email = ? LIMIT 1`)
-    .bind(normalized)
-    .first<{ email: string }>();
+  const row = await env.DB.prepare(`SELECT email FROM suppression WHERE email = ? LIMIT 1`).bind(normalized).first<{ email: string }>();
   return Boolean(row?.email);
 }
 
 function normalizeLeadWebsite(websiteUrl: string): string {
-  return websiteUrl.trim().replace(/\/+$/, "");
+  return String(websiteUrl || "").trim().replace(/\/+$/, "");
+}
+
+function companyNameFromWebsite(websiteUrl: string): string {
+  try {
+    const normalized = /^https?:\/\//i.test(websiteUrl) ? websiteUrl : `https://${websiteUrl}`;
+    const host = new URL(normalized).hostname.replace(/^www\./i, "");
+    return host || "unknown-site";
+  } catch {
+    return normalizeLeadWebsite(websiteUrl) || "unknown-site";
+  }
 }
 
 export async function insertLead(env: Env, websiteUrl: string, discoverySource = "manual"): Promise<LeadRow> {
   const normalized = normalizeLeadWebsite(websiteUrl);
-
   const existing = await env.DB.prepare(
     `SELECT id, company_name, website_url, country, region, category, discovery_source,
             contact_email, contact_page_url, has_contact_form, signals_json,
@@ -237,14 +220,13 @@ export async function insertLead(env: Env, websiteUrl: string, discoverySource =
      FROM leads
      WHERE lower(website_url) = lower(?)
      LIMIT 1`
-  )
-    .bind(normalized)
-    .first<LeadRow>();
+  ).bind(normalized).first<LeadRow>();
 
   if (existing) return existing;
 
   const id = uuid();
   const now = nowISO();
+  const companyName = companyNameFromWebsite(normalized);
 
   await env.DB.prepare(
     `INSERT INTO leads (
@@ -252,36 +234,18 @@ export async function insertLead(env: Env, websiteUrl: string, discoverySource =
       contact_email, contact_page_url, has_contact_form, signals_json,
       score_fit, score_contact, score_risk, score_total, status, created_at_iso, updated_at_iso
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(
-      id,
-      null,
-      normalized,
-      null,
-      null,
-      "general",
-      discoverySource,
-      null,
-      null,
-      0,
-      null,
-      0,
-      0,
-      0,
-      0,
-      "new",
-      now,
-      now
-    )
-    .run();
+  ).bind(
+      id, companyName, normalized, null, null, "other", discoverySource,
+      null, null, 0, null, 0, 0, 0, 0, "new", now, now
+    ).run();
 
   return {
     id,
-    company_name: null,
+    company_name: companyName,
     website_url: normalized,
     country: null,
     region: null,
-    category: "general",
+    category: "other",
     discovery_source: discoverySource,
     contact_email: null,
     contact_page_url: null,
@@ -297,20 +261,12 @@ export async function insertLead(env: Env, websiteUrl: string, discoverySource =
   };
 }
 
-interface ListLeadOptions {
-  status?: LeadStatus;
-  limit?: number;
-}
+interface ListLeadOptions { status?: LeadStatus; limit?: number; }
 
 export async function listLeads(env: Env, opts: ListLeadOptions = {}): Promise<LeadRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
-
-  if (opts.status) {
-    clauses.push("status = ?");
-    params.push(opts.status);
-  }
-
+  if (opts.status) { clauses.push("status = ?"); params.push(opts.status); }
   const limit = Math.min(500, Math.max(1, opts.limit ?? 50));
   const sql = `SELECT id, company_name, website_url, country, region, category, discovery_source,
                       contact_email, contact_page_url, has_contact_form, signals_json,
@@ -321,7 +277,6 @@ export async function listLeads(env: Env, opts: ListLeadOptions = {}): Promise<L
                ORDER BY updated_at_iso DESC
                LIMIT ?`;
   params.push(limit);
-
   const { results } = (await env.DB.prepare(sql).bind(...params).all()) as { results: LeadRow[] };
   return results || [];
 }
@@ -346,90 +301,39 @@ export interface LeadUpdateInput {
 export async function updateLead(env: Env, id: string, updates: LeadUpdateInput): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [];
-  const orderedKeys: Array<keyof LeadUpdateInput> = [
-    "company_name",
-    "country",
-    "region",
-    "category",
-    "discovery_source",
-    "contact_email",
-    "contact_page_url",
-    "has_contact_form",
-    "signals_json",
-    "score_fit",
-    "score_contact",
-    "score_risk",
-    "score_total",
-    "status",
-  ];
-
+  const orderedKeys: Array<keyof LeadUpdateInput> = ["company_name","country","region","category","discovery_source","contact_email","contact_page_url","has_contact_form","signals_json","score_fit","score_contact","score_risk","score_total","status"];
   for (const key of orderedKeys) {
     if (Object.prototype.hasOwnProperty.call(updates, key)) {
       sets.push(`${key} = ?`);
       params.push((updates as any)[key]);
     }
   }
-
   sets.push("updated_at_iso = ?");
   params.push(nowISO());
   params.push(id);
-
-  await env.DB.prepare(
-    `UPDATE leads
-     SET ${sets.join(", ")}
-     WHERE id = ?`
-  )
-    .bind(...params)
-    .run();
+  await env.DB.prepare(`UPDATE leads SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
 }
 
 export async function getLeadById(env: Env, id: string): Promise<LeadRow | null> {
-  return (
-    (await env.DB.prepare(
-      `SELECT id, company_name, website_url, country, region, category, discovery_source,
-              contact_email, contact_page_url, has_contact_form, signals_json,
-              score_fit, score_contact, score_risk, score_total, status,
-              created_at_iso, updated_at_iso
-       FROM leads
-       WHERE id = ?
-       LIMIT 1`
-    )
-      .bind(id)
-      .first<LeadRow>()) || null
-  );
+  return (await env.DB.prepare(
+    `SELECT id, company_name, website_url, country, region, category, discovery_source,
+            contact_email, contact_page_url, has_contact_form, signals_json,
+            score_fit, score_contact, score_risk, score_total, status,
+            created_at_iso, updated_at_iso
+     FROM leads WHERE id = ? LIMIT 1`
+  ).bind(id).first<LeadRow>()) || null;
 }
 
-export interface DraftInsertInput {
-  leadId: string;
-  mode?: string | null;
-  subject: string;
-  bodyText: string;
-  followupText?: string | null;
-  whyJson?: string | null;
-}
+export interface DraftInsertInput { leadId: string; mode?: string | null; subject: string; bodyText: string; followupText?: string | null; whyJson?: string | null; }
 
 export async function insertDraft(env: Env, input: DraftInsertInput): Promise<DraftRow> {
   const now = nowISO();
   const id = uuid();
-
   await env.DB.prepare(
     `INSERT INTO drafts (
       id, lead_id, mode, subject, body_text, followup_text, why_json, status, created_at_iso, updated_at_iso
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(
-      id,
-      input.leadId,
-      input.mode || "heuristic",
-      input.subject,
-      input.bodyText,
-      input.followupText || null,
-      input.whyJson || null,
-      "created",
-      now,
-      now
-    )
-    .run();
+  ).bind(id, input.leadId, input.mode || "heuristic", input.subject, input.bodyText, input.followupText || null, input.whyJson || null, "created", now, now).run();
 
   return {
     id,
@@ -445,20 +349,12 @@ export async function insertDraft(env: Env, input: DraftInsertInput): Promise<Dr
   };
 }
 
-interface ListDraftOptions {
-  status?: DraftStatus;
-  limit?: number;
-}
+interface ListDraftOptions { status?: DraftStatus; limit?: number; }
 
 export async function listDrafts(env: Env, opts: ListDraftOptions = {}): Promise<DraftRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
-
-  if (opts.status) {
-    clauses.push("status = ?");
-    params.push(opts.status);
-  }
-
+  if (opts.status) { clauses.push("status = ?"); params.push(opts.status); }
   const limit = Math.min(500, Math.max(1, opts.limit ?? 50));
   const sql = `SELECT id, lead_id, mode, subject, body_text, followup_text, why_json, status, created_at_iso, updated_at_iso
                FROM drafts
@@ -466,51 +362,31 @@ export async function listDrafts(env: Env, opts: ListDraftOptions = {}): Promise
                ORDER BY updated_at_iso DESC
                LIMIT ?`;
   params.push(limit);
-
   const { results } = (await env.DB.prepare(sql).bind(...params).all()) as { results: DraftRow[] };
   return results || [];
 }
 
 export async function getDraftById(env: Env, id: string): Promise<DraftRow | null> {
-  return (
-    (await env.DB.prepare(
-      `SELECT id, lead_id, mode, subject, body_text, followup_text, why_json, status, created_at_iso, updated_at_iso
-       FROM drafts
-       WHERE id = ?
-       LIMIT 1`
-    )
-      .bind(id)
-      .first<DraftRow>()) || null
-  );
+  return (await env.DB.prepare(
+    `SELECT id, lead_id, mode, subject, body_text, followup_text, why_json, status, created_at_iso, updated_at_iso
+     FROM drafts WHERE id = ? LIMIT 1`
+  ).bind(id).first<DraftRow>()) || null;
 }
 
-export async function updateDraft(
-  env: Env,
-  id: string,
-  updates: Partial<Pick<DraftRow, "status" | "subject" | "body_text" | "followup_text" | "why_json" | "mode">>
-): Promise<void> {
+export async function updateDraft(env: Env, id: string, updates: Partial<Pick<DraftRow, "status" | "subject" | "body_text" | "followup_text" | "why_json" | "mode">>): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [];
-  const orderedKeys: Array<keyof typeof updates> = ["status", "subject", "body_text", "followup_text", "why_json", "mode"];
-
+  const orderedKeys: Array<keyof typeof updates> = ["status","subject","body_text","followup_text","why_json","mode"];
   for (const key of orderedKeys) {
     if (Object.prototype.hasOwnProperty.call(updates, key)) {
       sets.push(`${key} = ?`);
       params.push((updates as any)[key]);
     }
   }
-
   sets.push("updated_at_iso = ?");
   params.push(nowISO());
   params.push(id);
-
-  await env.DB.prepare(
-    `UPDATE drafts
-     SET ${sets.join(", ")}
-     WHERE id = ?`
-  )
-    .bind(...params)
-    .run();
+  await env.DB.prepare(`UPDATE drafts SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
 }
 
 export interface TodayStats {
@@ -533,11 +409,7 @@ export async function getTodayStats(env: Env): Promise<TodayStats> {
     bouncesToday: "bounces_today",
     unsubscribesToday: "unsubscribes_today",
   } as const;
-
   const out: Record<string, number> = {};
-  for (const [targetKey, sourceKey] of Object.entries(map)) {
-    out[targetKey] = Number((await getSetting(env, sourceKey)) || 0);
-  }
-
+  for (const [targetKey, sourceKey] of Object.entries(map)) out[targetKey] = Number((await getSetting(env, sourceKey)) || 0);
   return out as TodayStats;
 }

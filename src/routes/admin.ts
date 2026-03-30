@@ -1,4 +1,4 @@
-import type { Env, LeadRow, DraftRow } from "../db";
+import type { Env, LeadRow, DraftRow, EventRow } from "../db";
 import {
   listLeads,
   listDrafts,
@@ -10,7 +10,9 @@ import {
   listEvents,
   logEvent,
   bump,
-  safeJsonParse,
+  parseLeadSignals,
+  getAdminToken,
+  getDraftById,
 } from "../db";
 import { dailyTick, runScanOnce, runDraftOnce, runSendApproved, scanWebsiteNow } from "../engine";
 
@@ -27,48 +29,53 @@ function getBearerToken(req: Request): string {
   return header.startsWith("Bearer ") ? header.slice(7) : "";
 }
 
+function confidenceForScore(score: number): "low" | "medium" | "high" {
+  if (score >= 0.75) return "high";
+  if (score >= 0.45) return "medium";
+  return "low";
+}
+
 function mapLead(lead: LeadRow) {
-  const info = safeJsonParse<any>(lead.data) || lead.data || {};
-  const domain = String(lead.website).replace(/^https?:\/\//i, "").replace(/\/$/, "");
-  const scoreTotal = Number(info.scoreTotal || 0);
+  const signals = parseLeadSignals(lead);
+  const domain = String(lead.website_url).replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
   return {
     id: lead.id,
-    website_url: lead.website,
-    website: lead.website,
+    website_url: lead.website_url,
+    website: lead.website_url,
     domain,
-    title: info.title || "",
-    summary: info.brief || "",
-    category: info.classification || "general",
+    title: signals.title || lead.company_name || "",
+    summary: signals.brief || signals.summary || "",
+    category: lead.category || "general",
     status: lead.status,
-    contact_email: info.contactEmail || null,
-    contact_emails: info.contactEmail ? JSON.stringify([info.contactEmail]) : null,
-    contact_page_url: null,
-    has_contact_form: /contact/i.test(info.contactSummary || ""),
-    score: scoreTotal,
-    score_total: scoreTotal,
+    contact_email: lead.contact_email || null,
+    contact_emails: lead.contact_email ? JSON.stringify([lead.contact_email]) : null,
+    contact_page_url: lead.contact_page_url || null,
+    has_contact_form: Boolean(lead.has_contact_form),
+    score: Number(lead.score_total || 0),
+    score_total: Number(lead.score_total || 0),
     score_breakdown: {
-      fit: Number(info.fitScore || 0),
-      contactability: Number(info.contactabilityScore || 0),
-      risk: Number(info.riskScore || 0),
-      total: scoreTotal,
+      fit: Number(lead.score_fit || 0),
+      contactability: Number(lead.score_contact || 0),
+      risk: Number(lead.score_risk || 0),
+      total: Number(lead.score_total || 0),
     },
-    country: null,
-    region: null,
+    country: lead.country || null,
+    region: lead.region || null,
     mode: "heuristic",
-    tech_stack: Array.isArray(info.techTags) ? info.techTags.join(", ") : null,
+    tech_stack: Array.isArray(signals.techTags) ? signals.techTags.join(", ") : null,
     brief: {
-      summary: info.brief || "",
-      siteQualitySummary: info.siteQualitySummary || "",
-      serviceTags: Array.isArray(info.serviceTags) ? info.serviceTags : [],
-      techTags: Array.isArray(info.techTags) ? info.techTags : [],
-      outreachAngles: Array.isArray(info.outreachAngles) ? info.outreachAngles : [],
-      groundedFacts: Array.isArray(info.groundedFacts) ? info.groundedFacts : [],
-      avoidSaying: Array.isArray(info.avoidSaying) ? info.avoidSaying : [],
-      contactSummary: info.contactSummary || "",
-      confidence: scoreTotal >= 0.75 ? "high" : scoreTotal >= 0.45 ? "medium" : "low",
+      summary: signals.brief || signals.summary || "",
+      siteQualitySummary: signals.siteQualitySummary || "",
+      serviceTags: Array.isArray(signals.serviceTags) ? signals.serviceTags : [],
+      techTags: Array.isArray(signals.techTags) ? signals.techTags : [],
+      outreachAngles: Array.isArray(signals.outreachAngles) ? signals.outreachAngles : [],
+      groundedFacts: Array.isArray(signals.groundedFacts) ? signals.groundedFacts : [],
+      avoidSaying: Array.isArray(signals.avoidSaying) ? signals.avoidSaying : [],
+      contactSummary: signals.contactSummary || "",
+      confidence: confidenceForScore(Number(lead.score_total || 0)),
     },
-    lead_class: info.classification || "general",
+    lead_class: lead.category || "general",
     created_at_iso: lead.created_at_iso,
     updated_at_iso: lead.updated_at_iso,
     last_scanned_at_iso: lead.updated_at_iso,
@@ -76,18 +83,27 @@ function mapLead(lead: LeadRow) {
 }
 
 async function mapDraft(env: Env, draft: DraftRow) {
-  const lead = await env.DB.prepare(`SELECT website, data FROM leads WHERE id = ?`).bind(draft.lead_id).first<any>();
-  const info = safeJsonParse<any>(lead?.data) || {};
+  const lead = await env.DB.prepare(
+    `SELECT company_name, website_url, contact_email
+     FROM leads
+     WHERE id = ?
+     LIMIT 1`
+  )
+    .bind(draft.lead_id)
+    .first<{ company_name: string | null; website_url: string; contact_email: string | null }>();
+
+  const displayName = lead?.company_name || String(lead?.website_url || draft.lead_id).replace(/^https?:\/\//i, "").replace(/\/$/, "");
+
   return {
     id: draft.id,
     lead_id: draft.lead_id,
     status: draft.status === "created" ? "queued" : draft.status,
     subject: draft.subject,
-    body_text: draft.body,
-    followup_text: null,
-    why_json: null,
-    to_name: String(lead?.website || draft.lead_id).replace(/^https?:\/\//i, "").replace(/\/$/, ""),
-    to_email: info.contactEmail || null,
+    body_text: draft.body_text,
+    followup_text: draft.followup_text || null,
+    why_json: draft.why_json || null,
+    to_name: displayName,
+    to_email: lead?.contact_email || null,
     created_at_iso: draft.created_at_iso,
     updated_at_iso: draft.updated_at_iso,
   };
@@ -101,12 +117,12 @@ async function getCaps(env: Env) {
   };
 }
 
-function mapEvent(event: { id: string; type: string; message: string; created_at_iso: string }) {
+function mapEvent(event: EventRow) {
   return {
     id: event.id,
     type: event.type,
     message: event.message,
-    lead_id: null,
+    lead_id: event.lead_id || null,
     created_at_iso: event.created_at_iso,
   };
 }
@@ -118,8 +134,9 @@ export async function handleAdmin(
   url: URL,
   json: (data: any, init?: ResponseInit) => Response
 ): Promise<Response> {
-  if (!env.ADMIN_TOKEN) return json({ ok: false, error: "admin_token_not_configured" }, { status: 500 });
-  if (getBearerToken(req) !== env.ADMIN_TOKEN) return unauthorized(json);
+  const adminToken = getAdminToken(env);
+  if (!adminToken) return json({ ok: false, error: "admin_token_not_configured" }, { status: 500 });
+  if (getBearerToken(req) !== adminToken) return unauthorized(json);
 
   const path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
   const parts = path.split("/");
@@ -151,9 +168,9 @@ export async function handleAdmin(
   }
 
   if (req.method === "GET" && path === "admin/leads") {
-    const status = url.searchParams.get("status") || undefined;
+    const status = (url.searchParams.get("status") || undefined) as any;
     const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
-    const leads = await listLeads(env, { status: status as any, limit });
+    const leads = await listLeads(env, { status, limit });
     return json({ ok: true, leads: leads.map(mapLead) });
   }
 
@@ -167,32 +184,32 @@ export async function handleAdmin(
 
   if (req.method === "GET" && path === "admin/drafts") {
     const requested = String(url.searchParams.get("status") || "");
-    const status = requested === "queued" ? "created" : requested || undefined;
+    const status = requested === "queued" ? "created" : (requested || undefined);
     const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
     const drafts = await listDrafts(env, { status: status as any, limit });
-    const out: any[] = []
+    const out = [];
     for (const draft of drafts) out.push(await mapDraft(env, draft));
     return json({ ok: true, drafts: out });
   }
 
   if (req.method === "POST" && parts.length === 4 && parts[0] === "admin" && parts[1] === "drafts" && parts[3] === "approve") {
     const draftId = decodeURIComponent(parts[2]);
-    const draft = await env.DB.prepare(`SELECT id, lead_id FROM drafts WHERE id = ? LIMIT 1`).bind(draftId).first<any>();
+    const draft = await getDraftById(env, draftId);
     if (!draft) return json({ ok: false, error: "draft_not_found" }, { status: 404 });
     await updateDraft(env, draftId, { status: "approved" });
     await updateLead(env, draft.lead_id, { status: "approved" });
     await bump(env, "approvals_today", 1);
-    await logEvent(env, "draft_approved", `Draft approved ${draftId}`);
+    await logEvent(env, "draft_approved", `Draft approved ${draftId}`, draft.lead_id);
     return json({ ok: true });
   }
 
   if (req.method === "POST" && parts.length === 4 && parts[0] === "admin" && parts[1] === "drafts" && parts[3] === "reject") {
     const draftId = decodeURIComponent(parts[2]);
-    const draft = await env.DB.prepare(`SELECT id, lead_id FROM drafts WHERE id = ? LIMIT 1`).bind(draftId).first<any>();
+    const draft = await getDraftById(env, draftId);
     if (!draft) return json({ ok: false, error: "draft_not_found" }, { status: 404 });
     await updateDraft(env, draftId, { status: "rejected" });
     await updateLead(env, draft.lead_id, { status: "rejected" });
-    await logEvent(env, "draft_rejected", `Draft rejected ${draftId}`);
+    await logEvent(env, "draft_rejected", `Draft rejected ${draftId}`, draft.lead_id);
     return json({ ok: true });
   }
 
@@ -208,7 +225,7 @@ export async function handleAdmin(
       ok: true,
       settings: {
         engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
-        ai_enabled: (await getSetting(env, "ai_enabled")) || "1",
+        ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
         drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
         sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
         approval_required: (await getSetting(env, "approval_required")) || "1",
@@ -216,7 +233,7 @@ export async function handleAdmin(
         draft_cap_per_day: String(caps.drafts),
         send_cap_per_day: String(caps.send),
         min_score_for_draft: (await getSetting(env, "min_score_for_draft")) || "0.45",
-        min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.75",
+        min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.65",
       },
     });
   }
@@ -252,12 +269,10 @@ export async function handleAdmin(
     const statuses: Record<string, number> = {};
 
     for (const lead of leads) {
-      const info = safeJsonParse<any>(lead.data) || lead.data || {};
-      if (info.contactEmail) contactableLeads += 1;
-      totalScore += Number(info.scoreTotal || 0);
-
-      const classification = String(info.classification || "unknown");
-      leadClasses[classification] = (leadClasses[classification] || 0) + 1;
+      if (lead.contact_email) contactableLeads += 1;
+      totalScore += Number(lead.score_total || 0);
+      const category = String(lead.category || "unknown");
+      leadClasses[category] = (leadClasses[category] || 0) + 1;
       statuses[lead.status] = (statuses[lead.status] || 0) + 1;
     }
 
@@ -309,16 +324,11 @@ export async function handleAdmin(
     const urls = Array.isArray(body?.urls) ? body.urls.map((v: any) => String(v).trim()).filter(Boolean) : [];
     if (!urls.length) return badRequest(json, "missing_urls");
     let added = 0;
-    for (const website of urls) {
-      await scanWebsiteNow(env, website);
+    for (const websiteUrl of urls) {
+      await scanWebsiteNow(env, websiteUrl);
       added += 1;
     }
     return json({ ok: true, added });
-  }
-
-  if (req.method === "POST" && path === "admin/scan") {
-    const result = await runScanOnce(env);
-    return json({ ok: true, ...result });
   }
 
   return json({ ok: false, error: "not_found" }, { status: 404 });

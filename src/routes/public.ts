@@ -1,12 +1,5 @@
 import type { Env } from "../db";
-import {
-  getTodayStats,
-  getSetting,
-  listEvents,
-  addSuppression,
-  logEvent,
-  setSetting,
-} from "../db";
+import { getTodayStats, getSetting, listEvents, addSuppression, logEvent, setSetting } from "../db";
 
 function withCors(res: Response, origin: string | null): Response {
   const headers = new Headers(res.headers);
@@ -55,77 +48,79 @@ export async function handlePublic(
     if (lastRunRaw) {
       try { lastRun = JSON.parse(lastRunRaw); } catch {}
     }
-    const crawlCap = Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60);
-    const aiCap = Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25);
-    const sendCap = Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12);
 
-    const budgets = {
-      crawl: {
-        scannedToday: stats.leadsNewToday,
-        capPerDay: crawlCap,
-        remaining: Math.max(0, crawlCap - stats.leadsNewToday),
-      },
-      ai: {
-        usedToday: stats.draftsCreatedToday,
-        capPerDay: aiCap,
-        remaining: Math.max(0, aiCap - stats.draftsCreatedToday),
-      },
-      send: {
-        sentToday: stats.sendsSentToday,
-        capPerDay: sendCap,
-        remaining: Math.max(0, sendCap - stats.sendsSentToday),
-      },
-    };
+    const crawlCap = Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60);
+    const draftCap = Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25);
+    const sendCap = Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12);
 
     const topSlices = await (async () => {
       try {
         const { results } = (await env.DB.prepare(
-          `SELECT json_extract(data, '$.classification') as class, COUNT(*) as count
+          `SELECT category, COUNT(*) as count
            FROM leads
-           WHERE data IS NOT NULL
-           GROUP BY class`
-        ).all()) as { results: any[] };
-        const total = results.reduce((sum, row) => sum + Number(row.count || 0), 0) || 0;
-        return results
-          .map((row) => ({
-            label: row.class || "unknown",
-            value: total ? Math.round((Number(row.count) / total) * 100) : 0,
-          }))
-          .filter((row) => row.value > 0)
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 6);
+           GROUP BY category
+           ORDER BY count DESC
+           LIMIT 6`
+        ).all()) as { results: Array<{ category: string | null; count: number }> };
+        const total = (results || []).reduce((sum, row) => sum + Number(row.count || 0), 0);
+        return (results || []).map((row) => ({
+          label: row.category || "unknown",
+          value: total ? Math.round((Number(row.count || 0) / total) * 100) : 0,
+        }));
       } catch {
         return [];
       }
     })();
 
-    return withCors(json({
-      ok: true,
-      nowISO: new Date().toISOString(),
-      engine: {
-        enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
-        sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") !== "0" && !!env.MAILCHANNELS_API_KEY && !!env.FROM_EMAIL,
-        pausedReason: (await getSetting(env, "engine_paused_reason")) || null,
-        lastRun,
-      },
-      budgets,
-      stats,
-      topSlices,
-    }), origin);
+    return withCors(
+      json({
+        ok: true,
+        nowISO: new Date().toISOString(),
+        engine: {
+          enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
+          sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") !== "0" && !!env.MAILCHANNELS_API_KEY && !!env.FROM_EMAIL,
+          pausedReason: (await getSetting(env, "engine_paused_reason")) || null,
+          lastRun,
+        },
+        budgets: {
+          crawl: {
+            scannedToday: stats.leadsNewToday,
+            capPerDay: crawlCap,
+            remaining: Math.max(0, crawlCap - stats.leadsNewToday),
+          },
+          ai: {
+            usedToday: stats.draftsCreatedToday,
+            capPerDay: draftCap,
+            remaining: Math.max(0, draftCap - stats.draftsCreatedToday),
+          },
+          send: {
+            sentToday: stats.sendsSentToday,
+            capPerDay: sendCap,
+            remaining: Math.max(0, sendCap - stats.sendsSentToday),
+          },
+        },
+        stats,
+        topSlices,
+      }),
+      origin
+    );
   }
 
   if (req.method === "GET" && path === "public/events") {
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 18)));
     const events = await listEvents(env, limit);
-    return withCors(json({
-      ok: true,
-      events: events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        message: humanizePublicEvent(event.type, event.message),
-        created_at_iso: event.created_at_iso,
-      })),
-    }), origin);
+    return withCors(
+      json({
+        ok: true,
+        events: events.map((event) => ({
+          id: event.id,
+          type: event.type,
+          message: humanizePublicEvent(event.type, event.message),
+          created_at_iso: event.created_at_iso,
+        })),
+      }),
+      origin
+    );
   }
 
   if (req.method === "GET" && path === "public/unsubscribe") {

@@ -18,7 +18,6 @@ import {
   insertLead,
   parseLeadSignals,
   getLeadById,
-  getDraftById,
   isSuppressed,
 } from "./db";
 import { sendEmail } from "./email";
@@ -80,6 +79,22 @@ async function fetchHtml(url: string): Promise<string> {
   }
 }
 
+function extractDescription(html: string): string {
+  return html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1]?.trim() || "";
+}
+
+function extractTitle(html: string): string {
+  return html.match(/<title[^>]*>(.*?)<\/title>/i)?.[1]?.trim() || "";
+}
+
+function guessCompanyName(title: string, domain: string): string {
+  if (title) {
+    const cleaned = title.split(/[\-|•|:|·]/)[0].replace(/\s+/g, " ").trim();
+    if (cleaned) return cleaned;
+  }
+  return domain.replace(/^www\./i, "");
+}
+
 function classifyLead(domain: string, html: string): { classification: string; serviceTags: string[]; techTags: string[] } {
   const content = html.toLowerCase();
   const domainLower = domain.toLowerCase();
@@ -90,42 +105,25 @@ function classifyLead(domain: string, html: string): { classification: string; s
   if (/wordpress|wp-content/.test(content)) techTags.push("wordpress");
   if (/wix/.test(content)) techTags.push("wix");
   if (/squarespace/.test(content)) techTags.push("squarespace");
-  if (/react|next\.js/.test(content)) techTags.push("react");
+  if (/react|next\.js|__next/.test(content)) techTags.push("react");
   if (/webflow/.test(content)) techTags.push("webflow");
 
   if (/e[- ]?commerce|checkout|cart|product/.test(content)) serviceTags.push("ecommerce");
   if (/design|branding|studio|creative/.test(content)) serviceTags.push("design");
   if (/development|software|engineer|developer/.test(content)) serviceTags.push("development");
   if (/marketing|seo|ads|campaign/.test(content)) serviceTags.push("marketing");
-  if (/agency/.test(content)) serviceTags.push("agency");
+  if (/agency|white[- ]?label|partner/.test(content)) serviceTags.push("agency");
 
   let classification = "general";
   if (/(^|\.)gov(\.|$)| government /.test(` ${domainLower} ${content} `)) classification = "government";
   else if (/(^|\.)edu(\.|$)| university | school /.test(` ${domainLower} ${content} `)) classification = "education";
   else if (/nonprofit|not-for-profit|charity|ngo/.test(content)) classification = "nonprofit";
-  else if (/saas|software as a service/.test(content)) classification = "saas";
+  else if (/saas|software as a service|book demo|start free|sign in/.test(content)) classification = "saas";
   else if (serviceTags.includes("ecommerce")) classification = "ecommerce";
   else if (serviceTags.includes("agency")) classification = "agency";
+  else if (/builder|plumber|electrician|contractor|cabinet|joinery|roofing|construction/.test(content)) classification = "contractor";
 
   return { classification, serviceTags, techTags };
-}
-
-function extractDescription(html: string): string {
-  const match = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i);
-  return match?.[1]?.trim() || "";
-}
-
-function extractTitle(html: string): string {
-  const match = html.match(/<title[^>]*>(.*?)<\/title>/i);
-  return match?.[1]?.trim() || "";
-}
-
-function guessCompanyName(title: string, domain: string): string {
-  if (title) {
-    const cleaned = title.split(/[\-|•|:|·]/)[0].replace(/\s+/g, " ").trim();
-    if (cleaned) return cleaned;
-  }
-  return domain.replace(/^www\./i, "");
 }
 
 async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
@@ -142,9 +140,11 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
   const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], normalized).toString() : null;
   const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
 
-  let fit = 0.5;
-  if (["ecommerce", "saas", "agency"].includes(classification)) fit = 0.85;
-  if (["government", "education", "nonprofit"].includes(classification)) fit = 0.2;
+  let fit = 0.45;
+  if (["ecommerce", "saas", "agency", "contractor"].includes(classification)) fit = 0.82;
+  if (["government", "education", "nonprofit"].includes(classification)) fit = 0.18;
+  if (/wix|squarespace|weebly|template/i.test(html)) fit += 0.08;
+  if (!html.trim()) fit -= 0.12;
 
   let contact = 0.2;
   if (contactEmail) contact = 0.95;
@@ -154,10 +154,15 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
   if (/\.(xyz|click|top|info)$/i.test(url.hostname)) risk = 0.45;
   if (/(casino|bet|porn|adult|download crack)/i.test(html)) risk = 0.9;
 
+  fit = Math.max(0, Math.min(1, fit));
+  contact = Math.max(0, Math.min(1, contact));
+  risk = Math.max(0, Math.min(1, risk));
+
   const scoreTotal = fit * 0.5 + contact * 0.35 - risk * 0.2;
   const outreachAngles: string[] = [];
+  if (classification === "agency") outreachAngles.push("support overflow delivery", "offer white-label capacity");
+  if (classification === "contractor") outreachAngles.push("make the site clearer for inbound enquiries", "improve trust and lead capture");
   if (serviceTags.includes("ecommerce")) outreachAngles.push("improve conversion flow");
-  if (serviceTags.includes("design")) outreachAngles.push("lift visual credibility");
   if (techTags.some((tag) => ["wordpress", "wix", "squarespace"].includes(tag))) outreachAngles.push("rebuild into a stronger custom stack");
   if (!outreachAngles.length) outreachAngles.push("tighten positioning and site performance");
 
@@ -167,6 +172,12 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
   if (contactEmail) groundedFacts.push(`Email found: ${contactEmail}`);
   if (contactPageUrl) groundedFacts.push(`Contact page: ${contactPageUrl}`);
 
+  let brief = `General business with ${serviceTags.join(", ") || "unspecified offerings"}`;
+  if (classification === "agency") brief = "Agency lead that may suit white-label or overflow support outreach";
+  else if (classification === "contractor") brief = "Contractor-style business where practical lead-generation improvements may be valuable";
+  else if (classification === "ecommerce") brief = "Commerce-focused business with likely conversion optimisation opportunities";
+  else if (classification === "saas") brief = "SaaS-style business where positioning and product marketing clarity matter";
+
   return {
     companyName: guessCompanyName(title, url.hostname),
     classification,
@@ -174,7 +185,7 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
     contactabilityScore: Number(contact.toFixed(2)),
     riskScore: Number(risk.toFixed(2)),
     scoreTotal: Number(scoreTotal.toFixed(2)),
-    brief: classification === "general" ? `General business with ${serviceTags.join(", ") || "unspecified offerings"}` : `${classification} business`,
+    brief,
     contactEmail,
     contactPageUrl,
     hasContactForm,
@@ -183,7 +194,7 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
     techTags,
     serviceTags,
     outreachAngles,
-    avoidSaying: classification === "nonprofit" ? ["profit"] : [],
+    avoidSaying: classification === "agency" ? ["we can replace your team", "you need a redesign"] : classification === "nonprofit" ? ["profit"] : [],
     groundedFacts,
     title,
     description,
@@ -209,51 +220,131 @@ function buildLeadSignals(scan: ScanResult): LeadSignals {
   };
 }
 
-function buildDraftCopy(lead: LeadRow): { subject: string; bodyText: string; followupText: string | null; whyJson: string } {
+function envBrandLine(env: Env): string {
+  return env.BRAND_NAME || "EVAVO Studio";
+}
+
+function cleanCompanyName(lead: LeadRow): string {
   const signals = parseLeadSignals(lead);
+  return lead.company_name || signals.companyName || lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+}
+
+function buildAgencyDraft(env: Env, lead: LeadRow) {
+  const signals = parseLeadSignals(lead);
+  const company = cleanCompanyName(lead);
   const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-  const company = lead.company_name || signals.companyName || domain;
+  const facts = (signals.groundedFacts || []).slice(0, 2).join("; ");
+
+  return {
+    subject: `Possible overflow support for ${company}`,
+    bodyText: [
+      `Hi ${company},`,
+      "",
+      `I had a look through ${domain} and thought there may be a fit for overflow or white-label support.`,
+      facts ? `A couple of grounded things I picked up: ${facts}.` : "",
+      "",
+      `At ${envBrandLine(env)}, we help teams that need dependable extra capacity across strategy, design, and implementation without adding permanent headcount.`,
+      "This would only make sense if you occasionally need extra hands behind the scenes, but if that is relevant, I would be happy to send a short note on how we usually slot in.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].filter(Boolean).join("\n"),
+    followupText: [
+      `Hi ${company},`,
+      "",
+      "Just following up in case overflow or white-label support is relevant at the moment.",
+      "Happy to send a short note outlining the kind of work we can quietly support behind the scenes.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].join("\n"),
+    whyJson: JSON.stringify({
+      mode: "agency_partnership",
+      company,
+      category: lead.category,
+      score_total: lead.score_total,
+      groundedFacts: signals.groundedFacts || [],
+      outreachAngles: signals.outreachAngles || [],
+    }),
+  };
+}
+
+function buildContractorDraft(env: Env, lead: LeadRow) {
+  const signals = parseLeadSignals(lead);
+  const company = cleanCompanyName(lead);
+  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const fact = (signals.groundedFacts || [])[0];
+
+  return {
+    subject: `A practical website idea for ${company}`,
+    bodyText: [
+      `Hi ${company},`,
+      "",
+      `I had a look through ${domain} and there may be a straightforward opportunity to make the site work harder for new enquiries.`,
+      fact ? `One grounded thing that stood out was: ${fact}.` : "",
+      "",
+      `At ${envBrandLine(env)}, we help service businesses tighten their site structure, lead flow, and trust signals so the website feels more like a useful sales tool than just a placeholder.`,
+      "If useful, I can send through a short note with two or three practical suggestions based on what is already there.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].filter(Boolean).join("\n"),
+    followupText: [
+      `Hi ${company},`,
+      "",
+      "Just following up in case a short set of practical website suggestions would be useful.",
+      "Happy to keep it brief and specific to what is already on the site.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].join("\n"),
+    whyJson: JSON.stringify({
+      mode: "contractor_outreach",
+      company,
+      category: lead.category,
+      score_total: lead.score_total,
+      groundedFacts: signals.groundedFacts || [],
+      outreachAngles: signals.outreachAngles || [],
+    }),
+  };
+}
+
+function buildGeneralDraft(env: Env, lead: LeadRow) {
+  const signals = parseLeadSignals(lead);
+  const company = cleanCompanyName(lead);
+  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
   const serviceTags = signals.serviceTags || [];
   const groundedFacts = signals.groundedFacts || [];
   const outreachAngles = signals.outreachAngles || ["improve digital presence"];
 
-  let subject = `A practical idea for ${company}`;
-  if ((lead.category || "").toLowerCase() === "ecommerce") subject = `Idea to improve ${company}'s conversion flow`;
-  else if ((lead.category || "").toLowerCase() === "agency") subject = `Potential collaboration with ${company}`;
-
-  const body = [
-    `Hi ${company},`,
-    "",
-    `I had a look through ${domain} and there are a few strong foundations already in place.`,
-    groundedFacts.length ? `A couple of grounded things that stood out: ${groundedFacts.slice(0, 3).join("; ")}.` : "",
-    "",
-    "At EVAVO, we help businesses tighten the quality of their web presence through strategy, design, and build work.",
-    `From what I saw, there may be an opportunity to ${outreachAngles.join(" and ")}.`,
-    serviceTags.length ? `It looks like your focus is around ${serviceTags.join(", ")}.` : "",
-    "",
-    "Happy to send through a few practical ideas if that would be useful.",
-    "",
-    "Best,",
-    envBrandLine(),
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const followup = [
-    `Hi ${company},`,
-    "",
-    "Just following up on my earlier note in case it slipped past you.",
-    "Happy to send a short teardown with a few practical suggestions if that would help.",
-    "",
-    "Best,",
-    envBrandLine(),
-  ].join("\n");
-
   return {
-    subject,
-    bodyText: body,
-    followupText: followup,
+    subject: serviceTags.includes("ecommerce") ? `Idea to improve ${company}'s conversion flow` : `A practical idea for ${company}`,
+    bodyText: [
+      `Hi ${company},`,
+      "",
+      `I had a look through ${domain} and there are a few practical opportunities that stood out.`,
+      groundedFacts.length ? `A couple of grounded things I picked up: ${groundedFacts.slice(0, 3).join("; ")}.` : "",
+      "",
+      `At ${envBrandLine(env)}, we help businesses tighten the quality of their web presence through strategy, design, and build work.`,
+      `From what I saw, there may be an opportunity to ${outreachAngles.join(" and ")}.`,
+      serviceTags.length ? `It also looks like your focus is around ${serviceTags.join(", ")}.` : "",
+      "",
+      "Happy to send through a few practical ideas if that would be useful.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].filter(Boolean).join("\n"),
+    followupText: [
+      `Hi ${company},`,
+      "",
+      "Just following up on my earlier note in case it slipped past you.",
+      "Happy to send a short teardown with a few practical suggestions if that would help.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].join("\n"),
     whyJson: JSON.stringify({
+      mode: "general_outreach",
       company,
       category: lead.category,
       score_total: lead.score_total,
@@ -264,8 +355,11 @@ function buildDraftCopy(lead: LeadRow): { subject: string; bodyText: string; fol
   };
 }
 
-function envBrandLine(): string {
-  return "EVAVO Studio";
+function buildDraftCopy(env: Env, lead: LeadRow) {
+  const category = String(lead.category || "").toLowerCase();
+  if (category === "agency") return buildAgencyDraft(env, lead);
+  if (category === "contractor") return buildContractorDraft(env, lead);
+  return buildGeneralDraft(env, lead);
 }
 
 async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseDelayMs = 300): Promise<T> {
@@ -353,7 +447,7 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
   for (const lead of leads) {
     if (lead.score_total < minimumScore) continue;
     try {
-      const draft = buildDraftCopy(lead);
+      const draft = buildDraftCopy(env, lead);
       await insertDraft(env, {
         leadId: lead.id,
         mode: "heuristic",
@@ -365,7 +459,7 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
       await updateLead(env, lead.id, { status: "drafted" });
       await bump(env, "drafts_created_today", 1);
       await bump(env, "ai_calls", 1);
-      await logEvent(env, `draft_created`, `Draft created for ${lead.website_url}`, lead.id);
+      await logEvent(env, "draft_created", `Draft created for ${lead.website_url}`, lead.id);
       drafted += 1;
     } catch (error) {
       await logEvent(env, "draft_fail", `Error drafting for ${lead.website_url}: ${String(error)}`, lead.id);

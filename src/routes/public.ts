@@ -30,6 +30,12 @@ function humanizePublicEvent(type: string, message: string): string {
   }
 }
 
+async function getNumericSetting(env: Env, key: string, fallback = 0): Promise<number> {
+  const raw = await getSetting(env, key);
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 export async function handlePublic(
   req: Request,
   env: Env,
@@ -46,12 +52,77 @@ export async function handlePublic(
     const lastRunRaw = (await getSetting(env, "last_engine_run")) || null;
     let lastRun: any = null;
     if (lastRunRaw) {
-      try { lastRun = JSON.parse(lastRunRaw); } catch {}
+      try {
+        lastRun = JSON.parse(lastRunRaw);
+      } catch {
+        lastRun = null;
+      }
     }
 
     const crawlCap = Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60);
     const draftCap = Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25);
     const sendCap = Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12);
+
+    const crawlScannedToday = await getNumericSetting(env, "crawl_scanned_today", stats.leadsNewToday || 0);
+    const draftsCreatedToday = await getNumericSetting(env, "drafts_created_today", stats.draftsCreatedToday || 0);
+    const approvalsToday = await getNumericSetting(env, "approvals_today", stats.approvalsToday || 0);
+    const sendsSentToday = await getNumericSetting(env, "sends_sent_today", stats.sendsSentToday || 0);
+    const repliesToday = await getNumericSetting(env, "replies_today", stats.repliesToday || 0);
+    const bouncesToday = await getNumericSetting(env, "bounces_today", stats.bouncesToday || 0);
+    const unsubscribesToday = await getNumericSetting(env, "unsubscribes_today", stats.unsubscribesToday || 0);
+
+    const pipeline = await (async () => {
+      try {
+        const leadStatusResult = (await env.DB.prepare(
+          `SELECT status, COUNT(*) AS count
+           FROM leads
+           GROUP BY status`
+        ).all()) as { results: Array<{ status: string | null; count: number }> };
+
+        const draftStatusResult = (await env.DB.prepare(
+          `SELECT status, COUNT(*) AS count
+           FROM drafts
+           GROUP BY status`
+        ).all()) as { results: Array<{ status: string | null; count: number }> };
+
+        const contactableRow = await env.DB.prepare(
+          `SELECT COUNT(*) AS count
+           FROM leads
+           WHERE COALESCE(TRIM(contact_email), '') <> ''
+              OR has_contact_form = 1`
+        ).first<{ count: number }>();
+
+        const byLeadStatus: Record<string, number> = {};
+        for (const row of leadStatusResult.results || []) {
+          byLeadStatus[String(row.status || "unknown")] = Number(row.count || 0);
+        }
+
+        const byDraftStatus: Record<string, number> = {};
+        for (const row of draftStatusResult.results || []) {
+          byDraftStatus[String(row.status || "unknown")] = Number(row.count || 0);
+        }
+
+        const totalLeads = Object.values(byLeadStatus).reduce((sum, count) => sum + Number(count || 0), 0);
+
+        return {
+          totalLeads,
+          contactableLeads: Number(contactableRow?.count || 0),
+          leads: byLeadStatus,
+          drafts: byDraftStatus,
+          readyToSend: Number(byDraftStatus.approved || 0),
+          queuedDrafts: Number(byDraftStatus.created || 0) + Number(byDraftStatus.queued || 0),
+        };
+      } catch {
+        return {
+          totalLeads: 0,
+          contactableLeads: 0,
+          leads: {},
+          drafts: {},
+          readyToSend: 0,
+          queuedDrafts: 0,
+        };
+      }
+    })();
 
     const topSlices = await (async () => {
       try {
@@ -78,28 +149,40 @@ export async function handlePublic(
         nowISO: new Date().toISOString(),
         engine: {
           enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
-          sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") !== "0" && !!env.MAILCHANNELS_API_KEY && !!env.FROM_EMAIL,
+          sendingEnabled:
+            ((await getSetting(env, "sending_enabled")) || "0") !== "0" &&
+            !!env.MAILCHANNELS_API_KEY &&
+            !!env.FROM_EMAIL,
           pausedReason: (await getSetting(env, "engine_paused_reason")) || null,
           lastRun,
         },
         budgets: {
           crawl: {
-            scannedToday: stats.leadsNewToday,
+            scannedToday: crawlScannedToday,
             capPerDay: crawlCap,
-            remaining: Math.max(0, crawlCap - stats.leadsNewToday),
+            remaining: Math.max(0, crawlCap - crawlScannedToday),
           },
           ai: {
-            usedToday: stats.draftsCreatedToday,
+            usedToday: draftsCreatedToday,
             capPerDay: draftCap,
-            remaining: Math.max(0, draftCap - stats.draftsCreatedToday),
+            remaining: Math.max(0, draftCap - draftsCreatedToday),
           },
           send: {
-            sentToday: stats.sendsSentToday,
+            sentToday: sendsSentToday,
             capPerDay: sendCap,
-            remaining: Math.max(0, sendCap - stats.sendsSentToday),
+            remaining: Math.max(0, sendCap - sendsSentToday),
           },
         },
-        stats,
+        stats: {
+          leadsNewToday: stats.leadsNewToday || 0,
+          draftsCreatedToday,
+          approvalsToday,
+          sendsSentToday,
+          repliesToday,
+          bouncesToday,
+          unsubscribesToday,
+        },
+        pipeline,
         topSlices,
       }),
       origin

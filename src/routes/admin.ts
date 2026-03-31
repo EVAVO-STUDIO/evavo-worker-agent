@@ -1,335 +1,314 @@
-import type { Env, LeadRow, DraftRow, EventRow } from "../db";
 import {
+  Env,
   listLeads,
   listDrafts,
   updateLead,
-  updateDraft,
   getSetting,
-  setSetting,
-  getTodayStats,
   listEvents,
   logEvent,
-  bump,
-  parseLeadSignals,
   getAdminToken,
   getDraftById,
+  insertLead,
+  getLeadById,
+  parseLeadSignals,
 } from "../db";
-import { dailyTick, runScanOnce, runDraftOnce, runSendApproved, scanWebsiteNow } from "../engine";
+import { dailyTick, runDraftOnce, runScanOnce, runSendApproved } from "../engine";
 
-function badRequest(json: (data: any, init?: ResponseInit) => Response, error: string): Response {
-  return json({ ok: false, error }, { status: 400 });
-}
+type InferredKind = "agency" | "contractor" | "ecommerce" | "service" | "not_fit" | "general";
 
-function unauthorized(json: (data: any, init?: ResponseInit) => Response): Response {
-  return json({ ok: false, error: "unauthorized" }, { status: 401 });
-}
-
-function getBearerToken(req: Request): string {
-  const header = req.headers.get("authorization") || "";
-  return header.startsWith("Bearer ") ? header.slice(7) : "";
-}
-
-function confidenceForScore(score: number): "low" | "medium" | "high" {
-  if (score >= 0.75) return "high";
-  if (score >= 0.45) return "medium";
-  return "low";
-}
-
-function mapLead(lead: LeadRow) {
-  const signals = parseLeadSignals(lead);
-  const domain = String(lead.website_url).replace(/^https?:\/\//i, "").replace(/\/$/, "");
-
-  return {
-    id: lead.id,
-    website_url: lead.website_url,
-    website: lead.website_url,
-    domain,
-    title: signals.title || lead.company_name || "",
-    summary: signals.brief || signals.summary || "",
-    category: lead.category || "general",
-    status: lead.status,
-    contact_email: lead.contact_email || null,
-    contact_emails: lead.contact_email ? JSON.stringify([lead.contact_email]) : null,
-    contact_page_url: lead.contact_page_url || null,
-    has_contact_form: Boolean(lead.has_contact_form),
-    score: Number(lead.score_total || 0),
-    score_total: Number(lead.score_total || 0),
-    score_breakdown: {
-      fit: Number(lead.score_fit || 0),
-      contactability: Number(lead.score_contact || 0),
-      risk: Number(lead.score_risk || 0),
-      total: Number(lead.score_total || 0),
+function json(data: unknown, init: ResponseInit = {}) {
+  return new Response(JSON.stringify(data), {
+    ...init,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      ...(init.headers || {}),
     },
-    country: lead.country || null,
-    region: lead.region || null,
-    mode: "heuristic",
-    tech_stack: Array.isArray(signals.techTags) ? signals.techTags.join(", ") : null,
+  });
+}
+
+function inferKind(lead: any): InferredKind {
+  const hay = JSON.stringify({
+    website: lead.website_url || "",
+    category: lead.category || "",
+    company_name: lead.company_name || "",
+    signals_json: lead.signals_json || "",
+  }).toLowerCase();
+
+  if (/(government|council|school|university|charity|nonprofit|not-for-profit|foundation)/.test(hay)) return "not_fit";
+  if (/(agency|studio|creative|branding|marketing agency|seo agency|web design|development company|developers|software studio|app development|white label|partner)/.test(hay)) return "agency";
+  if (/(builder|construction|joinery|cabinet|plumber|electrician|roofing|glazing|concrete|carpentry|landscap|civil contractor|earthworks|fabrication)/.test(hay)) return "contractor";
+  if (/(ecommerce|shopify|checkout|cart|product)/.test(hay)) return "ecommerce";
+  if (/(dentist|lawyer|accountant|clinic|cleaning|mechanic|repairs|service business|local service)/.test(hay)) return "service";
+  return "general";
+}
+
+function inferMetadata(lead: any) {
+  const kind = inferKind(lead);
+  const signals = parseLeadSignals(lead) as any;
+  const text = JSON.stringify(signals || {}).toLowerCase();
+  const weak = /wix|squarespace|weebly|template|placeholder|coming soon|under construction/.test(text);
+  const strong = /react|webflow|shopify|wordpress/.test(text);
+
+  let opportunityType = "positioning_improvement";
+  let draftStrategy = "light_teardown_offer";
+  let qualityTier = weak ? "weak" : strong ? "strong" : "average";
+
+  if (kind === "agency") {
+    opportunityType = /white.?label|partner/.test(text) ? "white_label_partnership" : "overflow_delivery_support";
+    draftStrategy = opportunityType === "white_label_partnership" ? "white_label_partnership" : "overflow_delivery_support";
+  } else if (kind === "contractor" || kind === "service") {
+    opportunityType = weak ? "site_rebuild" : "lead_flow_uplift";
+    draftStrategy = "contractor_lead_uplift";
+  } else if (kind === "ecommerce") {
+    opportunityType = "conversion_optimisation";
+    draftStrategy = "ecommerce_conversion_offer";
+  } else if (kind === "not_fit") {
+    opportunityType = "do_not_pitch";
+    draftStrategy = "do_not_send";
+  } else if (weak) {
+    opportunityType = "site_rebuild";
+    draftStrategy = "site_rebuild_offer";
+  }
+
+  return { kind, opportunityType, qualityTier, draftStrategy };
+}
+
+function withDerivedLead(lead: any) {
+  const derived = inferMetadata(lead);
+  const signals = parseLeadSignals(lead) as any;
+  return {
+    ...lead,
+    website: lead.website_url || "",
+    domain: String(lead.website_url || "").replace(/^https?:\/\//, "").replace(/\/+$/, ""),
+    lead_class: signals.leadClass || derived.kind,
+    opportunity_type: signals.opportunityType || derived.opportunityType,
+    quality_tier: signals.qualityTier || derived.qualityTier,
+    draft_strategy: signals.draftStrategy || derived.draftStrategy,
     brief: {
-      summary: signals.brief || signals.summary || "",
+      summary: signals.summary || signals.brief || "",
       siteQualitySummary: signals.siteQualitySummary || "",
-      serviceTags: Array.isArray(signals.serviceTags) ? signals.serviceTags : [],
-      techTags: Array.isArray(signals.techTags) ? signals.techTags : [],
-      outreachAngles: Array.isArray(signals.outreachAngles) ? signals.outreachAngles : [],
-      groundedFacts: Array.isArray(signals.groundedFacts) ? signals.groundedFacts : [],
-      avoidSaying: Array.isArray(signals.avoidSaying) ? signals.avoidSaying : [],
       contactSummary: signals.contactSummary || "",
-      confidence: confidenceForScore(Number(lead.score_total || 0)),
+      outreachAngles: signals.outreachAngles || [],
+      groundedFacts: signals.groundedFacts || [],
+      avoidSaying: signals.avoidSaying || [],
+      decisionSummary: signals.decisionSummary || "",
     },
-    lead_class: lead.category || "general",
-    created_at_iso: lead.created_at_iso,
-    updated_at_iso: lead.updated_at_iso,
-    last_scanned_at_iso: lead.updated_at_iso,
+    score_breakdown: {
+      fit: lead.score_fit || 0,
+      contactability: lead.score_contact || 0,
+      risk: lead.score_risk || 0,
+    },
+    score_total: lead.score_total || 0,
+    summary: signals.summary || signals.brief || "",
+    title: signals.title || "",
+    category: lead.category || derived.kind,
   };
 }
 
-async function mapDraft(env: Env, draft: DraftRow) {
-  const lead = await env.DB.prepare(
-    `SELECT company_name, website_url, contact_email
-     FROM leads
-     WHERE id = ?
-     LIMIT 1`
-  )
-    .bind(draft.lead_id)
-    .first<{ company_name: string | null; website_url: string; contact_email: string | null }>();
-
-  const displayName = lead?.company_name || String(lead?.website_url || draft.lead_id).replace(/^https?:\/\//i, "").replace(/\/$/, "");
-
-  return {
-    id: draft.id,
-    lead_id: draft.lead_id,
-    status: draft.status === "created" ? "queued" : draft.status,
-    subject: draft.subject,
-    body_text: draft.body_text,
-    followup_text: draft.followup_text || null,
-    why_json: draft.why_json || null,
-    to_name: displayName,
-    to_email: lead?.contact_email || null,
-    created_at_iso: draft.created_at_iso,
-    updated_at_iso: draft.updated_at_iso,
+async function handleOverview(env: Env) {
+  const counters = {
+    crawl_scanned: Number((await getSetting(env, "crawl_scanned_today")) || 0),
+    drafts_created: Number((await getSetting(env, "drafts_created_today")) || 0),
+    sends_sent: Number((await getSetting(env, "sends_sent_today")) || 0),
+    approvals: Number((await getSetting(env, "approvals_today")) || 0),
+    replies: Number((await getSetting(env, "replies_today")) || 0),
+    ai_calls: Number((await getSetting(env, "ai_calls")) || 0),
+    bounces: Number((await getSetting(env, "bounces_today")) || 0),
+    unsubscribes: Number((await getSetting(env, "unsubscribes_today")) || 0),
+    day: new Date().toISOString().slice(0, 10),
   };
-}
-
-async function getCaps(env: Env) {
-  return {
+  const caps = {
     crawl: Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60),
     drafts: Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25),
     send: Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12),
   };
+  return json({ ok: true, counters, caps, lastRun: await getSetting(env, "last_engine_run") });
 }
 
-function mapEvent(event: EventRow) {
-  return {
-    id: event.id,
-    type: event.type,
-    message: event.message,
-    lead_id: event.lead_id || null,
-    created_at_iso: event.created_at_iso,
-  };
+async function handleLeads(env: Env, url: URL) {
+  const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
+  const status = url.searchParams.get("status") || undefined;
+  const leads = (await listLeads(env, { status: status as any, limit })).map(withDerivedLead);
+  return json({ ok: true, leads });
 }
 
-export async function handleAdmin(
-  req: Request,
-  env: Env,
-  _ctx: ExecutionContext,
-  url: URL,
-  json: (data: any, init?: ResponseInit) => Response
-): Promise<Response> {
-  const adminToken = getAdminToken(env);
-  if (!adminToken) return json({ ok: false, error: "admin_token_not_configured" }, { status: 500 });
-  if (getBearerToken(req) !== adminToken) return unauthorized(json);
+async function handleDrafts(env: Env, url: URL) {
+  const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
+  const status = url.searchParams.get("status") || undefined;
+  const drafts = await listDrafts(env, { status: status as any, limit });
+  const enriched = [];
+  for (const draft of drafts) {
+    const lead = await getLeadById(env, draft.lead_id);
+    enriched.push({ ...draft, to_email: lead?.contact_email || null, to_name: lead?.company_name || null, website: lead?.website_url || null });
+  }
+  return json({ ok: true, drafts: enriched });
+}
 
-  const path = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
-  const parts = path.split("/");
+async function handleInsights(env: Env) {
+  const leads = (await listLeads(env, { limit: 500 })).map(withDerivedLead);
+  const leadClasses: Record<string, number> = {};
+  const qualityTiers: Record<string, number> = {};
+  const opportunityTypes: Record<string, number> = {};
+  const statuses: Record<string, number> = {};
+  let contactable = 0;
+  let totalScore = 0;
 
-  if (req.method === "GET" && path === "admin/overview") {
-    const stats = await getTodayStats(env);
-    const caps = await getCaps(env);
-    const lastRunRaw = (await getSetting(env, "last_engine_run")) || null;
-    let lastRun: any = null;
-    if (lastRunRaw) {
-      try { lastRun = JSON.parse(lastRunRaw); } catch {}
-    }
-    return json({
-      ok: true,
-      counters: {
-        crawl_scanned: stats.leadsNewToday,
-        drafts_created: stats.draftsCreatedToday,
-        sends_sent: stats.sendsSentToday,
-        approvals: stats.approvalsToday,
-        replies: stats.repliesToday,
-        ai_calls: Number((await getSetting(env, "ai_calls")) || 0),
-        bounces: stats.bouncesToday,
-        unsubscribes: stats.unsubscribesToday,
-        day: new Date().toISOString().slice(0, 10),
-      },
-      caps,
-      lastRun,
-    });
+  for (const lead of leads) {
+    leadClasses[lead.lead_class] = (leadClasses[lead.lead_class] || 0) + 1;
+    qualityTiers[lead.quality_tier] = (qualityTiers[lead.quality_tier] || 0) + 1;
+    opportunityTypes[lead.opportunity_type] = (opportunityTypes[lead.opportunity_type] || 0) + 1;
+    statuses[lead.status] = (statuses[lead.status] || 0) + 1;
+    if (lead.contact_email || lead.contact_page_url || lead.has_contact_form) contactable += 1;
+    totalScore += Number(lead.score_total || 0);
   }
 
-  if (req.method === "GET" && path === "admin/leads") {
-    const status = (url.searchParams.get("status") || undefined) as any;
-    const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
-    const leads = await listLeads(env, { status, limit });
-    return json({ ok: true, leads: leads.map(mapLead) });
-  }
+  return json({
+    ok: true,
+    summary: {
+      totalLeads: leads.length,
+      contactableLeads: contactable,
+      directEmailRate: leads.length ? Number(((leads.filter((x) => !!x.contact_email).length / leads.length) * 100).toFixed(1)) : 0,
+      averageScore: leads.length ? Number((totalScore / leads.length).toFixed(2)) : 0,
+    },
+    leadClasses,
+    qualityTiers,
+    opportunityTypes,
+    statuses,
+  });
+}
 
-  if (req.method === "POST" && path === "admin/leads") {
-    const body = await req.json().catch(() => ({}));
+async function handleSeedInsert(env: Env, body: any) {
+  const rawItems = Array.isArray(body?.items)
+    ? body.items
+    : Array.isArray(body?.urls)
+    ? body.urls.map((url: string) => ({ url }))
+    : [];
+  const inserted = [];
+  for (const item of rawItems) {
+    const url = String(item?.url || item || "").trim();
+    if (!url) continue;
+    const label = String(item?.label || body?.label || "manual");
+    const type = String(item?.type || body?.type || "directory");
+    const category = String(item?.category || body?.category || "general");
+    const lead = await insertLead(env, url, `${type}:${label}:${category}`);
+    inserted.push({ id: lead.id, url });
+  }
+  await logEvent(env, "seed_add", `Added ${inserted.length} seed URLs`);
+  return json({ ok: true, inserted });
+}
+
+async function handleBackfill(env: Env, body: any) {
+  const limit = Math.max(1, Math.min(500, Number(body?.limit || 100)));
+  const leads = await listLeads(env, { limit });
+  let updated = 0;
+  for (const lead of leads) {
+    const derived = inferMetadata(lead);
+    const signals = parseLeadSignals(lead) as any;
+    const nextSignals = {
+      ...signals,
+      leadClass: derived.kind,
+      opportunityType: derived.opportunityType,
+      qualityTier: derived.qualityTier,
+      draftStrategy: derived.draftStrategy,
+      decisionSummary:
+        derived.opportunityType === "white_label_partnership"
+          ? "Likely partner candidate where EVAVO should position as quiet white-label support."
+          : derived.opportunityType === "overflow_delivery_support"
+          ? "Likely delivery partner candidate where overflow support could make sense."
+          : derived.opportunityType === "lead_flow_uplift"
+          ? "Good lead-generation opportunity for a service business."
+          : derived.opportunityType === "conversion_optimisation"
+          ? "Conversion-focused opportunity rather than a generic redesign pitch."
+          : derived.opportunityType === "do_not_pitch"
+          ? "Not a fit for outbound outreach."
+          : "General improvement opportunity.",
+    };
+    await updateLead(env, lead.id, { category: derived.kind as any, signals_json: JSON.stringify(nextSignals) });
+    updated += 1;
+  }
+  await logEvent(env, "backfill_ok", `Backfilled ${updated} leads`);
+  return json({ ok: true, updated });
+}
+
+export async function handleAdminRequest(request: Request, env: Env, pathname: string) {
+  if (request.method === "OPTIONS") return json({ ok: true });
+  const token = getAdminToken(env);
+  const auth = request.headers.get("authorization") || "";
+  if (!token || auth !== `Bearer ${token}`) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+
+  const url = new URL(request.url);
+
+  if (pathname === "/admin/overview" && request.method === "GET") return handleOverview(env);
+  if (pathname === "/admin/leads" && request.method === "GET") return handleLeads(env, url);
+  if (pathname === "/admin/drafts" && request.method === "GET") return handleDrafts(env, url);
+  if (pathname === "/admin/events" && request.method === "GET") return json({ ok: true, events: await listEvents(env, 150) });
+  if (pathname === "/admin/settings" && request.method === "GET") {
+    return json({ ok: true, settings: {
+      engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
+      ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
+      drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
+      sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
+      approval_required: (await getSetting(env, "approval_required")) || "1",
+      crawl_cap_per_day: (await getSetting(env, "crawl_cap_per_day")) || String(env.CAP_CRAWL_PER_DAY || 60),
+      draft_cap_per_day: (await getSetting(env, "draft_cap_per_day")) || String(env.CAP_DRAFTS_PER_DAY || 25),
+      send_cap_per_day: (await getSetting(env, "send_cap_per_day")) || String(env.CAP_SEND_PER_DAY || 12),
+      min_score_for_draft: (await getSetting(env, "min_score_for_draft")) || "0.45",
+      min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.65",
+    }});
+  }
+  if (pathname === "/admin/insights" && request.method === "GET") return handleInsights(env);
+  if (pathname === "/admin/runs" && request.method === "GET") return json({ ok: true, runs: await listEvents(env, 100) });
+
+  if (pathname === "/admin/leads" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
     const websiteUrl = String(body?.websiteUrl || "").trim();
-    if (!websiteUrl) return badRequest(json, "missing_websiteUrl");
-    const lead = await scanWebsiteNow(env, websiteUrl);
-    return json({ ok: true, lead: mapLead(lead) });
+    if (!websiteUrl) return json({ ok: false, error: "websiteUrl is required" }, { status: 400 });
+    const lead = await insertLead(env, websiteUrl, "manual");
+    await logEvent(env, "lead_add", `Manually added ${websiteUrl}`, lead.id);
+    return json({ ok: true, lead });
   }
 
-  if (req.method === "GET" && path === "admin/drafts") {
-    const requested = String(url.searchParams.get("status") || "");
-    const status = requested === "queued" ? "created" : (requested || undefined);
-    const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
-    const drafts = await listDrafts(env, { status: status as any, limit });
-    const out = [];
-    for (const draft of drafts) out.push(await mapDraft(env, draft));
-    return json({ ok: true, drafts: out });
+  if (pathname === "/admin/seeds" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    return handleSeedInsert(env, body);
   }
 
-  if (req.method === "POST" && parts.length === 4 && parts[0] === "admin" && parts[1] === "drafts" && parts[3] === "approve") {
-    const draftId = decodeURIComponent(parts[2]);
-    const draft = await getDraftById(env, draftId);
-    if (!draft) return json({ ok: false, error: "draft_not_found" }, { status: 404 });
-    await updateDraft(env, draftId, { status: "approved" });
-    await updateLead(env, draft.lead_id, { status: "approved" });
-    await bump(env, "approvals_today", 1);
-    await logEvent(env, "draft_approved", `Draft approved ${draftId}`, draft.lead_id);
-    return json({ ok: true });
-  }
-
-  if (req.method === "POST" && parts.length === 4 && parts[0] === "admin" && parts[1] === "drafts" && parts[3] === "reject") {
-    const draftId = decodeURIComponent(parts[2]);
-    const draft = await getDraftById(env, draftId);
-    if (!draft) return json({ ok: false, error: "draft_not_found" }, { status: 404 });
-    await updateDraft(env, draftId, { status: "rejected" });
-    await updateLead(env, draft.lead_id, { status: "rejected" });
-    await logEvent(env, "draft_rejected", `Draft rejected ${draftId}`, draft.lead_id);
-    return json({ ok: true });
-  }
-
-  if (req.method === "GET" && path === "admin/events") {
-    const limit = Math.min(300, Math.max(1, Number(url.searchParams.get("limit") || 100)));
-    const events = await listEvents(env, limit);
-    return json({ ok: true, events: events.map(mapEvent) });
-  }
-
-  if (req.method === "GET" && path === "admin/settings") {
-    const caps = await getCaps(env);
-    return json({
-      ok: true,
-      settings: {
-        engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
-        ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
-        drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
-        sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
-        approval_required: (await getSetting(env, "approval_required")) || "1",
-        crawl_cap_per_day: String(caps.crawl),
-        draft_cap_per_day: String(caps.drafts),
-        send_cap_per_day: String(caps.send),
-        min_score_for_draft: (await getSetting(env, "min_score_for_draft")) || "0.45",
-        min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.65",
-      },
-    });
-  }
-
-  if (req.method === "POST" && path === "admin/settings") {
-    const body = await req.json().catch(() => ({}));
-    const allowed = [
-      "engine_enabled",
-      "ai_enabled",
-      "drafting_enabled",
-      "sending_enabled",
-      "approval_required",
-      "crawl_cap_per_day",
-      "draft_cap_per_day",
-      "send_cap_per_day",
-      "min_score_for_draft",
-      "min_score_for_send",
-    ];
-    for (const key of allowed) {
-      if (Object.prototype.hasOwnProperty.call(body, key)) {
-        await setSetting(env, key, String(body[key]));
-      }
-    }
-    await logEvent(env, "settings_updated", "Admin settings updated");
-    return json({ ok: true });
-  }
-
-  if (req.method === "GET" && path === "admin/insights") {
-    const leads = await listLeads(env, { limit: 500 });
-    let contactableLeads = 0;
-    let totalScore = 0;
-    const leadClasses: Record<string, number> = {};
-    const statuses: Record<string, number> = {};
-
-    for (const lead of leads) {
-      if (lead.contact_email) contactableLeads += 1;
-      totalScore += Number(lead.score_total || 0);
-      const category = String(lead.category || "unknown");
-      leadClasses[category] = (leadClasses[category] || 0) + 1;
-      statuses[lead.status] = (statuses[lead.status] || 0) + 1;
-    }
-
-    return json({
-      ok: true,
-      summary: {
-        totalLeads: leads.length,
-        contactableLeads,
-        directEmailRate: leads.length ? Number(((contactableLeads / leads.length) * 100).toFixed(1)) : 0,
-        averageScore: leads.length ? Number((totalScore / leads.length).toFixed(2)) : 0,
-      },
-      leadClasses,
-      statuses,
-    });
-  }
-
-  if (req.method === "GET" && path === "admin/runs") {
-    const events = await listEvents(env, 100);
-    const runs = events
-      .filter((event) => ["tick_ok", "tick_fail", "scan_ok", "draft_ok", "send_ok"].includes(event.type))
-      .map(mapEvent);
-    return json({ ok: true, runs });
-  }
-
-  if (req.method === "POST" && path === "admin/run") {
-    const body = await req.json().catch(() => ({}));
-    const kind = String(body?.kind || "tick");
+  if (pathname === "/admin/run" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const kind = String(body?.kind || "");
+    if (kind === "scan") return json({ ok: true, kind, ...(await runScanOnce(env)) });
+    if (kind === "draft") return json({ ok: true, kind, ...(await runDraftOnce(env)) });
+    if (kind === "send") return json({ ok: true, kind, ...(await runSendApproved(env)) });
     if (kind === "tick") {
       await dailyTick(env);
-      return json({ ok: true, kind });
+      return json({ ok: true, kind, finished: true });
     }
-    if (kind === "scan") {
-      const result = await runScanOnce(env);
-      return json({ ok: true, kind, ...result });
-    }
-    if (kind === "draft") {
-      const result = await runDraftOnce(env);
-      return json({ ok: true, kind, ...result });
-    }
-    if (kind === "send") {
-      const result = await runSendApproved(env);
-      return json({ ok: true, kind, ...result });
-    }
-    return badRequest(json, "unknown_kind");
+    if (kind === "backfill") return handleBackfill(env, body);
+    return json({ ok: false, error: "Unsupported run kind" }, { status: 400 });
   }
 
-  if (req.method === "POST" && path === "admin/seeds") {
-    const body = await req.json().catch(() => ({}));
-    const urls = Array.isArray(body?.urls) ? body.urls.map((v: any) => String(v).trim()).filter(Boolean) : [];
-    if (!urls.length) return badRequest(json, "missing_urls");
-    let added = 0;
-    for (const websiteUrl of urls) {
-      await scanWebsiteNow(env, websiteUrl);
-      added += 1;
-    }
-    return json({ ok: true, added });
+  if (pathname.startsWith("/admin/drafts/") && pathname.endsWith("/approve") && request.method === "POST") {
+    const id = pathname.split("/")[3];
+    const draft = await getDraftById(env, id);
+    if (!draft) return json({ ok: false, error: "Draft not found" }, { status: 404 });
+    await updateLead(env, draft.lead_id, { status: "approved" as any });
+    await env.DB.prepare(`UPDATE drafts SET status = 'approved', updated_at_iso = ? WHERE id = ?`).bind(new Date().toISOString(), id).run();
+    await logEvent(env, "approve_ok", `Draft approved`, draft.lead_id);
+    return json({ ok: true, id });
   }
 
-  return json({ ok: false, error: "not_found" }, { status: 404 });
+  if (pathname.startsWith("/admin/drafts/") && pathname.endsWith("/reject") && request.method === "POST") {
+    const id = pathname.split("/")[3];
+    const draft = await getDraftById(env, id);
+    if (!draft) return json({ ok: false, error: "Draft not found" }, { status: 404 });
+    await updateLead(env, draft.lead_id, { status: "rejected" as any });
+    await env.DB.prepare(`UPDATE drafts SET status = 'rejected', updated_at_iso = ? WHERE id = ?`).bind(new Date().toISOString(), id).run();
+    await logEvent(env, "reject_ok", `Draft rejected`, draft.lead_id);
+    return json({ ok: true, id });
+  }
+
+  return json({ ok: false, error: "Not found" }, { status: 404 });
 }

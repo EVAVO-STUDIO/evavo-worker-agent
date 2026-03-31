@@ -1,6 +1,8 @@
 import { Env, getSetting, listEvents, listLeads, parseLeadSignals } from "../db";
 
-function json(data: unknown, init: ResponseInit = {}) {
+type JsonResponse = (data: any, init?: ResponseInit) => Response;
+
+function defaultJson(data: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(data), {
     ...init,
     headers: {
@@ -26,7 +28,13 @@ function inferKind(lead: any): string {
   return "general";
 }
 
-export async function handlePublicRequest(request: Request, env: Env, pathname: string) {
+export async function handlePublic(
+  request: Request,
+  env: Env,
+  pathname: string,
+  _ctx?: ExecutionContext,
+  json: JsonResponse = defaultJson
+) {
   if (request.method === "OPTIONS") return json({ ok: true });
 
   if (pathname === "/public/events" && request.method === "GET") {
@@ -38,12 +46,17 @@ export async function handlePublicRequest(request: Request, env: Env, pathname: 
   if (pathname === "/public/status" && request.method === "GET") {
     const leads = await listLeads(env, { limit: 500 });
     const segments: Record<string, number> = {};
+
     for (const lead of leads) {
       const signals = parseLeadSignals(lead) as any;
       const key = signals.leadClass || inferKind(lead);
       segments[key] = (segments[key] || 0) + 1;
     }
-    const topSlices = Object.entries(segments).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([label, value]) => ({ label, value }));
+
+    const topSlices = Object.entries(segments)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([label, value]) => ({ label, value }));
 
     return json({
       ok: true,
@@ -84,5 +97,3 @@ export async function handlePublicRequest(request: Request, env: Env, pathname: 
 
   return json({ ok: false, error: "Not found" }, { status: 404 });
 }
-
-export const handlePublic = handlePublicRequest;

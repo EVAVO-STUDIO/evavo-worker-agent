@@ -14,9 +14,10 @@ import {
 } from "../db";
 import { dailyTick, runDraftOnce, runScanOnce, runSendApproved } from "../engine";
 
+type JsonResponse = (data: any, init?: ResponseInit) => Response;
 type InferredKind = "agency" | "contractor" | "ecommerce" | "service" | "not_fit" | "general";
 
-function json(data: unknown, init: ResponseInit = {}) {
+function defaultJson(data: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(data), {
     ...init,
     headers: {
@@ -108,7 +109,7 @@ function withDerivedLead(lead: any) {
   };
 }
 
-async function handleOverview(env: Env) {
+async function handleOverview(env: Env, json: JsonResponse) {
   const counters = {
     crawl_scanned: Number((await getSetting(env, "crawl_scanned_today")) || 0),
     drafts_created: Number((await getSetting(env, "drafts_created_today")) || 0),
@@ -128,26 +129,33 @@ async function handleOverview(env: Env) {
   return json({ ok: true, counters, caps, lastRun: await getSetting(env, "last_engine_run") });
 }
 
-async function handleLeads(env: Env, url: URL) {
+async function handleLeads(request: Request, env: Env, json: JsonResponse) {
+  const url = new URL(request.url);
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
   const status = url.searchParams.get("status") || undefined;
   const leads = (await listLeads(env, { status: status as any, limit })).map(withDerivedLead);
   return json({ ok: true, leads });
 }
 
-async function handleDrafts(env: Env, url: URL) {
+async function handleDrafts(request: Request, env: Env, json: JsonResponse) {
+  const url = new URL(request.url);
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
   const status = url.searchParams.get("status") || undefined;
   const drafts = await listDrafts(env, { status: status as any, limit });
   const enriched = [];
   for (const draft of drafts) {
     const lead = await getLeadById(env, draft.lead_id);
-    enriched.push({ ...draft, to_email: lead?.contact_email || null, to_name: lead?.company_name || null, website: lead?.website_url || null });
+    enriched.push({
+      ...draft,
+      to_email: lead?.contact_email || null,
+      to_name: lead?.company_name || null,
+      website: lead?.website_url || null,
+    });
   }
   return json({ ok: true, drafts: enriched });
 }
 
-async function handleInsights(env: Env) {
+async function handleInsights(env: Env, json: JsonResponse) {
   const leads = (await listLeads(env, { limit: 500 })).map(withDerivedLead);
   const leadClasses: Record<string, number> = {};
   const qualityTiers: Record<string, number> = {};
@@ -180,7 +188,7 @@ async function handleInsights(env: Env) {
   });
 }
 
-async function handleSeedInsert(env: Env, body: any) {
+async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
   const rawItems = Array.isArray(body?.items)
     ? body.items
     : Array.isArray(body?.urls)
@@ -200,7 +208,7 @@ async function handleSeedInsert(env: Env, body: any) {
   return json({ ok: true, inserted });
 }
 
-async function handleBackfill(env: Env, body: any) {
+async function handleBackfill(env: Env, body: any, json: JsonResponse) {
   const limit = Math.max(1, Math.min(500, Number(body?.limit || 100)));
   const leads = await listLeads(env, { limit });
   let updated = 0;
@@ -226,41 +234,55 @@ async function handleBackfill(env: Env, body: any) {
           ? "Not a fit for outbound outreach."
           : "General improvement opportunity.",
     };
-    await updateLead(env, lead.id, { category: derived.kind as any, signals_json: JSON.stringify(nextSignals) });
+    await updateLead(env, lead.id, {
+      category: derived.kind as any,
+      signals_json: JSON.stringify(nextSignals),
+    });
     updated += 1;
   }
   await logEvent(env, "backfill_ok", `Backfilled ${updated} leads`);
   return json({ ok: true, updated });
 }
 
-export async function handleAdminRequest(request: Request, env: Env, pathname: string) {
+export async function handleAdmin(
+  request: Request,
+  env: Env,
+  pathname: string,
+  _ctx?: ExecutionContext,
+  json: JsonResponse = defaultJson
+) {
   if (request.method === "OPTIONS") return json({ ok: true });
+
   const token = getAdminToken(env);
   const auth = request.headers.get("authorization") || "";
-  if (!token || auth !== `Bearer ${token}`) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
-
-  const url = new URL(request.url);
-
-  if (pathname === "/admin/overview" && request.method === "GET") return handleOverview(env);
-  if (pathname === "/admin/leads" && request.method === "GET") return handleLeads(env, url);
-  if (pathname === "/admin/drafts" && request.method === "GET") return handleDrafts(env, url);
-  if (pathname === "/admin/events" && request.method === "GET") return json({ ok: true, events: await listEvents(env, 150) });
-  if (pathname === "/admin/settings" && request.method === "GET") {
-    return json({ ok: true, settings: {
-      engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
-      ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
-      drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
-      sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
-      approval_required: (await getSetting(env, "approval_required")) || "1",
-      crawl_cap_per_day: (await getSetting(env, "crawl_cap_per_day")) || String(env.CAP_CRAWL_PER_DAY || 60),
-      draft_cap_per_day: (await getSetting(env, "draft_cap_per_day")) || String(env.CAP_DRAFTS_PER_DAY || 25),
-      send_cap_per_day: (await getSetting(env, "send_cap_per_day")) || String(env.CAP_SEND_PER_DAY || 12),
-      min_score_for_draft: (await getSetting(env, "min_score_for_draft")) || "0.45",
-      min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.65",
-    }});
+  if (!token || auth !== `Bearer ${token}`) {
+    return json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  if (pathname === "/admin/insights" && request.method === "GET") return handleInsights(env);
+
+  if (pathname === "/admin/overview" && request.method === "GET") return handleOverview(env, json);
+  if (pathname === "/admin/leads" && request.method === "GET") return handleLeads(request, env, json);
+  if (pathname === "/admin/drafts" && request.method === "GET") return handleDrafts(request, env, json);
+  if (pathname === "/admin/events" && request.method === "GET") return json({ ok: true, events: await listEvents(env, 150) });
+  if (pathname === "/admin/insights" && request.method === "GET") return handleInsights(env, json);
   if (pathname === "/admin/runs" && request.method === "GET") return json({ ok: true, runs: await listEvents(env, 100) });
+
+  if (pathname === "/admin/settings" && request.method === "GET") {
+    return json({
+      ok: true,
+      settings: {
+        engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
+        ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
+        drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
+        sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
+        approval_required: (await getSetting(env, "approval_required")) || "1",
+        crawl_cap_per_day: (await getSetting(env, "crawl_cap_per_day")) || String(env.CAP_CRAWL_PER_DAY || 60),
+        draft_cap_per_day: (await getSetting(env, "draft_cap_per_day")) || String(env.CAP_DRAFTS_PER_DAY || 25),
+        send_cap_per_day: (await getSetting(env, "send_cap_per_day")) || String(env.CAP_SEND_PER_DAY || 12),
+        min_score_for_draft: (await getSetting(env, "min_score_for_draft")) || "0.45",
+        min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.65",
+      },
+    });
+  }
 
   if (pathname === "/admin/leads" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
@@ -273,7 +295,7 @@ export async function handleAdminRequest(request: Request, env: Env, pathname: s
 
   if (pathname === "/admin/seeds" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
-    return handleSeedInsert(env, body);
+    return handleSeedInsert(env, body, json);
   }
 
   if (pathname === "/admin/run" && request.method === "POST") {
@@ -286,7 +308,7 @@ export async function handleAdminRequest(request: Request, env: Env, pathname: s
       await dailyTick(env);
       return json({ ok: true, kind, finished: true });
     }
-    if (kind === "backfill") return handleBackfill(env, body);
+    if (kind === "backfill") return handleBackfill(env, body, json);
     return json({ ok: false, error: "Unsupported run kind" }, { status: 400 });
   }
 
@@ -295,7 +317,9 @@ export async function handleAdminRequest(request: Request, env: Env, pathname: s
     const draft = await getDraftById(env, id);
     if (!draft) return json({ ok: false, error: "Draft not found" }, { status: 404 });
     await updateLead(env, draft.lead_id, { status: "approved" as any });
-    await env.DB.prepare(`UPDATE drafts SET status = 'approved', updated_at_iso = ? WHERE id = ?`).bind(new Date().toISOString(), id).run();
+    await env.DB.prepare(`UPDATE drafts SET status = 'approved', updated_at_iso = ? WHERE id = ?`)
+      .bind(new Date().toISOString(), id)
+      .run();
     await logEvent(env, "approve_ok", `Draft approved`, draft.lead_id);
     return json({ ok: true, id });
   }
@@ -305,12 +329,12 @@ export async function handleAdminRequest(request: Request, env: Env, pathname: s
     const draft = await getDraftById(env, id);
     if (!draft) return json({ ok: false, error: "Draft not found" }, { status: 404 });
     await updateLead(env, draft.lead_id, { status: "rejected" as any });
-    await env.DB.prepare(`UPDATE drafts SET status = 'rejected', updated_at_iso = ? WHERE id = ?`).bind(new Date().toISOString(), id).run();
+    await env.DB.prepare(`UPDATE drafts SET status = 'rejected', updated_at_iso = ? WHERE id = ?`)
+      .bind(new Date().toISOString(), id)
+      .run();
     await logEvent(env, "reject_ok", `Draft rejected`, draft.lead_id);
     return json({ ok: true, id });
   }
 
   return json({ ok: false, error: "Not found" }, { status: 404 });
 }
-
-export const handleAdmin = handleAdminRequest;

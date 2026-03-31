@@ -312,3 +312,5 @@ export async function handleAdminRequest(request: Request, env: Env, pathname: s
 
   return json({ ok: false, error: "Not found" }, { status: 404 });
 }
+
+export const handleAdmin = handleAdminRequest;

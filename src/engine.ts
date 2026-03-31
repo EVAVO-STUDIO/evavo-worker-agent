@@ -10,7 +10,6 @@ import {
   listDrafts,
   updateDraft,
   logEvent,
-  setSetting,
   getSetting,
   nowISO,
   uuid,
@@ -22,9 +21,46 @@ import {
 } from "./db";
 import { sendEmail } from "./email";
 
+type LeadClass =
+  | "agency"
+  | "dev_shop"
+  | "marketing_agency"
+  | "ecommerce"
+  | "contractor"
+  | "local_service"
+  | "professional_service"
+  | "industrial"
+  | "not_fit"
+  | "general";
+
+type OpportunityType =
+  | "white_label_partnership"
+  | "overflow_delivery_support"
+  | "site_rebuild"
+  | "lead_flow_uplift"
+  | "conversion_optimisation"
+  | "positioning_improvement"
+  | "do_not_pitch";
+
+type QualityTier = "missing" | "weak" | "average" | "strong";
+type DraftStrategy =
+  | "white_label_partnership"
+  | "overflow_delivery_support"
+  | "contractor_lead_uplift"
+  | "professional_service_uplift"
+  | "site_rebuild_offer"
+  | "ecommerce_conversion_offer"
+  | "light_teardown_offer"
+  | "do_not_send";
+type ToneMode = "peer" | "consultative" | "direct" | "sharp";
+
 export interface ScanResult {
   companyName?: string;
-  classification: string;
+  leadClass: LeadClass;
+  opportunityType: OpportunityType;
+  qualityTier: QualityTier;
+  draftStrategy: DraftStrategy;
+  toneMode: ToneMode;
   fitScore: number;
   contactabilityScore: number;
   riskScore: number;
@@ -42,6 +78,10 @@ export interface ScanResult {
   groundedFacts: string[];
   title?: string;
   description?: string;
+  decisionSummary: string;
+  problemSummary: string;
+  leverageSummary: string;
+  recommendedAngle: string;
   country?: string | null;
   region?: string | null;
 }
@@ -55,12 +95,7 @@ function normalizeWebsite(raw: string): string {
 
 function extractEmails(input: string): string[] {
   const matches = input.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-  const cleaned = new Set<string>();
-  for (const value of matches) {
-    const email = value.toLowerCase();
-    if (!/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email)) cleaned.add(email);
-  }
-  return Array.from(cleaned);
+  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter((email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email));
 }
 
 async function fetchHtml(url: string): Promise<string> {
@@ -95,9 +130,12 @@ function guessCompanyName(title: string, domain: string): string {
   return domain.replace(/^www\./i, "");
 }
 
-function classifyLead(domain: string, html: string): { classification: string; serviceTags: string[]; techTags: string[] } {
-  const content = html.toLowerCase();
-  const domainLower = domain.toLowerCase();
+function hasAny(text: string, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function classifyLead(domain: string, html: string, title: string, description: string) {
+  const content = `${domain} ${title} ${description} ${html}`.toLowerCase();
   const techTags: string[] = [];
   const serviceTags: string[] = [];
 
@@ -107,23 +145,136 @@ function classifyLead(domain: string, html: string): { classification: string; s
   if (/squarespace/.test(content)) techTags.push("squarespace");
   if (/react|next\.js|__next/.test(content)) techTags.push("react");
   if (/webflow/.test(content)) techTags.push("webflow");
+  if (/hubspot/.test(content)) techTags.push("hubspot");
 
   if (/e[- ]?commerce|checkout|cart|product/.test(content)) serviceTags.push("ecommerce");
-  if (/design|branding|studio|creative/.test(content)) serviceTags.push("design");
-  if (/development|software|engineer|developer/.test(content)) serviceTags.push("development");
-  if (/marketing|seo|ads|campaign/.test(content)) serviceTags.push("marketing");
-  if (/agency|white[- ]?label|partner/.test(content)) serviceTags.push("agency");
+  if (/branding|brand strategy/.test(content)) serviceTags.push("branding");
+  if (/marketing|seo|ads|campaign|social media/.test(content)) serviceTags.push("marketing");
+  if (/development|developer|software|engineering|app development/.test(content)) serviceTags.push("development");
+  if (/white[- ]?label|partner|overflow|reseller/.test(content)) serviceTags.push("partnering");
+  if (/builder|construction|joinery|cabinet|plumber|electrician|roofing|glazing|concrete|carpentry/.test(content)) serviceTags.push("trade");
+  if (/dentist|lawyer|accountant|clinic|cleaning|mechanic|consulting/.test(content)) serviceTags.push("professional_service");
 
-  let classification = "general";
-  if (/(^|\.)gov(\.|$)| government /.test(` ${domainLower} ${content} `)) classification = "government";
-  else if (/(^|\.)edu(\.|$)| university | school /.test(` ${domainLower} ${content} `)) classification = "education";
-  else if (/nonprofit|not-for-profit|charity|ngo/.test(content)) classification = "nonprofit";
-  else if (/saas|software as a service|book demo|start free|sign in/.test(content)) classification = "saas";
-  else if (serviceTags.includes("ecommerce")) classification = "ecommerce";
-  else if (serviceTags.includes("agency")) classification = "agency";
-  else if (/builder|plumber|electrician|contractor|cabinet|joinery|roofing|construction/.test(content)) classification = "contractor";
+  const notFitPatterns = [/\bgovernment\b/, /\bcouncil\b/, /\bschool\b/, /\buniversity\b/, /\bcharity\b/, /\bnonprofit\b/, /\bnot-for-profit\b/, /\bfoundation\b/];
+  const agencyPatterns = [/\bagency\b/, /\bstudio\b/, /\bcreative\b/, /\bbranding\b/, /\bmarketing agency\b/, /\bseo agency\b/, /\bweb design\b/, /\bdesign studio\b/, /\bwhite label\b/];
+  const devShopPatterns = [/\bsoftware studio\b/, /\bproduct studio\b/, /\bweb development\b/, /\bapp development\b/, /\bdevelopers\b/, /\bsoftware agency\b/];
+  const contractorPatterns = [/\bbuilder\b/, /\bconstruction\b/, /\bjoinery\b/, /\bcabinet\b/, /\bplumber\b/, /\belectrician\b/, /\broofing\b/, /\bglazing\b/, /\bconcrete\b/, /\bcarpentry\b/, /\blandscap/i, /\bcivil contractor\b/, /\bearthworks\b/, /\bfabrication\b/];
+  const professionalPatterns = [/\bdentist\b/, /\blawyer\b/, /\baccountant\b/, /\bphysio\b/, /\bclinic\b/, /\bconsulting\b/, /\bfinancial planning\b/];
+  const industrialPatterns = [/\bmanufacturing\b/, /\bindustrial\b/, /\bfabrication\b/, /\bengineering services\b/];
 
-  return { classification, serviceTags, techTags };
+  let leadClass: LeadClass = "general";
+  if (hasAny(content, notFitPatterns)) leadClass = "not_fit";
+  else if (hasAny(content, devShopPatterns)) leadClass = "dev_shop";
+  else if (hasAny(content, agencyPatterns)) leadClass = serviceTags.includes("marketing") ? "marketing_agency" : "agency";
+  else if (/e[- ]?commerce|checkout|cart|product/.test(content)) leadClass = "ecommerce";
+  else if (hasAny(content, contractorPatterns)) leadClass = "contractor";
+  else if (hasAny(content, professionalPatterns)) leadClass = "professional_service";
+  else if (hasAny(content, industrialPatterns)) leadClass = "industrial";
+  else if (/cleaning|mechanic|removals|pest control|service business/.test(content)) leadClass = "local_service";
+
+  let qualityTier: QualityTier = "average";
+  if (!html.trim() || /coming soon|under construction|domain parked|placeholder/i.test(content)) qualityTier = "missing";
+  else if (/wix|squarespace|weebly|template|site by wix/i.test(content)) qualityTier = "weak";
+  else if ((title && description) && (techTags.includes("react") || techTags.includes("shopify") || techTags.includes("webflow"))) qualityTier = "strong";
+
+  let opportunityType: OpportunityType = "positioning_improvement";
+  let draftStrategy: DraftStrategy = "light_teardown_offer";
+  let toneMode: ToneMode = "consultative";
+
+  if (leadClass === "agency" || leadClass === "dev_shop" || leadClass === "marketing_agency") {
+    opportunityType = serviceTags.includes("partnering") ? "white_label_partnership" : "overflow_delivery_support";
+    draftStrategy = opportunityType === "white_label_partnership" ? "white_label_partnership" : "overflow_delivery_support";
+    toneMode = "peer";
+  } else if (leadClass === "contractor" || leadClass === "local_service") {
+    opportunityType = qualityTier === "weak" || qualityTier === "missing" ? "site_rebuild" : "lead_flow_uplift";
+    draftStrategy = "contractor_lead_uplift";
+    toneMode = "direct";
+  } else if (leadClass === "professional_service") {
+    opportunityType = qualityTier === "weak" || qualityTier === "missing" ? "site_rebuild" : "lead_flow_uplift";
+    draftStrategy = "professional_service_uplift";
+    toneMode = "consultative";
+  } else if (leadClass === "ecommerce") {
+    opportunityType = "conversion_optimisation";
+    draftStrategy = "ecommerce_conversion_offer";
+    toneMode = "sharp";
+  } else if (leadClass === "not_fit") {
+    opportunityType = "do_not_pitch";
+    draftStrategy = "do_not_send";
+  } else if (qualityTier === "weak" || qualityTier === "missing") {
+    opportunityType = "site_rebuild";
+    draftStrategy = "site_rebuild_offer";
+  }
+
+  return { leadClass, opportunityType, qualityTier, draftStrategy, toneMode, serviceTags, techTags };
+}
+
+function deriveScores(input: { leadClass: LeadClass; qualityTier: QualityTier; opportunityType: OpportunityType; hasContactForm: boolean; contactEmail?: string; html: string; }) {
+  let fit = 0.35;
+  let contact = 0.2;
+  let risk = 0.08;
+
+  if (input.contactEmail) contact = 0.95;
+  else if (input.hasContactForm) contact = 0.55;
+
+  if (["agency", "dev_shop", "marketing_agency"].includes(input.leadClass)) fit = 0.9;
+  else if (["contractor", "local_service", "professional_service", "industrial"].includes(input.leadClass)) fit = 0.82;
+  else if (input.leadClass === "ecommerce") fit = 0.87;
+  else if (input.leadClass === "not_fit") fit = 0.1;
+
+  if (input.qualityTier === "missing") fit += 0.1;
+  if (input.qualityTier === "weak") fit += 0.12;
+  if (input.qualityTier === "strong" && !["agency", "dev_shop", "marketing_agency"].includes(input.leadClass)) fit -= 0.2;
+
+  if (input.opportunityType === "do_not_pitch") risk = 0.8;
+  if (/(casino|bet|porn|adult|download crack)/i.test(input.html)) risk = 0.95;
+
+  fit = Math.max(0, Math.min(1, fit));
+  contact = Math.max(0, Math.min(1, contact));
+  risk = Math.max(0, Math.min(1, risk));
+  const total = Math.max(0, Math.min(1, fit * 0.55 + contact * 0.35 - risk * 0.2));
+  return { fit: Number(fit.toFixed(2)), contact: Number(contact.toFixed(2)), risk: Number(risk.toFixed(2)), total: Number(total.toFixed(2)) };
+}
+
+function buildProblemSummary(leadClass: LeadClass, qualityTier: QualityTier) {
+  if (leadClass === "agency" || leadClass === "dev_shop" || leadClass === "marketing_agency") return "This looks more like a partnership or overflow opportunity than a redesign target.";
+  if (leadClass === "ecommerce") return "The likely value here is conversion improvement, not surface-level redesign work.";
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") {
+    return qualityTier === "weak" || qualityTier === "missing" ? "The site likely undersells trust and enquiry flow." : "The site may be leaving enquiry quality and conversion clarity on the table.";
+  }
+  return qualityTier === "weak" || qualityTier === "missing" ? "The digital presence appears weaker than it should be." : "There may be positioning or performance issues worth tightening.";
+}
+
+function buildLeverageSummary(leadClass: LeadClass, opportunityType: OpportunityType) {
+  if (opportunityType === "white_label_partnership") return "EVAVO should position as quiet implementation capacity behind the scenes.";
+  if (opportunityType === "overflow_delivery_support") return "EVAVO should position as overflow support that helps delivery teams move faster.";
+  if (leadClass === "ecommerce") return "EVAVO should focus on conversion, clarity, and practical revenue lift.";
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return "EVAVO should focus on trust, enquiries, and cleaner conversion paths.";
+  return "EVAVO should use a short, grounded teardown angle.";
+}
+
+function buildRecommendedAngle(opportunityType: OpportunityType) {
+  if (opportunityType === "white_label_partnership") return "Peer-to-peer note about white-label or overflow support.";
+  if (opportunityType === "overflow_delivery_support") return "Short note about extra delivery capacity without adding headcount.";
+  if (opportunityType === "conversion_optimisation") return "Short conversion-focused teardown offer.";
+  if (opportunityType === "lead_flow_uplift") return "Practical lead-flow improvement note.";
+  if (opportunityType === "site_rebuild") return "Low-friction rebuild or refresh angle.";
+  return "Light teardown offer.";
+}
+
+function buildOutreachAngles(leadClass: LeadClass, opportunityType: OpportunityType): string[] {
+  if (opportunityType === "white_label_partnership") return ["support overflow delivery", "offer white-label implementation capacity", "help quietly behind the scenes"];
+  if (opportunityType === "overflow_delivery_support") return ["help with production overflow", "support delivery under capacity pressure", "add implementation support without headcount"];
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return ["make the site clearer for inbound enquiries", "improve trust and lead capture", "tighten contact pathways"];
+  if (leadClass === "ecommerce") return ["improve conversion flow", "tighten product page clarity", "lift trust and checkout performance"];
+  if (opportunityType === "site_rebuild") return ["refresh positioning and structure", "improve mobile clarity", "rebuild around conversion and trust"];
+  return ["tighten positioning and site performance"];
+}
+
+function buildAvoidSaying(opportunityType: OpportunityType): string[] {
+  if (opportunityType === "white_label_partnership" || opportunityType === "overflow_delivery_support") {
+    return ["we can redo your website", "your site is bad", "you need a redesign", "we can replace your team"];
+  }
+  return ["generic growth claims", "obvious AI phrasing", "empty flattery"];
 }
 
 async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
@@ -132,7 +283,7 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
   const html = await fetchHtml(normalized);
   const title = extractTitle(html);
   const description = extractDescription(html);
-  const { classification, serviceTags, techTags } = classifyLead(url.hostname, html);
+  const classified = classifyLead(url.hostname, html, title, description);
 
   const emails = extractEmails(html);
   const contactEmail = emails[0];
@@ -140,64 +291,55 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
   const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], normalized).toString() : null;
   const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
 
-  let fit = 0.45;
-  if (["ecommerce", "saas", "agency", "contractor"].includes(classification)) fit = 0.82;
-  if (["government", "education", "nonprofit"].includes(classification)) fit = 0.18;
-  if (/wix|squarespace|weebly|template/i.test(html)) fit += 0.08;
-  if (!html.trim()) fit -= 0.12;
-
-  let contact = 0.2;
-  if (contactEmail) contact = 0.95;
-  else if (hasContactForm) contact = 0.55;
-
-  let risk = 0.05;
-  if (/\.(xyz|click|top|info)$/i.test(url.hostname)) risk = 0.45;
-  if (/(casino|bet|porn|adult|download crack)/i.test(html)) risk = 0.9;
-
-  fit = Math.max(0, Math.min(1, fit));
-  contact = Math.max(0, Math.min(1, contact));
-  risk = Math.max(0, Math.min(1, risk));
-
-  const scoreTotal = fit * 0.5 + contact * 0.35 - risk * 0.2;
-  const outreachAngles: string[] = [];
-  if (classification === "agency") outreachAngles.push("support overflow delivery", "offer white-label capacity");
-  if (classification === "contractor") outreachAngles.push("make the site clearer for inbound enquiries", "improve trust and lead capture");
-  if (serviceTags.includes("ecommerce")) outreachAngles.push("improve conversion flow");
-  if (techTags.some((tag) => ["wordpress", "wix", "squarespace"].includes(tag))) outreachAngles.push("rebuild into a stronger custom stack");
-  if (!outreachAngles.length) outreachAngles.push("tighten positioning and site performance");
+  const scores = deriveScores({ leadClass: classified.leadClass, qualityTier: classified.qualityTier, opportunityType: classified.opportunityType, hasContactForm, contactEmail, html });
 
   const groundedFacts: string[] = [];
   if (title) groundedFacts.push(`Title: ${title}`);
   if (description) groundedFacts.push(`Description: ${description}`);
   if (contactEmail) groundedFacts.push(`Email found: ${contactEmail}`);
   if (contactPageUrl) groundedFacts.push(`Contact page: ${contactPageUrl}`);
+  if (classified.techTags.length) groundedFacts.push(`Tech tags: ${classified.techTags.join(", ")}`);
+  if (classified.serviceTags.length) groundedFacts.push(`Service tags: ${classified.serviceTags.join(", ")}`);
 
-  let brief = `General business with ${serviceTags.join(", ") || "unspecified offerings"}`;
-  if (classification === "agency") brief = "Agency lead that may suit white-label or overflow support outreach";
-  else if (classification === "contractor") brief = "Contractor-style business where practical lead-generation improvements may be valuable";
-  else if (classification === "ecommerce") brief = "Commerce-focused business with likely conversion optimisation opportunities";
-  else if (classification === "saas") brief = "SaaS-style business where positioning and product marketing clarity matter";
+  const brief =
+    classified.leadClass === "agency" || classified.leadClass === "dev_shop" || classified.leadClass === "marketing_agency"
+      ? "Agency-side lead that likely suits partnership or overflow support."
+      : classified.leadClass === "ecommerce"
+      ? "Commerce lead that likely suits a conversion-focused offer."
+      : classified.leadClass === "contractor" || classified.leadClass === "local_service"
+      ? "Service-business lead where practical website uplift may improve enquiry flow."
+      : classified.leadClass === "professional_service"
+      ? "Professional-service lead where clearer trust and contact flow may matter."
+      : "General lead with some improvement potential.";
 
   return {
     companyName: guessCompanyName(title, url.hostname),
-    classification,
-    fitScore: Number(fit.toFixed(2)),
-    contactabilityScore: Number(contact.toFixed(2)),
-    riskScore: Number(risk.toFixed(2)),
-    scoreTotal: Number(scoreTotal.toFixed(2)),
+    leadClass: classified.leadClass,
+    opportunityType: classified.opportunityType,
+    qualityTier: classified.qualityTier,
+    draftStrategy: classified.draftStrategy,
+    toneMode: classified.toneMode,
+    fitScore: scores.fit,
+    contactabilityScore: scores.contact,
+    riskScore: scores.risk,
+    scoreTotal: scores.total,
     brief,
     contactEmail,
     contactPageUrl,
     hasContactForm,
     contactSummary: contactEmail ? `Found direct email ${contactEmail}` : hasContactForm ? "No direct email found, but a contact route exists" : "No direct contact route found",
-    siteQualitySummary: html ? "Site loaded successfully" : "Could not fetch site",
-    techTags,
-    serviceTags,
-    outreachAngles,
-    avoidSaying: classification === "agency" ? ["we can replace your team", "you need a redesign"] : classification === "nonprofit" ? ["profit"] : [],
+    siteQualitySummary: classified.qualityTier === "missing" ? "Digital presence appears missing or placeholder-level." : classified.qualityTier === "weak" ? "Site loaded, but likely presents a weaker or more templated experience." : classified.qualityTier === "strong" ? "Site loaded and appears comparatively stronger." : "Site loaded successfully.",
+    techTags: classified.techTags,
+    serviceTags: classified.serviceTags,
+    outreachAngles: buildOutreachAngles(classified.leadClass, classified.opportunityType),
+    avoidSaying: buildAvoidSaying(classified.opportunityType),
     groundedFacts,
     title,
     description,
+    decisionSummary: buildRecommendedAngle(classified.opportunityType),
+    problemSummary: buildProblemSummary(classified.leadClass, classified.qualityTier),
+    leverageSummary: buildLeverageSummary(classified.leadClass, classified.opportunityType),
+    recommendedAngle: buildRecommendedAngle(classified.opportunityType),
     country: null,
     region: null,
   };
@@ -217,7 +359,16 @@ function buildLeadSignals(scan: ScanResult): LeadSignals {
     title: scan.title,
     description: scan.description,
     companyName: scan.companyName,
-  };
+    leadClass: scan.leadClass as any,
+    qualityTier: scan.qualityTier as any,
+    opportunityType: scan.opportunityType as any,
+    decisionSummary: scan.decisionSummary,
+    draftStrategy: scan.draftStrategy as any,
+    toneMode: scan.toneMode as any,
+    problemSummary: scan.problemSummary,
+    leverageSummary: scan.leverageSummary,
+    recommendedAngle: scan.recommendedAngle,
+  } as LeadSignals;
 }
 
 function envBrandLine(env: Env): string {
@@ -225,149 +376,112 @@ function envBrandLine(env: Env): string {
 }
 
 function cleanCompanyName(lead: LeadRow): string {
-  const signals = parseLeadSignals(lead);
+  const signals = parseLeadSignals(lead) as any;
   return lead.company_name || signals.companyName || lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
 
-function buildAgencyDraft(env: Env, lead: LeadRow) {
-  const signals = parseLeadSignals(lead);
-  const company = cleanCompanyName(lead);
-  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-  const facts = (signals.groundedFacts || []).slice(0, 2).join("; ");
-
-  return {
-    subject: `Possible overflow support for ${company}`,
-    bodyText: [
-      `Hi ${company},`,
-      "",
-      `I had a look through ${domain} and thought there may be a fit for overflow or white-label support.`,
-      facts ? `A couple of grounded things I picked up: ${facts}.` : "",
-      "",
-      `At ${envBrandLine(env)}, we help teams that need dependable extra capacity across strategy, design, and implementation without adding permanent headcount.`,
-      "This would only make sense if you occasionally need extra hands behind the scenes, but if that is relevant, I would be happy to send a short note on how we usually slot in.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].filter(Boolean).join("\n"),
-    followupText: [
-      `Hi ${company},`,
-      "",
-      "Just following up in case overflow or white-label support is relevant at the moment.",
-      "Happy to send a short note outlining the kind of work we can quietly support behind the scenes.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].join("\n"),
-    whyJson: JSON.stringify({
-      mode: "agency_partnership",
-      company,
-      category: lead.category,
-      score_total: lead.score_total,
-      groundedFacts: signals.groundedFacts || [],
-      outreachAngles: signals.outreachAngles || [],
-    }),
-  };
-}
-
-function buildContractorDraft(env: Env, lead: LeadRow) {
-  const signals = parseLeadSignals(lead);
-  const company = cleanCompanyName(lead);
-  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-  const fact = (signals.groundedFacts || [])[0];
-
-  return {
-    subject: `A practical website idea for ${company}`,
-    bodyText: [
-      `Hi ${company},`,
-      "",
-      `I had a look through ${domain} and there may be a straightforward opportunity to make the site work harder for new enquiries.`,
-      fact ? `One grounded thing that stood out was: ${fact}.` : "",
-      "",
-      `At ${envBrandLine(env)}, we help service businesses tighten their site structure, lead flow, and trust signals so the website feels more like a useful sales tool than just a placeholder.`,
-      "If useful, I can send through a short note with two or three practical suggestions based on what is already there.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].filter(Boolean).join("\n"),
-    followupText: [
-      `Hi ${company},`,
-      "",
-      "Just following up in case a short set of practical website suggestions would be useful.",
-      "Happy to keep it brief and specific to what is already on the site.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].join("\n"),
-    whyJson: JSON.stringify({
-      mode: "contractor_outreach",
-      company,
-      category: lead.category,
-      score_total: lead.score_total,
-      groundedFacts: signals.groundedFacts || [],
-      outreachAngles: signals.outreachAngles || [],
-    }),
-  };
-}
-
-function buildGeneralDraft(env: Env, lead: LeadRow) {
-  const signals = parseLeadSignals(lead);
-  const company = cleanCompanyName(lead);
-  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-  const serviceTags = signals.serviceTags || [];
-  const groundedFacts = signals.groundedFacts || [];
-  const outreachAngles = signals.outreachAngles || ["improve digital presence"];
-
-  return {
-    subject: serviceTags.includes("ecommerce") ? `Idea to improve ${company}'s conversion flow` : `A practical idea for ${company}`,
-    bodyText: [
-      `Hi ${company},`,
-      "",
-      `I had a look through ${domain} and there are a few practical opportunities that stood out.`,
-      groundedFacts.length ? `A couple of grounded things I picked up: ${groundedFacts.slice(0, 3).join("; ")}.` : "",
-      "",
-      `At ${envBrandLine(env)}, we help businesses tighten the quality of their web presence through strategy, design, and build work.`,
-      `From what I saw, there may be an opportunity to ${outreachAngles.join(" and ")}.`,
-      serviceTags.length ? `It also looks like your focus is around ${serviceTags.join(", ")}.` : "",
-      "",
-      "Happy to send through a few practical ideas if that would be useful.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].filter(Boolean).join("\n"),
-    followupText: [
-      `Hi ${company},`,
-      "",
-      "Just following up on my earlier note in case it slipped past you.",
-      "Happy to send a short teardown with a few practical suggestions if that would help.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].join("\n"),
-    whyJson: JSON.stringify({
-      mode: "general_outreach",
-      company,
-      category: lead.category,
-      score_total: lead.score_total,
-      serviceTags,
-      outreachAngles,
-      groundedFacts: groundedFacts.slice(0, 5),
-    }),
-  };
-}
-
 function buildDraftCopy(env: Env, lead: LeadRow) {
-  const category = String(lead.category || "").toLowerCase();
-  if (category === "agency") return buildAgencyDraft(env, lead);
-  if (category === "contractor") return buildContractorDraft(env, lead);
-  return buildGeneralDraft(env, lead);
+  const signals = parseLeadSignals(lead) as any;
+  const company = cleanCompanyName(lead);
+  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const grounded = Array.isArray(signals.groundedFacts) ? signals.groundedFacts.slice(0, 2) : [];
+  const angle = signals.recommendedAngle || "Short teardown offer";
+  const problem = signals.problemSummary || "There may be a practical website opportunity here.";
+  const leverage = signals.leverageSummary || "EVAVO should focus on practical improvement, not fluff.";
+  const tone = String(signals.toneMode || "consultative");
+
+  if (signals.draftStrategy === "white_label_partnership" || signals.draftStrategy === "overflow_delivery_support") {
+    return {
+      subject: `Quiet support for ${company} if overflow ever hits`,
+      bodyText: [
+        `Hi ${company},`,
+        "",
+        `I had a quick look through ${domain} and this felt more like a partner-fit conversation than a pitch about redoing your site.`,
+        grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "",
+        "",
+        `${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,
+        `The angle here would be simple: ${angle.toLowerCase()}.`,
+        "",
+        "If that is ever useful, I am happy to send a short note on where we tend to plug in.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ].filter(Boolean).join("\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
+      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
+    };
+  }
+
+  if (signals.draftStrategy === "contractor_lead_uplift" || signals.draftStrategy === "professional_service_uplift") {
+    return {
+      subject: `A practical website idea for ${company}`,
+      bodyText: [
+        `Hi ${company},`,
+        "",
+        `I had a look through ${domain} and there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`,
+        grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "",
+        "",
+        problem,
+        leverage,
+        "",
+        `If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.`,
+        "",
+        "Best,",
+        envBrandLine(env),
+      ].filter(Boolean).join("\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
+    };
+  }
+
+  if (signals.draftStrategy === "ecommerce_conversion_offer") {
+    return {
+      subject: `A conversion idea for ${company}`,
+      bodyText: [
+        `Hi ${company},`,
+        "",
+        `I had a look through ${domain} and this feels more like a conversion and clarity opportunity than a redesign-for-the-sake-of-it situation.`,
+        grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "",
+        "",
+        problem,
+        leverage,
+        "",
+        "If useful, I can send a short teardown focused on what is most likely to lift trust or action.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ].filter(Boolean).join("\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
+    };
+  }
+
+  return {
+    subject: `A practical idea for ${company}`,
+    bodyText: [
+      `Hi ${company},`,
+      "",
+      `I had a look through ${domain} and there may be a worthwhile improvement opportunity there.`,
+      grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "",
+      "",
+      problem,
+      leverage,
+      "",
+      "If useful, I can send a short note with specific suggestions.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].filter(Boolean).join("\n"),
+    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+    whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
+  };
 }
 
 async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseDelayMs = 300): Promise<T> {
   let attempt = 0;
   while (true) {
-    try {
-      return await task();
-    } catch (error: any) {
+    try { return await task(); }
+    catch (error: any) {
       attempt += 1;
       const message = String(error?.message || error || "");
       const retryable = /timeout|network|429|rate|temporar/i.test(message);
@@ -383,13 +497,18 @@ function getCap(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+async function draftCountForLead(env: Env, leadId: string): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) as count FROM drafts WHERE lead_id = ?`).bind(leadId).first<{ count: number }>();
+  return Number(row?.count || 0);
+}
+
 export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> {
   const website = normalizeWebsite(websiteInput);
   const lead = await insertLead(env, website, "manual");
   const scan = await heuristicScan(website);
   await updateLead(env, lead.id, {
     company_name: scan.companyName || null,
-    category: scan.classification,
+    category: scan.leadClass as any,
     country: scan.country || null,
     region: scan.region || null,
     contact_email: scan.contactEmail || null,
@@ -403,7 +522,8 @@ export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<Le
     status: "scanned",
   });
   await bump(env, "leads_new_today", 1);
-  await logEvent(env, "scan_ok", `Scanned ${website}`, lead.id);
+  await bump(env, "crawl_scanned_today", 1);
+  await logEvent(env, "scan_ok", `Scanned ${website} as ${scan.leadClass}`, lead.id);
   return (await getLeadById(env, lead.id)) as LeadRow;
 }
 
@@ -415,7 +535,7 @@ async function runScan(env: Env, maxItems: number): Promise<number> {
       const scan = await heuristicScan(lead.website_url);
       await updateLead(env, lead.id, {
         company_name: scan.companyName || null,
-        category: scan.classification,
+        category: scan.leadClass as any,
         country: scan.country || null,
         region: scan.region || null,
         contact_email: scan.contactEmail || null,
@@ -429,7 +549,8 @@ async function runScan(env: Env, maxItems: number): Promise<number> {
         status: "scanned",
       });
       await bump(env, "leads_new_today", 1);
-      await logEvent(env, "scan_ok", `Scanned ${lead.website_url}`, lead.id);
+      await bump(env, "crawl_scanned_today", 1);
+      await logEvent(env, "scan_ok", `Scanned ${lead.website_url} as ${scan.leadClass}`, lead.id);
       scanned += 1;
     } catch (error) {
       await updateLead(env, lead.id, { status: "failed" });
@@ -441,21 +562,26 @@ async function runScan(env: Env, maxItems: number): Promise<number> {
 
 async function runDraft(env: Env, maxItems: number): Promise<number> {
   const minimumScore = Number((await getSetting(env, "min_score_for_draft")) || 0.45);
-  const leads = await listLeads(env, { status: "scanned", limit: maxItems });
+  const leads = await listLeads(env, { status: "scanned", limit: maxItems * 4 });
   let drafted = 0;
 
   for (const lead of leads) {
+    const signals = parseLeadSignals(lead) as any;
+    const leadClass = String(signals.leadClass || lead.category || "general").toLowerCase();
+    const qualityTier = String(signals.qualityTier || "average").toLowerCase();
+    const opportunityType = String(signals.opportunityType || "");
+    const strategy = String(signals.draftStrategy || "");
+    const existingDraftCount = await draftCountForLead(env, lead.id);
+
+    if (drafted >= maxItems) break;
     if (lead.score_total < minimumScore) continue;
+    if (strategy === "do_not_send" || opportunityType === "do_not_pitch") continue;
+    if (qualityTier === "strong" && !["agency", "dev_shop", "marketing_agency", "ecommerce"].includes(leadClass)) continue;
+    if (existingDraftCount >= 1) continue;
+
     try {
       const draft = buildDraftCopy(env, lead);
-      await insertDraft(env, {
-        leadId: lead.id,
-        mode: "heuristic",
-        subject: draft.subject,
-        bodyText: draft.bodyText,
-        followupText: draft.followupText,
-        whyJson: draft.whyJson,
-      });
+      await insertDraft(env, { leadId: lead.id, mode: "heuristic", subject: draft.subject, bodyText: draft.bodyText, followupText: draft.followupText, whyJson: draft.whyJson });
       await updateLead(env, lead.id, { status: "drafted" });
       await bump(env, "drafts_created_today", 1);
       await bump(env, "ai_calls", 1);
@@ -465,7 +591,6 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
       await logEvent(env, "draft_fail", `Error drafting for ${lead.website_url}: ${String(error)}`, lead.id);
     }
   }
-
   return drafted;
 }
 
@@ -501,14 +626,7 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
     }
 
     try {
-      const result = await executeWithRetry(() =>
-        sendEmail(env, {
-          to: toEmail,
-          subject: draft.subject,
-          bodyText: draft.body_text,
-        })
-      );
-
+      const result = await executeWithRetry(() => sendEmail(env, { to: toEmail, subject: draft.subject, bodyText: draft.body_text }));
       if (result.ok) {
         await updateDraft(env, draft.id, { status: "sent" });
         await updateLead(env, lead.id, { status: "sent" });
@@ -528,14 +646,12 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
       failed += 1;
     }
   }
-
   return { sent, failed };
 }
 
 export async function dailyTick(env: Env): Promise<void> {
   const engineEnabled = ((await getSetting(env, "engine_enabled")) || "1") !== "0";
   if (!engineEnabled) return;
-
   const token = await tryAcquireLock(env, "engine-cycle", 60 * 10);
   if (!token) return;
 
@@ -559,18 +675,9 @@ export async function dailyTick(env: Env): Promise<void> {
   } catch (error) {
     await logEvent(env, "tick_fail", String(error));
   } finally {
-    await setSetting(
-      env,
-      "last_engine_run",
-      JSON.stringify({
-        runId,
-        started_at_iso: startedAt,
-        scanned,
-        drafted,
-        sent: sendResult.sent,
-        failed: sendResult.failed,
-      })
-    );
+    await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`)
+      .bind("last_engine_run", JSON.stringify({ runId, started_at_iso: startedAt, scanned, drafted, sent: sendResult.sent, failed: sendResult.failed }))
+      .run();
     await releaseLock(env, "engine-cycle", token);
   }
 }

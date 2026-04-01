@@ -86,6 +86,13 @@ export interface ScanResult {
   region?: string | null;
 }
 
+export interface ScanRunSummary {
+  scanned: number;
+  expanded: number;
+  skipped: number;
+  failed: number;
+}
+
 function normalizeWebsite(raw: string): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) throw new Error("Missing website URL");
@@ -95,7 +102,9 @@ function normalizeWebsite(raw: string): string {
 
 function extractEmails(input: string): string[] {
   const matches = input.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter((email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email));
+  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter(
+    (email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email)
+  );
 }
 
 async function fetchHtml(url: string): Promise<string> {
@@ -132,6 +141,46 @@ function guessCompanyName(title: string, domain: string): string {
 
 function hasAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+function looksLikeSourcePage(url: string, html: string): boolean {
+  const lower = `${url} ${html}`.toLowerCase();
+  if (/truelocal\.com\.au\/find\//.test(lower)) return true;
+  if (/yellowpages\.com\.au\/find\//.test(lower)) return true;
+  if (/hipages\.com\.au\/find\//.test(lower)) return true;
+  if (/directory|results for|search results|business listings/.test(lower) && /href=/.test(lower)) return true;
+  return false;
+}
+
+function extractCandidateUrls(sourceUrl: string, html: string): string[] {
+  const source = sourceUrl.toLowerCase();
+  const matches = Array.from(html.matchAll(/href=["']([^"'#]+)["']/gi)).map((m) => m[1]);
+  const urls: string[] = [];
+
+  for (const href of matches) {
+    try {
+      const absolute = new URL(href, sourceUrl).toString();
+      const lower = absolute.toLowerCase();
+
+      if (source.includes("truelocal.com.au")) {
+        if (/truelocal\.com\.au\/business\//.test(lower)) urls.push(absolute);
+      } else if (source.includes("yellowpages.com.au")) {
+        if (/yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/.test(lower) || /yellowpages\.com\.au\/find\//.test(lower) === false && /yellowpages\.com\.au\//.test(lower)) {
+          urls.push(absolute);
+        }
+      } else if (source.includes("hipages.com.au")) {
+        if (/hipages\.com\.au\/connect\//.test(lower) || /hipages\.com\.au\/find\//.test(lower) === false && /hipages\.com\.au\//.test(lower)) {
+          urls.push(absolute);
+        }
+      } else {
+        if (/^https?:\/\//.test(lower)) urls.push(absolute);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return Array.from(new Set(urls)).slice(0, 30);
 }
 
 function classifyLead(domain: string, html: string, title: string, description: string) {
@@ -291,7 +340,14 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
   const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], normalized).toString() : null;
   const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
 
-  const scores = deriveScores({ leadClass: classified.leadClass, qualityTier: classified.qualityTier, opportunityType: classified.opportunityType, hasContactForm, contactEmail, html });
+  const scores = deriveScores({
+    leadClass: classified.leadClass,
+    qualityTier: classified.qualityTier,
+    opportunityType: classified.opportunityType,
+    hasContactForm,
+    contactEmail,
+    html,
+  });
 
   const groundedFacts: string[] = [];
   if (title) groundedFacts.push(`Title: ${title}`);
@@ -340,7 +396,7 @@ async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
     problemSummary: buildProblemSummary(classified.leadClass, classified.qualityTier),
     leverageSummary: buildLeverageSummary(classified.leadClass, classified.opportunityType),
     recommendedAngle: buildRecommendedAngle(classified.opportunityType),
-    country: null,
+    country: url.hostname.endsWith(".nz") ? "NZ" : "AU",
     region: null,
   };
 }
@@ -359,12 +415,12 @@ function buildLeadSignals(scan: ScanResult): LeadSignals {
     title: scan.title,
     description: scan.description,
     companyName: scan.companyName,
-    leadClass: scan.leadClass as any,
-    qualityTier: scan.qualityTier as any,
-    opportunityType: scan.opportunityType as any,
+    leadClass: scan.leadClass,
+    qualityTier: scan.qualityTier,
+    opportunityType: scan.opportunityType,
     decisionSummary: scan.decisionSummary,
-    draftStrategy: scan.draftStrategy as any,
-    toneMode: scan.toneMode as any,
+    draftStrategy: scan.draftStrategy,
+    toneMode: scan.toneMode,
     problemSummary: scan.problemSummary,
     leverageSummary: scan.leverageSummary,
     recommendedAngle: scan.recommendedAngle,
@@ -407,7 +463,14 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "Best,",
         envBrandLine(env),
       ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
+      followupText: [
+        `Hi ${company},`,
+        "",
+        "Just following up in case overflow or quiet implementation support is relevant at the moment.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -429,7 +492,14 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "Best,",
         envBrandLine(env),
       ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      followupText: [
+        `Hi ${company},`,
+        "",
+        "Just following up in case a short, practical teardown would be useful.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -451,7 +521,14 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "Best,",
         envBrandLine(env),
       ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      followupText: [
+        `Hi ${company},`,
+        "",
+        "Just following up in case a conversion-focused teardown would be useful.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -472,7 +549,14 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
       "Best,",
       envBrandLine(env),
     ].filter(Boolean).join("\n"),
-    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+    followupText: [
+      `Hi ${company},`,
+      "",
+      "Just following up in case a short, specific teardown would be useful.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ].join("\n"),
     whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
   };
 }
@@ -480,8 +564,9 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
 async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseDelayMs = 300): Promise<T> {
   let attempt = 0;
   while (true) {
-    try { return await task(); }
-    catch (error: any) {
+    try {
+      return await task();
+    } catch (error: any) {
       attempt += 1;
       const message = String(error?.message || error || "");
       const retryable = /timeout|network|429|rate|temporar/i.test(message);
@@ -502,9 +587,48 @@ async function draftCountForLead(env: Env, leadId: string): Promise<number> {
   return Number(row?.count || 0);
 }
 
+async function expandSourceLead(env: Env, lead: LeadRow): Promise<number> {
+  const html = await fetchHtml(lead.website_url);
+  if (!html.trim()) {
+    await updateLead(env, lead.id, { status: "failed" });
+    await logEvent(env, "expand_fail", `Source page empty or unavailable: ${lead.website_url}`, lead.id);
+    return 0;
+  }
+
+  const candidates = extractCandidateUrls(lead.website_url, html);
+  let inserted = 0;
+
+  for (const candidate of candidates) {
+    try {
+      await insertLead(env, {
+        websiteUrl: candidate,
+        discoverySource: `expanded_from:${lead.id}`,
+        category: lead.category || "general",
+        country: lead.country || "AU",
+        region: lead.region || null,
+        signalsJson: "{}",
+      });
+      inserted += 1;
+    } catch {
+      continue;
+    }
+  }
+
+  await updateLead(env, lead.id, {
+    status: "do_not_contact",
+    signals_json: JSON.stringify({
+      sourceExpanded: true,
+      extractedCandidates: inserted,
+      decisionSummary: `Directory source page expanded into ${inserted} candidate URLs.`,
+    }),
+  });
+  await logEvent(env, "expand_ok", `Expanded ${lead.website_url} into ${inserted} candidate URLs`, lead.id);
+  return inserted;
+}
+
 export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> {
   const website = normalizeWebsite(websiteInput);
-  const lead = await insertLead(env, website, "manual");
+  const lead = await insertLead(env, { websiteUrl: website, discoverySource: "manual", signalsJson: "{}" });
   const scan = await heuristicScan(website);
   await updateLead(env, lead.id, {
     company_name: scan.companyName || null,
@@ -527,12 +651,99 @@ export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<Le
   return (await getLeadById(env, lead.id)) as LeadRow;
 }
 
-async function runScan(env: Env, maxItems: number): Promise<number> {
+async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
   const leads = await listLeads(env, { status: "new", limit: maxItems });
-  let scanned = 0;
+  const summary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0 };
+
   for (const lead of leads) {
     try {
-      const scan = await heuristicScan(lead.website_url);
+      const html = await fetchHtml(lead.website_url);
+      if (!html.trim()) {
+        await updateLead(env, lead.id, { status: "failed" });
+        await logEvent(env, "scan_fail", `No HTML returned for ${lead.website_url}`, lead.id);
+        summary.failed += 1;
+        continue;
+      }
+
+      if (looksLikeSourcePage(lead.website_url, html)) {
+        const expanded = await expandSourceLead(env, lead);
+        summary.expanded += expanded;
+        continue;
+      }
+
+      const title = extractTitle(html);
+      const description = extractDescription(html);
+      const url = new URL(normalizeWebsite(lead.website_url));
+      const classified = classifyLead(url.hostname, html, title, description);
+
+      const emails = extractEmails(html);
+      const contactEmail = emails[0];
+      const contactHrefMatch = html.match(/href=["']([^"']*contact[^"']*)["']/i);
+      const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], lead.website_url).toString() : null;
+      const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
+
+      const scores = deriveScores({
+        leadClass: classified.leadClass,
+        qualityTier: classified.qualityTier,
+        opportunityType: classified.opportunityType,
+        hasContactForm,
+        contactEmail,
+        html,
+      });
+
+      const scan: ScanResult = {
+        companyName: guessCompanyName(title, url.hostname),
+        leadClass: classified.leadClass,
+        opportunityType: classified.opportunityType,
+        qualityTier: classified.qualityTier,
+        draftStrategy: classified.draftStrategy,
+        toneMode: classified.toneMode,
+        fitScore: scores.fit,
+        contactabilityScore: scores.contact,
+        riskScore: scores.risk,
+        scoreTotal: scores.total,
+        brief:
+          classified.leadClass === "agency" || classified.leadClass === "dev_shop" || classified.leadClass === "marketing_agency"
+            ? "Agency-side lead that likely suits partnership or overflow support."
+            : classified.leadClass === "ecommerce"
+            ? "Commerce lead that likely suits a conversion-focused offer."
+            : classified.leadClass === "contractor" || classified.leadClass === "local_service"
+            ? "Service-business lead where practical website uplift may improve enquiry flow."
+            : classified.leadClass === "professional_service"
+            ? "Professional-service lead where clearer trust and contact flow may matter."
+            : "General lead with some improvement potential.",
+        contactEmail,
+        contactPageUrl,
+        hasContactForm,
+        contactSummary: contactEmail ? `Found direct email ${contactEmail}` : hasContactForm ? "No direct email found, but a contact route exists" : "No direct contact route found",
+        siteQualitySummary:
+          classified.qualityTier === "missing"
+            ? "Digital presence appears missing or placeholder-level."
+            : classified.qualityTier === "weak"
+            ? "Site loaded, but likely presents a weaker or more templated experience."
+            : classified.qualityTier === "strong"
+            ? "Site loaded and appears comparatively stronger."
+            : "Site loaded successfully.",
+        techTags: classified.techTags,
+        serviceTags: classified.serviceTags,
+        outreachAngles: buildOutreachAngles(classified.leadClass, classified.opportunityType),
+        avoidSaying: buildAvoidSaying(classified.opportunityType),
+        groundedFacts: [
+          ...(title ? [`Title: ${title}`] : []),
+          ...(description ? [`Description: ${description}`] : []),
+          ...(contactEmail ? [`Email found: ${contactEmail}`] : []),
+          ...(contactPageUrl ? [`Contact page: ${contactPageUrl}`] : []),
+        ],
+        title,
+        description,
+        decisionSummary: buildRecommendedAngle(classified.opportunityType),
+        problemSummary: buildProblemSummary(classified.leadClass, classified.qualityTier),
+        leverageSummary: buildLeverageSummary(classified.leadClass, classified.opportunityType),
+        recommendedAngle: buildRecommendedAngle(classified.opportunityType),
+        country: url.hostname.endsWith(".nz") ? "NZ" : "AU",
+        region: null,
+      };
+
       await updateLead(env, lead.id, {
         company_name: scan.companyName || null,
         category: scan.leadClass as any,
@@ -551,13 +762,15 @@ async function runScan(env: Env, maxItems: number): Promise<number> {
       await bump(env, "leads_new_today", 1);
       await bump(env, "crawl_scanned_today", 1);
       await logEvent(env, "scan_ok", `Scanned ${lead.website_url} as ${scan.leadClass}`, lead.id);
-      scanned += 1;
+      summary.scanned += 1;
     } catch (error) {
       await updateLead(env, lead.id, { status: "failed" });
       await logEvent(env, "scan_fail", `Error scanning ${lead.website_url}: ${String(error)}`, lead.id);
+      summary.failed += 1;
     }
   }
-  return scanned;
+
+  return summary;
 }
 
 async function runDraft(env: Env, maxItems: number): Promise<number> {
@@ -581,7 +794,14 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
 
     try {
       const draft = buildDraftCopy(env, lead);
-      await insertDraft(env, { leadId: lead.id, mode: "heuristic", subject: draft.subject, bodyText: draft.bodyText, followupText: draft.followupText, whyJson: draft.whyJson });
+      await insertDraft(env, {
+        leadId: lead.id,
+        mode: "heuristic",
+        subject: draft.subject,
+        bodyText: draft.bodyText,
+        followupText: draft.followupText,
+        whyJson: draft.whyJson,
+      });
       await updateLead(env, lead.id, { status: "drafted" });
       await bump(env, "drafts_created_today", 1);
       await bump(env, "ai_calls", 1);
@@ -591,6 +811,7 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
       await logEvent(env, "draft_fail", `Error drafting for ${lead.website_url}: ${String(error)}`, lead.id);
     }
   }
+
   return drafted;
 }
 
@@ -626,7 +847,14 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
     }
 
     try {
-      const result = await executeWithRetry(() => sendEmail(env, { to: toEmail, subject: draft.subject, bodyText: draft.body_text }));
+      const result = await executeWithRetry(() =>
+        sendEmail(env, {
+          to: toEmail,
+          subject: draft.subject,
+          bodyText: draft.body_text,
+        })
+      );
+
       if (result.ok) {
         await updateDraft(env, draft.id, { status: "sent" });
         await updateLead(env, lead.id, { status: "sent" });
@@ -646,12 +874,14 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
       failed += 1;
     }
   }
+
   return { sent, failed };
 }
 
 export async function dailyTick(env: Env): Promise<void> {
   const engineEnabled = ((await getSetting(env, "engine_enabled")) || "1") !== "0";
   if (!engineEnabled) return;
+
   const token = await tryAcquireLock(env, "engine-cycle", 60 * 10);
   if (!token) return;
 
@@ -661,34 +891,50 @@ export async function dailyTick(env: Env): Promise<void> {
 
   const startedAt = nowISO();
   const runId = uuid();
-  let scanned = 0;
+  let scanSummary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0 };
   let drafted = 0;
   let sendResult = { sent: 0, failed: 0 };
 
   try {
     await logEvent(env, "tick_ok", "Daily tick step started");
-    scanned = await runScan(env, Math.min(10, crawlCap));
+    scanSummary = await runScan(env, Math.min(10, crawlCap));
     const draftingEnabled = ((await getSetting(env, "drafting_enabled")) || "1") !== "0";
     if (draftingEnabled) drafted = await runDraft(env, Math.min(10, draftCap));
     sendResult = await runSend(env, Math.min(10, sendCap));
-    await logEvent(env, "tick_ok", "Daily tick step finished");
+    await logEvent(
+      env,
+      "tick_ok",
+      `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`
+    );
   } catch (error) {
     await logEvent(env, "tick_fail", String(error));
   } finally {
     await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`)
-      .bind("last_engine_run", JSON.stringify({ runId, started_at_iso: startedAt, scanned, drafted, sent: sendResult.sent, failed: sendResult.failed }))
+      .bind(
+        "last_engine_run",
+        JSON.stringify({
+          runId,
+          started_at_iso: startedAt,
+          scanned: scanSummary.scanned,
+          expanded: scanSummary.expanded,
+          failed: scanSummary.failed,
+          drafted,
+          sent: sendResult.sent,
+          sendFailed: sendResult.failed,
+        })
+      )
       .run();
     await releaseLock(env, "engine-cycle", token);
   }
 }
 
-export async function runScanOnce(env: Env): Promise<{ scanned: number }> {
+export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
   const token = await tryAcquireLock(env, "scan-only", 60 * 5);
-  if (!token) return { scanned: 0 };
+  if (!token) return { scanned: 0, expanded: 0, skipped: 0, failed: 0 };
   try {
-    const scanned = await runScan(env, 10);
-    await logEvent(env, "scan_ok", "Manual scan completed");
-    return { scanned };
+    const summary = await runScan(env, 10);
+    await logEvent(env, "scan_ok", `Manual scan completed | scanned ${summary.scanned} | expanded ${summary.expanded} | failed ${summary.failed}`);
+    return summary;
   } finally {
     await releaseLock(env, "scan-only", token);
   }
@@ -699,7 +945,7 @@ export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
   if (!token) return { drafted: 0 };
   try {
     const drafted = await runDraft(env, 10);
-    await logEvent(env, "draft_ok", "Manual draft completed");
+    await logEvent(env, "draft_ok", `Manual draft completed | drafted ${drafted}`);
     return { drafted };
   } finally {
     await releaseLock(env, "draft-only", token);
@@ -711,7 +957,7 @@ export async function runSendApproved(env: Env): Promise<{ sent: number; failed:
   if (!token) return { sent: 0, failed: 0 };
   try {
     const result = await runSend(env, 10);
-    await logEvent(env, "send_ok", "Manual send completed");
+    await logEvent(env, "send_ok", `Manual send completed | sent ${result.sent} | failed ${result.failed}`);
     return result;
   } finally {
     await releaseLock(env, "send-only", token);

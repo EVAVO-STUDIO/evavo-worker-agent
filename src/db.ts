@@ -1,4 +1,3 @@
-
 export type LeadStatus =
   | "new"
   | "scanned"
@@ -210,8 +209,28 @@ function companyNameFromWebsite(websiteUrl: string): string {
   }
 }
 
-export async function insertLead(env: Env, websiteUrl: string, discoverySource = "manual"): Promise<LeadRow> {
-  const normalized = normalizeLeadWebsite(websiteUrl);
+function inferCountryFromWebsite(websiteUrl: string): string {
+  const lower = String(websiteUrl || "").toLowerCase();
+  if (lower.includes(".co.nz") || lower.includes(".nz/") || lower.endsWith(".nz")) return "NZ";
+  return "AU";
+}
+
+export interface InsertLeadInput {
+  websiteUrl: string;
+  discoverySource?: string | null;
+  country?: string | null;
+  region?: string | null;
+  category?: string | null;
+  companyName?: string | null;
+}
+
+export async function insertLead(env: Env, websiteOrInput: string | InsertLeadInput, discoverySource = "manual"): Promise<LeadRow> {
+  const input: InsertLeadInput =
+    typeof websiteOrInput === "string"
+      ? { websiteUrl: websiteOrInput, discoverySource }
+      : websiteOrInput;
+
+  const normalized = normalizeLeadWebsite(input.websiteUrl);
   const existing = await env.DB.prepare(
     `SELECT id, company_name, website_url, country, region, category, discovery_source,
             contact_email, contact_page_url, has_contact_form, signals_json,
@@ -226,7 +245,11 @@ export async function insertLead(env: Env, websiteUrl: string, discoverySource =
 
   const id = uuid();
   const now = nowISO();
-  const companyName = companyNameFromWebsite(normalized);
+  const companyName = input.companyName || companyNameFromWebsite(normalized);
+  const country = input.country || inferCountryFromWebsite(normalized) || "AU";
+  const region = Object.prototype.hasOwnProperty.call(input, "region") ? input.region ?? null : null;
+  const category = input.category || "general";
+  const source = input.discoverySource || discoverySource || "manual";
 
   await env.DB.prepare(
     `INSERT INTO leads (
@@ -235,18 +258,18 @@ export async function insertLead(env: Env, websiteUrl: string, discoverySource =
       score_fit, score_contact, score_risk, score_total, status, created_at_iso, updated_at_iso
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-      id, companyName, normalized, null, null, "other", discoverySource,
-      null, null, 0, null, 0, 0, 0, 0, "new", now, now
-    ).run();
+    id, companyName, normalized, country, region, category, source,
+    null, null, 0, null, 0, 0, 0, 0, "new", now, now
+  ).run();
 
   return {
     id,
     company_name: companyName,
     website_url: normalized,
-    country: null,
-    region: null,
-    category: "other",
-    discovery_source: discoverySource,
+    country,
+    region,
+    category,
+    discovery_source: source,
     contact_email: null,
     contact_page_url: null,
     has_contact_form: 0,

@@ -109,6 +109,12 @@ function withDerivedLead(lead: any) {
   };
 }
 
+function inferCountryFromUrl(url: string): string {
+  const lower = String(url || "").toLowerCase();
+  if (lower.includes(".co.nz") || lower.includes(".nz/") || lower.endsWith(".nz")) return "NZ";
+  return "AU";
+}
+
 async function handleOverview(env: Env, json: JsonResponse) {
   const counters = {
     crawl_scanned: Number((await getSetting(env, "crawl_scanned_today")) || 0),
@@ -201,8 +207,18 @@ async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
     const label = String(item?.label || body?.label || "manual");
     const type = String(item?.type || body?.type || "directory");
     const category = String(item?.category || body?.category || "general");
-    const lead = await insertLead(env, url, `${type}:${label}:${category}`);
-    inserted.push({ id: lead.id, url });
+    const country = String(item?.country || body?.country || inferCountryFromUrl(url) || "AU").toUpperCase();
+    const region = item?.region ? String(item.region) : null;
+
+    const lead = await insertLead(env, {
+      websiteUrl: url,
+      discoverySource: `${type}:${label}:${category}`,
+      category,
+      country,
+      region,
+    });
+
+    inserted.push({ id: lead.id, url, country, category });
   }
   await logEvent(env, "seed_add", `Added ${inserted.length} seed URLs`);
   return json({ ok: true, inserted });
@@ -288,7 +304,15 @@ export async function handleAdmin(
     const body = await request.json().catch(() => ({}));
     const websiteUrl = String(body?.websiteUrl || "").trim();
     if (!websiteUrl) return json({ ok: false, error: "websiteUrl is required" }, { status: 400 });
-    const lead = await insertLead(env, websiteUrl, "manual");
+
+    const lead = await insertLead(env, {
+      websiteUrl,
+      discoverySource: "manual",
+      category: String(body?.category || "general"),
+      country: String(body?.country || inferCountryFromUrl(websiteUrl) || "AU").toUpperCase(),
+      region: body?.region ? String(body.region) : null,
+    });
+
     await logEvent(env, "lead_add", `Manually added ${websiteUrl}`, lead.id);
     return json({ ok: true, lead });
   }

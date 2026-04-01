@@ -115,6 +115,11 @@ function inferCountryFromUrl(url: string): string {
   return "AU";
 }
 
+function isDirectorySource(url: string, type: string, label: string): boolean {
+  const lower = `${url} ${type} ${label}`.toLowerCase();
+  return /truelocal|yellowpages|hipages|directory/.test(lower);
+}
+
 async function handleOverview(env: Env, json: JsonResponse) {
   const counters = {
     crawl_scanned: Number((await getSetting(env, "crawl_scanned_today")) || 0),
@@ -201,28 +206,54 @@ async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
     ? body.urls.map((url: string) => ({ url }))
     : [];
   const inserted = [];
+  const requeued = [];
+
   for (const item of rawItems) {
     const url = String(item?.url || item || "").trim();
     if (!url) continue;
+
     const label = String(item?.label || body?.label || "manual");
     const type = String(item?.type || body?.type || "directory");
     const category = String(item?.category || body?.category || "general");
     const country = String(item?.country || body?.country || inferCountryFromUrl(url) || "AU").toUpperCase();
     const region = item?.region ? String(item.region) : null;
+    const discoverySource = `${type}:${label}:${category}`;
 
     const lead = await insertLead(env, {
       websiteUrl: url,
-      discoverySource: `${type}:${label}:${category}`,
+      discoverySource,
       category,
       country,
       region,
       signalsJson: "{}",
     });
 
+    const isSource = isDirectorySource(url, type, label);
+
+    if (isSource) {
+      await updateLead(env, lead.id, {
+        category: category as any,
+        country,
+        region,
+        discovery_source: discoverySource,
+        signals_json: "{}",
+        contact_email: null,
+        contact_page_url: null,
+        has_contact_form: 0,
+        score_fit: 0,
+        score_contact: 0,
+        score_risk: 0,
+        score_total: 0,
+        status: "new",
+      });
+      requeued.push({ id: lead.id, url, status: "new" });
+    }
+
     inserted.push({ id: lead.id, url, country, category });
   }
-  await logEvent(env, "seed_add", `Added ${inserted.length} seed URLs`);
-  return json({ ok: true, inserted });
+
+  await logEvent(env, "seed_add", `Added or refreshed ${inserted.length} seed URLs`);
+  return json({ ok: true, inserted, requeued });
 }
 
 async function handleBackfill(env: Env, body: any, json: JsonResponse) {

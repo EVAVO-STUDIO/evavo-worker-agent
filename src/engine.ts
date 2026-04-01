@@ -43,6 +43,7 @@ type OpportunityType =
   | "do_not_pitch";
 
 type QualityTier = "missing" | "weak" | "average" | "strong";
+
 type DraftStrategy =
   | "white_label_partnership"
   | "overflow_delivery_support"
@@ -52,6 +53,7 @@ type DraftStrategy =
   | "ecommerce_conversion_offer"
   | "light_teardown_offer"
   | "do_not_send";
+
 type ToneMode = "peer" | "consultative" | "direct" | "sharp";
 
 interface CandidateEvaluation {
@@ -107,6 +109,7 @@ export interface ScanRunSummary {
     noiseSkipped: number;
     lowScoreSkipped: number;
     outOfRegionSkipped: number;
+    badDomainSkipped: number;
   };
 }
 
@@ -130,9 +133,20 @@ function getDomain(raw: string): string {
 }
 
 function isBadDomain(domain: string): boolean {
-  const badPrefixes = ["img.", "cdn.", "static.", "assets.", "media.", "fonts."];
-  const badExact = new Set(["gstatic.com", "googleusercontent.com"]);
-  return badPrefixes.some((prefix) => domain.startsWith(prefix)) || badExact.has(domain);
+  const prefixes = ["img.", "cdn.", "static.", "assets.", "media.", "fonts."];
+  const exact = new Set(["gstatic.com", "googleusercontent.com"]);
+  return prefixes.some((prefix) => domain.startsWith(prefix)) || exact.has(domain);
+}
+
+function isHardNoiseUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    /\.(jpg|jpeg|png|gif|webp|svg|pdf|docx?|xlsx?)($|\?)/i.test(lower) ||
+    /mailto:|tel:|javascript:/.test(lower) ||
+    /facebook\.com|instagram\.com|linkedin\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|pinterest\.com/.test(lower) ||
+    /\/(search|find|category|categories|tag|tags|listing|listings|directory|login|signup|register|privacy|terms)(\/|$)/i.test(lower) ||
+    /[?&](page|sort|filter|session|ref|utm_)/i.test(lower)
+  );
 }
 
 function extractEmails(input: string): string[] {
@@ -225,7 +239,7 @@ function extractCandidateUrls(sourceUrl: string, html: string): string[] {
     }
   }
 
-  return Array.from(new Set(urls)).slice(0, 60);
+  return Array.from(new Set(urls)).slice(0, 80);
 }
 
 function inferCountryGuess(url: string, text: string): "AU" | "NZ" | "OTHER" {
@@ -244,45 +258,26 @@ function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomai
   }
 
   const domain = getDomain(normalizedUrl);
-  const lower = normalizedUrl.toLowerCase();
   const reasons: string[] = [];
   let score = 0;
 
-  if (!/^https?:\/\//.test(lower)) reasons.push("unsupported_scheme");
-  if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|docx?|xlsx?)($|\?)/i.test(lower)) reasons.push("asset_link");
-  if (/mailto:|tel:|javascript:/.test(lower)) reasons.push("non_page_link");
-  if (/[?&](page|sort|filter|session|ref|utm_)/i.test(lower)) reasons.push("query_noise");
-  if (/\/(search|find|category|categories|tag|tags|listing|listings|directory|page|login|signup|register|privacy|terms)(\/|$)/i.test(lower)) reasons.push("directory_noise");
-  if (/facebook\.com|instagram\.com|linkedin\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|pinterest\.com/.test(lower)) reasons.push("social_link");
-  if (/truelocal\.com\.au|yellowpages\.com\.au|hipages\.com\.au/.test(lower)) reasons.push("directory_domain");
+  if (isHardNoiseUrl(normalizedUrl)) reasons.push("noise_url");
   if (isBadDomain(domain)) reasons.push("bad_domain");
+  if (existingDomains.has(domain)) reasons.push("duplicate_domain");
 
-  if (!reasons.length) score += 2;
-  if (!/directory_domain|social_link|asset_link|non_page_link|bad_domain/.test(reasons.join(" "))) score += 1;
   if (sourceCategory === "agency" && /(agency|studio|creative|web|design|development|marketing|digital)/i.test(domain)) score += 2;
   if (sourceCategory === "contractor" && /(build|construct|plumb|electric|roof|joinery|cabinet|glazing|concrete|landscape|civil)/i.test(domain)) score += 2;
   if (sourceCategory === "ecommerce" && /(shop|store|online|boutique|supply)/i.test(domain)) score += 2;
   if (/\.com\.au$|\.net\.au$|\.org\.au$|\.co\.nz$|\.nz$/.test(domain)) score += 2;
-  if (existingDomains.has(domain)) reasons.push("duplicate_domain");
+  if (!reasons.length) score += 2;
 
   const countryGuess = inferCountryGuess(normalizedUrl, domain);
   if (countryGuess === "OTHER") reasons.push("out_of_region");
 
   const accepted =
-    !reasons.some((r) =>
-      [
-        "invalid_url",
-        "unsupported_scheme",
-        "asset_link",
-        "non_page_link",
-        "social_link",
-        "directory_domain",
-        "duplicate_domain",
-        "bad_domain",
-      ].includes(r)
-    ) &&
-    !reasons.includes("query_noise") &&
-    !reasons.includes("directory_noise") &&
+    !reasons.includes("noise_url") &&
+    !reasons.includes("bad_domain") &&
+    !reasons.includes("duplicate_domain") &&
     !reasons.includes("out_of_region") &&
     score >= 3;
 
@@ -503,9 +498,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "",
         "Best,",
         envBrandLine(env),
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      ].filter(Boolean).join("\n"),
       followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
@@ -527,9 +520,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "",
         "Best,",
         envBrandLine(env),
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      ].filter(Boolean).join("\n"),
       followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
@@ -551,9 +542,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "",
         "Best,",
         envBrandLine(env),
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      ].filter(Boolean).join("\n"),
       followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
@@ -574,9 +563,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
       "",
       "Best,",
       envBrandLine(env),
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    ].filter(Boolean).join("\n"),
     followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
     whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
   };
@@ -628,13 +615,11 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
       summary.candidateDiagnostics.duplicatesSkipped += 1;
       continue;
     }
-    if (
-      evaluation.reasons.includes("directory_noise") ||
-      evaluation.reasons.includes("directory_domain") ||
-      evaluation.reasons.includes("social_link") ||
-      evaluation.reasons.includes("query_noise") ||
-      evaluation.reasons.includes("bad_domain")
-    ) {
+    if (evaluation.reasons.includes("bad_domain")) {
+      summary.candidateDiagnostics.badDomainSkipped += 1;
+      continue;
+    }
+    if (evaluation.reasons.includes("noise_url")) {
       summary.candidateDiagnostics.noiseSkipped += 1;
       continue;
     }
@@ -682,6 +667,19 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
   return inserted;
 }
 
+async function markBadLead(env: Env, lead: LeadRow, reason: string): Promise<void> {
+  await updateLead(env, lead.id, {
+    status: "do_not_contact",
+    signals_json: JSON.stringify({
+      ...(parseLeadSignals(lead) || {}),
+      filteredOut: true,
+      filterReason: reason,
+      decisionSummary: `Lead excluded by filter: ${reason}.`,
+    }),
+  });
+  await logEvent(env, "scan_skip", `Filtered lead ${lead.website_url}: ${reason}`, lead.id);
+}
+
 export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> {
   const website = normalizeWebsite(websiteInput);
   const lead = await insertLead(env, { websiteUrl: website, discoverySource: "manual", signalsJson: "{}" });
@@ -696,6 +694,12 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
 
   const eligible = allRecent.filter((lead) => {
     const signals = parseLeadSignals(lead) as any;
+    const domain = getDomain(lead.website_url || "");
+
+    if (isBadDomain(domain)) {
+      skippedReasons.bad_domain_existing = (skippedReasons.bad_domain_existing || 0) + 1;
+      return false;
+    }
 
     if (lead.status === "new") return true;
     if (isSourceLead(lead) && !signals.sourceExpanded) return true;
@@ -724,11 +728,27 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       noiseSkipped: 0,
       lowScoreSkipped: 0,
       outOfRegionSkipped: 0,
+      badDomainSkipped: 0,
     },
   };
 
   for (const lead of leads) {
     try {
+      const domain = getDomain(lead.website_url);
+      if (isBadDomain(domain)) {
+        await markBadLead(env, lead, "bad_domain");
+        summary.skipped += 1;
+        summary.candidateDiagnostics.badDomainSkipped += 1;
+        continue;
+      }
+
+      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) {
+        await markBadLead(env, lead, "noise_url");
+        summary.skipped += 1;
+        summary.candidateDiagnostics.noiseSkipped += 1;
+        continue;
+      }
+
       const html = await fetchHtml(lead.website_url);
       if (!html.trim()) {
         await updateLead(env, lead.id, { status: "failed" });
@@ -978,6 +998,7 @@ export async function dailyTick(env: Env): Promise<void> {
       noiseSkipped: 0,
       lowScoreSkipped: 0,
       outOfRegionSkipped: 0,
+      badDomainSkipped: 0,
     },
   };
   let drafted = 0;
@@ -1038,6 +1059,7 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
         noiseSkipped: 0,
         lowScoreSkipped: 0,
         outOfRegionSkipped: 0,
+        badDomainSkipped: 0,
       },
     };
   }

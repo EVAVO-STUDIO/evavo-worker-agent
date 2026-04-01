@@ -54,6 +54,15 @@ type DraftStrategy =
   | "do_not_send";
 type ToneMode = "peer" | "consultative" | "direct" | "sharp";
 
+interface CandidateEvaluation {
+  accepted: boolean;
+  score: number;
+  reasons: string[];
+  normalizedUrl: string;
+  domain: string;
+  countryGuess: "AU" | "NZ" | "OTHER";
+}
+
 export interface ScanResult {
   companyName?: string;
   leadClass: LeadClass;
@@ -92,19 +101,34 @@ export interface ScanRunSummary {
   skipped: number;
   failed: number;
   skippedReasons: Record<string, number>;
+  candidateDiagnostics: {
+    inserted: number;
+    duplicatesSkipped: number;
+    noiseSkipped: number;
+    lowScoreSkipped: number;
+    outOfRegionSkipped: number;
+  };
 }
 
 function normalizeWebsite(raw: string): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) throw new Error("Missing website URL");
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  return withProtocol.replace(/\/+$/, "");
+  const withProtocol = /^https?:\\/\\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withProtocol.replace(/\\/+$/, "");
+}
+
+function getDomain(raw: string): string {
+  try {
+    return new URL(normalizeWebsite(raw)).hostname.replace(/^www\\./i, "").toLowerCase();
+  } catch {
+    return String(raw || "").replace(/^https?:\\/\\//i, "").replace(/^www\\./i, "").split("/")[0].toLowerCase();
+  }
 }
 
 function extractEmails(input: string): string[] {
-  const matches = input.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+  const matches = input.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [];
   return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter(
-    (email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email)
+    (email) => !/\\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email)
   );
 }
 
@@ -129,15 +153,15 @@ function extractDescription(html: string): string {
 }
 
 function extractTitle(html: string): string {
-  return html.match(/<title[^>]*>(.*?)<\/title>/i)?.[1]?.trim() || "";
+  return html.match(/<title[^>]*>(.*?)<\\/title>/i)?.[1]?.trim() || "";
 }
 
 function guessCompanyName(title: string, domain: string): string {
   if (title) {
-    const cleaned = title.split(/[\-|•|:|·]/)[0].replace(/\s+/g, " ").trim();
+    const cleaned = title.split(/[\\-|•|:|·]/)[0].replace(/\\s+/g, " ").trim();
     if (cleaned) return cleaned;
   }
-  return domain.replace(/^www\./i, "");
+  return domain.replace(/^www\\./i, "");
 }
 
 function hasAny(text: string, patterns: RegExp[]): boolean {
@@ -146,9 +170,9 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
 
 function looksLikeSourcePage(url: string, html: string): boolean {
   const lower = `${url} ${html}`.toLowerCase();
-  if (/truelocal\.com\.au\/find\//.test(lower)) return true;
-  if (/yellowpages\.com\.au\/find\//.test(lower)) return true;
-  if (/hipages\.com\.au\/find\//.test(lower)) return true;
+  if (/truelocal\\.com\\.au\\/find\\//.test(lower)) return true;
+  if (/yellowpages\\.com\\.au\\/find\\//.test(lower)) return true;
+  if (/hipages\\.com\\.au\\/find\\//.test(lower)) return true;
   if (/directory|results for|search results|business listings/.test(lower) && /href=/.test(lower)) return true;
   return false;
 }
@@ -168,16 +192,16 @@ function extractCandidateUrls(sourceUrl: string, html: string): string[] {
       const lower = absolute.toLowerCase();
 
       if (source.includes("truelocal.com.au")) {
-        if (/truelocal\.com\.au\/business\//.test(lower)) urls.push(absolute);
+        if (/truelocal\\.com\\.au\\/business\\//.test(lower)) urls.push(absolute);
       } else if (source.includes("yellowpages.com.au")) {
-        if (/yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/.test(lower) || (!/yellowpages\.com\.au\/find\//.test(lower) && /yellowpages\.com\.au\//.test(lower))) {
+        if (/yellowpages\\.com\\.au\\/[^/]+\\/[^/]+-\\d+/.test(lower) || (!/yellowpages\\.com\\.au\\/find\\//.test(lower) && /yellowpages\\.com\\.au\\//.test(lower))) {
           urls.push(absolute);
         }
       } else if (source.includes("hipages.com.au")) {
-        if (/hipages\.com\.au\/connect\//.test(lower) || (!/hipages\.com\.au\/find\//.test(lower) && /hipages\.com\.au\//.test(lower))) {
+        if (/hipages\\.com\\.au\\/connect\\//.test(lower) || (!/hipages\\.com\\.au\\/find\\//.test(lower) && /hipages\\.com\\.au\\//.test(lower))) {
           urls.push(absolute);
         }
-      } else if (/^https?:\/\//.test(lower)) {
+      } else if (/^https?:\\/\\//.test(lower)) {
         urls.push(absolute);
       }
     } catch {
@@ -185,7 +209,58 @@ function extractCandidateUrls(sourceUrl: string, html: string): string[] {
     }
   }
 
-  return Array.from(new Set(urls)).slice(0, 30);
+  return Array.from(new Set(urls)).slice(0, 60);
+}
+
+function inferCountryGuess(url: string, text: string): "AU" | "NZ" | "OTHER" {
+  const hay = `${url} ${text}`.toLowerCase();
+  if (/\\.co\\.nz\\b|\\.nz\\b|new zealand|auckland|wellington|christchurch|hamilton/.test(hay)) return "NZ";
+  if (/\\.com\\.au\\b|\\.au\\b|australia|melbourne|sydney|brisbane|perth|adelaide|geelong|victoria|queensland|nsw|new south wales/.test(hay)) return "AU";
+  return "OTHER";
+}
+
+function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomains: Set<string>): CandidateEvaluation {
+  let normalizedUrl = "";
+  try {
+    normalizedUrl = normalizeWebsite(url);
+  } catch {
+    return { accepted: false, score: -10, reasons: ["invalid_url"], normalizedUrl: "", domain: "", countryGuess: "OTHER" };
+  }
+
+  const domain = getDomain(normalizedUrl);
+  const lower = normalizedUrl.toLowerCase();
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (!/^https?:\\/\\//.test(lower)) reasons.push("unsupported_scheme");
+  if (/\\.(jpg|jpeg|png|gif|webp|svg|pdf|docx?|xlsx?)($|\\?)/i.test(lower)) reasons.push("asset_link");
+  if (/mailto:|tel:|javascript:/.test(lower)) reasons.push("non_page_link");
+  if (/[?&](page|sort|filter|session|ref|utm_)/i.test(lower)) reasons.push("query_noise");
+  if (/\\/(search|find|category|categories|tag|tags|listing|listings|directory|page|login|signup|register|privacy|terms|contact-us\\/?$)/i.test(lower)) reasons.push("directory_noise");
+  if (/facebook\\.com|instagram\\.com|linkedin\\.com|x\\.com|twitter\\.com|youtube\\.com|tiktok\\.com|pinterest\\.com/.test(lower)) reasons.push("social_link");
+  if (/truelocal\\.com\\.au|yellowpages\\.com\\.au|hipages\\.com\\.au/.test(lower)) reasons.push("directory_domain");
+
+  if (!reasons.length) score += 2;
+  if (!/directory_domain|social_link|asset_link|non_page_link/.test(reasons.join(" "))) score += 1;
+  if (sourceCategory === "agency" && /(agency|studio|creative|web|design|development|marketing|digital)/i.test(domain)) score += 2;
+  if (sourceCategory === "contractor" && /(build|construct|plumb|electric|roof|joinery|cabinet|glazing|concrete|landscape|civil)/i.test(domain)) score += 2;
+  if (sourceCategory === "ecommerce" && /(shop|store|online|boutique|supply)/i.test(domain)) score += 2;
+  if (/\\.com\\.au$|\\.net\\.au$|\\.org\\.au$|\\.co\\.nz$|\\.nz$/.test(domain)) score += 2;
+  if (existingDomains.has(domain)) reasons.push("duplicate_domain");
+
+  const countryGuess = inferCountryGuess(normalizedUrl, domain);
+  if (countryGuess === "OTHER") reasons.push("out_of_region");
+
+  const accepted =
+    !reasons.some((r) =>
+      ["invalid_url", "unsupported_scheme", "asset_link", "non_page_link", "social_link", "directory_domain", "duplicate_domain"].includes(r)
+    ) &&
+    !reasons.includes("query_noise") &&
+    !reasons.includes("directory_noise") &&
+    !reasons.includes("out_of_region") &&
+    score >= 3;
+
+  return { accepted, score, reasons, normalizedUrl, domain, countryGuess };
 }
 
 function classifyLead(domain: string, html: string, title: string, description: string) {
@@ -197,7 +272,7 @@ function classifyLead(domain: string, html: string, title: string, description: 
   if (/wordpress|wp-content/.test(content)) techTags.push("wordpress");
   if (/wix/.test(content)) techTags.push("wix");
   if (/squarespace/.test(content)) techTags.push("squarespace");
-  if (/react|next\.js|__next/.test(content)) techTags.push("react");
+  if (/react|next\\.js|__next/.test(content)) techTags.push("react");
   if (/webflow/.test(content)) techTags.push("webflow");
   if (/hubspot/.test(content)) techTags.push("hubspot");
 
@@ -209,12 +284,12 @@ function classifyLead(domain: string, html: string, title: string, description: 
   if (/builder|construction|joinery|cabinet|plumber|electrician|roofing|glazing|concrete|carpentry/.test(content)) serviceTags.push("trade");
   if (/dentist|lawyer|accountant|clinic|cleaning|mechanic|consulting/.test(content)) serviceTags.push("professional_service");
 
-  const notFitPatterns = [/\bgovernment\b/, /\bcouncil\b/, /\bschool\b/, /\buniversity\b/, /\bcharity\b/, /\bnonprofit\b/, /\bnot-for-profit\b/, /\bfoundation\b/];
-  const agencyPatterns = [/\bagency\b/, /\bstudio\b/, /\bcreative\b/, /\bbranding\b/, /\bmarketing agency\b/, /\bseo agency\b/, /\bweb design\b/, /\bdesign studio\b/, /\bwhite label\b/];
-  const devShopPatterns = [/\bsoftware studio\b/, /\bproduct studio\b/, /\bweb development\b/, /\bapp development\b/, /\bdevelopers\b/, /\bsoftware agency\b/];
-  const contractorPatterns = [/\bbuilder\b/, /\bconstruction\b/, /\bjoinery\b/, /\bcabinet\b/, /\bplumber\b/, /\belectrician\b/, /\broofing\b/, /\bglazing\b/, /\bconcrete\b/, /\bcarpentry\b/, /\blandscap/i, /\bcivil contractor\b/, /\bearthworks\b/, /\bfabrication\b/];
-  const professionalPatterns = [/\bdentist\b/, /\blawyer\b/, /\baccountant\b/, /\bphysio\b/, /\bclinic\b/, /\bconsulting\b/, /\bfinancial planning\b/];
-  const industrialPatterns = [/\bmanufacturing\b/, /\bindustrial\b/, /\bfabrication\b/, /\bengineering services\b/];
+  const notFitPatterns = [/\\bgovernment\\b/, /\\bcouncil\\b/, /\\bschool\\b/, /\\buniversity\\b/, /\\bcharity\\b/, /\\bnonprofit\\b/, /\\bnot-for-profit\\b/, /\\bfoundation\\b/];
+  const agencyPatterns = [/\\bagency\\b/, /\\bstudio\\b/, /\\bcreative\\b/, /\\bbranding\\b/, /\\bmarketing agency\\b/, /\\bseo agency\\b/, /\\bweb design\\b/, /\\bdesign studio\\b/, /\\bwhite label\\b/];
+  const devShopPatterns = [/\\bsoftware studio\\b/, /\\bproduct studio\\b/, /\\bweb development\\b/, /\\bapp development\\b/, /\\bdevelopers\\b/, /\\bsoftware agency\\b/];
+  const contractorPatterns = [/\\bbuilder\\b/, /\\bconstruction\\b/, /\\bjoinery\\b/, /\\bcabinet\\b/, /\\bplumber\\b/, /\\belectrician\\b/, /\\broofing\\b/, /\\bglazing\\b/, /\\bconcrete\\b/, /\\bcarpentry\\b/, /\\blandscap/i, /\\bcivil contractor\\b/, /\\bearthworks\\b/, /\\bfabrication\\b/];
+  const professionalPatterns = [/\\bdentist\\b/, /\\blawyer\\b/, /\\baccountant\\b/, /\\bphysio\\b/, /\\bclinic\\b/, /\\bconsulting\\b/, /\\bfinancial planning\\b/];
+  const industrialPatterns = [/\\bmanufacturing\\b/, /\\bindustrial\\b/, /\\bfabrication\\b/, /\\bengineering services\\b/];
 
   let leadClass: LeadClass = "general";
   if (hasAny(content, notFitPatterns)) leadClass = "not_fit";
@@ -363,13 +438,13 @@ function envBrandLine(env: Env): string {
 
 function cleanCompanyName(lead: LeadRow): string {
   const signals = parseLeadSignals(lead) as any;
-  return lead.company_name || signals.companyName || lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  return lead.company_name || signals.companyName || lead.website_url.replace(/^https?:\\/\\//i, "").replace(/\\/+$/, "");
 }
 
 function buildDraftCopy(env: Env, lead: LeadRow) {
   const signals = parseLeadSignals(lead) as any;
   const company = cleanCompanyName(lead);
-  const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const domain = lead.website_url.replace(/^https?:\\/\\//i, "").replace(/\\/+$/, "");
   const grounded = Array.isArray(signals.groundedFacts) ? signals.groundedFacts.slice(0, 2) : [];
   const angle = signals.recommendedAngle || "Short teardown offer";
   const problem = signals.problemSummary || "There may be a practical website opportunity here.";
@@ -392,8 +467,8 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "",
         "Best,",
         envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
+      ].filter(Boolean).join("\\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -414,8 +489,8 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "",
         "Best,",
         envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      ].filter(Boolean).join("\\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -436,8 +511,8 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "",
         "Best,",
         envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      ].filter(Boolean).join("\\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -457,8 +532,8 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
       "",
       "Best,",
       envBrandLine(env),
-    ].filter(Boolean).join("\n"),
-    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+    ].filter(Boolean).join("\\n"),
+    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\\n"),
     whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
   };
 }
@@ -489,7 +564,7 @@ async function draftCountForLead(env: Env, leadId: string): Promise<number> {
   return Number(row?.count || 0);
 }
 
-async function expandSourceLead(env: Env, lead: LeadRow): Promise<number> {
+async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary): Promise<number> {
   const html = await fetchHtml(lead.website_url);
   if (!html.trim()) {
     await updateLead(env, lead.id, { status: "failed" });
@@ -497,24 +572,52 @@ async function expandSourceLead(env: Env, lead: LeadRow): Promise<number> {
     return 0;
   }
 
+  const existingLeads = await listLeads(env, { limit: 500 });
+  const existingDomains = new Set(existingLeads.map((item) => getDomain(item.website_url)));
   const candidates = extractCandidateUrls(lead.website_url, html);
   let inserted = 0;
 
   for (const candidate of candidates) {
-    try {
-      await insertLead(env, {
-        websiteUrl: candidate,
-        discoverySource: `expanded_from:${lead.id}`,
-        category: lead.category || "general",
-        country: lead.country || "AU",
-        region: lead.region || null,
-        signalsJson: "{}",
-      });
-      inserted += 1;
-    } catch {
+    const evaluation = evaluateCandidateUrl(candidate, lead.category || "general", existingDomains);
+
+    if (evaluation.reasons.includes("duplicate_domain")) {
+      summary.candidateDiagnostics.duplicatesSkipped += 1;
       continue;
     }
+    if (evaluation.reasons.includes("directory_noise") || evaluation.reasons.includes("directory_domain") || evaluation.reasons.includes("social_link") || evaluation.reasons.includes("query_noise")) {
+      summary.candidateDiagnostics.noiseSkipped += 1;
+      continue;
+    }
+    if (evaluation.reasons.includes("out_of_region")) {
+      summary.candidateDiagnostics.outOfRegionSkipped += 1;
+      continue;
+    }
+    if (!evaluation.accepted) {
+      summary.candidateDiagnostics.lowScoreSkipped += 1;
+      continue;
+    }
+
+    try {
+      await insertLead(env, {
+        websiteUrl: evaluation.normalizedUrl,
+        discoverySource: `expanded_from:${lead.id}`,
+        category: lead.category || "general",
+        country: evaluation.countryGuess === "NZ" ? "NZ" : "AU",
+        region: lead.region || null,
+        signalsJson: JSON.stringify({
+          sourceDomain: getDomain(lead.website_url),
+          candidateScore: evaluation.score,
+          candidateReasons: evaluation.reasons,
+        }),
+      });
+      inserted += 1;
+      existingDomains.add(evaluation.domain);
+    } catch {
+      summary.candidateDiagnostics.duplicatesSkipped += 1;
+    }
   }
+
+  summary.candidateDiagnostics.inserted += inserted;
 
   await updateLead(env, lead.id, {
     status: "do_not_contact",
@@ -556,7 +659,20 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
   });
 
   const leads = eligible.slice(0, maxItems);
-  const summary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: Math.max(0, allRecent.length - leads.length), failed: 0, skippedReasons };
+  const summary: ScanRunSummary = {
+    scanned: 0,
+    expanded: 0,
+    skipped: Math.max(0, allRecent.length - leads.length),
+    failed: 0,
+    skippedReasons,
+    candidateDiagnostics: {
+      inserted: 0,
+      duplicatesSkipped: 0,
+      noiseSkipped: 0,
+      lowScoreSkipped: 0,
+      outOfRegionSkipped: 0,
+    },
+  };
 
   for (const lead of leads) {
     try {
@@ -569,7 +685,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       }
 
       if (looksLikeSourcePage(lead.website_url, html)) {
-        const expanded = await expandSourceLead(env, lead);
+        const expanded = await expandSourceLead(env, lead, summary);
         summary.expanded += expanded;
         continue;
       }
@@ -583,7 +699,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       const contactEmail = emails[0];
       const contactHrefMatch = html.match(/href=["']([^"']*contact[^"']*)["']/i);
       const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], lead.website_url).toString() : null;
-      const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
+      const hasContactForm = /<form[\\s\\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
 
       const scores = deriveScores({
         leadClass: classified.leadClass,
@@ -794,7 +910,20 @@ export async function dailyTick(env: Env): Promise<void> {
 
   const startedAt = nowISO();
   const runId = uuid();
-  let scanSummary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {} };
+  let scanSummary: ScanRunSummary = {
+    scanned: 0,
+    expanded: 0,
+    skipped: 0,
+    failed: 0,
+    skippedReasons: {},
+    candidateDiagnostics: {
+      inserted: 0,
+      duplicatesSkipped: 0,
+      noiseSkipped: 0,
+      lowScoreSkipped: 0,
+      outOfRegionSkipped: 0,
+    },
+  };
   let drafted = 0;
   let sendResult = { sent: 0, failed: 0 };
 
@@ -822,6 +951,7 @@ export async function dailyTick(env: Env): Promise<void> {
           expanded: scanSummary.expanded,
           skipped: scanSummary.skipped,
           skippedReasons: scanSummary.skippedReasons,
+          candidateDiagnostics: scanSummary.candidateDiagnostics,
           failed: scanSummary.failed,
           drafted,
           sent: sendResult.sent,
@@ -835,7 +965,22 @@ export async function dailyTick(env: Env): Promise<void> {
 
 export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
   const token = await tryAcquireLock(env, "scan-only", 60 * 5);
-  if (!token) return { scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {} };
+  if (!token) {
+    return {
+      scanned: 0,
+      expanded: 0,
+      skipped: 0,
+      failed: 0,
+      skippedReasons: {},
+      candidateDiagnostics: {
+        inserted: 0,
+        duplicatesSkipped: 0,
+        noiseSkipped: 0,
+        lowScoreSkipped: 0,
+        outOfRegionSkipped: 0,
+      },
+    };
+  }
   try {
     const summary = await runScan(env, 10);
     await logEvent(env, "scan_ok", `Manual scan completed | scanned ${summary.scanned} | expanded ${summary.expanded} | failed ${summary.failed}`);

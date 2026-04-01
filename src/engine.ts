@@ -91,6 +91,7 @@ export interface ScanRunSummary {
   expanded: number;
   skipped: number;
   failed: number;
+  skippedReasons: Record<string, number>;
 }
 
 function normalizeWebsite(raw: string): string {
@@ -152,6 +153,10 @@ function looksLikeSourcePage(url: string, html: string): boolean {
   return false;
 }
 
+function isSourceLead(lead: LeadRow): boolean {
+  return /^directory:/i.test(String(lead.discovery_source || "")) || /truelocal|yellowpages|hipages/i.test(String(lead.website_url || ""));
+}
+
 function extractCandidateUrls(sourceUrl: string, html: string): string[] {
   const source = sourceUrl.toLowerCase();
   const matches = Array.from(html.matchAll(/href=["']([^"'#]+)["']/gi)).map((m) => m[1]);
@@ -165,15 +170,15 @@ function extractCandidateUrls(sourceUrl: string, html: string): string[] {
       if (source.includes("truelocal.com.au")) {
         if (/truelocal\.com\.au\/business\//.test(lower)) urls.push(absolute);
       } else if (source.includes("yellowpages.com.au")) {
-        if (/yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/.test(lower) || /yellowpages\.com\.au\/find\//.test(lower) === false && /yellowpages\.com\.au\//.test(lower)) {
+        if (/yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/.test(lower) || (!/yellowpages\.com\.au\/find\//.test(lower) && /yellowpages\.com\.au\//.test(lower))) {
           urls.push(absolute);
         }
       } else if (source.includes("hipages.com.au")) {
-        if (/hipages\.com\.au\/connect\//.test(lower) || /hipages\.com\.au\/find\//.test(lower) === false && /hipages\.com\.au\//.test(lower)) {
+        if (/hipages\.com\.au\/connect\//.test(lower) || (!/hipages\.com\.au\/find\//.test(lower) && /hipages\.com\.au\//.test(lower))) {
           urls.push(absolute);
         }
-      } else {
-        if (/^https?:\/\//.test(lower)) urls.push(absolute);
+      } else if (/^https?:\/\//.test(lower)) {
+        urls.push(absolute);
       }
     } catch {
       continue;
@@ -326,81 +331,6 @@ function buildAvoidSaying(opportunityType: OpportunityType): string[] {
   return ["generic growth claims", "obvious AI phrasing", "empty flattery"];
 }
 
-async function heuristicScan(websiteUrl: string): Promise<ScanResult> {
-  const normalized = normalizeWebsite(websiteUrl);
-  const url = new URL(normalized);
-  const html = await fetchHtml(normalized);
-  const title = extractTitle(html);
-  const description = extractDescription(html);
-  const classified = classifyLead(url.hostname, html, title, description);
-
-  const emails = extractEmails(html);
-  const contactEmail = emails[0];
-  const contactHrefMatch = html.match(/href=["']([^"']*contact[^"']*)["']/i);
-  const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], normalized).toString() : null;
-  const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
-
-  const scores = deriveScores({
-    leadClass: classified.leadClass,
-    qualityTier: classified.qualityTier,
-    opportunityType: classified.opportunityType,
-    hasContactForm,
-    contactEmail,
-    html,
-  });
-
-  const groundedFacts: string[] = [];
-  if (title) groundedFacts.push(`Title: ${title}`);
-  if (description) groundedFacts.push(`Description: ${description}`);
-  if (contactEmail) groundedFacts.push(`Email found: ${contactEmail}`);
-  if (contactPageUrl) groundedFacts.push(`Contact page: ${contactPageUrl}`);
-  if (classified.techTags.length) groundedFacts.push(`Tech tags: ${classified.techTags.join(", ")}`);
-  if (classified.serviceTags.length) groundedFacts.push(`Service tags: ${classified.serviceTags.join(", ")}`);
-
-  const brief =
-    classified.leadClass === "agency" || classified.leadClass === "dev_shop" || classified.leadClass === "marketing_agency"
-      ? "Agency-side lead that likely suits partnership or overflow support."
-      : classified.leadClass === "ecommerce"
-      ? "Commerce lead that likely suits a conversion-focused offer."
-      : classified.leadClass === "contractor" || classified.leadClass === "local_service"
-      ? "Service-business lead where practical website uplift may improve enquiry flow."
-      : classified.leadClass === "professional_service"
-      ? "Professional-service lead where clearer trust and contact flow may matter."
-      : "General lead with some improvement potential.";
-
-  return {
-    companyName: guessCompanyName(title, url.hostname),
-    leadClass: classified.leadClass,
-    opportunityType: classified.opportunityType,
-    qualityTier: classified.qualityTier,
-    draftStrategy: classified.draftStrategy,
-    toneMode: classified.toneMode,
-    fitScore: scores.fit,
-    contactabilityScore: scores.contact,
-    riskScore: scores.risk,
-    scoreTotal: scores.total,
-    brief,
-    contactEmail,
-    contactPageUrl,
-    hasContactForm,
-    contactSummary: contactEmail ? `Found direct email ${contactEmail}` : hasContactForm ? "No direct email found, but a contact route exists" : "No direct contact route found",
-    siteQualitySummary: classified.qualityTier === "missing" ? "Digital presence appears missing or placeholder-level." : classified.qualityTier === "weak" ? "Site loaded, but likely presents a weaker or more templated experience." : classified.qualityTier === "strong" ? "Site loaded and appears comparatively stronger." : "Site loaded successfully.",
-    techTags: classified.techTags,
-    serviceTags: classified.serviceTags,
-    outreachAngles: buildOutreachAngles(classified.leadClass, classified.opportunityType),
-    avoidSaying: buildAvoidSaying(classified.opportunityType),
-    groundedFacts,
-    title,
-    description,
-    decisionSummary: buildRecommendedAngle(classified.opportunityType),
-    problemSummary: buildProblemSummary(classified.leadClass, classified.qualityTier),
-    leverageSummary: buildLeverageSummary(classified.leadClass, classified.opportunityType),
-    recommendedAngle: buildRecommendedAngle(classified.opportunityType),
-    country: url.hostname.endsWith(".nz") ? "NZ" : "AU",
-    region: null,
-  };
-}
-
 function buildLeadSignals(scan: ScanResult): LeadSignals {
   return {
     summary: scan.brief,
@@ -463,14 +393,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "Best,",
         envBrandLine(env),
       ].filter(Boolean).join("\n"),
-      followupText: [
-        `Hi ${company},`,
-        "",
-        "Just following up in case overflow or quiet implementation support is relevant at the moment.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].join("\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -492,14 +415,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "Best,",
         envBrandLine(env),
       ].filter(Boolean).join("\n"),
-      followupText: [
-        `Hi ${company},`,
-        "",
-        "Just following up in case a short, practical teardown would be useful.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].join("\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -521,14 +437,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
         "Best,",
         envBrandLine(env),
       ].filter(Boolean).join("\n"),
-      followupText: [
-        `Hi ${company},`,
-        "",
-        "Just following up in case a conversion-focused teardown would be useful.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].join("\n"),
+      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -549,14 +458,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
       "Best,",
       envBrandLine(env),
     ].filter(Boolean).join("\n"),
-    followupText: [
-      `Hi ${company},`,
-      "",
-      "Just following up in case a short, specific teardown would be useful.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].join("\n"),
+    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
     whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
   };
 }
@@ -629,31 +531,32 @@ async function expandSourceLead(env: Env, lead: LeadRow): Promise<number> {
 export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> {
   const website = normalizeWebsite(websiteInput);
   const lead = await insertLead(env, { websiteUrl: website, discoverySource: "manual", signalsJson: "{}" });
-  const scan = await heuristicScan(website);
-  await updateLead(env, lead.id, {
-    company_name: scan.companyName || null,
-    category: scan.leadClass as any,
-    country: scan.country || null,
-    region: scan.region || null,
-    contact_email: scan.contactEmail || null,
-    contact_page_url: scan.contactPageUrl || null,
-    has_contact_form: scan.hasContactForm ? 1 : 0,
-    signals_json: JSON.stringify(buildLeadSignals(scan)),
-    score_fit: scan.fitScore,
-    score_contact: scan.contactabilityScore,
-    score_risk: scan.riskScore,
-    score_total: scan.scoreTotal,
-    status: "scanned",
-  });
-  await bump(env, "leads_new_today", 1);
-  await bump(env, "crawl_scanned_today", 1);
-  await logEvent(env, "scan_ok", `Scanned ${website} as ${scan.leadClass}`, lead.id);
+  const summary = await runScan(env, 1);
+  await logEvent(env, "scan_ok", `Direct scan requested for ${website} | scanned ${summary.scanned} | expanded ${summary.expanded}`, lead.id);
   return (await getLeadById(env, lead.id)) as LeadRow;
 }
 
 async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
-  const leads = await listLeads(env, { status: "new", limit: maxItems });
-  const summary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0 };
+  const allRecent = await listLeads(env, { limit: 250 });
+  const skippedReasons: Record<string, number> = {};
+  const eligible = allRecent.filter((lead) => {
+    const signals = parseLeadSignals(lead) as any;
+
+    if (lead.status === "new") return true;
+    if (isSourceLead(lead) && !signals.sourceExpanded) return true;
+
+    const key =
+      lead.status !== "new"
+        ? `status_${lead.status}`
+        : signals.sourceExpanded
+        ? "source_already_expanded"
+        : "other";
+    skippedReasons[key] = (skippedReasons[key] || 0) + 1;
+    return false;
+  });
+
+  const leads = eligible.slice(0, maxItems);
+  const summary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: Math.max(0, allRecent.length - leads.length), failed: 0, skippedReasons };
 
   for (const lead of leads) {
     try {
@@ -891,7 +794,7 @@ export async function dailyTick(env: Env): Promise<void> {
 
   const startedAt = nowISO();
   const runId = uuid();
-  let scanSummary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0 };
+  let scanSummary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {} };
   let drafted = 0;
   let sendResult = { sent: 0, failed: 0 };
 
@@ -917,6 +820,8 @@ export async function dailyTick(env: Env): Promise<void> {
           started_at_iso: startedAt,
           scanned: scanSummary.scanned,
           expanded: scanSummary.expanded,
+          skipped: scanSummary.skipped,
+          skippedReasons: scanSummary.skippedReasons,
           failed: scanSummary.failed,
           drafted,
           sent: sendResult.sent,
@@ -930,7 +835,7 @@ export async function dailyTick(env: Env): Promise<void> {
 
 export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
   const token = await tryAcquireLock(env, "scan-only", 60 * 5);
-  if (!token) return { scanned: 0, expanded: 0, skipped: 0, failed: 0 };
+  if (!token) return { scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {} };
   try {
     const summary = await runScan(env, 10);
     await logEvent(env, "scan_ok", `Manual scan completed | scanned ${summary.scanned} | expanded ${summary.expanded} | failed ${summary.failed}`);

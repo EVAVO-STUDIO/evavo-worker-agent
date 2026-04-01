@@ -56,6 +56,8 @@ type DraftStrategy =
 
 type ToneMode = "peer" | "consultative" | "direct" | "sharp";
 
+const MARKETPLACE_ROOTS = new Set(["hipages.com.au", "truelocal.com.au", "yellowpages.com.au"]);
+
 interface CandidateEvaluation {
   accepted: boolean;
   score: number;
@@ -110,6 +112,7 @@ export interface ScanRunSummary {
     lowScoreSkipped: number;
     outOfRegionSkipped: number;
     badDomainSkipped: number;
+    marketplaceSkipped: number;
   };
 }
 
@@ -124,11 +127,7 @@ function getDomain(raw: string): string {
   try {
     return new URL(normalizeWebsite(raw)).hostname.replace(/^www\./i, "").toLowerCase();
   } catch {
-    return String(raw || "")
-      .replace(/^https?:\/\//i, "")
-      .replace(/^www\./i, "")
-      .split("/")[0]
-      .toLowerCase();
+    return String(raw || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase();
   }
 }
 
@@ -136,6 +135,22 @@ function isBadDomain(domain: string): boolean {
   const prefixes = ["img.", "cdn.", "static.", "assets.", "media.", "fonts."];
   const exact = new Set(["gstatic.com", "googleusercontent.com"]);
   return prefixes.some((prefix) => domain.startsWith(prefix)) || exact.has(domain);
+}
+
+function isMarketplaceDomain(domain: string): boolean {
+  if (MARKETPLACE_ROOTS.has(domain)) return true;
+  for (const root of MARKETPLACE_ROOTS) if (domain.endsWith(`.${root}`)) return true;
+  return false;
+}
+
+function isMarketplaceSourcePage(url: string): boolean {
+  try {
+    const parsed = new URL(normalizeWebsite(url));
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    return MARKETPLACE_ROOTS.has(host) && /\/find\//.test(parsed.pathname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 function isHardNoiseUrl(url: string): boolean {
@@ -151,9 +166,7 @@ function isHardNoiseUrl(url: string): boolean {
 
 function extractEmails(input: string): string[] {
   const matches = input.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter(
-    (email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email)
-  );
+  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter((email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email));
 }
 
 async function fetchHtml(url: string): Promise<string> {
@@ -193,16 +206,14 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
 }
 
 function looksLikeSourcePage(url: string, html: string): boolean {
+  if (isMarketplaceSourcePage(url)) return true;
   const lower = `${url} ${html}`.toLowerCase();
-  if (/truelocal\.com\.au\/find\//.test(lower)) return true;
-  if (/yellowpages\.com\.au\/find\//.test(lower)) return true;
-  if (/hipages\.com\.au\/find\//.test(lower)) return true;
-  if (/directory|results for|search results|business listings/.test(lower) && /href=/.test(lower)) return true;
-  return false;
+  return /directory|results for|search results|business listings/.test(lower) && /href=/.test(lower);
 }
 
 function isSourceLead(lead: LeadRow): boolean {
-  return /^directory:/i.test(String(lead.discovery_source || "")) || /truelocal|yellowpages|hipages/i.test(String(lead.website_url || ""));
+  if (/^directory:/i.test(String(lead.discovery_source || ""))) return true;
+  return isMarketplaceSourcePage(lead.website_url || "");
 }
 
 function extractCandidateUrls(sourceUrl: string, html: string): string[] {
@@ -218,19 +229,10 @@ function extractCandidateUrls(sourceUrl: string, html: string): string[] {
       if (source.includes("truelocal.com.au")) {
         if (/truelocal\.com\.au\/business\//.test(lower)) urls.push(absolute);
       } else if (source.includes("yellowpages.com.au")) {
-        if (
-          /yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/.test(lower) ||
-          (!/yellowpages\.com\.au\/find\//.test(lower) && /yellowpages\.com\.au\//.test(lower))
-        ) {
-          urls.push(absolute);
-        }
+        if (/yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/.test(lower)) urls.push(absolute);
       } else if (source.includes("hipages.com.au")) {
-        if (
-          /hipages\.com\.au\/connect\//.test(lower) ||
-          (!/hipages\.com\.au\/find\//.test(lower) && /hipages\.com\.au\//.test(lower))
-        ) {
-          urls.push(absolute);
-        }
+        if (/hipages\.com\.au\/find\//.test(lower)) continue;
+        if (/hipages\.com\.au\//.test(lower)) urls.push(absolute);
       } else if (/^https?:\/\//.test(lower)) {
         urls.push(absolute);
       }
@@ -263,6 +265,7 @@ function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomai
 
   if (isHardNoiseUrl(normalizedUrl)) reasons.push("noise_url");
   if (isBadDomain(domain)) reasons.push("bad_domain");
+  if (isMarketplaceDomain(domain)) reasons.push("marketplace_domain");
   if (existingDomains.has(domain)) reasons.push("duplicate_domain");
 
   if (sourceCategory === "agency" && /(agency|studio|creative|web|design|development|marketing|digital)/i.test(domain)) score += 2;
@@ -277,6 +280,7 @@ function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomai
   const accepted =
     !reasons.includes("noise_url") &&
     !reasons.includes("bad_domain") &&
+    !reasons.includes("marketplace_domain") &&
     !reasons.includes("duplicate_domain") &&
     !reasons.includes("out_of_region") &&
     score >= 3;
@@ -395,20 +399,16 @@ function buildProblemSummary(leadClass: LeadClass, qualityTier: QualityTier) {
   if (leadClass === "agency" || leadClass === "dev_shop" || leadClass === "marketing_agency") return "This looks more like a partnership or overflow opportunity than a redesign target.";
   if (leadClass === "ecommerce") return "The likely value here is conversion improvement, not surface-level redesign work.";
   if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") {
-    return qualityTier === "weak" || qualityTier === "missing"
-      ? "The site likely undersells trust and enquiry flow."
-      : "The site may be leaving enquiry quality and conversion clarity on the table.";
+    return qualityTier === "weak" || qualityTier === "missing" ? "The site likely undersells trust && enquiry flow." : "The site may be leaving enquiry quality && conversion clarity on the table.";
   }
-  return qualityTier === "weak" || qualityTier === "missing"
-    ? "The digital presence appears weaker than it should be."
-    : "There may be positioning or performance issues worth tightening.";
+  return qualityTier === "weak" || qualityTier === "missing" ? "The digital presence appears weaker than it should be." : "There may be positioning or performance issues worth tightening.";
 }
 
 function buildLeverageSummary(leadClass: LeadClass, opportunityType: OpportunityType) {
   if (opportunityType === "white_label_partnership") return "EVAVO should position as quiet implementation capacity behind the scenes.";
   if (opportunityType === "overflow_delivery_support") return "EVAVO should position as overflow support that helps delivery teams move faster.";
-  if (leadClass === "ecommerce") return "EVAVO should focus on conversion, clarity, and practical revenue lift.";
-  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return "EVAVO should focus on trust, enquiries, and cleaner conversion paths.";
+  if (leadClass === "ecommerce") return "EVAVO should focus on conversion, clarity, && practical revenue lift.";
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return "EVAVO should focus on trust, enquiries, && cleaner conversion paths.";
   return "EVAVO should use a short, grounded teardown angle.";
 }
 
@@ -424,10 +424,10 @@ function buildRecommendedAngle(opportunityType: OpportunityType) {
 function buildOutreachAngles(leadClass: LeadClass, opportunityType: OpportunityType): string[] {
   if (opportunityType === "white_label_partnership") return ["support overflow delivery", "offer white-label implementation capacity", "help quietly behind the scenes"];
   if (opportunityType === "overflow_delivery_support") return ["help with production overflow", "support delivery under capacity pressure", "add implementation support without headcount"];
-  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return ["make the site clearer for inbound enquiries", "improve trust and lead capture", "tighten contact pathways"];
-  if (leadClass === "ecommerce") return ["improve conversion flow", "tighten product page clarity", "lift trust and checkout performance"];
-  if (opportunityType === "site_rebuild") return ["refresh positioning and structure", "improve mobile clarity", "rebuild around conversion and trust"];
-  return ["tighten positioning and site performance"];
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return ["make the site clearer for inbound enquiries", "improve trust && lead capture", "tighten contact pathways"];
+  if (leadClass === "ecommerce") return ["improve conversion flow", "tighten product page clarity", "lift trust && checkout performance"];
+  if (opportunityType === "site_rebuild") return ["refresh positioning && structure", "improve mobile clarity", "rebuild around conversion && trust"];
+  return ["tighten positioning && site performance"];
 }
 
 function buildAvoidSaying(opportunityType: OpportunityType): string[] {
@@ -485,21 +485,8 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
   if (signals.draftStrategy === "white_label_partnership" || signals.draftStrategy === "overflow_delivery_support") {
     return {
       subject: `Quiet support for ${company} if overflow ever hits`,
-      bodyText: [
-        `Hi ${company},`,
-        "",
-        `I had a quick look through ${domain} and this felt more like a partner-fit conversation than a pitch about redoing your site.`,
-        grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "",
-        "",
-        `${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,
-        `The angle here would be simple: ${angle.toLowerCase()}.`,
-        "",
-        "If that is ever useful, I am happy to send a short note on where we tend to plug in.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
+      bodyText: [`Hi ${company},`,"",`I had a quick look through ${domain} && this felt more like a partner-fit conversation than a pitch about redoing your site.`,grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "","",`${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,`The angle here would be simple: ${angle.toLowerCase()}.`,"","If that is ever useful, I am happy to send a short note on where we tend to plug in.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"),
+      followupText: [`Hi ${company},`,"","Just following up in case overflow or quiet implementation support is relevant at the moment.","","Best,",envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -507,21 +494,8 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
   if (signals.draftStrategy === "contractor_lead_uplift" || signals.draftStrategy === "professional_service_uplift") {
     return {
       subject: `A practical website idea for ${company}`,
-      bodyText: [
-        `Hi ${company},`,
-        "",
-        `I had a look through ${domain} and there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`,
-        grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "",
-        "",
-        problem,
-        leverage,
-        "",
-        "If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      bodyText: [`Hi ${company},`,"",`I had a look through ${domain} && there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`,grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "", "", problem, leverage, "", "If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.", "", "Best,", envBrandLine(env)].filter(Boolean).join("\n"),
+      followupText: [`Hi ${company},`,"","Just following up in case a short, practical teardown would be useful.","","Best,",envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
@@ -529,42 +503,16 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
   if (signals.draftStrategy === "ecommerce_conversion_offer") {
     return {
       subject: `A conversion idea for ${company}`,
-      bodyText: [
-        `Hi ${company},`,
-        "",
-        `I had a look through ${domain} and this feels more like a conversion and clarity opportunity than a redesign-for-the-sake-of-it situation.`,
-        grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "",
-        "",
-        problem,
-        leverage,
-        "",
-        "If useful, I can send a short teardown focused on what is most likely to lift trust or action.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+      bodyText: [`Hi ${company},`,"",`I had a look through ${domain} && this feels more like a conversion && clarity opportunity than a redesign-for-the-sake-of-it situation.`,grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "", "", problem, leverage, "", "If useful, I can send a short teardown focused on what is most likely to lift trust or action.", "", "Best,", envBrandLine(env)].filter(Boolean).join("\n"),
+      followupText: [`Hi ${company},`,"","Just following up in case a conversion-focused teardown would be useful.","","Best,",envBrandLine(env)].join("\n"),
       whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
     };
   }
 
   return {
     subject: `A practical idea for ${company}`,
-    bodyText: [
-      `Hi ${company},`,
-      "",
-      `I had a look through ${domain} and there may be a worthwhile improvement opportunity there.`,
-      grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "",
-      "",
-      problem,
-      leverage,
-      "",
-      "If useful, I can send a short note with specific suggestions.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].filter(Boolean).join("\n"),
-    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
+    bodyText: [`Hi ${company},`,"",`I had a look through ${domain} && there may be a worthwhile improvement opportunity there.`,grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "", "", problem, leverage, "", "If useful, I can send a short note with specific suggestions.", "", "Best,", envBrandLine(env)].filter(Boolean).join("\n"),
+    followupText: [`Hi ${company},`,"","Just following up in case a short, specific teardown would be useful.","","Best,",envBrandLine(env)].join("\n"),
     whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
   };
 }
@@ -611,26 +559,12 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
   for (const candidate of candidates) {
     const evaluation = evaluateCandidateUrl(candidate, lead.category || "general", existingDomains);
 
-    if (evaluation.reasons.includes("duplicate_domain")) {
-      summary.candidateDiagnostics.duplicatesSkipped += 1;
-      continue;
-    }
-    if (evaluation.reasons.includes("bad_domain")) {
-      summary.candidateDiagnostics.badDomainSkipped += 1;
-      continue;
-    }
-    if (evaluation.reasons.includes("noise_url")) {
-      summary.candidateDiagnostics.noiseSkipped += 1;
-      continue;
-    }
-    if (evaluation.reasons.includes("out_of_region")) {
-      summary.candidateDiagnostics.outOfRegionSkipped += 1;
-      continue;
-    }
-    if (!evaluation.accepted) {
-      summary.candidateDiagnostics.lowScoreSkipped += 1;
-      continue;
-    }
+    if (evaluation.reasons.includes("duplicate_domain")) { summary.candidateDiagnostics.duplicatesSkipped += 1; continue; }
+    if (evaluation.reasons.includes("marketplace_domain")) { summary.candidateDiagnostics.marketplaceSkipped += 1; continue; }
+    if (evaluation.reasons.includes("bad_domain")) { summary.candidateDiagnostics.badDomainSkipped += 1; continue; }
+    if (evaluation.reasons.includes("noise_url")) { summary.candidateDiagnostics.noiseSkipped += 1; continue; }
+    if (evaluation.reasons.includes("out_of_region")) { summary.candidateDiagnostics.outOfRegionSkipped += 1; continue; }
+    if (!evaluation.accepted) { summary.candidateDiagnostics.lowScoreSkipped += 1; continue; }
 
     try {
       await insertLead(env, {
@@ -639,11 +573,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
         category: lead.category || "general",
         country: evaluation.countryGuess === "NZ" ? "NZ" : "AU",
         region: lead.region || null,
-        signalsJson: JSON.stringify({
-          sourceDomain: getDomain(lead.website_url),
-          candidateScore: evaluation.score,
-          candidateReasons: evaluation.reasons,
-        }),
+        signalsJson: JSON.stringify({ sourceDomain: getDomain(lead.website_url), candidateScore: evaluation.score, candidateReasons: evaluation.reasons }),
       });
       inserted += 1;
       existingDomains.add(evaluation.domain);
@@ -656,26 +586,17 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
 
   await updateLead(env, lead.id, {
     status: "do_not_contact",
-    signals_json: JSON.stringify({
-      sourceExpanded: true,
-      extractedCandidates: inserted,
-      decisionSummary: `Directory source page expanded into ${inserted} candidate URLs.`,
-    }),
+    signals_json: JSON.stringify({ sourceExpanded: true, extractedCandidates: inserted, decisionSummary: `Directory source page expanded into ${inserted} candidate URLs.` }),
   });
 
   await logEvent(env, "expand_ok", `Expanded ${lead.website_url} into ${inserted} candidate URLs`, lead.id);
   return inserted;
 }
 
-async function markBadLead(env: Env, lead: LeadRow, reason: string): Promise<void> {
+async function markExcludedLead(env: Env, lead: LeadRow, reason: string): Promise<void> {
   await updateLead(env, lead.id, {
     status: "do_not_contact",
-    signals_json: JSON.stringify({
-      ...(parseLeadSignals(lead) || {}),
-      filteredOut: true,
-      filterReason: reason,
-      decisionSummary: `Lead excluded by filter: ${reason}.`,
-    }),
+    signals_json: JSON.stringify({ ...(parseLeadSignals(lead) || {}), filteredOut: true, filterReason: reason, decisionSummary: `Lead excluded by filter: ${reason}.` }),
   });
   await logEvent(env, "scan_skip", `Filtered lead ${lead.website_url}: ${reason}`, lead.id);
 }
@@ -696,21 +617,13 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
     const signals = parseLeadSignals(lead) as any;
     const domain = getDomain(lead.website_url || "");
 
-    if (isBadDomain(domain)) {
-      skippedReasons.bad_domain_existing = (skippedReasons.bad_domain_existing || 0) + 1;
-      return false;
-    }
+    if (isBadDomain(domain)) { skippedReasons.bad_domain_existing = (skippedReasons.bad_domain_existing || 0) + 1; return false; }
+    if (isMarketplaceDomain(domain) && !isSourceLead(lead)) { skippedReasons.marketplace_existing = (skippedReasons.marketplace_existing || 0) + 1; return false; }
 
     if (lead.status === "new") return true;
     if (isSourceLead(lead) && !signals.sourceExpanded) return true;
 
-    const key =
-      lead.status !== "new"
-        ? `status_${lead.status}`
-        : signals.sourceExpanded
-        ? "source_already_expanded"
-        : "other";
-
+    const key = lead.status !== "new" ? `status_${lead.status}` : signals.sourceExpanded ? "source_already_expanded" : "other";
     skippedReasons[key] = (skippedReasons[key] || 0) + 1;
     return false;
   });
@@ -722,32 +635,15 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
     skipped: Math.max(0, allRecent.length - leads.length),
     failed: 0,
     skippedReasons,
-    candidateDiagnostics: {
-      inserted: 0,
-      duplicatesSkipped: 0,
-      noiseSkipped: 0,
-      lowScoreSkipped: 0,
-      outOfRegionSkipped: 0,
-      badDomainSkipped: 0,
-    },
+    candidateDiagnostics: { inserted: 0, duplicatesSkipped: 0, noiseSkipped: 0, lowScoreSkipped: 0, outOfRegionSkipped: 0, badDomainSkipped: 0, marketplaceSkipped: 0 },
   };
 
   for (const lead of leads) {
     try {
       const domain = getDomain(lead.website_url);
-      if (isBadDomain(domain)) {
-        await markBadLead(env, lead, "bad_domain");
-        summary.skipped += 1;
-        summary.candidateDiagnostics.badDomainSkipped += 1;
-        continue;
-      }
-
-      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) {
-        await markBadLead(env, lead, "noise_url");
-        summary.skipped += 1;
-        summary.candidateDiagnostics.noiseSkipped += 1;
-        continue;
-      }
+      if (isBadDomain(domain)) { await markExcludedLead(env, lead, "bad_domain"); summary.skipped += 1; summary.candidateDiagnostics.badDomainSkipped += 1; continue; }
+      if (isMarketplaceDomain(domain) && !isSourceLead(lead)) { await markExcludedLead(env, lead, "marketplace_domain"); summary.skipped += 1; summary.candidateDiagnostics.marketplaceSkipped += 1; continue; }
+      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) { await markExcludedLead(env, lead, "noise_url"); summary.skipped += 1; summary.candidateDiagnostics.noiseSkipped += 1; continue; }
 
       const html = await fetchHtml(lead.website_url);
       if (!html.trim()) {
@@ -774,14 +670,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], lead.website_url).toString() : null;
       const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
 
-      const scores = deriveScores({
-        leadClass: classified.leadClass,
-        qualityTier: classified.qualityTier,
-        opportunityType: classified.opportunityType,
-        hasContactForm,
-        contactEmail,
-        html,
-      });
+      const scores = deriveScores({ leadClass: classified.leadClass, qualityTier: classified.qualityTier, opportunityType: classified.opportunityType, hasContactForm, contactEmail, html });
 
       const scan: ScanResult = {
         companyName: guessCompanyName(title, url.hostname),
@@ -802,7 +691,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
             : classified.leadClass === "contractor" || classified.leadClass === "local_service"
             ? "Service-business lead where practical website uplift may improve enquiry flow."
             : classified.leadClass === "professional_service"
-            ? "Professional-service lead where clearer trust and contact flow may matter."
+            ? "Professional-service lead where clearer trust && contact flow may matter."
             : "General lead with some improvement potential.",
         contactEmail,
         contactPageUrl,
@@ -814,7 +703,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
             : classified.qualityTier === "weak"
             ? "Site loaded, but likely presents a weaker or more templated experience."
             : classified.qualityTier === "strong"
-            ? "Site loaded and appears comparatively stronger."
+            ? "Site loaded && appears comparatively stronger."
             : "Site loaded successfully.",
         techTags: classified.techTags,
         serviceTags: classified.serviceTags,
@@ -857,8 +746,9 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       await logEvent(env, "scan_ok", `Scanned ${lead.website_url} as ${scan.leadClass}`, lead.id);
       summary.scanned += 1;
     } catch (error) {
+      const message = String(error || "Unknown scan error");
       await updateLead(env, lead.id, { status: "failed" });
-      await logEvent(env, "scan_fail", `Error scanning ${lead.website_url}: ${String(error)}`, lead.id);
+      await logEvent(env, "scan_fail", `Error scanning ${lead.website_url}: ${message}`, lead.id);
       summary.failed += 1;
     }
   }
@@ -880,22 +770,14 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
     const existingDraftCount = await draftCountForLead(env, lead.id);
 
     if (drafted >= maxItems) break;
-    if (lead.score_total < minimumScore) continue;
+    if ((lead.score_total || 0) < minimumScore) continue;
     if (strategy === "do_not_send" || opportunityType === "do_not_pitch") continue;
     if (qualityTier === "strong" && !["agency", "dev_shop", "marketing_agency", "ecommerce"].includes(leadClass)) continue;
     if (existingDraftCount >= 1) continue;
 
     try {
       const draft = buildDraftCopy(env, lead);
-      await insertDraft(env, {
-        leadId: lead.id,
-        mode: "heuristic",
-        subject: draft.subject,
-        bodyText: draft.bodyText,
-        followupText: draft.followupText,
-        whyJson: draft.whyJson,
-      });
-
+      await insertDraft(env, { leadId: lead.id, mode: "heuristic", subject: draft.subject, bodyText: draft.bodyText, followupText: draft.followupText, whyJson: draft.whyJson });
       await updateLead(env, lead.id, { status: "drafted" });
       await bump(env, "drafts_created_today", 1);
       await bump(env, "ai_calls", 1);
@@ -942,14 +824,7 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
     }
 
     try {
-      const result = await executeWithRetry(() =>
-        sendEmail(env, {
-          to: toEmail,
-          subject: draft.subject,
-          bodyText: draft.body_text,
-        })
-      );
-
+      const result = await executeWithRetry(() => sendEmail(env, { to: toEmail, subject: draft.subject, bodyText: draft.body_text }));
       if (result.ok) {
         await updateDraft(env, draft.id, { status: "sent" });
         await updateLead(env, lead.id, { status: "sent" });
@@ -986,84 +861,40 @@ export async function dailyTick(env: Env): Promise<void> {
 
   const startedAt = nowISO();
   const runId = uuid();
-  let scanSummary: ScanRunSummary = {
-    scanned: 0,
-    expanded: 0,
-    skipped: 0,
-    failed: 0,
-    skippedReasons: {},
-    candidateDiagnostics: {
-      inserted: 0,
-      duplicatesSkipped: 0,
-      noiseSkipped: 0,
-      lowScoreSkipped: 0,
-      outOfRegionSkipped: 0,
-      badDomainSkipped: 0,
-    },
-  };
+  let scanSummary: ScanRunSummary = { scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {}, candidateDiagnostics: { inserted: 0, duplicatesSkipped: 0, noiseSkipped: 0, lowScoreSkipped: 0, outOfRegionSkipped: 0, badDomainSkipped: 0, marketplaceSkipped: 0 } };
   let drafted = 0;
   let sendResult = { sent: 0, failed: 0 };
 
   try {
     await logEvent(env, "tick_ok", "Daily tick step started");
     scanSummary = await runScan(env, Math.min(10, crawlCap));
-
     const draftingEnabled = ((await getSetting(env, "drafting_enabled")) || "1") !== "0";
     if (draftingEnabled) drafted = await runDraft(env, Math.min(10, draftCap));
-
     sendResult = await runSend(env, Math.min(10, sendCap));
-
-    await logEvent(
-      env,
-      "tick_ok",
-      `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`
-    );
+    await logEvent(env, "tick_ok", `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`);
   } catch (error) {
     await logEvent(env, "tick_fail", String(error));
   } finally {
-    await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`)
-      .bind(
-        "last_engine_run",
-        JSON.stringify({
-          runId,
-          started_at_iso: startedAt,
-          scanned: scanSummary.scanned,
-          expanded: scanSummary.expanded,
-          skipped: scanSummary.skipped,
-          skippedReasons: scanSummary.skippedReasons,
-          candidateDiagnostics: scanSummary.candidateDiagnostics,
-          failed: scanSummary.failed,
-          drafted,
-          sent: sendResult.sent,
-          sendFailed: sendResult.failed,
-        })
-      )
-      .run();
-
+    await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`).bind("last_engine_run", JSON.stringify({
+      runId,
+      started_at_iso: startedAt,
+      scanned: scanSummary.scanned,
+      expanded: scanSummary.expanded,
+      skipped: scanSummary.skipped,
+      skippedReasons: scanSummary.skippedReasons,
+      candidateDiagnostics: scanSummary.candidateDiagnostics,
+      failed: scanSummary.failed,
+      drafted,
+      sent: sendResult.sent,
+      sendFailed: sendResult.failed,
+    })).run();
     await releaseLock(env, "engine-cycle", token);
   }
 }
 
 export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
   const token = await tryAcquireLock(env, "scan-only", 60 * 5);
-  if (!token) {
-    return {
-      scanned: 0,
-      expanded: 0,
-      skipped: 0,
-      failed: 0,
-      skippedReasons: {},
-      candidateDiagnostics: {
-        inserted: 0,
-        duplicatesSkipped: 0,
-        noiseSkipped: 0,
-        lowScoreSkipped: 0,
-        outOfRegionSkipped: 0,
-        badDomainSkipped: 0,
-      },
-    };
-  }
-
+  if (!token) return { scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {}, candidateDiagnostics: { inserted: 0, duplicatesSkipped: 0, noiseSkipped: 0, lowScoreSkipped: 0, outOfRegionSkipped: 0, badDomainSkipped: 0, marketplaceSkipped: 0 } };
   try {
     const summary = await runScan(env, 10);
     await logEvent(env, "scan_ok", `Manual scan completed | scanned ${summary.scanned} | expanded ${summary.expanded} | failed ${summary.failed}`);
@@ -1076,7 +907,6 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
 export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
   const token = await tryAcquireLock(env, "draft-only", 60 * 5);
   if (!token) return { drafted: 0 };
-
   try {
     const drafted = await runDraft(env, 10);
     await logEvent(env, "draft_ok", `Manual draft completed | drafted ${drafted}`);
@@ -1089,7 +919,6 @@ export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
 export async function runSendApproved(env: Env): Promise<{ sent: number; failed: number }> {
   const token = await tryAcquireLock(env, "send-only", 60 * 5);
   if (!token) return { sent: 0, failed: 0 };
-
   try {
     const result = await runSend(env, 10);
     await logEvent(env, "send_ok", `Manual send completed | sent ${result.sent} | failed ${result.failed}`);

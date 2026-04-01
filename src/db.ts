@@ -42,6 +42,15 @@ export interface LeadSignals {
   title?: string;
   description?: string;
   companyName?: string;
+  leadClass?: string;
+  qualityTier?: string;
+  opportunityType?: string;
+  decisionSummary?: string;
+  draftStrategy?: string;
+  toneMode?: string;
+  problemSummary?: string;
+  leverageSummary?: string;
+  recommendedAngle?: string;
 }
 
 export interface LeadRow {
@@ -222,6 +231,7 @@ export interface InsertLeadInput {
   region?: string | null;
   category?: string | null;
   companyName?: string | null;
+  signalsJson?: string | null;
 }
 
 export async function insertLead(env: Env, websiteOrInput: string | InsertLeadInput, discoverySource = "manual"): Promise<LeadRow> {
@@ -250,6 +260,7 @@ export async function insertLead(env: Env, websiteOrInput: string | InsertLeadIn
   const region = Object.prototype.hasOwnProperty.call(input, "region") ? input.region ?? null : null;
   const category = input.category || "general";
   const source = input.discoverySource || discoverySource || "manual";
+  const signalsJson = input.signalsJson ?? "{}";
 
   await env.DB.prepare(
     `INSERT INTO leads (
@@ -258,8 +269,24 @@ export async function insertLead(env: Env, websiteOrInput: string | InsertLeadIn
       score_fit, score_contact, score_risk, score_total, status, created_at_iso, updated_at_iso
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-    id, companyName, normalized, country, region, category, source,
-    null, null, 0, null, 0, 0, 0, 0, "new", now, now
+    id,
+    companyName,
+    normalized,
+    country,
+    region,
+    category,
+    source,
+    null,
+    null,
+    0,
+    signalsJson,
+    0,
+    0,
+    0,
+    0,
+    "new",
+    now,
+    now
   ).run();
 
   return {
@@ -273,7 +300,7 @@ export async function insertLead(env: Env, websiteOrInput: string | InsertLeadIn
     contact_email: null,
     contact_page_url: null,
     has_contact_form: 0,
-    signals_json: null,
+    signals_json: signalsJson,
     score_fit: 0,
     score_contact: 0,
     score_risk: 0,
@@ -284,12 +311,18 @@ export async function insertLead(env: Env, websiteOrInput: string | InsertLeadIn
   };
 }
 
-interface ListLeadOptions { status?: LeadStatus; limit?: number; }
+interface ListLeadOptions {
+  status?: LeadStatus;
+  limit?: number;
+}
 
 export async function listLeads(env: Env, opts: ListLeadOptions = {}): Promise<LeadRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
-  if (opts.status) { clauses.push("status = ?"); params.push(opts.status); }
+  if (opts.status) {
+    clauses.push("status = ?");
+    params.push(opts.status);
+  }
   const limit = Math.min(500, Math.max(1, opts.limit ?? 50));
   const sql = `SELECT id, company_name, website_url, country, region, category, discovery_source,
                       contact_email, contact_page_url, has_contact_form, signals_json,
@@ -324,7 +357,22 @@ export interface LeadUpdateInput {
 export async function updateLead(env: Env, id: string, updates: LeadUpdateInput): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [];
-  const orderedKeys: Array<keyof LeadUpdateInput> = ["company_name","country","region","category","discovery_source","contact_email","contact_page_url","has_contact_form","signals_json","score_fit","score_contact","score_risk","score_total","status"];
+  const orderedKeys: Array<keyof LeadUpdateInput> = [
+    "company_name",
+    "country",
+    "region",
+    "category",
+    "discovery_source",
+    "contact_email",
+    "contact_page_url",
+    "has_contact_form",
+    "signals_json",
+    "score_fit",
+    "score_contact",
+    "score_risk",
+    "score_total",
+    "status",
+  ];
   for (const key of orderedKeys) {
     if (Object.prototype.hasOwnProperty.call(updates, key)) {
       sets.push(`${key} = ?`);
@@ -347,7 +395,14 @@ export async function getLeadById(env: Env, id: string): Promise<LeadRow | null>
   ).bind(id).first<LeadRow>()) || null;
 }
 
-export interface DraftInsertInput { leadId: string; mode?: string | null; subject: string; bodyText: string; followupText?: string | null; whyJson?: string | null; }
+export interface DraftInsertInput {
+  leadId: string;
+  mode?: string | null;
+  subject: string;
+  bodyText: string;
+  followupText?: string | null;
+  whyJson?: string | null;
+}
 
 export async function insertDraft(env: Env, input: DraftInsertInput): Promise<DraftRow> {
   const now = nowISO();
@@ -356,7 +411,18 @@ export async function insertDraft(env: Env, input: DraftInsertInput): Promise<Dr
     `INSERT INTO drafts (
       id, lead_id, mode, subject, body_text, followup_text, why_json, status, created_at_iso, updated_at_iso
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(id, input.leadId, input.mode || "heuristic", input.subject, input.bodyText, input.followupText || null, input.whyJson || null, "created", now, now).run();
+  ).bind(
+    id,
+    input.leadId,
+    input.mode || "heuristic",
+    input.subject,
+    input.bodyText,
+    input.followupText || null,
+    input.whyJson || null,
+    "created",
+    now,
+    now
+  ).run();
 
   return {
     id,
@@ -372,12 +438,18 @@ export async function insertDraft(env: Env, input: DraftInsertInput): Promise<Dr
   };
 }
 
-interface ListDraftOptions { status?: DraftStatus; limit?: number; }
+interface ListDraftOptions {
+  status?: DraftStatus;
+  limit?: number;
+}
 
 export async function listDrafts(env: Env, opts: ListDraftOptions = {}): Promise<DraftRow[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
-  if (opts.status) { clauses.push("status = ?"); params.push(opts.status); }
+  if (opts.status) {
+    clauses.push("status = ?");
+    params.push(opts.status);
+  }
   const limit = Math.min(500, Math.max(1, opts.limit ?? 50));
   const sql = `SELECT id, lead_id, mode, subject, body_text, followup_text, why_json, status, created_at_iso, updated_at_iso
                FROM drafts
@@ -396,10 +468,14 @@ export async function getDraftById(env: Env, id: string): Promise<DraftRow | nul
   ).bind(id).first<DraftRow>()) || null;
 }
 
-export async function updateDraft(env: Env, id: string, updates: Partial<Pick<DraftRow, "status" | "subject" | "body_text" | "followup_text" | "why_json" | "mode">>): Promise<void> {
+export async function updateDraft(
+  env: Env,
+  id: string,
+  updates: Partial<Pick<DraftRow, "status" | "subject" | "body_text" | "followup_text" | "why_json" | "mode">>
+): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [];
-  const orderedKeys: Array<keyof typeof updates> = ["status","subject","body_text","followup_text","why_json","mode"];
+  const orderedKeys: Array<keyof typeof updates> = ["status", "subject", "body_text", "followup_text", "why_json", "mode"];
   for (const key of orderedKeys) {
     if (Object.prototype.hasOwnProperty.call(updates, key)) {
       sets.push(`${key} = ?`);
@@ -433,6 +509,8 @@ export async function getTodayStats(env: Env): Promise<TodayStats> {
     unsubscribesToday: "unsubscribes_today",
   } as const;
   const out: Record<string, number> = {};
-  for (const [targetKey, sourceKey] of Object.entries(map)) out[targetKey] = Number((await getSetting(env, sourceKey)) || 0);
+  for (const [targetKey, sourceKey] of Object.entries(map)) {
+    out[targetKey] = Number((await getSetting(env, sourceKey)) || 0);
+  }
   return out as TodayStats;
 }

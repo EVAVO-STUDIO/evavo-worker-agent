@@ -216,6 +216,7 @@ async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
       category,
       country,
       region,
+      signalsJson: "{}",
     });
 
     inserted.push({ id: lead.id, url, country, category });
@@ -311,6 +312,7 @@ export async function handleAdmin(
       category: String(body?.category || "general"),
       country: String(body?.country || inferCountryFromUrl(websiteUrl) || "AU").toUpperCase(),
       region: body?.region ? String(body.region) : null,
+      signalsJson: "{}",
     });
 
     await logEvent(env, "lead_add", `Manually added ${websiteUrl}`, lead.id);

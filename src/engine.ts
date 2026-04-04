@@ -1,5 +1,3 @@
-// See packaged README: this file is intended as a full replacement for src/engine.ts.
-// It preserves the current worker flow while tightening source-page extraction logic.
 import {
   Env,
   LeadRow,
@@ -84,6 +82,7 @@ export interface ScanRunSummary {
     profilesVisited: number;
     fallbackUsed: number;
     noExternalWebsite: number;
+    requeuedSources: number;
   };
 }
 
@@ -248,7 +247,11 @@ function isSourceLead(lead: LeadRow): boolean {
 }
 
 function absoluteUrl(href: string, baseUrl: string): string | null {
-  try { return new URL(href, baseUrl).toString(); } catch { return null; }
+  try {
+    return new URL(href, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 function extractLinks(html: string, baseUrl: string): string[] {
@@ -266,6 +269,7 @@ function extractCandidateProfileUrls(sourceUrl: string, html: string): { urls: s
   const source = sourceUrl.toLowerCase();
   const allLinks = extractLinks(html, sourceUrl);
   let strict: string[] = [];
+
   if (source.includes("truelocal.com.au")) {
     strict = allLinks.filter((u) => /truelocal\.com\.au\/business\//i.test(u));
   } else if (source.includes("yellowpages.com.au")) {
@@ -273,6 +277,7 @@ function extractCandidateProfileUrls(sourceUrl: string, html: string): { urls: s
   } else if (source.includes("hipages.com.au")) {
     strict = allLinks.filter((u) => /hipages\.com\.au\//i.test(u) && !/\/find\//i.test(u) && !/\/articles\//i.test(u));
   }
+
   if (strict.length > 0) return { urls: Array.from(new Set(strict)).slice(0, 80), fallbackUsed: false };
 
   const fallback = allLinks.filter((u) => {
@@ -283,11 +288,13 @@ function extractCandidateProfileUrls(sourceUrl: string, html: string): { urls: s
     if (isHardNoiseUrl(u)) return false;
     return true;
   });
+
   return { urls: Array.from(new Set(fallback)).slice(0, 80), fallbackUsed: fallback.length > 0 };
 }
 
 function extractExternalWebsiteFromProfile(profileUrl: string, html: string): string | null {
   const links = extractLinks(html, profileUrl);
+
   for (const url of links) {
     const domain = getDomain(url);
     if (!domain) continue;
@@ -309,6 +316,7 @@ function extractExternalWebsiteFromProfile(profileUrl: string, html: string): st
       }
     }
   }
+
   return null;
 }
 
@@ -326,6 +334,7 @@ function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomai
   } catch {
     return { accepted: false, score: -10, reasons: ["invalid_url"], normalizedUrl: "", domain: "", countryGuess: "OTHER" };
   }
+
   const domain = getDomain(normalizedUrl);
   const reasons: string[] = [];
   let score = 0;
@@ -361,6 +370,7 @@ function classifyLead(domain: string, html: string, title: string, description: 
   const content = `${domain} ${title} ${description} ${html}`.toLowerCase();
   const techTags: string[] = [];
   const serviceTags: string[] = [];
+
   if (/shopify/.test(content)) techTags.push("shopify");
   if (/wordpress|wp-content/.test(content)) techTags.push("wordpress");
   if (/wix/.test(content)) techTags.push("wix");
@@ -462,16 +472,25 @@ function deriveScores(input: {
   risk = Math.max(0, Math.min(1, risk));
   const total = Math.max(0, Math.min(1, fit * 0.55 + contact * 0.35 - risk * 0.2));
 
-  return { fit: Number(fit.toFixed(2)), contact: Number(contact.toFixed(2)), risk: Number(risk.toFixed(2)), total: Number(total.toFixed(2)) };
+  return {
+    fit: Number(fit.toFixed(2)),
+    contact: Number(contact.toFixed(2)),
+    risk: Number(risk.toFixed(2)),
+    total: Number(total.toFixed(2)),
+  };
 }
 
 function buildProblemSummary(leadClass: LeadClass, qualityTier: QualityTier) {
   if (leadClass === "agency" || leadClass === "dev_shop" || leadClass === "marketing_agency") return "This looks more like a partnership or overflow opportunity than a redesign target.";
   if (leadClass === "ecommerce") return "The likely value here is conversion improvement, not surface-level redesign work.";
   if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") {
-    return qualityTier === "weak" || qualityTier === "missing" ? "The site likely undersells trust and enquiry flow." : "The site may be leaving enquiry quality and conversion clarity on the table.";
+    return qualityTier === "weak" || qualityTier === "missing"
+      ? "The site likely undersells trust and enquiry flow."
+      : "The site may be leaving enquiry quality and conversion clarity on the table.";
   }
-  return qualityTier === "weak" || qualityTier === "missing" ? "The digital presence appears weaker than it should be." : "There may be positioning or performance issues worth tightening.";
+  return qualityTier === "weak" || qualityTier === "missing"
+    ? "The digital presence appears weaker than it should be."
+    : "There may be positioning or performance issues worth tightening.";
 }
 
 function buildLeverageSummary(leadClass: LeadClass, opportunityType: OpportunityType) {
@@ -642,8 +661,9 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
 async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseDelayMs = 300): Promise<T> {
   let attempt = 0;
   while (true) {
-    try { return await task(); }
-    catch (error: any) {
+    try {
+      return await task();
+    } catch (error: any) {
       attempt += 1;
       const message = String(error?.message || error || "");
       const retryable = /timeout|network|429|rate|temporar/i.test(message);
@@ -664,6 +684,43 @@ async function draftCountForLead(env: Env, leadId: string): Promise<number> {
   return Number(row?.count || 0);
 }
 
+function getSourceSignals(lead: LeadRow): any {
+  try {
+    return parseLeadSignals(lead) || {};
+  } catch {
+    return {};
+  }
+}
+
+function shouldRequeueSourceLead(lead: LeadRow): boolean {
+  if (!isSourceLead(lead)) return false;
+  const signals = getSourceSignals(lead);
+  const extracted = Number(signals?.extractedCandidates || 0);
+  const sourceExpanded = Boolean(signals?.sourceExpanded);
+  return sourceExpanded && extracted === 0;
+}
+
+async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 12): Promise<number> {
+  let count = 0;
+  for (const lead of leads) {
+    if (count >= maxToRequeue) break;
+    if (!shouldRequeueSourceLead(lead)) continue;
+
+    await updateLead(env, lead.id, {
+      status: "new",
+      signals_json: JSON.stringify({
+        ...getSourceSignals(lead),
+        sourceExpanded: false,
+        requeuedForRetry: true,
+        requeuedAt: nowISO(),
+      }),
+    });
+    await logEvent(env, "source_requeued", `Requeued dead source page for another expansion pass: ${lead.website_url}`, lead.id);
+    count += 1;
+  }
+  return count;
+}
+
 async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary): Promise<number> {
   const html = await fetchHtml(lead.website_url);
   if (!html.trim()) {
@@ -677,12 +734,13 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
   const extracted = extractCandidateProfileUrls(lead.website_url, html);
   const profileUrls = extracted.urls;
   if (extracted.fallbackUsed) summary.candidateDiagnostics.fallbackUsed += 1;
+
   let inserted = 0;
 
   for (const profileUrl of profileUrls) {
     summary.candidateDiagnostics.profilesVisited += 1;
-    let externalWebsite: string | null = null;
 
+    let externalWebsite: string | null = null;
     if (isMarketplaceProfileUrl(profileUrl)) {
       const profileHtml = await fetchHtml(profileUrl);
       if (!profileHtml.trim()) continue;
@@ -744,6 +802,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
   }
 
   summary.candidateDiagnostics.inserted += inserted;
+
   await updateLead(env, lead.id, {
     status: "do_not_contact",
     signals_json: JSON.stringify({
@@ -754,7 +813,13 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
       decisionSummary: `Directory source page expanded into ${inserted} candidate URLs.`,
     }),
   });
-  await logEvent(env, "expand_ok", `Expanded ${lead.website_url} | profiles ${profileUrls.length} | inserted ${inserted} | fallback ${extracted.fallbackUsed ? "yes" : "no"}`, lead.id);
+
+  await logEvent(
+    env,
+    "expand_ok",
+    `Expanded ${lead.website_url} | profiles ${profileUrls.length} | inserted ${inserted} | fallback ${extracted.fallbackUsed ? "yes" : "no"}`,
+    lead.id
+  );
   return inserted;
 }
 
@@ -783,7 +848,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
   const allRecent = await listLeads(env, { limit: 250 });
   const skippedReasons: Record<string, number> = {};
 
-  const eligible = allRecent.filter((lead) => {
+  let eligible = allRecent.filter((lead) => {
     const signals = parseLeadSignals(lead) as any;
     const domain = getDomain(lead.website_url || "");
 
@@ -795,6 +860,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       skippedReasons.marketplace_existing = (skippedReasons.marketplace_existing || 0) + 1;
       return false;
     }
+
     if (lead.status === "new") return true;
     if (isSourceLead(lead) && !signals.sourceExpanded) return true;
 
@@ -803,11 +869,10 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
     return false;
   });
 
-  const leads = eligible.slice(0, maxItems);
   const summary: ScanRunSummary = {
     scanned: 0,
     expanded: 0,
-    skipped: Math.max(0, allRecent.length - leads.length),
+    skipped: 0,
     failed: 0,
     skippedReasons,
     candidateDiagnostics: {
@@ -821,18 +886,62 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       profilesVisited: 0,
       fallbackUsed: 0,
       noExternalWebsite: 0,
+      requeuedSources: 0,
     },
   };
+
+  if (eligible.length === 0) {
+    const requeued = await requeueDeadSources(env, allRecent, 12);
+    summary.candidateDiagnostics.requeuedSources = requeued;
+    if (requeued > 0) {
+      const refreshed = await listLeads(env, { limit: 250 });
+      eligible = refreshed.filter((lead) => {
+        const signals = parseLeadSignals(lead) as any;
+        const domain = getDomain(lead.website_url || "");
+        if (isBadDomain(domain)) return false;
+        if (isMarketplaceDomain(domain) && !isSourceLead(lead)) return false;
+        if (lead.status === "new") return true;
+        if (isSourceLead(lead) && !signals.sourceExpanded) return true;
+        return false;
+      });
+    }
+  }
+
+  const leads = eligible.slice(0, maxItems);
+  summary.skipped = Math.max(0, allRecent.length - leads.length);
 
   for (const lead of leads) {
     try {
       const domain = getDomain(lead.website_url);
-      if (isBadDomain(domain)) { await markExcludedLead(env, lead, "bad_domain"); summary.skipped += 1; summary.candidateDiagnostics.badDomainSkipped += 1; continue; }
-      if (isMarketplaceDomain(domain) && !isSourceLead(lead)) { await markExcludedLead(env, lead, "marketplace_domain"); summary.skipped += 1; summary.candidateDiagnostics.marketplaceSkipped += 1; continue; }
-      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) { await markExcludedLead(env, lead, "noise_url"); summary.skipped += 1; summary.candidateDiagnostics.noiseSkipped += 1; continue; }
+
+      if (isBadDomain(domain)) {
+        await markExcludedLead(env, lead, "bad_domain");
+        summary.skipped += 1;
+        summary.candidateDiagnostics.badDomainSkipped += 1;
+        continue;
+      }
+
+      if (isMarketplaceDomain(domain) && !isSourceLead(lead)) {
+        await markExcludedLead(env, lead, "marketplace_domain");
+        summary.skipped += 1;
+        summary.candidateDiagnostics.marketplaceSkipped += 1;
+        continue;
+      }
+
+      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) {
+        await markExcludedLead(env, lead, "noise_url");
+        summary.skipped += 1;
+        summary.candidateDiagnostics.noiseSkipped += 1;
+        continue;
+      }
 
       const html = await fetchHtml(lead.website_url);
-      if (!html.trim()) { await updateLead(env, lead.id, { status: "failed" }); await logEvent(env, "scan_fail", `No HTML returned for ${lead.website_url}`, lead.id); summary.failed += 1; continue; }
+      if (!html.trim()) {
+        await updateLead(env, lead.id, { status: "failed" });
+        await logEvent(env, "scan_fail", `No HTML returned for ${lead.website_url}`, lead.id);
+        summary.failed += 1;
+        continue;
+      }
 
       if (looksLikeSourcePage(lead.website_url, html)) {
         const expanded = await expandSourceLead(env, lead, summary);
@@ -844,12 +953,21 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       const description = extractDescription(html);
       const url = new URL(normalizeWebsite(lead.website_url));
       const classified = classifyLead(url.hostname, html, title, description);
+
       const emails = extractEmails(html);
       const contactEmail = emails[0];
       const contactHrefMatch = html.match(/href=["']([^"']*contact[^"']*)["']/i);
       const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], lead.website_url).toString() : null;
       const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
-      const scores = deriveScores({ leadClass: classified.leadClass, qualityTier: classified.qualityTier, opportunityType: classified.opportunityType, hasContactForm, contactEmail, html });
+
+      const scores = deriveScores({
+        leadClass: classified.leadClass,
+        qualityTier: classified.qualityTier,
+        opportunityType: classified.opportunityType,
+        hasContactForm,
+        contactEmail,
+        html,
+      });
 
       const scan: ScanResult = {
         companyName: guessCompanyName(title, url.hostname),
@@ -931,6 +1049,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       summary.failed += 1;
     }
   }
+
   return summary;
 }
 
@@ -955,7 +1074,15 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
 
     try {
       const draft = buildDraftCopy(env, lead);
-      await insertDraft(env, { leadId: lead.id, mode: "heuristic", subject: draft.subject, bodyText: draft.bodyText, followupText: draft.followupText, whyJson: draft.whyJson });
+      await insertDraft(env, {
+        leadId: lead.id,
+        mode: "heuristic",
+        subject: draft.subject,
+        bodyText: draft.bodyText,
+        followupText: draft.followupText,
+        whyJson: draft.whyJson,
+      });
+
       await updateLead(env, lead.id, { status: "drafted" });
       await bump(env, "drafts_created_today", 1);
       await bump(env, "ai_calls", 1);
@@ -965,12 +1092,16 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
       await logEvent(env, "draft_fail", `Error drafting for ${lead.website_url}: ${String(error)}`, lead.id);
     }
   }
+
   return drafted;
 }
 
 async function runSend(env: Env, maxItems: number): Promise<{ sent: number; failed: number }> {
   const sendingEnabled = ((await getSetting(env, "sending_enabled")) || "0") === "1";
-  if (!sendingEnabled) { await logEvent(env, "send_skip", "Sending disabled, skipping send stage."); return { sent: 0, failed: 0 }; }
+  if (!sendingEnabled) {
+    await logEvent(env, "send_skip", "Sending disabled, skipping send stage.");
+    return { sent: 0, failed: 0 };
+  }
 
   const minimumScore = Number((await getSetting(env, "min_score_for_send")) || 0.65);
   const drafts = await listDrafts(env, { status: "approved", limit: maxItems });
@@ -979,14 +1110,33 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
 
   for (const draft of drafts) {
     const lead = await getLeadById(env, draft.lead_id);
-    if (!lead) { failed += 1; await updateDraft(env, draft.id, { status: "failed" }); await logEvent(env, "send_fail", "Lead missing for approved draft", draft.lead_id); continue; }
-    if ((lead.score_total || 0) < minimumScore) { await logEvent(env, "send_skip", "Lead below send threshold", lead.id); continue; }
+    if (!lead) {
+      failed += 1;
+      await updateDraft(env, draft.id, { status: "failed" });
+      await logEvent(env, "send_fail", "Lead missing for approved draft", draft.lead_id);
+      continue;
+    }
+
+    if ((lead.score_total || 0) < minimumScore) {
+      await logEvent(env, "send_skip", "Lead below send threshold", lead.id);
+      continue;
+    }
 
     const toEmail = lead.contact_email?.trim().toLowerCase() || null;
-    if (!toEmail || (await isSuppressed(env, toEmail))) { await logEvent(env, "send_skip", "Missing or suppressed email", lead.id); continue; }
+    if (!toEmail || (await isSuppressed(env, toEmail))) {
+      await logEvent(env, "send_skip", "Missing or suppressed email", lead.id);
+      continue;
+    }
 
     try {
-      const result = await executeWithRetry(() => sendEmail(env, { to: toEmail, subject: draft.subject, bodyText: draft.body_text }));
+      const result = await executeWithRetry(() =>
+        sendEmail(env, {
+          to: toEmail,
+          subject: draft.subject,
+          bodyText: draft.body_text,
+        })
+      );
+
       if (result.ok) {
         await updateDraft(env, draft.id, { status: "sent" });
         await updateLead(env, lead.id, { status: "sent" });
@@ -1006,6 +1156,7 @@ async function runSend(env: Env, maxItems: number): Promise<{ sent: number; fail
       failed += 1;
     }
   }
+
   return { sent, failed };
 }
 
@@ -1023,9 +1174,23 @@ export async function dailyTick(env: Env): Promise<void> {
   const startedAt = nowISO();
   const runId = uuid();
   let scanSummary: ScanRunSummary = {
-    scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {},
+    scanned: 0,
+    expanded: 0,
+    skipped: 0,
+    failed: 0,
+    skippedReasons: {},
     candidateDiagnostics: {
-      inserted: 0, duplicatesSkipped: 0, noiseSkipped: 0, lowScoreSkipped: 0, outOfRegionSkipped: 0, badDomainSkipped: 0, marketplaceSkipped: 0, profilesVisited: 0, fallbackUsed: 0, noExternalWebsite: 0,
+      inserted: 0,
+      duplicatesSkipped: 0,
+      noiseSkipped: 0,
+      lowScoreSkipped: 0,
+      outOfRegionSkipped: 0,
+      badDomainSkipped: 0,
+      marketplaceSkipped: 0,
+      profilesVisited: 0,
+      fallbackUsed: 0,
+      noExternalWebsite: 0,
+      requeuedSources: 0,
     },
   };
   let drafted = 0;
@@ -1040,24 +1205,31 @@ export async function dailyTick(env: Env): Promise<void> {
 
     sendResult = await runSend(env, Math.min(10, sendCap));
 
-    await logEvent(env, "tick_ok", `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`);
+    await logEvent(
+      env,
+      "tick_ok",
+      `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`
+    );
   } catch (error) {
     await logEvent(env, "tick_fail", String(error));
   } finally {
     await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`)
-      .bind("last_engine_run", JSON.stringify({
-        runId,
-        started_at_iso: startedAt,
-        scanned: scanSummary.scanned,
-        expanded: scanSummary.expanded,
-        skipped: scanSummary.skipped,
-        skippedReasons: scanSummary.skippedReasons,
-        candidateDiagnostics: scanSummary.candidateDiagnostics,
-        failed: scanSummary.failed,
-        drafted,
-        sent: sendResult.sent,
-        sendFailed: sendResult.failed,
-      }))
+      .bind(
+        "last_engine_run",
+        JSON.stringify({
+          runId,
+          started_at_iso: startedAt,
+          scanned: scanSummary.scanned,
+          expanded: scanSummary.expanded,
+          skipped: scanSummary.skipped,
+          skippedReasons: scanSummary.skippedReasons,
+          candidateDiagnostics: scanSummary.candidateDiagnostics,
+          failed: scanSummary.failed,
+          drafted,
+          sent: sendResult.sent,
+          sendFailed: sendResult.failed,
+        })
+      )
       .run();
 
     await releaseLock(env, "engine-cycle", token);
@@ -1068,12 +1240,27 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
   const token = await tryAcquireLock(env, "scan-only", 60 * 5);
   if (!token) {
     return {
-      scanned: 0, expanded: 0, skipped: 0, failed: 0, skippedReasons: {},
+      scanned: 0,
+      expanded: 0,
+      skipped: 0,
+      failed: 0,
+      skippedReasons: {},
       candidateDiagnostics: {
-        inserted: 0, duplicatesSkipped: 0, noiseSkipped: 0, lowScoreSkipped: 0, outOfRegionSkipped: 0, badDomainSkipped: 0, marketplaceSkipped: 0, profilesVisited: 0, fallbackUsed: 0, noExternalWebsite: 0,
+        inserted: 0,
+        duplicatesSkipped: 0,
+        noiseSkipped: 0,
+        lowScoreSkipped: 0,
+        outOfRegionSkipped: 0,
+        badDomainSkipped: 0,
+        marketplaceSkipped: 0,
+        profilesVisited: 0,
+        fallbackUsed: 0,
+        noExternalWebsite: 0,
+        requeuedSources: 0,
       },
     };
   }
+
   try {
     const summary = await runScan(env, 10);
     await logEvent(env, "scan_ok", `Manual scan completed | scanned ${summary.scanned} | expanded ${summary.expanded} | failed ${summary.failed}`);
@@ -1086,6 +1273,7 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
 export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
   const token = await tryAcquireLock(env, "draft-only", 60 * 5);
   if (!token) return { drafted: 0 };
+
   try {
     const drafted = await runDraft(env, 10);
     await logEvent(env, "draft_ok", `Manual draft completed | drafted ${drafted}`);
@@ -1098,6 +1286,7 @@ export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
 export async function runSendApproved(env: Env): Promise<{ sent: number; failed: number }> {
   const token = await tryAcquireLock(env, "send-only", 60 * 5);
   if (!token) return { sent: 0, failed: 0 };
+
   try {
     const result = await runSend(env, 10);
     await logEvent(env, "send_ok", `Manual send completed | sent ${result.sent} | failed ${result.failed}`);

@@ -83,6 +83,8 @@ export interface ScanRunSummary {
     fallbackUsed: number;
     noExternalWebsite: number;
     requeuedSources: number;
+    inferredRegionAccepted: number;
+    sourcePagesRetried: number;
   };
 }
 
@@ -327,7 +329,12 @@ function inferCountryGuess(url: string, text: string): "AU" | "NZ" | "OTHER" {
   return "OTHER";
 }
 
-function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomains: Set<string>): CandidateEvaluation {
+function evaluateCandidateUrl(
+  url: string,
+  sourceCategory: string,
+  existingDomains: Set<string>,
+  sourceCountryHint?: "AU" | "NZ" | null
+): CandidateEvaluation {
   let normalizedUrl = "";
   try {
     normalizedUrl = normalizeWebsite(url);
@@ -349,10 +356,17 @@ function evaluateCandidateUrl(url: string, sourceCategory: string, existingDomai
   if (sourceCategory === "contractor" && /(build|construct|plumb|electric|roof|joinery|cabinet|glazing|concrete|landscape|civil)/i.test(domain)) score += 2;
   if (sourceCategory === "ecommerce" && /(shop|store|online|boutique|supply)/i.test(domain)) score += 2;
   if (/\.com\.au$|\.net\.au$|\.org\.au$|\.co\.nz$|\.nz$/.test(domain)) score += 2;
-  if (!reasons.length) score += 2;
 
-  const countryGuess = inferCountryGuess(normalizedUrl, domain);
+  let countryGuess = inferCountryGuess(normalizedUrl, domain);
+  const neutralCommercialDomain = /\.(com|net|org|io|co|app|studio|agency|digital)$/i.test(domain);
+
+  if (countryGuess === "OTHER" && sourceCountryHint && neutralCommercialDomain) {
+    countryGuess = sourceCountryHint;
+    score += 2;
+  }
+
   if (countryGuess === "OTHER") reasons.push("out_of_region");
+  if (!reasons.length) score += 2;
 
   const accepted =
     !reasons.includes("noise_url") &&
@@ -697,7 +711,8 @@ function shouldRequeueSourceLead(lead: LeadRow): boolean {
   const signals = getSourceSignals(lead);
   const extracted = Number(signals?.extractedCandidates || 0);
   const sourceExpanded = Boolean(signals?.sourceExpanded);
-  return sourceExpanded && extracted === 0;
+  const status = String(lead.status || "");
+  return status === "failed" || (sourceExpanded && extracted === 0);
 }
 
 async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 12): Promise<number> {
@@ -724,8 +739,18 @@ async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 12)
 async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary): Promise<number> {
   const html = await fetchHtml(lead.website_url);
   if (!html.trim()) {
-    await updateLead(env, lead.id, { status: "failed" });
+    await updateLead(env, lead.id, {
+      status: "failed",
+      signals_json: JSON.stringify({
+        ...getSourceSignals(lead),
+        sourceExpanded: false,
+        sourceFetchFailed: true,
+        lastSourceAttemptAt: nowISO(),
+        decisionSummary: `Source page unavailable for ${lead.website_url}.`,
+      }),
+    });
     await logEvent(env, "expand_fail", `Source page empty or unavailable: ${lead.website_url}`, lead.id);
+    summary.candidateDiagnostics.sourcePagesRetried += 1;
     return 0;
   }
 
@@ -733,9 +758,11 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
   const existingDomains = new Set(existingLeads.map((item) => getDomain(item.website_url)));
   const extracted = extractCandidateProfileUrls(lead.website_url, html);
   const profileUrls = extracted.urls;
+  const sourceCountryHint = (lead.country === "NZ" ? "NZ" : "AU") as "AU" | "NZ";
   if (extracted.fallbackUsed) summary.candidateDiagnostics.fallbackUsed += 1;
 
   let inserted = 0;
+  let acceptedViaHint = 0;
 
   for (const profileUrl of profileUrls) {
     summary.candidateDiagnostics.profilesVisited += 1;
@@ -753,7 +780,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
       externalWebsite = profileUrl;
     }
 
-    const evaluation = evaluateCandidateUrl(externalWebsite, lead.category || "general", existingDomains);
+    const evaluation = evaluateCandidateUrl(externalWebsite, lead.category || "general", existingDomains, sourceCountryHint);
 
     if (evaluation.reasons.includes("duplicate_domain")) {
       summary.candidateDiagnostics.duplicatesSkipped += 1;
@@ -780,6 +807,10 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
       continue;
     }
 
+    if (!/\.(com\.au|net\.au|org\.au|co\.nz|nz)$/i.test(evaluation.domain) && evaluation.countryGuess === sourceCountryHint) {
+      acceptedViaHint += 1;
+    }
+
     try {
       await insertLead(env, {
         websiteUrl: evaluation.normalizedUrl,
@@ -792,6 +823,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
           sourceProfileUrl: profileUrl,
           candidateScore: evaluation.score,
           candidateReasons: evaluation.reasons,
+          inferredFromMarketplaceRegion: evaluation.countryGuess === sourceCountryHint,
         }),
       });
       inserted += 1;
@@ -802,15 +834,20 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
   }
 
   summary.candidateDiagnostics.inserted += inserted;
+  summary.candidateDiagnostics.inferredRegionAccepted += acceptedViaHint;
 
+  const failedExpansion = inserted === 0;
   await updateLead(env, lead.id, {
-    status: "do_not_contact",
+    status: failedExpansion ? "failed" : "do_not_contact",
     signals_json: JSON.stringify({
-      sourceExpanded: true,
+      sourceExpanded: !failedExpansion,
       extractedCandidates: inserted,
       profilesVisited: profileUrls.length,
       fallbackUsed: extracted.fallbackUsed,
-      decisionSummary: `Directory source page expanded into ${inserted} candidate URLs.`,
+      lastSourceAttemptAt: nowISO(),
+      decisionSummary: failedExpansion
+        ? `Directory source page produced no accepted candidates after reviewing ${profileUrls.length} profiles.`
+        : `Directory source page expanded into ${inserted} candidate URLs.`,
     }),
   });
 
@@ -862,7 +899,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
     }
 
     if (lead.status === "new") return true;
-    if (isSourceLead(lead) && !signals.sourceExpanded) return true;
+    if (isSourceLead(lead) && (!signals.sourceExpanded || lead.status === "failed")) return true;
 
     const key = lead.status !== "new" ? `status_${lead.status}` : signals.sourceExpanded ? "source_already_expanded" : "other";
     skippedReasons[key] = (skippedReasons[key] || 0) + 1;
@@ -887,6 +924,8 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       fallbackUsed: 0,
       noExternalWebsite: 0,
       requeuedSources: 0,
+      inferredRegionAccepted: 0,
+      sourcePagesRetried: 0,
     },
   };
 
@@ -901,7 +940,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
         if (isBadDomain(domain)) return false;
         if (isMarketplaceDomain(domain) && !isSourceLead(lead)) return false;
         if (lead.status === "new") return true;
-        if (isSourceLead(lead) && !signals.sourceExpanded) return true;
+        if (isSourceLead(lead) && (!signals.sourceExpanded || lead.status === "failed")) return true;
         return false;
       });
     }
@@ -1191,6 +1230,8 @@ export async function dailyTick(env: Env): Promise<void> {
       fallbackUsed: 0,
       noExternalWebsite: 0,
       requeuedSources: 0,
+      inferredRegionAccepted: 0,
+      sourcePagesRetried: 0,
     },
   };
   let drafted = 0;
@@ -1257,6 +1298,8 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
         fallbackUsed: 0,
         noExternalWebsite: 0,
         requeuedSources: 0,
+        inferredRegionAccepted: 0,
+        sourcePagesRetried: 0,
       },
     };
   }

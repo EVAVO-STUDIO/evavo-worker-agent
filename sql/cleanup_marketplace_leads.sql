@@ -1,0 +1,20 @@
+DELETE FROM leads
+WHERE
+  website_url LIKE 'https://img.%'
+  OR website_url LIKE 'https://cdn.%'
+  OR website_url LIKE 'https://static.%'
+  OR website_url LIKE 'https://assets.%'
+  OR website_url LIKE 'https://media.%'
+  OR website_url LIKE 'https://fonts.%'
+  OR website_url LIKE 'http://img.%'
+  OR website_url LIKE 'http://cdn.%'
+  OR website_url LIKE 'http://static.%'
+  OR website_url LIKE 'http://assets.%'
+  OR website_url LIKE 'http://media.%'
+  OR website_url LIKE 'http://fonts.%'
+  OR website_url LIKE 'https://%.hipages.com.au%'
+  OR website_url LIKE 'https://%.truelocal.com.au%'
+  OR website_url LIKE 'https://%.yellowpages.com.au%'
+  OR website_url LIKE 'http://%.hipages.com.au%'
+  OR website_url LIKE 'http://%.truelocal.com.au%'
+  OR website_url LIKE 'http://%.yellowpages.com.au%';

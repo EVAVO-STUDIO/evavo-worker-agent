@@ -85,6 +85,8 @@ export interface ScanRunSummary {
     requeuedSources: number;
     inferredRegionAccepted: number;
     sourcePagesRetried: number;
+    assetRejected: number;
+    weakPageRejected: number;
   };
 }
 
@@ -132,6 +134,30 @@ const SOCIAL_HOST_PATTERNS = [
   /pinterest\.com$/i,
 ];
 
+const BAD_DOMAIN_EXACT = new Set([
+  "gstatic.com",
+  "googleusercontent.com",
+  "i1.ypcdn.com",
+  "i2.ypcdn.com",
+  "i3.ypcdn.com",
+  "i4.ypcdn.com",
+  "images.truelocal.com.au",
+]);
+
+const BAD_DOMAIN_PREFIXES = [
+  "img.",
+  "cdn.",
+  "static.",
+  "assets.",
+  "media.",
+  "fonts.",
+  "images.",
+  "image.",
+  "files.",
+];
+
+const ASSET_EXTENSIONS = /\.(?:jpg|jpeg|png|gif|webp|svg|ico|pdf|docx?|xlsx?|css|js|json|xml|txt|map|woff2?|ttf|eot|mp4|mp3|zip)(?:$|\?)/i;
+
 function normalizeWebsite(raw: string): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) throw new Error("Missing website URL");
@@ -148,9 +174,7 @@ function getDomain(raw: string): string {
 }
 
 function isBadDomain(domain: string): boolean {
-  const prefixes = ["img.", "cdn.", "static.", "assets.", "media.", "fonts."];
-  const exact = new Set(["gstatic.com", "googleusercontent.com"]);
-  return prefixes.some((prefix) => domain.startsWith(prefix)) || exact.has(domain);
+  return BAD_DOMAIN_PREFIXES.some((prefix) => domain.startsWith(prefix)) || BAD_DOMAIN_EXACT.has(domain);
 }
 
 function isMarketplaceDomain(domain: string): boolean {
@@ -188,7 +212,7 @@ function isMarketplaceProfileUrl(url: string): boolean {
 function isHardNoiseUrl(url: string): boolean {
   const lower = String(url || "").toLowerCase();
   return (
-    /\.(jpg|jpeg|png|gif|webp|svg|pdf|docx?|xlsx?)($|\?)/i.test(lower) ||
+    ASSET_EXTENSIONS.test(lower) ||
     /mailto:|tel:|javascript:/.test(lower) ||
     /facebook\.com|instagram\.com|linkedin\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|pinterest\.com/.test(lower) ||
     /\/(search|category|categories|tag|tags|listing|listings|login|signup|register|privacy|terms)(\/|$)/i.test(lower) ||
@@ -198,7 +222,7 @@ function isHardNoiseUrl(url: string): boolean {
 
 function extractEmails(input: string): string[] {
   const matches = input.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter((email) => !/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(email));
+  return Array.from(new Set(matches.map((v) => v.toLowerCase()))).filter((email) => !ASSET_EXTENSIONS.test(email));
 }
 
 async function fetchHtml(url: string): Promise<string> {
@@ -210,7 +234,9 @@ async function fetchHtml(url: string): Promise<string> {
       },
       redirect: "follow",
     });
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
     if (!res.ok) return "";
+    if (contentType && !/text\/html|application\/xhtml\+xml/.test(contentType)) return "";
     return await res.text();
   } catch {
     return "";
@@ -227,7 +253,7 @@ function extractTitle(html: string): string {
 
 function guessCompanyName(title: string, domain: string): string {
   if (title) {
-    const cleaned = title.split(/[\-|•|:|·]/)[0].replace(/\s+/g, " ").trim();
+    const cleaned = title.split(/[\-|•:·]/)[0].replace(/\s+/g, " ").trim();
     if (cleaned) return cleaned;
   }
   return domain.replace(/^www\./i, "");
@@ -237,10 +263,39 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
+function stripHtml(html: string): string {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function looksLikeSourcePage(url: string, html: string): boolean {
   if (isMarketplaceSourcePage(url)) return true;
   const lower = `${url} ${html}`.toLowerCase();
   return /directory|results for|search results|business listings/.test(lower) && /href=/.test(lower);
+}
+
+function looksLikeRealBusinessPage(url: string, html: string, title: string, description: string): boolean {
+  if (!html.trim()) return false;
+  if (isHardNoiseUrl(url)) return false;
+
+  const text = stripHtml(html);
+  const lower = `${title} ${description} ${text}`.toLowerCase();
+
+  if (text.length < 350) return false;
+  if (/favicon|sprite|icon set|loading\.\.\.|placeholder/i.test(lower) && text.length < 900) return false;
+
+  const signals = [
+    /about us|about|services|our work|projects|portfolio|contact|enquiry|inquiry|quote|request a quote/i.test(lower),
+    /phone|email|call us|get in touch|contact form/i.test(lower),
+    /abn|pty ltd|australia|new zealand|melbourne|sydney|brisbane|perth|adelaide|auckland|wellington/i.test(lower),
+    /builder|construction|agency|studio|marketing|design|developer|ecommerce|shop|contractor|plumbing|electrical|roofing|joinery|consulting|legal|medical/i.test(lower),
+  ].filter(Boolean).length;
+
+  return Boolean(title.trim()) && signals >= 2;
 }
 
 function isSourceLead(lead: LeadRow): boolean {
@@ -736,7 +791,7 @@ async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 12)
   return count;
 }
 
-async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary): Promise<number> {
+async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary): Promise<{ inserted: number; newLeadIds: string[] }> {
   const html = await fetchHtml(lead.website_url);
   if (!html.trim()) {
     await updateLead(env, lead.id, {
@@ -751,10 +806,10 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
     });
     await logEvent(env, "expand_fail", `Source page empty or unavailable: ${lead.website_url}`, lead.id);
     summary.candidateDiagnostics.sourcePagesRetried += 1;
-    return 0;
+    return { inserted: 0, newLeadIds: [] };
   }
 
-  const existingLeads = await listLeads(env, { limit: 500 });
+  const existingLeads = await listLeads(env, { limit: 600 });
   const existingDomains = new Set(existingLeads.map((item) => getDomain(item.website_url)));
   const extracted = extractCandidateProfileUrls(lead.website_url, html);
   const profileUrls = extracted.urls;
@@ -763,6 +818,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
 
   let inserted = 0;
   let acceptedViaHint = 0;
+  const newLeadIds: string[] = [];
 
   for (const profileUrl of profileUrls) {
     summary.candidateDiagnostics.profilesVisited += 1;
@@ -796,6 +852,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
     }
     if (evaluation.reasons.includes("noise_url")) {
       summary.candidateDiagnostics.noiseSkipped += 1;
+      summary.candidateDiagnostics.assetRejected += 1;
       continue;
     }
     if (evaluation.reasons.includes("out_of_region")) {
@@ -812,7 +869,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
     }
 
     try {
-      await insertLead(env, {
+      const insertedLead = await insertLead(env, {
         websiteUrl: evaluation.normalizedUrl,
         discoverySource: `expanded_from:${lead.id}`,
         category: lead.category || "general",
@@ -827,6 +884,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
         }),
       });
       inserted += 1;
+      newLeadIds.push(insertedLead.id);
       existingDomains.add(evaluation.domain);
     } catch {
       summary.candidateDiagnostics.duplicatesSkipped += 1;
@@ -857,7 +915,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
     `Expanded ${lead.website_url} | profiles ${profileUrls.length} | inserted ${inserted} | fallback ${extracted.fallbackUsed ? "yes" : "no"}`,
     lead.id
   );
-  return inserted;
+  return { inserted, newLeadIds };
 }
 
 async function markExcludedLead(env: Env, lead: LeadRow, reason: string): Promise<void> {
@@ -882,7 +940,7 @@ export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<Le
 }
 
 async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
-  const allRecent = await listLeads(env, { limit: 250 });
+  const allRecent = await listLeads(env, { limit: 300 });
   const skippedReasons: Record<string, number> = {};
 
   let eligible = allRecent.filter((lead) => {
@@ -926,6 +984,8 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       requeuedSources: 0,
       inferredRegionAccepted: 0,
       sourcePagesRetried: 0,
+      assetRejected: 0,
+      weakPageRejected: 0,
     },
   };
 
@@ -933,7 +993,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
     const requeued = await requeueDeadSources(env, allRecent, 12);
     summary.candidateDiagnostics.requeuedSources = requeued;
     if (requeued > 0) {
-      const refreshed = await listLeads(env, { limit: 250 });
+      const refreshed = await listLeads(env, { limit: 300 });
       eligible = refreshed.filter((lead) => {
         const signals = parseLeadSignals(lead) as any;
         const domain = getDomain(lead.website_url || "");
@@ -946,10 +1006,16 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
     }
   }
 
-  const leads = eligible.slice(0, maxItems);
-  summary.skipped = Math.max(0, allRecent.length - leads.length);
+  const queue = eligible.slice(0, maxItems * 2);
+  const processed = new Set<string>();
+  let cursor = 0;
+  summary.skipped = Math.max(0, allRecent.length - Math.min(queue.length, maxItems));
 
-  for (const lead of leads) {
+  while (cursor < queue.length && processed.size < maxItems) {
+    const lead = queue[cursor++];
+    if (processed.has(lead.id)) continue;
+    processed.add(lead.id);
+
     try {
       const domain = getDomain(lead.website_url);
 
@@ -971,6 +1037,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
         await markExcludedLead(env, lead, "noise_url");
         summary.skipped += 1;
         summary.candidateDiagnostics.noiseSkipped += 1;
+        summary.candidateDiagnostics.assetRejected += 1;
         continue;
       }
 
@@ -983,13 +1050,27 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       }
 
       if (looksLikeSourcePage(lead.website_url, html)) {
-        const expanded = await expandSourceLead(env, lead, summary);
-        summary.expanded += expanded;
+        const expansion = await expandSourceLead(env, lead, summary);
+        summary.expanded += expansion.inserted;
+
+        if (expansion.newLeadIds.length > 0 && processed.size < maxItems) {
+          const refreshed = await listLeads(env, { status: "new", limit: maxItems * 2 });
+          const extraTargets = refreshed.filter((item) => expansion.newLeadIds.includes(item.id) && !isSourceLead(item));
+          queue.push(...extraTargets);
+        }
         continue;
       }
 
       const title = extractTitle(html);
       const description = extractDescription(html);
+
+      if (!looksLikeRealBusinessPage(lead.website_url, html, title, description)) {
+        await markExcludedLead(env, lead, "weak_or_non_business_page");
+        summary.skipped += 1;
+        summary.candidateDiagnostics.weakPageRejected += 1;
+        continue;
+      }
+
       const url = new URL(normalizeWebsite(lead.website_url));
       const classified = classifyLead(url.hostname, html, title, description);
 
@@ -1232,6 +1313,8 @@ export async function dailyTick(env: Env): Promise<void> {
       requeuedSources: 0,
       inferredRegionAccepted: 0,
       sourcePagesRetried: 0,
+      assetRejected: 0,
+      weakPageRejected: 0,
     },
   };
   let drafted = 0;
@@ -1254,24 +1337,22 @@ export async function dailyTick(env: Env): Promise<void> {
   } catch (error) {
     await logEvent(env, "tick_fail", String(error));
   } finally {
-    await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`)
-      .bind(
-        "last_engine_run",
-        JSON.stringify({
-          runId,
-          started_at_iso: startedAt,
-          scanned: scanSummary.scanned,
-          expanded: scanSummary.expanded,
-          skipped: scanSummary.skipped,
-          skippedReasons: scanSummary.skippedReasons,
-          candidateDiagnostics: scanSummary.candidateDiagnostics,
-          failed: scanSummary.failed,
-          drafted,
-          sent: sendResult.sent,
-          sendFailed: sendResult.failed,
-        })
-      )
-      .run();
+    await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`).bind(
+      "last_engine_run",
+      JSON.stringify({
+        runId,
+        started_at_iso: startedAt,
+        scanned: scanSummary.scanned,
+        expanded: scanSummary.expanded,
+        skipped: scanSummary.skipped,
+        skippedReasons: scanSummary.skippedReasons,
+        candidateDiagnostics: scanSummary.candidateDiagnostics,
+        failed: scanSummary.failed,
+        drafted,
+        sent: sendResult.sent,
+        sendFailed: sendResult.failed,
+      })
+    ).run();
 
     await releaseLock(env, "engine-cycle", token);
   }
@@ -1300,6 +1381,8 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
         requeuedSources: 0,
         inferredRegionAccepted: 0,
         sourcePagesRetried: 0,
+        assetRejected: 0,
+        weakPageRejected: 0,
       },
     };
   }

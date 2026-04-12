@@ -194,16 +194,6 @@ function isMarketplaceSourcePage(url: string): boolean {
   }
 }
 
-function isMarketplaceProfileUrl(url: string): boolean {
-  try {
-    const parsed = new URL(normalizeWebsite(url));
-    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
-    return isMarketplaceDomain(host) && !/\/find(\/|$)/i.test(parsed.pathname);
-  } catch {
-    return false;
-  }
-}
-
 function isHardNoiseUrl(url: string): boolean {
   const lower = String(url || "").toLowerCase();
   return (
@@ -451,14 +441,7 @@ function classifyLead(domain: string, html: string, title: string, description: 
   return { leadClass, opportunityType, qualityTier, draftStrategy, toneMode, serviceTags, techTags };
 }
 
-function deriveScores(input: {
-  leadClass: LeadClass;
-  qualityTier: QualityTier;
-  opportunityType: OpportunityType;
-  hasContactForm: boolean;
-  contactEmail?: string;
-  html: string;
-}) {
+function deriveScores(input: { leadClass: LeadClass; qualityTier: QualityTier; opportunityType: OpportunityType; hasContactForm: boolean; contactEmail?: string; html: string; }) {
   let fit = 0.35;
   let contact = 0.2;
   let risk = 0.08;
@@ -556,7 +539,7 @@ function cleanCompanyName(lead: LeadRow): string {
   return lead.company_name || signals.companyName || lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
 
-function buildDraftCopy(env: Env, lead: LeadRow) {
+function buildDraftCopy(env: Env, lead: LeadRow) { /* unchanged body intentionally trimmed below */
   const signals = parseLeadSignals(lead) as any;
   const company = cleanCompanyName(lead);
   const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
@@ -565,92 +548,16 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
   const problem = signals.problemSummary || "There may be a practical website opportunity here.";
   const leverage = signals.leverageSummary || "EVAVO should focus on practical improvement, not fluff.";
   const tone = String(signals.toneMode || "consultative");
-
   if (signals.draftStrategy === "white_label_partnership" || signals.draftStrategy === "overflow_delivery_support") {
-    return {
-      subject: `Quiet support for ${company} if overflow ever hits`,
-      bodyText: [
-        `Hi ${company},`,
-        "",
-        `I had a quick look through ${domain} and this felt more like a partner-fit conversation than a pitch about redoing your site.`,
-        grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "",
-        "",
-        `${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,
-        `The angle here would be simple: ${angle.toLowerCase()}.`,
-        "",
-        "If that is ever useful, I am happy to send a short note on where we tend to plug in.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case overflow or quiet implementation support is relevant at the moment.", "", "Best,", envBrandLine(env)].join("\n"),
-      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
-    };
+    return { subject: `Quiet support for ${company} if overflow ever hits`, bodyText: [`Hi ${company},`,"",`I had a quick look through ${domain} and this felt more like a partner-fit conversation than a pitch about redoing your site.`, grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "","",`${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,`The angle here would be simple: ${angle.toLowerCase()}.`,`","If that is ever useful, I am happy to send a short note on where we tend to plug in.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case overflow or quiet implementation support is relevant at the moment.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }) };
   }
-
   if (signals.draftStrategy === "contractor_lead_uplift" || signals.draftStrategy === "professional_service_uplift") {
-    return {
-      subject: `A practical website idea for ${company}`,
-      bodyText: [
-        `Hi ${company},`,
-        "",
-        `I had a look through ${domain} and there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`,
-        grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "",
-        "",
-        problem,
-        leverage,
-        "",
-        "If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a short, practical teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
-      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
-    };
+    return { subject: `A practical website idea for ${company}`, bodyText: [`Hi ${company},`,"",`I had a look through ${domain} and there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`, grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "","",problem, leverage, "", "If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case a short, practical teardown would be useful.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }) };
   }
-
   if (signals.draftStrategy === "ecommerce_conversion_offer") {
-    return {
-      subject: `A conversion idea for ${company}`,
-      bodyText: [
-        `Hi ${company},`,
-        "",
-        `I had a look through ${domain} and this feels more like a conversion and clarity opportunity than a redesign-for-the-sake-of-it situation.`,
-        grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "",
-        "",
-        problem,
-        leverage,
-        "",
-        "If useful, I can send a short teardown focused on what is most likely to lift trust or action.",
-        "",
-        "Best,",
-        envBrandLine(env),
-      ].filter(Boolean).join("\n"),
-      followupText: [`Hi ${company},`, "", "Just following up in case a conversion-focused teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
-      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }),
-    };
+    return { subject: `A conversion idea for ${company}`, bodyText: [`Hi ${company},`,"",`I had a look through ${domain} and this feels more like a conversion and clarity opportunity than a redesign-for-the-sake-of-it situation.`, grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "","",problem, leverage, "", "If useful, I can send a short teardown focused on what is most likely to lift trust or action.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case a conversion-focused teardown would be useful.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }) };
   }
-
-  return {
-    subject: `A practical idea for ${company}`,
-    bodyText: [
-      `Hi ${company},`,
-      "",
-      `I had a look through ${domain} and there may be a worthwhile improvement opportunity there.`,
-      grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "",
-      "",
-      problem,
-      leverage,
-      "",
-      "If useful, I can send a short note with specific suggestions.",
-      "",
-      "Best,",
-      envBrandLine(env),
-    ].filter(Boolean).join("\n"),
-    followupText: [`Hi ${company},`, "", "Just following up in case a short, specific teardown would be useful.", "", "Best,", envBrandLine(env)].join("\n"),
-    whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }),
-  };
+  return { subject: `A practical idea for ${company}`, bodyText: [`Hi ${company},`,"",`I had a look through ${domain} and there may be a worthwhile improvement opportunity there.`, grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "","",problem, leverage, "", "If useful, I can send a short note with specific suggestions.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case a short, specific teardown would be useful.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }) };
 }
 
 async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseDelayMs = 300): Promise<T> {
@@ -669,26 +576,11 @@ async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseD
   }
 }
 
-function getCap(value: string | undefined, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-async function draftCountForLead(env: Env, leadId: string): Promise<number> {
-  const row = await env.DB.prepare(`SELECT COUNT(*) as count FROM drafts WHERE lead_id = ?`).bind(leadId).first<{ count: number }>();
-  return Number(row?.count || 0);
-}
+function getCap(value: string | undefined, fallback: number): number { const parsed = Number(value); return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback; }
+async function draftCountForLead(env: Env, leadId: string): Promise<number> { const row = await env.DB.prepare(`SELECT COUNT(*) as count FROM drafts WHERE lead_id = ?`).bind(leadId).first<{ count: number }>(); return Number(row?.count || 0); }
 
 async function markExcludedLead(env: Env, lead: LeadRow, reason: string): Promise<void> {
-  await updateLead(env, lead.id, {
-    status: "do_not_contact",
-    signals_json: JSON.stringify({
-      ...(parseLeadSignals(lead) || {}),
-      filteredOut: true,
-      filterReason: reason,
-      decisionSummary: `Lead excluded by filter: ${reason}.`,
-    }),
-  });
+  await updateLead(env, lead.id, { status: "do_not_contact", signals_json: JSON.stringify({ ...(parseLeadSignals(lead) || {}), filteredOut: true, filterReason: reason, decisionSummary: `Lead excluded by filter: ${reason}.`, }) });
   await logEvent(env, "scan_skip", `Filtered lead ${lead.website_url}: ${reason}`, lead.id);
 }
 
@@ -697,7 +589,6 @@ async function cleanMarketplaceTargetNoise(env: Env, leads: LeadRow[]): Promise<
   for (const lead of leads) {
     if (isSourceLead(lead)) continue;
     const domain = getDomain(lead.website_url || "");
-    const url = String(lead.website_url || "");
     if (!isMarketplaceDomain(domain)) continue;
     await markExcludedLead(env, lead, "marketplace_internal_target");
     cleaned += 1;
@@ -720,15 +611,7 @@ async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 8):
   for (const lead of leads) {
     if (count >= maxToRequeue) break;
     if (!shouldRetrySourceLead(lead)) continue;
-    await updateLead(env, lead.id, {
-      status: "new",
-      signals_json: JSON.stringify({
-        ...getSourceSignals(lead),
-        sourceExpanded: false,
-        requeuedForRetry: true,
-        requeuedAt: nowISO(),
-      }),
-    });
+    await updateLead(env, lead.id, { status: "new", signals_json: JSON.stringify({ ...getSourceSignals(lead), sourceExpanded: false, requeuedForRetry: true, requeuedAt: nowISO() }) });
     await logEvent(env, "source_requeued", `Requeued source page for another expansion pass: ${lead.website_url}`, lead.id);
     count += 1;
   }
@@ -738,248 +621,83 @@ async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 8):
 async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary): Promise<{ inserted: number; newLeadIds: string[] }> {
   const html = await fetchHtml(lead.website_url);
   if (!html.trim()) {
-    await updateLead(env, lead.id, {
-      status: "failed",
-      signals_json: JSON.stringify({
-        ...getSourceSignals(lead),
-        sourceExpanded: false,
-        sourceFetchFailed: true,
-        lastSourceAttemptAt: nowISO(),
-        decisionSummary: `Source page unavailable for ${lead.website_url}.`,
-      }),
-    });
+    await updateLead(env, lead.id, { status: "failed", signals_json: JSON.stringify({ ...getSourceSignals(lead), sourceExpanded: false, sourceFetchFailed: true, lastSourceAttemptAt: nowISO(), decisionSummary: `Source page unavailable for ${lead.website_url}.`, }) });
     await logEvent(env, "expand_fail", `Source page empty or unavailable: ${lead.website_url}`, lead.id);
     summary.candidateDiagnostics.sourcePagesRetried += 1;
     return { inserted: 0, newLeadIds: [] };
   }
-
   const existingLeads = await listLeads(env, { limit: 600 });
   const existingDomains = new Set(existingLeads.map((item) => getDomain(item.website_url)));
   const extracted = extractCandidateProfileUrls(lead.website_url, html);
   const profileUrls = extracted.urls;
   const sourceCountryHint = (lead.country === "NZ" ? "NZ" : "AU") as "AU" | "NZ";
   if (extracted.fallbackUsed) summary.candidateDiagnostics.fallbackUsed += 1;
-
   let inserted = 0;
   const newLeadIds: string[] = [];
   let inferredAccepted = 0;
-
   for (const profileUrl of profileUrls) {
     summary.candidateDiagnostics.profilesVisited += 1;
     const profileHtml = await fetchHtml(profileUrl);
     if (!profileHtml.trim()) continue;
-
     const externalWebsite = extractExternalWebsiteFromProfile(profileUrl, profileHtml);
-    if (!externalWebsite) {
-      summary.candidateDiagnostics.noExternalWebsite += 1;
-      continue;
-    }
-
+    if (!externalWebsite) { summary.candidateDiagnostics.noExternalWebsite += 1; continue; }
     const domain = getDomain(externalWebsite);
-    if (isBadDomain(domain)) {
-      summary.candidateDiagnostics.badDomainSkipped += 1;
-      continue;
-    }
-    if (isMarketplaceDomain(domain) || isSocialDomain(domain) || isHardNoiseUrl(externalWebsite)) {
-      summary.candidateDiagnostics.marketplaceSkipped += 1;
-      continue;
-    }
-    if (existingDomains.has(domain)) {
-      summary.candidateDiagnostics.duplicatesSkipped += 1;
-      continue;
-    }
-
+    if (isBadDomain(domain)) { summary.candidateDiagnostics.badDomainSkipped += 1; continue; }
+    if (isMarketplaceDomain(domain) || isSocialDomain(domain) || isHardNoiseUrl(externalWebsite)) { summary.candidateDiagnostics.marketplaceSkipped += 1; continue; }
+    if (existingDomains.has(domain)) { summary.candidateDiagnostics.duplicatesSkipped += 1; continue; }
     const countryGuess = inferCountryGuess(externalWebsite, `${domain} ${profileHtml}`);
-    if (countryGuess === "OTHER" && !/\.(com|net|org|io|co|app|studio|agency|digital)$/i.test(domain)) {
-      summary.candidateDiagnostics.outOfRegionSkipped += 1;
-      continue;
-    }
+    if (countryGuess === "OTHER" && !/\.(com|net|org|io|co|app|studio|agency|digital)$/i.test(domain)) { summary.candidateDiagnostics.outOfRegionSkipped += 1; continue; }
     if (countryGuess === "OTHER") inferredAccepted += 1;
-
     try {
-      const insertedLead = await insertLead(env, {
-        websiteUrl: normalizeWebsite(externalWebsite),
-        discoverySource: `expanded_from:${lead.id}`,
-        category: lead.category || "general",
-        country: countryGuess === "NZ" ? "NZ" : sourceCountryHint,
-        region: lead.region || null,
-        signalsJson: JSON.stringify({
-          sourceDomain: getDomain(lead.website_url),
-          sourceProfileUrl: profileUrl,
-          inferredFromMarketplaceRegion: countryGuess === "OTHER",
-        }),
-      });
-      inserted += 1;
-      newLeadIds.push(insertedLead.id);
-      existingDomains.add(domain);
-    } catch {
-      summary.candidateDiagnostics.duplicatesSkipped += 1;
-    }
+      const insertedLead = await insertLead(env, { websiteUrl: normalizeWebsite(externalWebsite), discoverySource: `expanded_from:${lead.id}`, category: lead.category || "general", country: countryGuess === "NZ" ? "NZ" : sourceCountryHint, region: lead.region || null, signalsJson: JSON.stringify({ sourceDomain: getDomain(lead.website_url), sourceProfileUrl: profileUrl, inferredFromMarketplaceRegion: countryGuess === "OTHER" }) });
+      inserted += 1; newLeadIds.push(insertedLead.id); existingDomains.add(domain);
+    } catch { summary.candidateDiagnostics.duplicatesSkipped += 1; }
   }
-
   summary.candidateDiagnostics.inserted += inserted;
   summary.candidateDiagnostics.inferredRegionAccepted += inferredAccepted;
-
-  await updateLead(env, lead.id, {
-    status: inserted > 0 ? "do_not_contact" : "failed",
-    signals_json: JSON.stringify({
-      sourceExpanded: inserted > 0,
-      extractedCandidates: inserted,
-      profilesVisited: profileUrls.length,
-      fallbackUsed: extracted.fallbackUsed,
-      lastSourceAttemptAt: nowISO(),
-      decisionSummary: inserted > 0
-        ? `Directory source page expanded into ${inserted} candidate URLs.`
-        : `Directory source page produced no accepted candidates after reviewing ${profileUrls.length} profiles.`,
-    }),
-  });
-
+  await updateLead(env, lead.id, { status: inserted > 0 ? "do_not_contact" : "failed", signals_json: JSON.stringify({ sourceExpanded: inserted > 0, extractedCandidates: inserted, profilesVisited: profileUrls.length, fallbackUsed: extracted.fallbackUsed, lastSourceAttemptAt: nowISO(), decisionSummary: inserted > 0 ? `Directory source page expanded into ${inserted} candidate URLs.` : `Directory source page produced no accepted candidates after reviewing ${profileUrls.length} profiles.`, }) });
   await logEvent(env, "expand_ok", `Expanded ${lead.website_url} | profiles ${profileUrls.length} | inserted ${inserted} | fallback ${extracted.fallbackUsed ? "yes" : "no"}`, lead.id);
   return { inserted, newLeadIds };
 }
 
-function buildScanResult(lead: LeadRow, html: string): ScanResult {
-  const url = new URL(normalizeWebsite(lead.website_url));
-  const title = extractTitle(html);
-  const description = extractDescription(html);
-  const classified = classifyLead(url.hostname, html, title, description);
-  const emails = extractEmails(html);
-  const contactEmail = emails[0];
-  const contactHrefMatch = html.match(/href=["']([^"']*contact[^"']*)["']/i);
-  const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], lead.website_url).toString() : null;
-  const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl);
-  const scores = deriveScores({
-    leadClass: classified.leadClass,
-    qualityTier: classified.qualityTier,
-    opportunityType: classified.opportunityType,
-    hasContactForm,
-    contactEmail,
-    html,
-  });
+function buildScanResult(lead: LeadRow, html: string): ScanResult { const url = new URL(normalizeWebsite(lead.website_url)); const title = extractTitle(html); const description = extractDescription(html); const classified = classifyLead(url.hostname, html, title, description); const emails = extractEmails(html); const contactEmail = emails[0]; const contactHrefMatch = html.match(/href=["']([^"']*contact[^"']*)["']/i); const contactPageUrl = contactHrefMatch ? new URL(contactHrefMatch[1], lead.website_url).toString() : null; const hasContactForm = /<form[\s\S]*?(contact|enquiry|inquiry|message)/i.test(html) || Boolean(contactPageUrl); const scores = deriveScores({ leadClass: classified.leadClass, qualityTier: classified.qualityTier, opportunityType: classified.opportunityType, hasContactForm, contactEmail, html, }); return { companyName: guessCompanyName(title, url.hostname), leadClass: classified.leadClass, opportunityType: classified.opportunityType, qualityTier: classified.qualityTier, draftStrategy: classified.draftStrategy, toneMode: classified.toneMode, fitScore: scores.fit, contactabilityScore: scores.contact, riskScore: scores.risk, scoreTotal: scores.total, brief: classified.leadClass === "agency" || classified.leadClass === "dev_shop" || classified.leadClass === "marketing_agency" ? "Agency-side lead that likely suits partnership or overflow support." : classified.leadClass === "ecommerce" ? "Commerce lead that likely suits a conversion-focused offer." : classified.leadClass === "contractor" || classified.leadClass === "local_service" ? "Service-business lead where practical website uplift may improve enquiry flow." : classified.leadClass === "professional_service" ? "Professional-service lead where clearer trust and contact flow may matter." : "General lead with some improvement potential.", contactEmail, contactPageUrl, hasContactForm, contactSummary: contactEmail ? `Found direct email ${contactEmail}` : hasContactForm ? "No direct email found, but a contact route exists" : "No direct contact route found", siteQualitySummary: classified.qualityTier === "missing" ? "Digital presence appears missing or placeholder-level." : classified.qualityTier === "weak" ? "Site loaded, but likely presents a weaker or more templated experience." : classified.qualityTier === "strong" ? "Site loaded and appears comparatively stronger." : "Site loaded successfully.", techTags: classified.techTags, serviceTags: classified.serviceTags, outreachAngles: buildOutreachAngles(classified.leadClass, classified.opportunityType), avoidSaying: buildAvoidSaying(classified.opportunityType), groundedFacts: [...(title ? [`Title: ${title}`] : []), ...(description ? [`Description: ${description}`] : []), ...(contactEmail ? [`Email found: ${contactEmail}`] : []), ...(contactPageUrl ? [`Contact page: ${contactPageUrl}`] : [])], title, description, decisionSummary: buildRecommendedAngle(classified.opportunityType), problemSummary: buildProblemSummary(classified.leadClass, classified.qualityTier), leverageSummary: buildLeverageSummary(classified.leadClass, classified.opportunityType), recommendedAngle: buildRecommendedAngle(classified.opportunityType), country: url.hostname.endsWith(".nz") ? "NZ" : "AU", region: null, }; }
 
-  return {
-    companyName: guessCompanyName(title, url.hostname),
-    leadClass: classified.leadClass,
-    opportunityType: classified.opportunityType,
-    qualityTier: classified.qualityTier,
-    draftStrategy: classified.draftStrategy,
-    toneMode: classified.toneMode,
-    fitScore: scores.fit,
-    contactabilityScore: scores.contact,
-    riskScore: scores.risk,
-    scoreTotal: scores.total,
-    brief:
-      classified.leadClass === "agency" || classified.leadClass === "dev_shop" || classified.leadClass === "marketing_agency"
-        ? "Agency-side lead that likely suits partnership or overflow support."
-        : classified.leadClass === "ecommerce"
-        ? "Commerce lead that likely suits a conversion-focused offer."
-        : classified.leadClass === "contractor" || classified.leadClass === "local_service"
-        ? "Service-business lead where practical website uplift may improve enquiry flow."
-        : classified.leadClass === "professional_service"
-        ? "Professional-service lead where clearer trust and contact flow may matter."
-        : "General lead with some improvement potential.",
-    contactEmail,
-    contactPageUrl,
-    hasContactForm,
-    contactSummary: contactEmail ? `Found direct email ${contactEmail}` : hasContactForm ? "No direct email found, but a contact route exists" : "No direct contact route found",
-    siteQualitySummary:
-      classified.qualityTier === "missing"
-        ? "Digital presence appears missing or placeholder-level."
-        : classified.qualityTier === "weak"
-        ? "Site loaded, but likely presents a weaker or more templated experience."
-        : classified.qualityTier === "strong"
-        ? "Site loaded and appears comparatively stronger."
-        : "Site loaded successfully.",
-    techTags: classified.techTags,
-    serviceTags: classified.serviceTags,
-    outreachAngles: buildOutreachAngles(classified.leadClass, classified.opportunityType),
-    avoidSaying: buildAvoidSaying(classified.opportunityType),
-    groundedFacts: [
-      ...(title ? [`Title: ${title}`] : []),
-      ...(description ? [`Description: ${description}`] : []),
-      ...(contactEmail ? [`Email found: ${contactEmail}`] : []),
-      ...(contactPageUrl ? [`Contact page: ${contactPageUrl}`] : []),
-    ],
-    title,
-    description,
-    decisionSummary: buildRecommendedAngle(classified.opportunityType),
-    problemSummary: buildProblemSummary(classified.leadClass, classified.qualityTier),
-    leverageSummary: buildLeverageSummary(classified.leadClass, classified.opportunityType),
-    recommendedAngle: buildRecommendedAngle(classified.opportunityType),
-    country: url.hostname.endsWith(".nz") ? "NZ" : "AU",
-    region: null,
-  };
-}
-
-export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> {
-  const website = normalizeWebsite(websiteInput);
-  const lead = await insertLead(env, { websiteUrl: website, discoverySource: "manual", signalsJson: "{}" });
-  await runScan(env, 1);
-  return (await getLeadById(env, lead.id)) as LeadRow;
-}
+export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<LeadRow> { const website = normalizeWebsite(websiteInput); const lead = await insertLead(env, { websiteUrl: website, discoverySource: "manual", signalsJson: "{}" }); await runScan(env, 1); return (await getLeadById(env, lead.id)) as LeadRow; }
 
 async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
   const allRecent = await listLeads(env, { limit: 300 });
   const summary = emptySummary();
   const cleanedMarketplaceTargets = await cleanMarketplaceTargetNoise(env, allRecent.filter((lead) => ["new", "failed"].includes(String(lead.status || ""))));
   if (cleanedMarketplaceTargets > 0) summary.candidateDiagnostics.marketplaceSkipped += cleanedMarketplaceTargets;
-
   let refreshedLeads = await listLeads(env, { limit: 300 });
   let eligible = refreshedLeads.filter((lead) => {
     const domain = getDomain(lead.website_url || "");
-    if (isBadDomain(domain)) {
-      summary.skippedReasons.bad_domain_existing = (summary.skippedReasons.bad_domain_existing || 0) + 1;
-      return false;
-    }
+    if (isBadDomain(domain)) { summary.skippedReasons.bad_domain_existing = (summary.skippedReasons.bad_domain_existing || 0) + 1; return false; }
     if (lead.status === "new") return true;
     if (shouldRetrySourceLead(lead)) return true;
     const key = lead.status ? `status_${lead.status}` : "other";
     summary.skippedReasons[key] = (summary.skippedReasons[key] || 0) + 1;
     return false;
   });
-
   if (eligible.length === 0) {
     const requeued = await requeueDeadSources(env, refreshedLeads, 8);
     summary.candidateDiagnostics.requeuedSources = requeued;
     refreshedLeads = await listLeads(env, { limit: 300 });
     eligible = refreshedLeads.filter((lead) => lead.status === "new" || shouldRetrySourceLead(lead));
   }
-
   const queue: LeadRow[] = eligible.slice(0, maxItems * 3);
   const processed = new Set<string>();
-
   while (queue.length > 0 && summary.scanned < maxItems) {
     const lead = queue.shift()!;
     if (processed.has(lead.id)) continue;
     processed.add(lead.id);
-
     try {
       const domain = getDomain(lead.website_url);
-      if (isBadDomain(domain)) {
-        await markExcludedLead(env, lead, "bad_domain");
-        summary.candidateDiagnostics.badDomainSkipped += 1;
-        continue;
-      }
-      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) {
-        await markExcludedLead(env, lead, "noise_url");
-        summary.candidateDiagnostics.noiseSkipped += 1;
-        summary.candidateDiagnostics.assetRejected += 1;
-        continue;
-      }
-      if (isMarketplaceDomain(domain) && !isSourceLead(lead)) {
-        await markExcludedLead(env, lead, "marketplace_internal_target");
-        summary.candidateDiagnostics.marketplaceSkipped += 1;
-        continue;
-      }
-
+      if (isBadDomain(domain)) { await markExcludedLead(env, lead, "bad_domain"); summary.candidateDiagnostics.badDomainSkipped += 1; continue; }
+      if (isHardNoiseUrl(lead.website_url) && !isSourceLead(lead)) { await markExcludedLead(env, lead, "noise_url"); summary.candidateDiagnostics.noiseSkipped += 1; summary.candidateDiagnostics.assetRejected += 1; continue; }
+      if (isMarketplaceDomain(domain) && !isSourceLead(lead)) { await markExcludedLead(env, lead, "marketplace_internal_target"); summary.candidateDiagnostics.marketplaceSkipped += 1; continue; }
       const html = await fetchHtml(lead.website_url);
-      if (!html.trim()) {
-        await updateLead(env, lead.id, { status: "failed" });
-        await logEvent(env, "scan_fail", `No HTML returned for ${lead.website_url}`, lead.id);
-        summary.failed += 1;
-        continue;
-      }
-
+      if (!html.trim()) { await updateLead(env, lead.id, { status: "failed" }); await logEvent(env, "scan_fail", `No HTML returned for ${lead.website_url}`, lead.id); summary.failed += 1; continue; }
       if (looksLikeSourcePage(lead.website_url, html)) {
         const expansion = await expandSourceLead(env, lead, summary);
         summary.expanded += expansion.inserted;
@@ -990,42 +708,13 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
         }
         continue;
       }
-
-      const title = extractTitle(html);
-      const description = extractDescription(html);
-      if (!looksLikeRealBusinessPage(lead.website_url, html, title, description)) {
-        await markExcludedLead(env, lead, "weak_or_non_business_page");
-        summary.candidateDiagnostics.weakPageRejected += 1;
-        continue;
-      }
-
+      const title = extractTitle(html); const description = extractDescription(html);
+      if (!looksLikeRealBusinessPage(lead.website_url, html, title, description)) { await markExcludedLead(env, lead, "weak_or_non_business_page"); summary.candidateDiagnostics.weakPageRejected += 1; continue; }
       const scan = buildScanResult(lead, html);
-      await updateLead(env, lead.id, {
-        company_name: scan.companyName || null,
-        category: scan.leadClass as any,
-        country: scan.country || null,
-        region: scan.region || null,
-        contact_email: scan.contactEmail || null,
-        contact_page_url: scan.contactPageUrl || null,
-        has_contact_form: scan.hasContactForm ? 1 : 0,
-        signals_json: JSON.stringify(buildLeadSignals(scan)),
-        score_fit: scan.fitScore,
-        score_contact: scan.contactabilityScore,
-        score_risk: scan.riskScore,
-        score_total: scan.scoreTotal,
-        status: "scanned",
-      });
-      await bump(env, "leads_new_today", 1);
-      await bump(env, "crawl_scanned_today", 1);
-      await logEvent(env, "scan_ok", `Scanned ${lead.website_url} as ${scan.leadClass}`, lead.id);
-      summary.scanned += 1;
-    } catch (error) {
-      await updateLead(env, lead.id, { status: "failed" });
-      await logEvent(env, "scan_fail", `Error scanning ${lead.website_url}: ${String(error)}`, lead.id);
-      summary.failed += 1;
-    }
+      await updateLead(env, lead.id, { company_name: scan.companyName || null, category: scan.leadClass as any, country: scan.country || null, region: scan.region || null, contact_email: scan.contactEmail || null, contact_page_url: scan.contactPageUrl || null, has_contact_form: scan.hasContactForm ? 1 : 0, signals_json: JSON.stringify(buildLeadSignals(scan)), score_fit: scan.fitScore, score_contact: scan.contactabilityScore, score_risk: scan.riskScore, score_total: scan.scoreTotal, status: "scanned" });
+      await bump(env, "leads_new_today", 1); await bump(env, "crawl_scanned_today", 1); await logEvent(env, "scan_ok", `Scanned ${lead.website_url} as ${scan.leadClass}`, lead.id); summary.scanned += 1;
+    } catch (error) { await updateLead(env, lead.id, { status: "failed" }); await logEvent(env, "scan_fail", `Error scanning ${lead.website_url}: ${String(error)}`, lead.id); summary.failed += 1; }
   }
-
   summary.skipped = Math.max(0, refreshedLeads.length - processed.size);
   return summary;
 }
@@ -1034,7 +723,6 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
   const minimumScore = Number((await getSetting(env, "min_score_for_draft")) || 0.45);
   const leads = await listLeads(env, { status: "scanned", limit: maxItems * 5 });
   let drafted = 0;
-
   for (const lead of leads) {
     const signals = parseLeadSignals(lead) as any;
     const leadClass = String(signals.leadClass || lead.category || "general").toLowerCase();
@@ -1042,180 +730,93 @@ async function runDraft(env: Env, maxItems: number): Promise<number> {
     const opportunityType = String(signals.opportunityType || "");
     const strategy = String(signals.draftStrategy || "");
     const existingDraftCount = await draftCountForLead(env, lead.id);
-
     if (drafted >= maxItems) break;
     if ((lead.score_total || 0) < minimumScore) continue;
     if (strategy === "do_not_send" || opportunityType === "do_not_pitch") continue;
     if (qualityTier === "strong" && !["agency", "dev_shop", "marketing_agency", "ecommerce"].includes(leadClass)) continue;
     if (existingDraftCount >= 1) continue;
-
     try {
       const draft = buildDraftCopy(env, lead);
-      await insertDraft(env, {
-        leadId: lead.id,
-        mode: "heuristic",
-        subject: draft.subject,
-        bodyText: draft.bodyText,
-        followupText: draft.followupText,
-        whyJson: draft.whyJson,
-      });
+      await insertDraft(env, { leadId: lead.id, mode: "heuristic", subject: draft.subject, bodyText: draft.bodyText, followupText: draft.followupText, whyJson: draft.whyJson });
       await updateLead(env, lead.id, { status: "drafted" });
-      await bump(env, "drafts_created_today", 1);
-      await bump(env, "ai_calls", 1);
-      await logEvent(env, "draft_created", `Draft created for ${lead.website_url}`, lead.id);
-      drafted += 1;
-    } catch (error) {
-      await logEvent(env, "draft_fail", `Error drafting for ${lead.website_url}: ${String(error)}`, lead.id);
-    }
+      await bump(env, "drafts_created_today", 1); await bump(env, "ai_calls", 1); await logEvent(env, "draft_created", `Draft created for ${lead.website_url}`, lead.id); drafted += 1;
+    } catch (error) { await logEvent(env, "draft_fail", `Error drafting for ${lead.website_url}: ${String(error)}`, lead.id); }
   }
-
   return drafted;
 }
 
 async function runSend(env: Env, maxItems: number): Promise<{ sent: number; failed: number }> {
   const sendingEnabled = ((await getSetting(env, "sending_enabled")) || "0") === "1";
-  if (!sendingEnabled) {
-    await logEvent(env, "send_skip", "Sending disabled, skipping send stage.");
-    return { sent: 0, failed: 0 };
-  }
-
+  if (!sendingEnabled) { await logEvent(env, "send_skip", "Sending disabled, skipping send stage."); return { sent: 0, failed: 0 }; }
   const minimumScore = Number((await getSetting(env, "min_score_for_send")) || 0.65);
   const drafts = await listDrafts(env, { status: "approved", limit: maxItems });
-  let sent = 0;
-  let failed = 0;
-
+  let sent = 0; let failed = 0;
   for (const draft of drafts) {
     const lead = await getLeadById(env, draft.lead_id);
-    if (!lead) {
-      failed += 1;
-      await updateDraft(env, draft.id, { status: "failed" });
-      await logEvent(env, "send_fail", "Lead missing for approved draft", draft.lead_id);
-      continue;
-    }
-
-    if ((lead.score_total || 0) < minimumScore) {
-      await logEvent(env, "send_skip", "Lead below send threshold", lead.id);
-      continue;
-    }
-
+    if (!lead) { failed += 1; await updateDraft(env, draft.id, { status: "failed" }); await logEvent(env, "send_fail", "Lead missing for approved draft", draft.lead_id); continue; }
+    if ((lead.score_total || 0) < minimumScore) { await logEvent(env, "send_skip", "Lead below send threshold", lead.id); continue; }
     const toEmail = lead.contact_email?.trim().toLowerCase() || null;
-    if (!toEmail || (await isSuppressed(env, toEmail))) {
-      await logEvent(env, "send_skip", "Missing or suppressed email", lead.id);
-      continue;
-    }
-
+    if (!toEmail || (await isSuppressed(env, toEmail))) { await logEvent(env, "send_skip", "Missing or suppressed email", lead.id); continue; }
     try {
-      const result = await executeWithRetry(() =>
-        sendEmail(env, {
-          to: toEmail,
-          subject: draft.subject,
-          bodyText: draft.body_text,
-        })
-      );
-
-      if (result.ok) {
-        await updateDraft(env, draft.id, { status: "sent" });
-        await updateLead(env, lead.id, { status: "sent" });
-        await bump(env, "sends_sent_today", 1);
-        await logEvent(env, "send_ok", `Email sent to ${toEmail}`, lead.id);
-        sent += 1;
-      } else {
-        await updateDraft(env, draft.id, { status: "failed" });
-        await updateLead(env, lead.id, { status: "failed" });
-        await logEvent(env, "send_fail", result.error || "Unknown send error", lead.id);
-        failed += 1;
-      }
-    } catch (error) {
-      await updateDraft(env, draft.id, { status: "failed" });
-      await updateLead(env, lead.id, { status: "failed" });
-      await logEvent(env, "send_fail", String(error), lead.id);
-      failed += 1;
-    }
+      const result = await executeWithRetry(() => sendEmail(env, { to: toEmail, subject: draft.subject, bodyText: draft.body_text }));
+      if (result.ok) { await updateDraft(env, draft.id, { status: "sent" }); await updateLead(env, lead.id, { status: "sent" }); await bump(env, "sends_sent_today", 1); await logEvent(env, "send_ok", `Email sent to ${toEmail}`, lead.id); sent += 1; }
+      else { await updateDraft(env, draft.id, { status: "failed" }); await updateLead(env, lead.id, { status: "failed" }); await logEvent(env, "send_fail", result.error || "Unknown send error", lead.id); failed += 1; }
+    } catch (error) { await updateDraft(env, draft.id, { status: "failed" }); await updateLead(env, lead.id, { status: "failed" }); await logEvent(env, "send_fail", String(error), lead.id); failed += 1; }
   }
-
   return { sent, failed };
+}
+
+async function persistLastEngineRun(env: Env, payload: { runId: string; started_at_iso: string; scanned: number; expanded: number; skipped: number; skippedReasons: Record<string, number>; candidateDiagnostics: Record<string, unknown>; failed: number; drafted: number; sent: number; sendFailed: number; runMode: "tick" | "manual_scan" | "manual_draft" | "manual_send"; }): Promise<void> {
+  await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`).bind("last_engine_run", JSON.stringify(payload)).run();
 }
 
 export async function dailyTick(env: Env): Promise<void> {
   const engineEnabled = ((await getSetting(env, "engine_enabled")) || "1") !== "0";
   if (!engineEnabled) return;
-
   const token = await tryAcquireLock(env, "engine-cycle", 60 * 10);
   if (!token) return;
-
   const crawlCap = getCap((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY, 60);
   const draftCap = getCap((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY, 25);
   const sendCap = getCap((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY, 12);
-
-  const startedAt = nowISO();
-  const runId = uuid();
-  let scanSummary = emptySummary();
-  let drafted = 0;
-  let sendResult = { sent: 0, failed: 0 };
-
-  try {
-    await logEvent(env, "tick_ok", "Daily tick step started");
-    scanSummary = await runScan(env, Math.min(10, crawlCap));
-    const draftingEnabled = ((await getSetting(env, "drafting_enabled")) || "1") !== "0";
-    if (draftingEnabled) drafted = await runDraft(env, Math.min(10, draftCap));
-    sendResult = await runSend(env, Math.min(10, sendCap));
-    await logEvent(env, "tick_ok", `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`);
-  } catch (error) {
-    await logEvent(env, "tick_fail", String(error));
-  } finally {
-    await env.DB.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`)
-      .bind(
-        "last_engine_run",
-        JSON.stringify({
-          runId,
-          started_at_iso: startedAt,
-          scanned: scanSummary.scanned,
-          expanded: scanSummary.expanded,
-          skipped: scanSummary.skipped,
-          skippedReasons: scanSummary.skippedReasons,
-          candidateDiagnostics: scanSummary.candidateDiagnostics,
-          failed: scanSummary.failed,
-          drafted,
-          sent: sendResult.sent,
-          sendFailed: sendResult.failed,
-        })
-      ).run();
-    await releaseLock(env, "engine-cycle", token);
-  }
+  const startedAt = nowISO(); const runId = uuid(); let scanSummary = emptySummary(); let drafted = 0; let sendResult = { sent: 0, failed: 0 };
+  try { await logEvent(env, "tick_ok", "Daily tick step started"); scanSummary = await runScan(env, Math.min(10, crawlCap)); const draftingEnabled = ((await getSetting(env, "drafting_enabled")) || "1") !== "0"; if (draftingEnabled) drafted = await runDraft(env, Math.min(10, draftCap)); sendResult = await runSend(env, Math.min(10, sendCap)); await logEvent(env, "tick_ok", `Daily tick step finished | scanned ${scanSummary.scanned} | expanded ${scanSummary.expanded} | failed ${scanSummary.failed} | drafted ${drafted} | sent ${sendResult.sent}`); }
+  catch (error) { await logEvent(env, "tick_fail", String(error)); }
+  finally { await persistLastEngineRun(env, { runId, started_at_iso: startedAt, scanned: scanSummary.scanned, expanded: scanSummary.expanded, skipped: scanSummary.skipped, skippedReasons: scanSummary.skippedReasons, candidateDiagnostics: scanSummary.candidateDiagnostics, failed: scanSummary.failed, drafted, sent: sendResult.sent, sendFailed: sendResult.failed, runMode: "tick" }); await releaseLock(env, "engine-cycle", token); }
 }
 
 export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
   const token = await tryAcquireLock(env, "scan-only", 60 * 5);
   if (!token) return emptySummary();
+  const runId = uuid();
+  const startedAt = nowISO();
   try {
     const summary = await runScan(env, 10);
+    await persistLastEngineRun(env, { runId, started_at_iso: startedAt, scanned: summary.scanned, expanded: summary.expanded, skipped: summary.skipped, skippedReasons: summary.skippedReasons, candidateDiagnostics: summary.candidateDiagnostics, failed: summary.failed, drafted: 0, sent: 0, sendFailed: 0, runMode: "manual_scan" });
     await logEvent(env, "scan_ok", `Manual scan completed | scanned ${summary.scanned} | expanded ${summary.expanded} | failed ${summary.failed}`);
     return summary;
-  } finally {
-    await releaseLock(env, "scan-only", token);
-  }
+  } finally { await releaseLock(env, "scan-only", token); }
 }
 
 export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
   const token = await tryAcquireLock(env, "draft-only", 60 * 5);
   if (!token) return { drafted: 0 };
+  const runId = uuid(); const startedAt = nowISO();
   try {
     const drafted = await runDraft(env, 10);
+    await persistLastEngineRun(env, { runId, started_at_iso: startedAt, scanned: 0, expanded: 0, skipped: 0, skippedReasons: {}, candidateDiagnostics: emptySummary().candidateDiagnostics, failed: 0, drafted, sent: 0, sendFailed: 0, runMode: "manual_draft" });
     await logEvent(env, "draft_ok", `Manual draft completed | drafted ${drafted}`);
     return { drafted };
-  } finally {
-    await releaseLock(env, "draft-only", token);
-  }
+  } finally { await releaseLock(env, "draft-only", token); }
 }
 
 export async function runSendApproved(env: Env): Promise<{ sent: number; failed: number }> {
   const token = await tryAcquireLock(env, "send-only", 60 * 5);
   if (!token) return { sent: 0, failed: 0 };
+  const runId = uuid(); const startedAt = nowISO();
   try {
     const result = await runSend(env, 10);
+    await persistLastEngineRun(env, { runId, started_at_iso: startedAt, scanned: 0, expanded: 0, skipped: 0, skippedReasons: {}, candidateDiagnostics: emptySummary().candidateDiagnostics, failed: 0, drafted: 0, sent: result.sent, sendFailed: result.failed, runMode: "manual_send" });
     await logEvent(env, "send_ok", `Manual send completed | sent ${result.sent} | failed ${result.failed}`);
     return result;
-  } finally {
-    await releaseLock(env, "send-only", token);
-  }
+  } finally { await releaseLock(env, "send-only", token); }
 }

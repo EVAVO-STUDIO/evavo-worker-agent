@@ -410,7 +410,7 @@ function evaluateCandidateUrl(
   if (sourceCategory === "agency" && /(agency|studio|creative|web|design|development|marketing|digital)/i.test(domain)) score += 2;
   if (sourceCategory === "contractor" && /(build|construct|plumb|electric|roof|joinery|cabinet|glazing|concrete|landscape|civil)/i.test(domain)) score += 2;
   if (sourceCategory === "ecommerce" && /(shop|store|online|boutique|supply)/i.test(domain)) score += 2;
-  if (/\.com\.au$|\.net\.au$|\.org\.au$|\.co\.nz$|\.nz$/.test(domain)) score += 2;
+  if (/\.(com\.au|net\.au|org\.au|co\.nz|nz)$/.test(domain)) score += 2;
 
   let countryGuess = inferCountryGuess(normalizedUrl, domain);
   const neutralCommercialDomain = /\.(com|net|org|io|co|app|studio|agency|digital)$/i.test(domain);
@@ -1011,7 +1011,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
   let cursor = 0;
   summary.skipped = Math.max(0, allRecent.length - Math.min(queue.length, maxItems));
 
-  while (cursor < queue.length && processed.size < maxItems) {
+  while (cursor < queue.length && summary.scanned < maxItems) {
     const lead = queue[cursor++];
     if (processed.has(lead.id)) continue;
     processed.add(lead.id);
@@ -1053,8 +1053,8 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
         const expansion = await expandSourceLead(env, lead, summary);
         summary.expanded += expansion.inserted;
 
-        if (expansion.newLeadIds.length > 0 && processed.size < maxItems) {
-          const refreshed = await listLeads(env, { status: "new", limit: maxItems * 2 });
+        if (expansion.newLeadIds.length > 0 && summary.scanned < maxItems) {
+          const refreshed = await listLeads(env, { status: "new", limit: maxItems * 4 });
           const extraTargets = refreshed.filter((item) => expansion.newLeadIds.includes(item.id) && !isSourceLead(item));
           queue.push(...extraTargets);
         }

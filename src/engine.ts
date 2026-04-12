@@ -539,7 +539,11 @@ function cleanCompanyName(lead: LeadRow): string {
   return lead.company_name || signals.companyName || lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 }
 
-function buildDraftCopy(env: Env, lead: LeadRow) { /* unchanged body intentionally trimmed below */
+function lines(parts: Array<string | false | null | undefined>): string {
+  return parts.filter((part): part is string => Boolean(part)).join("\n");
+}
+
+function buildDraftCopy(env: Env, lead: LeadRow) {
   const signals = parseLeadSignals(lead) as any;
   const company = cleanCompanyName(lead);
   const domain = lead.website_url.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
@@ -548,16 +552,121 @@ function buildDraftCopy(env: Env, lead: LeadRow) { /* unchanged body intentional
   const problem = signals.problemSummary || "There may be a practical website opportunity here.";
   const leverage = signals.leverageSummary || "EVAVO should focus on practical improvement, not fluff.";
   const tone = String(signals.toneMode || "consultative");
-  if (signals.draftStrategy === "white_label_partnership" || signals.draftStrategy === "overflow_delivery_support") {
-    return { subject: `Quiet support for ${company} if overflow ever hits`, bodyText: [`Hi ${company},`,"",`I had a quick look through ${domain} and this felt more like a partner-fit conversation than a pitch about redoing your site.`, grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "","",`${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,`The angle here would be simple: ${angle.toLowerCase()}.`,`","If that is ever useful, I am happy to send a short note on where we tend to plug in.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case overflow or quiet implementation support is relevant at the moment.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }) };
+  const strategy = String(signals.draftStrategy || "light_teardown_offer");
+
+  if (strategy === "white_label_partnership" || strategy === "overflow_delivery_support") {
+    return {
+      subject: `Quiet support for ${company} if overflow ever hits`,
+      bodyText: lines([
+        `Hi ${company},`,
+        "",
+        `I had a quick look through ${domain} and this felt more like a partner-fit conversation than a pitch about redoing your site.`,
+        grounded.length ? `A couple of grounded things I picked up: ${grounded.join("; ")}.` : "",
+        "",
+        `${envBrandLine(env)} usually helps behind the scenes when agencies or dev teams need extra implementation capacity without adding permanent headcount.`,
+        `The angle here would be simple: ${angle.toLowerCase()}.`,
+        "",
+        "If that is ever useful, I am happy to send a short note on where we tend to plug in.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ]),
+      followupText: lines([
+        `Hi ${company},`,
+        "",
+        "Just following up in case overflow or quiet implementation support is relevant at the moment.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ]),
+      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy }),
+    };
   }
-  if (signals.draftStrategy === "contractor_lead_uplift" || signals.draftStrategy === "professional_service_uplift") {
-    return { subject: `A practical website idea for ${company}`, bodyText: [`Hi ${company},`,"",`I had a look through ${domain} and there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`, grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "","",problem, leverage, "", "If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case a short, practical teardown would be useful.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }) };
+
+  if (strategy === "contractor_lead_uplift" || strategy === "professional_service_uplift") {
+    return {
+      subject: `A practical website idea for ${company}`,
+      bodyText: lines([
+        `Hi ${company},`,
+        "",
+        `I had a look through ${domain} and there looks to be a practical opportunity to tighten how the site turns visits into enquiries.`,
+        grounded.length ? `One grounded thing that stood out was: ${grounded[0]}.` : "",
+        "",
+        problem,
+        leverage,
+        "",
+        "If useful, I can send through a short note with 2 or 3 specific improvements rather than a generic redesign pitch.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ]),
+      followupText: lines([
+        `Hi ${company},`,
+        "",
+        "Just following up in case a short, practical teardown would be useful.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ]),
+      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy }),
+    };
   }
-  if (signals.draftStrategy === "ecommerce_conversion_offer") {
-    return { subject: `A conversion idea for ${company}`, bodyText: [`Hi ${company},`,"",`I had a look through ${domain} and this feels more like a conversion and clarity opportunity than a redesign-for-the-sake-of-it situation.`, grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "","",problem, leverage, "", "If useful, I can send a short teardown focused on what is most likely to lift trust or action.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case a conversion-focused teardown would be useful.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy }) };
+
+  if (strategy === "ecommerce_conversion_offer") {
+    return {
+      subject: `A conversion idea for ${company}`,
+      bodyText: lines([
+        `Hi ${company},`,
+        "",
+        `I had a look through ${domain} and this feels more like a conversion and clarity opportunity than a redesign-for-the-sake-of-it situation.`,
+        grounded.length ? `A grounded signal here was: ${grounded[0]}.` : "",
+        "",
+        problem,
+        leverage,
+        "",
+        "If useful, I can send a short teardown focused on what is most likely to lift trust or action.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ]),
+      followupText: lines([
+        `Hi ${company},`,
+        "",
+        "Just following up in case a conversion-focused teardown would be useful.",
+        "",
+        "Best,",
+        envBrandLine(env),
+      ]),
+      whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy }),
+    };
   }
-  return { subject: `A practical idea for ${company}`, bodyText: [`Hi ${company},`,"",`I had a look through ${domain} and there may be a worthwhile improvement opportunity there.`, grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "","",problem, leverage, "", "If useful, I can send a short note with specific suggestions.","","Best,",envBrandLine(env)].filter(Boolean).join("\n"), followupText: [`Hi ${company},`,"","Just following up in case a short, specific teardown would be useful.","","Best,",envBrandLine(env)].join("\n"), whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy: signals.draftStrategy || "light_teardown_offer" }) };
+
+  return {
+    subject: `A practical idea for ${company}`,
+    bodyText: lines([
+      `Hi ${company},`,
+      "",
+      `I had a look through ${domain} and there may be a worthwhile improvement opportunity there.`,
+      grounded.length ? `A couple of grounded things I noticed: ${grounded.join("; ")}.` : "",
+      "",
+      problem,
+      leverage,
+      "",
+      "If useful, I can send a short note with specific suggestions.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ]),
+    followupText: lines([
+      `Hi ${company},`,
+      "",
+      "Just following up in case a short, specific teardown would be useful.",
+      "",
+      "Best,",
+      envBrandLine(env),
+    ]),
+    whyJson: JSON.stringify({ company, tone, angle, problem, leverage, groundedFacts: grounded, strategy }),
+  };
 }
 
 async function executeWithRetry<T>(task: () => Promise<T>, maxRetries = 3, baseDelayMs = 300): Promise<T> {

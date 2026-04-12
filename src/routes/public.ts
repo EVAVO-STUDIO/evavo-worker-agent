@@ -1,3 +1,4 @@
+
 import { Env, getSetting, listEvents, listLeads, parseLeadSignals } from "../db";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -28,6 +29,12 @@ function inferKind(lead: any): string {
   return "general";
 }
 
+function parseMaybeJson(raw: any) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(String(raw)); } catch { return null; }
+}
+
 export async function handlePublic(
   request: Request,
   env: Env,
@@ -45,6 +52,7 @@ export async function handlePublic(
 
   if (pathname === "/public/status" && request.method === "GET") {
     const leads = await listLeads(env, { limit: 500 });
+    const events = await listEvents(env, 12);
     const segments: Record<string, number> = {};
 
     for (const lead of leads) {
@@ -58,6 +66,10 @@ export async function handlePublic(
       .slice(0, 4)
       .map(([label, value]) => ({ label, value }));
 
+    const lastRunRaw = await getSetting(env, "last_engine_run");
+    const lastRun = parseMaybeJson(lastRunRaw);
+    const latestEventISO = Array.isArray(events) && events.length ? events[0]?.created_at_iso || null : null;
+
     return json({
       ok: true,
       nowISO: new Date().toISOString(),
@@ -65,7 +77,11 @@ export async function handlePublic(
         enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
         sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") === "1",
         pausedReason: "",
-        lastRun: await getSetting(env, "last_engine_run"),
+        lastRun: lastRunRaw,
+        snapshotLag:
+          Boolean(lastRun?.started_at_iso) &&
+          Boolean(latestEventISO) &&
+          new Date(String(latestEventISO)).getTime() > new Date(String(lastRun?.started_at_iso)).getTime(),
       },
       budgets: {
         crawl: {
@@ -92,6 +108,8 @@ export async function handlePublic(
         qualifiedLeads: leads.filter((l) => Number(l.score_total || 0) >= 0.45).length,
       },
       topSlices,
+      latestEventISO,
+      publicEventsCount: events.length,
     });
   }
 

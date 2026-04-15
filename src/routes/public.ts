@@ -40,6 +40,38 @@ function parseMaybeJson(raw: any) {
   }
 }
 
+function buildEventSnapshot(event: any) {
+  const message = String(event?.message || "");
+  const scanned = Number(message.match(/scanned (\d+)/i)?.[1] || 0);
+  const expanded = Number(message.match(/expanded (\d+)/i)?.[1] || 0);
+  const failed = Number(message.match(/failed (\d+)/i)?.[1] || 0);
+  const drafted = Number(message.match(/drafted (\d+)/i)?.[1] || 0);
+  const sent = Number(message.match(/sent (\d+)/i)?.[1] || 0);
+
+  let runMode: "tick" | "manual_scan" | "manual_draft" | "manual_send" = "tick";
+  const type = String(event?.type || "");
+  if (type === "scan_ok") runMode = "manual_scan";
+  else if (type === "draft_ok") runMode = "manual_draft";
+  else if (type === "send_ok") runMode = "manual_send";
+
+  return {
+    runId: event?.id || null,
+    started_at_iso: event?.created_at_iso || null,
+    completed_at_iso: event?.created_at_iso || null,
+    scanned,
+    expanded,
+    skipped: 0,
+    skippedReasons: {},
+    candidateDiagnostics: {},
+    failed,
+    drafted,
+    sent,
+    sendFailed: 0,
+    runMode,
+    inferredFromEvent: true,
+  };
+}
+
 export async function handlePublic(
   request: Request,
   env: Env,
@@ -72,12 +104,20 @@ export async function handlePublic(
       .map(([label, value]) => ({ label, value }));
 
     const lastRunRaw = await getSetting(env, "last_engine_run");
-    const lastRun = parseMaybeJson(lastRunRaw);
-    const latestEventISO = Array.isArray(events) && events.length ? events[0]?.created_at_iso || null : null;
+    const storedLastRun = parseMaybeJson(lastRunRaw);
+    const latestEvent = Array.isArray(events) && events.length ? events[0] : null;
+    const latestEventISO = latestEvent?.created_at_iso || null;
+
+    let lastRun = storedLastRun;
+    if (!lastRun && latestEvent) {
+      lastRun = buildEventSnapshot(latestEvent);
+    }
+
+    const completedIso = lastRun?.completed_at_iso || lastRun?.started_at_iso || null;
     const snapshotLag =
-      Boolean(lastRun?.started_at_iso) &&
+      Boolean(completedIso) &&
       Boolean(latestEventISO) &&
-      new Date(String(latestEventISO)).getTime() > new Date(String(lastRun?.started_at_iso)).getTime();
+      new Date(String(latestEventISO)).getTime() > new Date(String(completedIso)).getTime();
 
     return json({
       ok: true,

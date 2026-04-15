@@ -77,6 +77,7 @@ export interface ScanRunSummary {
     sourcePagesRetried: number;
     assetRejected: number;
     weakPageRejected: number;
+    autoSeededSources: number;
   };
 }
 
@@ -112,6 +113,15 @@ interface ScanResult {
   region?: string | null;
 }
 
+type SourceSeed = {
+  url: string;
+  label: string;
+  type: "directory";
+  category: string;
+  country: "AU" | "NZ";
+  region?: string | null;
+};
+
 const MARKETPLACE_ROOTS = new Set(["hipages.com.au", "truelocal.com.au", "yellowpages.com.au"]);
 const BAD_DOMAIN_EXACT = new Set([
   "gstatic.com",
@@ -130,6 +140,7 @@ const ASSET_EXTENSIONS = /\.(?:jpg|jpeg|png|gif|webp|svg|ico|pdf|docx?|xlsx?|css
 const SOURCE_RETRY_HOURS = 8;
 const SOURCE_REFRESH_HOURS = 72;
 const SOURCE_MAX_EMPTY_ATTEMPTS = 4;
+const AUTO_SEED_TARGET = 10;
 
 function emptySummary(): ScanRunSummary {
   return {
@@ -154,6 +165,7 @@ function emptySummary(): ScanRunSummary {
       sourcePagesRetried: 0,
       assetRejected: 0,
       weakPageRejected: 0,
+      autoSeededSources: 0,
     },
   };
 }
@@ -357,7 +369,7 @@ function extractCandidateProfileUrls(sourceUrl: string, html: string): { urls: s
     if (/\/find(\/|$)/i.test(u)) return false;
     if (isHardNoiseUrl(u)) return false;
     if (isInternalMarketplaceProfileNoise(u)) return false;
-    return /(business|connect|-\d+$)/i.test(u);
+    return /(business|connect|-?\d+$)/i.test(u);
   });
 
   return { urls: Array.from(new Set(fallback)).slice(0, 80), fallbackUsed: fallback.length > 0 };
@@ -437,7 +449,7 @@ function classifyLead(domain: string, html: string, title: string, description: 
     opportunityType = qualityTier === "weak" || qualityTier === "missing" ? "site_rebuild" : "lead_flow_uplift";
     draftStrategy = "contractor_lead_uplift";
     toneMode = "direct";
-  } else if (leadClass === "professional_service") {
+  } else if (leadClass === "professional_service" || leadClass === "industrial") {
     opportunityType = qualityTier === "weak" || qualityTier === "missing" ? "site_rebuild" : "lead_flow_uplift";
     draftStrategy = "professional_service_uplift";
     toneMode = "consultative";
@@ -456,7 +468,7 @@ function classifyLead(domain: string, html: string, title: string, description: 
   return { leadClass, opportunityType, qualityTier, draftStrategy, toneMode, serviceTags, techTags };
 }
 
-function deriveScores(input: { leadClass: LeadClass; qualityTier: QualityTier; opportunityType: OpportunityType; hasContactForm: boolean; contactEmail?: string; html: string; }) {
+function deriveScores(input: { leadClass: LeadClass; qualityTier: QualityTier; opportunityType: OpportunityType; hasContactForm: boolean; contactEmail?: string; }) {
   let fit = 0.35;
   let contact = 0.2;
   let risk = 0.08;
@@ -485,7 +497,7 @@ function deriveScores(input: { leadClass: LeadClass; qualityTier: QualityTier; o
 function buildProblemSummary(leadClass: LeadClass, qualityTier: QualityTier) {
   if (leadClass === "agency" || leadClass === "dev_shop" || leadClass === "marketing_agency") return "This looks more like a partnership or overflow opportunity than a redesign target.";
   if (leadClass === "ecommerce") return "The likely value here is conversion improvement, not surface-level redesign work.";
-  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") {
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service" || leadClass === "industrial") {
     return qualityTier === "weak" || qualityTier === "missing"
       ? "The site likely undersells trust and enquiry flow."
       : "The site may be leaving enquiry quality and conversion clarity on the table.";
@@ -499,7 +511,7 @@ function buildLeverageSummary(leadClass: LeadClass, opportunityType: Opportunity
   if (opportunityType === "white_label_partnership") return "EVAVO should position as quiet implementation capacity behind the scenes.";
   if (opportunityType === "overflow_delivery_support") return "EVAVO should position as overflow support that helps delivery teams move faster.";
   if (leadClass === "ecommerce") return "EVAVO should focus on conversion, clarity, and practical revenue lift.";
-  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return "EVAVO should focus on trust, enquiries, and cleaner conversion paths.";
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service" || leadClass === "industrial") return "EVAVO should focus on trust, enquiries, and cleaner conversion paths.";
   return "EVAVO should use a short, grounded teardown angle.";
 }
 
@@ -515,7 +527,7 @@ function buildRecommendedAngle(opportunityType: OpportunityType) {
 function buildOutreachAngles(leadClass: LeadClass, opportunityType: OpportunityType): string[] {
   if (opportunityType === "white_label_partnership") return ["support overflow delivery", "offer white-label implementation capacity", "help quietly behind the scenes"];
   if (opportunityType === "overflow_delivery_support") return ["help with production overflow", "support delivery under capacity pressure", "add implementation support without headcount"];
-  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service") return ["make the site clearer for inbound enquiries", "improve trust and lead capture", "tighten contact pathways"];
+  if (leadClass === "contractor" || leadClass === "local_service" || leadClass === "professional_service" || leadClass === "industrial") return ["make the site clearer for inbound enquiries", "improve trust and lead capture", "tighten contact pathways"];
   if (leadClass === "ecommerce") return ["improve conversion flow", "tighten product page clarity", "lift trust and checkout performance"];
   if (opportunityType === "site_rebuild") return ["refresh positioning and structure", "improve mobile clarity", "rebuild around conversion and trust"];
   return ["tighten positioning and site performance"];
@@ -607,7 +619,7 @@ function buildDraftCopy(env: Env, lead: LeadRow) {
     };
   }
 
-  if (strategy === "contractor_lead_uplift" || strategy === "professional_service_uplift") {
+  if (strategy === "contractor_lead_uplift" || strategy === "professional_service_uplift" || strategy === "site_rebuild_offer") {
     return {
       subject: `A practical website idea for ${company}`,
       bodyText: lines([
@@ -771,6 +783,78 @@ function shouldRetrySourceLead(lead: LeadRow): boolean {
   return isStale && (status === "failed" || status === "do_not_contact");
 }
 
+function buildDefaultSourceSeeds(countriesRaw: string | undefined): SourceSeed[] {
+  const allowed = new Set(
+    String(countriesRaw || "AU,NZ")
+      .split(",")
+      .map((v) => v.trim().toUpperCase())
+      .filter(Boolean)
+  );
+
+  const seeds: SourceSeed[] = [];
+  if (allowed.has("AU")) {
+    seeds.push(
+      { url: "https://www.yellowpages.com.au/find/web-site-design-services/vic", label: "Yellow Pages AU", type: "directory", category: "agency", country: "AU", region: "VIC" },
+      { url: "https://www.truelocal.com.au/find/web-design/melbourne-vic", label: "True Local AU", type: "directory", category: "agency", country: "AU", region: "VIC" },
+      { url: "https://www.truelocal.com.au/find/online-store", label: "True Local AU", type: "directory", category: "ecommerce", country: "AU" },
+      { url: "https://www.yellowpages.com.au/find/builders-building-contractors/vic", label: "Yellow Pages AU", type: "directory", category: "contractor", country: "AU", region: "VIC" },
+      { url: "https://www.yellowpages.com.au/find/plumbers-gas-fitters/vic", label: "Yellow Pages AU", type: "directory", category: "contractor", country: "AU", region: "VIC" },
+      { url: "https://www.yellowpages.com.au/find/electricians-electrical-contractors/vic", label: "Yellow Pages AU", type: "directory", category: "contractor", country: "AU", region: "VIC" },
+      { url: "https://hipages.com.au/find/builders/vic", label: "hipages AU", type: "directory", category: "contractor", country: "AU", region: "VIC" }
+    );
+  }
+  if (allowed.has("NZ")) {
+    seeds.push(
+      { url: "https://www.yellow.co.nz/find/building-contractors/auckland-region", label: "Yellow NZ", type: "directory", category: "contractor", country: "NZ", region: "Auckland" },
+      { url: "https://www.yellow.co.nz/find/web-design", label: "Yellow NZ", type: "directory", category: "agency", country: "NZ" }
+    );
+  }
+  return seeds;
+}
+
+async function ensureDiscoverySeedPool(env: Env, leads: LeadRow[], summary: ScanRunSummary): Promise<number> {
+  const currentSourceUrls = new Set(
+    leads.filter(isSourceLead).map((lead) => normalizeWebsite(lead.website_url))
+  );
+  const currentSourceCount = currentSourceUrls.size;
+  if (currentSourceCount >= AUTO_SEED_TARGET) return 0;
+
+  const seeds = buildDefaultSourceSeeds(env.BRAND_COUNTRIES);
+  let inserted = 0;
+
+  for (const seed of seeds) {
+    if (inserted + currentSourceCount >= AUTO_SEED_TARGET) break;
+    const normalized = normalizeWebsite(seed.url);
+    if (currentSourceUrls.has(normalized)) continue;
+    try {
+      await insertLead(env, {
+        websiteUrl: normalized,
+        discoverySource: `directory:auto_seed:${seed.label}`,
+        category: seed.category,
+        country: seed.country,
+        region: seed.region || null,
+        signalsJson: JSON.stringify({
+          autoSeeded: true,
+          seedLabel: seed.label,
+          seedCategory: seed.category,
+          seedCountry: seed.country,
+        }),
+      });
+      currentSourceUrls.add(normalized);
+      inserted += 1;
+    } catch {
+      continue;
+    }
+  }
+
+  if (inserted > 0) {
+    summary.candidateDiagnostics.autoSeededSources += inserted;
+    await logEvent(env, "source_seeded", `Auto-seeded ${inserted} discovery sources to keep the worker supplied.`);
+  }
+
+  return inserted;
+}
+
 async function requeueDeadSources(env: Env, leads: LeadRow[], maxToRequeue = 8): Promise<number> {
   let count = 0;
   for (const lead of leads) {
@@ -817,7 +901,7 @@ async function expandSourceLead(env: Env, lead: LeadRow, summary: ScanRunSummary
     return { inserted: 0, newLeadIds: [] };
   }
 
-  const existingLeads = await listLeads(env, { limit: 800 });
+  const existingLeads = await listLeads(env, { limit: 1200 });
   const existingDomains = new Set(existingLeads.map((item) => getDomain(item.website_url)));
   const extracted = extractCandidateProfileUrls(lead.website_url, html);
   const profileUrls = extracted.urls;
@@ -933,7 +1017,6 @@ function buildScanResult(lead: LeadRow, html: string): ScanResult {
     opportunityType: classified.opportunityType,
     hasContactForm,
     contactEmail,
-    html,
   });
 
   return {
@@ -954,7 +1037,7 @@ function buildScanResult(lead: LeadRow, html: string): ScanResult {
         ? "Commerce lead that likely suits a conversion-focused offer."
         : classified.leadClass === "contractor" || classified.leadClass === "local_service"
         ? "Service-business lead where practical website uplift may improve enquiry flow."
-        : classified.leadClass === "professional_service"
+        : classified.leadClass === "professional_service" || classified.leadClass === "industrial"
         ? "Professional-service lead where clearer trust and contact flow may matter."
         : "General lead with some improvement potential.",
     contactEmail,
@@ -998,16 +1081,19 @@ export async function scanWebsiteNow(env: Env, websiteInput: string): Promise<Le
 }
 
 async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
-  const allRecent = await listLeads(env, { limit: 400 });
+  let refreshedLeads = await listLeads(env, { limit: 600 });
   const summary = emptySummary();
 
   const cleanedMarketplaceTargets = await cleanMarketplaceTargetNoise(
     env,
-    allRecent.filter((lead) => ["new", "failed"].includes(String(lead.status || "")))
+    refreshedLeads.filter((lead) => ["new", "failed"].includes(String(lead.status || "")))
   );
   if (cleanedMarketplaceTargets > 0) summary.candidateDiagnostics.marketplaceSkipped += cleanedMarketplaceTargets;
 
-  let refreshedLeads = await listLeads(env, { limit: 400 });
+  refreshedLeads = await listLeads(env, { limit: 600 });
+  await ensureDiscoverySeedPool(env, refreshedLeads, summary);
+  refreshedLeads = await listLeads(env, { limit: 600 });
+
   let eligible = refreshedLeads.filter((lead) => {
     const domain = getDomain(lead.website_url || "");
     if (isBadDomain(domain)) {
@@ -1024,7 +1110,9 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
   if (eligible.length === 0) {
     const requeued = await requeueDeadSources(env, refreshedLeads, 8);
     summary.candidateDiagnostics.requeuedSources = requeued;
-    refreshedLeads = await listLeads(env, { limit: 400 });
+    refreshedLeads = await listLeads(env, { limit: 600 });
+    await ensureDiscoverySeedPool(env, refreshedLeads, summary);
+    refreshedLeads = await listLeads(env, { limit: 600 });
     eligible = refreshedLeads.filter((lead) => lead.status === "new" || shouldRetrySourceLead(lead));
   }
 
@@ -1035,7 +1123,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       if (aSource !== bSource) return aSource - bSource;
       return (b.score_total || 0) - (a.score_total || 0);
     })
-    .slice(0, maxItems * 4);
+    .slice(0, maxItems * 10);
 
   const processed = new Set<string>();
 
@@ -1078,7 +1166,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
         const expansion = await expandSourceLead(env, lead, summary);
         summary.expanded += expansion.inserted;
         if (expansion.newLeadIds.length > 0) {
-          const fresh = await listLeads(env, { status: "new", limit: maxItems * 8 });
+          const fresh = await listLeads(env, { status: "new", limit: maxItems * 12 });
           const insertedTargets = fresh.filter((item) => expansion.newLeadIds.includes(item.id) && !isSourceLead(item));
           queue.unshift(...insertedTargets);
         }
@@ -1094,6 +1182,12 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
       }
 
       const scan = buildScanResult(lead, html);
+      if (scan.scoreTotal < 0.35 || scan.opportunityType === "do_not_pitch") {
+        await markExcludedLead(env, lead, scan.opportunityType === "do_not_pitch" ? "do_not_pitch" : "low_value_target");
+        summary.candidateDiagnostics.lowScoreSkipped += 1;
+        continue;
+      }
+
       await updateLead(env, lead.id, {
         company_name: scan.companyName || null,
         category: scan.leadClass as any,
@@ -1126,7 +1220,7 @@ async function runScan(env: Env, maxItems: number): Promise<ScanRunSummary> {
 
 async function runDraft(env: Env, maxItems: number): Promise<number> {
   const minimumScore = Number((await getSetting(env, "min_score_for_draft")) || 0.45);
-  const leads = await listLeads(env, { status: "scanned", limit: maxItems * 5 });
+  const leads = await listLeads(env, { status: "scanned", limit: maxItems * 8 });
   let drafted = 0;
 
   for (const lead of leads) {
@@ -1230,6 +1324,7 @@ async function persistLastEngineRun(
   payload: {
     runId: string;
     started_at_iso: string;
+    completed_at_iso: string;
     scanned: number;
     expanded: number;
     skipped: number;
@@ -1281,6 +1376,7 @@ export async function dailyTick(env: Env): Promise<void> {
     await persistLastEngineRun(env, {
       runId,
       started_at_iso: startedAt,
+      completed_at_iso: nowISO(),
       scanned: scanSummary.scanned,
       expanded: scanSummary.expanded,
       skipped: scanSummary.skipped,
@@ -1308,6 +1404,7 @@ export async function runScanOnce(env: Env): Promise<ScanRunSummary> {
     await persistLastEngineRun(env, {
       runId,
       started_at_iso: startedAt,
+      completed_at_iso: nowISO(),
       scanned: summary.scanned,
       expanded: summary.expanded,
       skipped: summary.skipped,
@@ -1338,6 +1435,7 @@ export async function runDraftOnce(env: Env): Promise<{ drafted: number }> {
     await persistLastEngineRun(env, {
       runId,
       started_at_iso: startedAt,
+      completed_at_iso: nowISO(),
       scanned: 0,
       expanded: 0,
       skipped: 0,
@@ -1368,6 +1466,7 @@ export async function runSendApproved(env: Env): Promise<{ sent: number; failed:
     await persistLastEngineRun(env, {
       runId,
       started_at_iso: startedAt,
+      completed_at_iso: nowISO(),
       scanned: 0,
       expanded: 0,
       skipped: 0,

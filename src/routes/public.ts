@@ -1,4 +1,3 @@
-
 import { Env, getSetting, listEvents, listLeads, parseLeadSignals } from "../db";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -72,6 +71,38 @@ function buildEmptyDiagnostics() {
   };
 }
 
+function sanitizeRunSnapshot(input: any) {
+  if (!input || typeof input !== "object") return null;
+  const hasAnyMetric =
+    typeof input.scanned !== "undefined" ||
+    typeof input.expanded !== "undefined" ||
+    typeof input.failed !== "undefined" ||
+    typeof input.drafted !== "undefined" ||
+    typeof input.sent !== "undefined";
+
+  if (!hasAnyMetric) return null;
+
+  return {
+    runId: String(input.runId || ""),
+    started_at_iso: input.started_at_iso || input.startedAtISO || null,
+    completed_at_iso: input.completed_at_iso || input.completedAtISO || input.started_at_iso || null,
+    scanned: parseIntSafe(input.scanned),
+    expanded: parseIntSafe(input.expanded),
+    skipped: parseIntSafe(input.skipped),
+    skippedReasons: input.skippedReasons && typeof input.skippedReasons === "object" ? input.skippedReasons : {},
+    candidateDiagnostics:
+      input.candidateDiagnostics && typeof input.candidateDiagnostics === "object"
+        ? { ...buildEmptyDiagnostics(), ...input.candidateDiagnostics }
+        : buildEmptyDiagnostics(),
+    failed: parseIntSafe(input.failed),
+    drafted: parseIntSafe(input.drafted),
+    sent: parseIntSafe(input.sent),
+    sendFailed: parseIntSafe(input.sendFailed),
+    runMode: String(input.runMode || input.mode || "tick"),
+    derivedFromEvents: Boolean(input.derivedFromEvents),
+  };
+}
+
 function snapshotFromEvent(event: any) {
   if (!event?.type || !event?.message) return null;
   const lowerType = String(event.type).toLowerCase();
@@ -82,46 +113,46 @@ function snapshotFromEvent(event: any) {
   const draftMatch = msg.match(/drafted\s+(\d+)/i);
   const sendMatch = msg.match(/sent\s+(\d+)(?:\s+\|\s+failed\s+(\d+))?/i);
 
-  if (lowerType === "tick_ok" && tickMatch) {
-    return {
+  if (lowerType === "tick_ok" && /finished/i.test(msg) && tickMatch) {
+    return sanitizeRunSnapshot({
       runId: `derived:${event.id}`,
       started_at_iso: event.created_at_iso,
       completed_at_iso: event.created_at_iso,
-      scanned: parseIntSafe(tickMatch[1]),
-      expanded: parseIntSafe(tickMatch[2]),
+      scanned: tickMatch[1],
+      expanded: tickMatch[2],
       skipped: 0,
       skippedReasons: {},
       candidateDiagnostics: buildEmptyDiagnostics(),
-      failed: parseIntSafe(tickMatch[3]),
-      drafted: parseIntSafe(tickMatch[4]),
-      sent: parseIntSafe(tickMatch[5]),
+      failed: tickMatch[3],
+      drafted: tickMatch[4],
+      sent: tickMatch[5],
       sendFailed: 0,
       runMode: "tick",
       derivedFromEvents: true,
-    };
+    });
   }
 
   if (lowerType === "scan_ok" && /manual scan completed/i.test(msg) && scanMatch) {
-    return {
+    return sanitizeRunSnapshot({
       runId: `derived:${event.id}`,
       started_at_iso: event.created_at_iso,
       completed_at_iso: event.created_at_iso,
-      scanned: parseIntSafe(scanMatch[1]),
-      expanded: parseIntSafe(scanMatch[2]),
+      scanned: scanMatch[1],
+      expanded: scanMatch[2],
       skipped: 0,
       skippedReasons: {},
       candidateDiagnostics: buildEmptyDiagnostics(),
-      failed: parseIntSafe(scanMatch[3]),
+      failed: scanMatch[3],
       drafted: 0,
       sent: 0,
       sendFailed: 0,
       runMode: "manual_scan",
       derivedFromEvents: true,
-    };
+    });
   }
 
-  if (lowerType === "draft_ok" && draftMatch) {
-    return {
+  if (lowerType === "draft_ok" && /manual draft completed/i.test(msg) && draftMatch) {
+    return sanitizeRunSnapshot({
       runId: `derived:${event.id}`,
       started_at_iso: event.created_at_iso,
       completed_at_iso: event.created_at_iso,
@@ -131,16 +162,16 @@ function snapshotFromEvent(event: any) {
       skippedReasons: {},
       candidateDiagnostics: buildEmptyDiagnostics(),
       failed: 0,
-      drafted: parseIntSafe(draftMatch[1]),
+      drafted: draftMatch[1],
       sent: 0,
       sendFailed: 0,
       runMode: "manual_draft",
       derivedFromEvents: true,
-    };
+    });
   }
 
   if ((lowerType === "send_ok" || lowerType === "send_skip") && sendMatch) {
-    return {
+    return sanitizeRunSnapshot({
       runId: `derived:${event.id}`,
       started_at_iso: event.created_at_iso,
       completed_at_iso: event.created_at_iso,
@@ -151,20 +182,30 @@ function snapshotFromEvent(event: any) {
       candidateDiagnostics: buildEmptyDiagnostics(),
       failed: 0,
       drafted: 0,
-      sent: parseIntSafe(sendMatch[1]),
-      sendFailed: parseIntSafe(sendMatch[2]),
+      sent: sendMatch[1],
+      sendFailed: sendMatch[2],
       runMode: "manual_send",
       derivedFromEvents: true,
-    };
+    });
   }
 
   return null;
 }
 
+function findDerivedSnapshot(events: any[]) {
+  if (!Array.isArray(events)) return null;
+  for (const event of events) {
+    const snapshot = snapshotFromEvent(event);
+    if (snapshot) return snapshot;
+  }
+  return null;
+}
+
 function resolveLastRun(lastRunRaw: any, events: any[]) {
-  const stored = parseMaybeJson(lastRunRaw);
+  const stored = sanitizeRunSnapshot(parseMaybeJson(lastRunRaw));
+  const derived = findDerivedSnapshot(events);
   const latestEvent = Array.isArray(events) && events.length ? events[0] : null;
-  const derived = Array.isArray(events) ? events.map(snapshotFromEvent).find(Boolean) || null : null;
+  const latestEventMs = toMs(latestEvent?.created_at_iso);
 
   if (!stored && derived) {
     return { lastRun: derived, snapshotLag: false, derivedFromEvents: true };
@@ -174,12 +215,14 @@ function resolveLastRun(lastRunRaw: any, events: any[]) {
     return { lastRun: null, snapshotLag: false, derivedFromEvents: false };
   }
 
-  const storedMs = Math.max(toMs((stored as any).completed_at_iso), toMs((stored as any).started_at_iso));
-  const latestEventMs = toMs(latestEvent?.created_at_iso);
+  const storedMs = Math.max(toMs(stored.completed_at_iso), toMs(stored.started_at_iso));
   const stale = Boolean(latestEventMs && storedMs && latestEventMs > storedMs);
 
-  if (stale && derived && toMs((derived as any).completed_at_iso) >= storedMs) {
-    return { lastRun: derived, snapshotLag: true, derivedFromEvents: true };
+  if (stale && derived) {
+    const derivedMs = Math.max(toMs(derived.completed_at_iso), toMs(derived.started_at_iso));
+    if (derivedMs >= storedMs) {
+      return { lastRun: derived, snapshotLag: true, derivedFromEvents: true };
+    }
   }
 
   return { lastRun: stored, snapshotLag: stale, derivedFromEvents: false };

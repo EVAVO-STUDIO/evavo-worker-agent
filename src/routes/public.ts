@@ -22,6 +22,7 @@ function inferKind(lead: any): string {
     category: lead.category || "",
     signals_json: lead.signals_json || "",
   }).toLowerCase();
+
   if (/(agency|studio|creative|branding|white label|partner|developers|software studio)/.test(hay)) return "agency";
   if (/(builder|construction|joinery|cabinet|plumber|electrician|roofing|glazing|concrete|carpentry|landscap|civil contractor|earthworks|fabrication|dentist|lawyer|accountant|clinic|cleaning|mechanic)/.test(hay)) return "service";
   if (/(ecommerce|shopify|checkout|cart|product)/.test(hay)) return "ecommerce";
@@ -32,7 +33,11 @@ function inferKind(lead: any): string {
 function parseMaybeJson(raw: any) {
   if (!raw) return null;
   if (typeof raw === "object") return raw;
-  try { return JSON.parse(String(raw)); } catch { return null; }
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return null;
+  }
 }
 
 export async function handlePublic(
@@ -53,8 +58,8 @@ export async function handlePublic(
   if (pathname === "/public/status" && request.method === "GET") {
     const leads = await listLeads(env, { limit: 500 });
     const events = await listEvents(env, 12);
-    const segments: Record<string, number> = {};
 
+    const segments: Record<string, number> = {};
     for (const lead of leads) {
       const signals = parseLeadSignals(lead) as any;
       const key = signals.leadClass || inferKind(lead);
@@ -69,6 +74,10 @@ export async function handlePublic(
     const lastRunRaw = await getSetting(env, "last_engine_run");
     const lastRun = parseMaybeJson(lastRunRaw);
     const latestEventISO = Array.isArray(events) && events.length ? events[0]?.created_at_iso || null : null;
+    const snapshotLag =
+      Boolean(lastRun?.started_at_iso) &&
+      Boolean(latestEventISO) &&
+      new Date(String(latestEventISO)).getTime() > new Date(String(lastRun?.started_at_iso)).getTime();
 
     return json({
       ok: true,
@@ -77,11 +86,8 @@ export async function handlePublic(
         enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
         sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") === "1",
         pausedReason: "",
-        lastRun: lastRunRaw,
-        snapshotLag:
-          Boolean(lastRun?.started_at_iso) &&
-          Boolean(latestEventISO) &&
-          new Date(String(latestEventISO)).getTime() > new Date(String(lastRun?.started_at_iso)).getTime(),
+        lastRun,
+        snapshotLag,
       },
       budgets: {
         crawl: {

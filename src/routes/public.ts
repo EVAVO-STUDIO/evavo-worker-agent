@@ -40,36 +40,149 @@ function parseMaybeJson(raw: any) {
   }
 }
 
-function buildEventSnapshot(event: any) {
-  const message = String(event?.message || "");
-  const scanned = Number(message.match(/scanned (\d+)/i)?.[1] || 0);
-  const expanded = Number(message.match(/expanded (\d+)/i)?.[1] || 0);
-  const failed = Number(message.match(/failed (\d+)/i)?.[1] || 0);
-  const drafted = Number(message.match(/drafted (\d+)/i)?.[1] || 0);
-  const sent = Number(message.match(/sent (\d+)/i)?.[1] || 0);
+function toMs(value: unknown): number {
+  if (!value) return 0;
+  const ms = new Date(String(value)).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
 
-  let runMode: "tick" | "manual_scan" | "manual_draft" | "manual_send" = "tick";
-  const type = String(event?.type || "");
-  if (type === "scan_ok") runMode = "manual_scan";
-  else if (type === "draft_ok") runMode = "manual_draft";
-  else if (type === "send_ok") runMode = "manual_send";
+function parseIntSafe(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
+function buildEmptyDiagnostics() {
   return {
-    runId: event?.id || null,
-    started_at_iso: event?.created_at_iso || null,
-    completed_at_iso: event?.created_at_iso || null,
-    scanned,
-    expanded,
-    skipped: 0,
-    skippedReasons: {},
-    candidateDiagnostics: {},
-    failed,
-    drafted,
-    sent,
-    sendFailed: 0,
-    runMode,
-    inferredFromEvent: true,
+    inserted: 0,
+    duplicatesSkipped: 0,
+    noiseSkipped: 0,
+    lowScoreSkipped: 0,
+    outOfRegionSkipped: 0,
+    badDomainSkipped: 0,
+    marketplaceSkipped: 0,
+    profilesVisited: 0,
+    fallbackUsed: 0,
+    noExternalWebsite: 0,
+    requeuedSources: 0,
+    inferredRegionAccepted: 0,
+    sourcePagesRetried: 0,
+    assetRejected: 0,
+    weakPageRejected: 0,
+    autoSeededSources: 0,
   };
+}
+
+function snapshotFromEvent(event: any) {
+  if (!event?.type || !event?.message) return null;
+  const lowerType = String(event.type).toLowerCase();
+  const msg = String(event.message);
+
+  const tickMatch = msg.match(/scanned\s+(\d+)\s+\|\s+expanded\s+(\d+)\s+\|\s+failed\s+(\d+)\s+\|\s+drafted\s+(\d+)\s+\|\s+sent\s+(\d+)/i);
+  const scanMatch = msg.match(/scanned\s+(\d+)\s+\|\s+expanded\s+(\d+)\s+\|\s+failed\s+(\d+)/i);
+  const draftMatch = msg.match(/drafted\s+(\d+)/i);
+  const sendMatch = msg.match(/sent\s+(\d+)(?:\s+\|\s+failed\s+(\d+))?/i);
+
+  if (lowerType === "tick_ok" && tickMatch) {
+    return {
+      runId: `derived:${event.id}`,
+      started_at_iso: event.created_at_iso,
+      completed_at_iso: event.created_at_iso,
+      scanned: parseIntSafe(tickMatch[1]),
+      expanded: parseIntSafe(tickMatch[2]),
+      skipped: 0,
+      skippedReasons: {},
+      candidateDiagnostics: buildEmptyDiagnostics(),
+      failed: parseIntSafe(tickMatch[3]),
+      drafted: parseIntSafe(tickMatch[4]),
+      sent: parseIntSafe(tickMatch[5]),
+      sendFailed: 0,
+      runMode: "tick",
+      derivedFromEvents: true,
+    };
+  }
+
+  if (lowerType === "scan_ok" && /manual scan completed/i.test(msg) && scanMatch) {
+    return {
+      runId: `derived:${event.id}`,
+      started_at_iso: event.created_at_iso,
+      completed_at_iso: event.created_at_iso,
+      scanned: parseIntSafe(scanMatch[1]),
+      expanded: parseIntSafe(scanMatch[2]),
+      skipped: 0,
+      skippedReasons: {},
+      candidateDiagnostics: buildEmptyDiagnostics(),
+      failed: parseIntSafe(scanMatch[3]),
+      drafted: 0,
+      sent: 0,
+      sendFailed: 0,
+      runMode: "manual_scan",
+      derivedFromEvents: true,
+    };
+  }
+
+  if (lowerType === "draft_ok" && draftMatch) {
+    return {
+      runId: `derived:${event.id}`,
+      started_at_iso: event.created_at_iso,
+      completed_at_iso: event.created_at_iso,
+      scanned: 0,
+      expanded: 0,
+      skipped: 0,
+      skippedReasons: {},
+      candidateDiagnostics: buildEmptyDiagnostics(),
+      failed: 0,
+      drafted: parseIntSafe(draftMatch[1]),
+      sent: 0,
+      sendFailed: 0,
+      runMode: "manual_draft",
+      derivedFromEvents: true,
+    };
+  }
+
+  if ((lowerType === "send_ok" || lowerType === "send_skip") && sendMatch) {
+    return {
+      runId: `derived:${event.id}`,
+      started_at_iso: event.created_at_iso,
+      completed_at_iso: event.created_at_iso,
+      scanned: 0,
+      expanded: 0,
+      skipped: 0,
+      skippedReasons: {},
+      candidateDiagnostics: buildEmptyDiagnostics(),
+      failed: 0,
+      drafted: 0,
+      sent: parseIntSafe(sendMatch[1]),
+      sendFailed: parseIntSafe(sendMatch[2]),
+      runMode: "manual_send",
+      derivedFromEvents: true,
+    };
+  }
+
+  return null;
+}
+
+function resolveLastRun(lastRunRaw: any, events: any[]) {
+  const stored = parseMaybeJson(lastRunRaw);
+  const latestEvent = Array.isArray(events) && events.length ? events[0] : null;
+  const derived = Array.isArray(events) ? events.map(snapshotFromEvent).find(Boolean) || null : null;
+
+  if (!stored && derived) {
+    return { lastRun: derived, snapshotLag: false, derivedFromEvents: true };
+  }
+
+  if (!stored) {
+    return { lastRun: null, snapshotLag: false, derivedFromEvents: false };
+  }
+
+  const storedMs = Math.max(toMs((stored as any).completed_at_iso), toMs((stored as any).started_at_iso));
+  const latestEventMs = toMs(latestEvent?.created_at_iso);
+  const stale = Boolean(latestEventMs && storedMs && latestEventMs > storedMs);
+
+  if (stale && derived && toMs((derived as any).completed_at_iso) >= storedMs) {
+    return { lastRun: derived, snapshotLag: true, derivedFromEvents: true };
+  }
+
+  return { lastRun: stored, snapshotLag: stale, derivedFromEvents: false };
 }
 
 export async function handlePublic(
@@ -104,20 +217,8 @@ export async function handlePublic(
       .map(([label, value]) => ({ label, value }));
 
     const lastRunRaw = await getSetting(env, "last_engine_run");
-    const storedLastRun = parseMaybeJson(lastRunRaw);
-    const latestEvent = Array.isArray(events) && events.length ? events[0] : null;
-    const latestEventISO = latestEvent?.created_at_iso || null;
-
-    let lastRun = storedLastRun;
-    if (!lastRun && latestEvent) {
-      lastRun = buildEventSnapshot(latestEvent);
-    }
-
-    const completedIso = lastRun?.completed_at_iso || lastRun?.started_at_iso || null;
-    const snapshotLag =
-      Boolean(completedIso) &&
-      Boolean(latestEventISO) &&
-      new Date(String(latestEventISO)).getTime() > new Date(String(completedIso)).getTime();
+    const latestEventISO = Array.isArray(events) && events.length ? events[0]?.created_at_iso || null : null;
+    const resolved = resolveLastRun(lastRunRaw, events);
 
     return json({
       ok: true,
@@ -126,8 +227,9 @@ export async function handlePublic(
         enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
         sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") === "1",
         pausedReason: "",
-        lastRun,
-        snapshotLag,
+        lastRun: resolved.lastRun,
+        snapshotLag: resolved.snapshotLag,
+        derivedFromEvents: resolved.derivedFromEvents,
       },
       budgets: {
         crawl: {

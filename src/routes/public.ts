@@ -71,35 +71,22 @@ function buildEmptyDiagnostics() {
   };
 }
 
-function sanitizeRunSnapshot(input: any) {
-  if (!input || typeof input !== "object") return null;
-  const hasAnyMetric =
-    typeof input.scanned !== "undefined" ||
-    typeof input.expanded !== "undefined" ||
-    typeof input.failed !== "undefined" ||
-    typeof input.drafted !== "undefined" ||
-    typeof input.sent !== "undefined";
-
-  if (!hasAnyMetric) return null;
-
+function buildFallbackRun(event: any, runMode: string, values: Partial<Record<string, number>> = {}) {
   return {
-    runId: String(input.runId || ""),
-    started_at_iso: input.started_at_iso || input.startedAtISO || null,
-    completed_at_iso: input.completed_at_iso || input.completedAtISO || input.started_at_iso || null,
-    scanned: parseIntSafe(input.scanned),
-    expanded: parseIntSafe(input.expanded),
-    skipped: parseIntSafe(input.skipped),
-    skippedReasons: input.skippedReasons && typeof input.skippedReasons === "object" ? input.skippedReasons : {},
-    candidateDiagnostics:
-      input.candidateDiagnostics && typeof input.candidateDiagnostics === "object"
-        ? { ...buildEmptyDiagnostics(), ...input.candidateDiagnostics }
-        : buildEmptyDiagnostics(),
-    failed: parseIntSafe(input.failed),
-    drafted: parseIntSafe(input.drafted),
-    sent: parseIntSafe(input.sent),
-    sendFailed: parseIntSafe(input.sendFailed),
-    runMode: String(input.runMode || input.mode || "tick"),
-    derivedFromEvents: Boolean(input.derivedFromEvents),
+    runId: `derived:${event?.id || "event"}`,
+    started_at_iso: event?.created_at_iso || null,
+    completed_at_iso: event?.created_at_iso || null,
+    scanned: parseIntSafe(values.scanned, 0),
+    expanded: parseIntSafe(values.expanded, 0),
+    skipped: parseIntSafe(values.skipped, 0),
+    skippedReasons: {},
+    candidateDiagnostics: buildEmptyDiagnostics(),
+    failed: parseIntSafe(values.failed, 0),
+    drafted: parseIntSafe(values.drafted, 0),
+    sent: parseIntSafe(values.sent, 0),
+    sendFailed: parseIntSafe(values.sendFailed, 0),
+    runMode,
+    derivedFromEvents: true,
   };
 }
 
@@ -113,99 +100,89 @@ function snapshotFromEvent(event: any) {
   const draftMatch = msg.match(/drafted\s+(\d+)/i);
   const sendMatch = msg.match(/sent\s+(\d+)(?:\s+\|\s+failed\s+(\d+))?/i);
 
-  if (lowerType === "tick_ok" && /finished/i.test(msg) && tickMatch) {
-    return sanitizeRunSnapshot({
-      runId: `derived:${event.id}`,
-      started_at_iso: event.created_at_iso,
-      completed_at_iso: event.created_at_iso,
-      scanned: tickMatch[1],
-      expanded: tickMatch[2],
-      skipped: 0,
-      skippedReasons: {},
-      candidateDiagnostics: buildEmptyDiagnostics(),
-      failed: tickMatch[3],
-      drafted: tickMatch[4],
-      sent: tickMatch[5],
-      sendFailed: 0,
-      runMode: "tick",
-      derivedFromEvents: true,
-    });
+  if (lowerType === "tick_ok" && /finished/i.test(msg)) {
+    if (tickMatch) {
+      return buildFallbackRun(event, "tick", {
+        scanned: tickMatch[1],
+        expanded: tickMatch[2],
+        failed: tickMatch[3],
+        drafted: tickMatch[4],
+        sent: tickMatch[5],
+      });
+    }
+    return buildFallbackRun(event, "tick");
   }
 
-  if (lowerType === "scan_ok" && /manual scan completed/i.test(msg) && scanMatch) {
-    return sanitizeRunSnapshot({
-      runId: `derived:${event.id}`,
-      started_at_iso: event.created_at_iso,
-      completed_at_iso: event.created_at_iso,
-      scanned: scanMatch[1],
-      expanded: scanMatch[2],
-      skipped: 0,
-      skippedReasons: {},
-      candidateDiagnostics: buildEmptyDiagnostics(),
-      failed: scanMatch[3],
-      drafted: 0,
-      sent: 0,
-      sendFailed: 0,
-      runMode: "manual_scan",
-      derivedFromEvents: true,
-    });
+  if (lowerType === "scan_ok") {
+    if (scanMatch) {
+      return buildFallbackRun(event, "manual_scan", {
+        scanned: scanMatch[1],
+        expanded: scanMatch[2],
+        failed: scanMatch[3],
+      });
+    }
+    return buildFallbackRun(event, "manual_scan");
   }
 
-  if (lowerType === "draft_ok" && /manual draft completed/i.test(msg) && draftMatch) {
-    return sanitizeRunSnapshot({
-      runId: `derived:${event.id}`,
-      started_at_iso: event.created_at_iso,
-      completed_at_iso: event.created_at_iso,
-      scanned: 0,
-      expanded: 0,
-      skipped: 0,
-      skippedReasons: {},
-      candidateDiagnostics: buildEmptyDiagnostics(),
-      failed: 0,
-      drafted: draftMatch[1],
-      sent: 0,
-      sendFailed: 0,
-      runMode: "manual_draft",
-      derivedFromEvents: true,
-    });
+  if (lowerType === "draft_ok") {
+    if (draftMatch) return buildFallbackRun(event, "manual_draft", { drafted: draftMatch[1] });
+    return buildFallbackRun(event, "manual_draft");
   }
 
-  if ((lowerType === "send_ok" || lowerType === "send_skip") && sendMatch) {
-    return sanitizeRunSnapshot({
-      runId: `derived:${event.id}`,
-      started_at_iso: event.created_at_iso,
-      completed_at_iso: event.created_at_iso,
-      scanned: 0,
-      expanded: 0,
-      skipped: 0,
-      skippedReasons: {},
-      candidateDiagnostics: buildEmptyDiagnostics(),
-      failed: 0,
-      drafted: 0,
-      sent: sendMatch[1],
-      sendFailed: sendMatch[2],
-      runMode: "manual_send",
-      derivedFromEvents: true,
-    });
+  if (lowerType === "send_ok" || lowerType === "send_skip") {
+    if (sendMatch) {
+      return buildFallbackRun(event, "manual_send", {
+        sent: sendMatch[1],
+        sendFailed: sendMatch[2],
+      });
+    }
+    return buildFallbackRun(event, "manual_send");
   }
 
   return null;
 }
 
-function findDerivedSnapshot(events: any[]) {
-  if (!Array.isArray(events)) return null;
-  for (const event of events) {
-    const snapshot = snapshotFromEvent(event);
-    if (snapshot) return snapshot;
-  }
-  return null;
+function sanitizeStoredRun(stored: any) {
+  if (!stored || typeof stored !== "object") return null;
+  const started = stored.started_at_iso || stored.completed_at_iso || null;
+  const completed = stored.completed_at_iso || stored.started_at_iso || null;
+  const hasAnySignal =
+    Boolean(stored.runId) ||
+    Boolean(started) ||
+    Boolean(completed) ||
+    Number.isFinite(Number(stored.scanned)) ||
+    Number.isFinite(Number(stored.expanded)) ||
+    Number.isFinite(Number(stored.failed)) ||
+    Number.isFinite(Number(stored.drafted)) ||
+    Number.isFinite(Number(stored.sent));
+
+  if (!hasAnySignal) return null;
+
+  return {
+    runId: stored.runId || `stored:${completed || started || "unknown"}`,
+    started_at_iso: started,
+    completed_at_iso: completed,
+    scanned: parseIntSafe(stored.scanned, 0),
+    expanded: parseIntSafe(stored.expanded, 0),
+    skipped: parseIntSafe(stored.skipped, 0),
+    skippedReasons: stored.skippedReasons && typeof stored.skippedReasons === "object" ? stored.skippedReasons : {},
+    candidateDiagnostics:
+      stored.candidateDiagnostics && typeof stored.candidateDiagnostics === "object"
+        ? { ...buildEmptyDiagnostics(), ...stored.candidateDiagnostics }
+        : buildEmptyDiagnostics(),
+    failed: parseIntSafe(stored.failed, 0),
+    drafted: parseIntSafe(stored.drafted, 0),
+    sent: parseIntSafe(stored.sent, 0),
+    sendFailed: parseIntSafe(stored.sendFailed, 0),
+    runMode: stored.runMode || "tick",
+    derivedFromEvents: false,
+  };
 }
 
 function resolveLastRun(lastRunRaw: any, events: any[]) {
-  const stored = sanitizeRunSnapshot(parseMaybeJson(lastRunRaw));
-  const derived = findDerivedSnapshot(events);
+  const stored = sanitizeStoredRun(parseMaybeJson(lastRunRaw));
   const latestEvent = Array.isArray(events) && events.length ? events[0] : null;
-  const latestEventMs = toMs(latestEvent?.created_at_iso);
+  const derived = Array.isArray(events) ? events.map(snapshotFromEvent).find(Boolean) || null : null;
 
   if (!stored && derived) {
     return { lastRun: derived, snapshotLag: false, derivedFromEvents: true };
@@ -216,13 +193,11 @@ function resolveLastRun(lastRunRaw: any, events: any[]) {
   }
 
   const storedMs = Math.max(toMs(stored.completed_at_iso), toMs(stored.started_at_iso));
-  const stale = Boolean(latestEventMs && storedMs && latestEventMs > storedMs);
+  const latestEventMs = toMs(latestEvent?.created_at_iso);
+  const stale = Boolean(latestEventMs && (!storedMs || latestEventMs > storedMs));
 
   if (stale && derived) {
-    const derivedMs = Math.max(toMs(derived.completed_at_iso), toMs(derived.started_at_iso));
-    if (derivedMs >= storedMs) {
-      return { lastRun: derived, snapshotLag: true, derivedFromEvents: true };
-    }
+    return { lastRun: derived, snapshotLag: true, derivedFromEvents: true };
   }
 
   return { lastRun: stored, snapshotLag: stale, derivedFromEvents: false };
@@ -263,6 +238,28 @@ export async function handlePublic(
     const latestEventISO = Array.isArray(events) && events.length ? events[0]?.created_at_iso || null : null;
     const resolved = resolveLastRun(lastRunRaw, events);
 
+    const safeLastRun = resolved.lastRun || (latestEventISO
+      ? {
+          runId: `fallback:${latestEventISO}`,
+          started_at_iso: latestEventISO,
+          completed_at_iso: latestEventISO,
+          scanned: 0,
+          expanded: 0,
+          skipped: 0,
+          skippedReasons: {},
+          candidateDiagnostics: buildEmptyDiagnostics(),
+          failed: 0,
+          drafted: 0,
+          sent: 0,
+          sendFailed: 0,
+          runMode: "tick",
+          derivedFromEvents: false,
+          responseFallback: true,
+        }
+      : null);
+
+    const derivedFromEvents = Boolean(resolved.derivedFromEvents && safeLastRun);
+
     return json({
       ok: true,
       nowISO: new Date().toISOString(),
@@ -270,9 +267,9 @@ export async function handlePublic(
         enabled: ((await getSetting(env, "engine_enabled")) || "1") !== "0",
         sendingEnabled: ((await getSetting(env, "sending_enabled")) || "0") === "1",
         pausedReason: "",
-        lastRun: resolved.lastRun,
-        snapshotLag: resolved.snapshotLag,
-        derivedFromEvents: resolved.derivedFromEvents,
+        lastRun: safeLastRun,
+        snapshotLag: Boolean(resolved.snapshotLag || (!resolved.lastRun && latestEventISO)),
+        derivedFromEvents,
       },
       budgets: {
         crawl: {

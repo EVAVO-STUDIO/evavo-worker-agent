@@ -37,6 +37,68 @@ async function insertSource(env: Env, body: any, rawUrl: unknown) {
   return { id, url: sourceUrl };
 }
 
+async function fetchSourceHtml(sourceUrl: string): Promise<{ ok: boolean; html: string; status: number; contentType: string }> {
+  try {
+    const res = await fetch(sourceUrl, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (compatible; EVAVO-Outbound-Agent/1.0; +https://evavo.com.au)",
+        "accept-language": "en-AU,en;q=0.9",
+      },
+      redirect: "follow",
+    });
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+    if (!res.ok || (contentType && !/text\/html|application\/xhtml\+xml/.test(contentType))) {
+      return { ok: false, html: "", status: res.status, contentType };
+    }
+    const html = await res.text();
+    return { ok: Boolean(html.trim()), html, status: res.status, contentType };
+  } catch {
+    return { ok: false, html: "", status: 0, contentType: "" };
+  }
+}
+
+async function testSource(env: Env, sourceId: string) {
+  const source = await env.DB.prepare("SELECT * FROM sources WHERE id = ? LIMIT 1").bind(sourceId).first<any>();
+  if (!source) return { ok: false, error: "source_not_found" };
+
+  const started = nowISO();
+  const result = await fetchSourceHtml(String(source.url));
+  const completed = nowISO();
+  const html = result.html || "";
+  const hrefCount = (html.match(/href=[\"']/gi) || []).length;
+  const profileHintCount = (html.match(/\/business\/|\/connect\/|yellowpages\.com\.au\//gi) || []).length;
+  const status = result.ok ? "ok" : "failed";
+  const failedReason = result.ok ? null : `status_${result.status || "fetch_failed"}`;
+
+  await env.DB.prepare(
+    "INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)"
+  ).bind(uuid(), sourceId, status, started, completed, profileHintCount, failedReason, completed).run();
+
+  if (result.ok) {
+    await env.DB.prepare("UPDATE sources SET status = 'active', success_count = success_count + 1, last_run_at_iso = ?, updated_at_iso = ?, retired_reason = NULL WHERE id = ?")
+      .bind(completed, completed, sourceId)
+      .run();
+  } else {
+    await env.DB.prepare("UPDATE sources SET failure_count = failure_count + 1, last_run_at_iso = ?, updated_at_iso = ? WHERE id = ?")
+      .bind(completed, completed, sourceId)
+      .run();
+  }
+
+  await logEvent(env, result.ok ? "source_test_ok" : "source_test_fail", `Source ${sourceId} test ${status}: ${source.url}`);
+
+  return {
+    ok: true,
+    sourceId,
+    sourceUrl: source.url,
+    status,
+    httpStatus: result.status,
+    contentType: result.contentType,
+    hrefCount,
+    profileHintCount,
+    htmlBytes: html.length,
+  };
+}
+
 export async function handleSourcesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -67,6 +129,11 @@ export async function handleSourcesAdmin(request: Request, env: Env, pathname: s
 
     await logEvent(env, "source_add", `Added or refreshed ${inserted.length} source URL(s)`);
     return json({ ok: true, sources: inserted });
+  }
+
+  const testMatch = pathname.match(/^\/admin\/sources\/([^/]+)\/test$/);
+  if (testMatch && request.method === "POST") {
+    return json(await testSource(env, testMatch[1]));
   }
 
   const match = pathname.match(/^\/admin\/sources\/([^/]+)\/(cooldown|retire|activate)$/);

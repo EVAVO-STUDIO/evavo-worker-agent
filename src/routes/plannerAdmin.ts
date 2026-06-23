@@ -4,6 +4,7 @@ import { buildPlannerReport } from "../core/planner";
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 type BadgeTone = "good" | "warning" | "danger" | "neutral";
+type RiskLevel = "low" | "medium" | "high";
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
@@ -58,6 +59,67 @@ function buildDashboardBadges(planner: any) {
 
   badges.push(badge("manual_action_required", "Manual action required", "neutral", "Planner will not execute unsafe actions automatically."));
   return badges;
+}
+
+function buildDashboardRisk(planner: any) {
+  const flags = planner.flags || {};
+  const state = planner.state || {};
+  const sourceCounts = state.sourceCounts || {};
+  const draftBacklog = Number(state.draftBacklog || 0);
+  const healthIssues = Array.isArray(state.healthIssues) ? state.healthIssues : [];
+  const blockedActions = planner.decision?.blockedActions || [];
+  const activeSources = Number(sourceCounts.active || 0);
+  const cooldownSources = Number(sourceCounts.cooldown || 0);
+  const needsReviewSources = Number(sourceCounts.needs_review || 0);
+
+  let riskScore = 0;
+  const riskReasons: string[] = [];
+
+  if (flags.sendingEnabled) {
+    riskScore += 35;
+    riskReasons.push("Sending is enabled, so outbound email risk is high.");
+  }
+  if (flags.aiEnabled) {
+    riskScore += 15;
+    riskReasons.push("AI is enabled, so budget/spend risk is present.");
+  }
+  if (flags.engineEnabled) {
+    riskScore += 20;
+    riskReasons.push("Engine is enabled, so automatic cron work may run.");
+  }
+  if (draftBacklog >= 50) {
+    riskScore += 15;
+    riskReasons.push(`Draft backlog is high (${draftBacklog}); review before more discovery.`);
+  } else if (draftBacklog >= 20) {
+    riskScore += 8;
+    riskReasons.push(`Draft backlog is moderate (${draftBacklog}).`);
+  }
+  if (healthIssues.length > 0) {
+    riskScore += Math.min(20, healthIssues.length * 5);
+    riskReasons.push(`${healthIssues.length} health issue(s) reported.`);
+  }
+  if (activeSources === 0) {
+    riskScore += 8;
+    riskReasons.push("No active sources are available for safe discovery.");
+  }
+  if (cooldownSources > 0) {
+    riskScore += Math.min(10, cooldownSources * 2);
+    riskReasons.push(`${cooldownSources} source(s) are in cooldown.`);
+  }
+  if (needsReviewSources > 0) {
+    riskScore += Math.min(12, needsReviewSources * 3);
+    riskReasons.push(`${needsReviewSources} source(s) need review.`);
+  }
+  if (blockedActions.length > 0) {
+    riskScore += Math.min(10, blockedActions.length * 2);
+    riskReasons.push(`${blockedActions.length} blocked action(s) are currently enforced.`);
+  }
+
+  riskScore = Math.max(0, Math.min(100, riskScore));
+  const riskLevel: RiskLevel = riskScore >= 60 ? "high" : riskScore >= 30 ? "medium" : "low";
+  if (riskReasons.length === 0) riskReasons.push("No major operational risks detected in planner state.");
+
+  return { riskLevel, riskScore, riskReasons };
 }
 
 function summarizeRecommendationRow(row: any) {
@@ -155,11 +217,13 @@ async function plannerDashboard(env: Env) {
   const latestExecution = summarizeExecutionRow(latestExecutionRow);
   const primaryAction = planner.decision?.primaryActionCard || null;
   const badges = buildDashboardBadges(planner);
+  const risk = buildDashboardRisk(planner);
 
   return {
     ok: true,
     mode: "planner_dashboard",
     nowISO: new Date().toISOString(),
+    risk,
     badges,
     status: {
       healthStatus: planner.state?.healthStatus || null,

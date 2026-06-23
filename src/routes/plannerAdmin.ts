@@ -34,6 +34,18 @@ function checklist(id: string, label: string, status: ChecklistStatus, detail: s
   return { id, label, status, detail, route: route || null };
 }
 
+function hasPath(data: any, path: string) {
+  return path.split(".").every((part) => {
+    if (data == null || typeof data !== "object" || !(part in data)) return false;
+    data = data[part];
+    return true;
+  });
+}
+
+function check(id: string, ok: boolean, detail: string) {
+  return { id, ok, detail };
+}
+
 function buildDashboardSchemaHints(compact: boolean) {
   return {
     contractVersion: PLANNER_DASHBOARD_CONTRACT_VERSION,
@@ -416,6 +428,55 @@ async function plannerDashboard(env: Env, compact = false) {
   };
 }
 
+function selfTestDashboardPayload(payload: any, compact: boolean) {
+  const requiredPaths = [
+    "ok",
+    "mode",
+    "contractVersion",
+    "schemaHints",
+    "refreshHints",
+    "risk.riskLevel",
+    "risk.riskScore",
+    "risk.riskReasons",
+    "badges",
+    "checklist",
+    "status",
+    "counts",
+    "recommendation",
+    "latestRecommendation",
+    "latestExecution",
+  ];
+  if (!compact) requiredPaths.push("recent");
+
+  const checks = requiredPaths.map((path) => check(`field:${path}`, hasPath(payload, path), `Required field ${path}`));
+  checks.push(check("contract:version", payload.contractVersion === PLANNER_DASHBOARD_CONTRACT_VERSION, `Expected ${PLANNER_DASHBOARD_CONTRACT_VERSION}`));
+  checks.push(check("contract:schemaHints", payload.schemaHints?.contractVersion === PLANNER_DASHBOARD_CONTRACT_VERSION, "schemaHints contractVersion matches."));
+  checks.push(check("mode:expected", compact ? payload.mode === "planner_dashboard_compact" : payload.mode === "planner_dashboard", "Dashboard mode matches request."));
+  checks.push(check("risk:level", ["low", "medium", "high"].includes(payload.risk?.riskLevel), "Risk level is a known enum value."));
+  checks.push(check("risk:score", typeof payload.risk?.riskScore === "number" && payload.risk.riskScore >= 0 && payload.risk.riskScore <= 100, "Risk score is a number from 0 to 100."));
+  checks.push(check("badges:array", Array.isArray(payload.badges), "Badges is an array."));
+  checks.push(check("checklist:array", Array.isArray(payload.checklist), "Checklist is an array."));
+  checks.push(check("refresh:interval", typeof payload.refreshHints?.suggestedIntervalSeconds === "number" && payload.refreshHints.suggestedIntervalSeconds >= 30, "Refresh interval is present and sane."));
+  checks.push(check("compact:omits_recent", compact ? !("recent" in payload) : true, "Compact mode omits recent payload."));
+  checks.push(check("compact:omits_action_cards", compact ? payload.recommendation?.actionCards === undefined : true, "Compact mode omits full action cards."));
+
+  const failed = checks.filter((item) => !item.ok);
+  return {
+    ok: failed.length === 0,
+    mode: "planner_dashboard_self_test",
+    compact,
+    contractVersion: PLANNER_DASHBOARD_CONTRACT_VERSION,
+    checkedAtISO: new Date().toISOString(),
+    summary: { passed: checks.length - failed.length, failed: failed.length, total: checks.length },
+    checks,
+  };
+}
+
+async function plannerDashboardSelfTest(env: Env, compact = false) {
+  const dashboard = await plannerDashboard(env, compact);
+  return selfTestDashboardPayload(dashboard, compact);
+}
+
 async function recordExecution(env: Env, actionId: string, route: string, result: any, body: any) {
   const id = uuid();
   await env.DB.prepare(
@@ -484,6 +545,12 @@ export async function handlePlannerAdmin(request: Request, env: Env, pathname: s
 
   if (pathname === "/admin/planner" && request.method === "GET") {
     return json(await buildPlannerReport(env));
+  }
+
+  if (pathname === "/admin/planner/dashboard/self-test" && request.method === "GET") {
+    const url = new URL(request.url);
+    const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("compact") === "true";
+    return json(await plannerDashboardSelfTest(env, compact));
   }
 
   if (pathname === "/admin/planner/dashboard" && request.method === "GET") {

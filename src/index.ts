@@ -10,6 +10,7 @@ import { handlePlannerAdmin } from "./routes/plannerAdmin";
 import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
 import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
 import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAdmin";
+import { handleOpportunityReviewAdmin } from "./routes/opportunityReviewAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -19,6 +20,10 @@ function jsonResponse(data: any, init: ResponseInit = {}): Response {
 
 function isOpportunityDiscoveryPath(pathname: string): boolean {
   return pathname.startsWith("/admin/opportunities/sources/") && (pathname.endsWith("/test") || pathname.endsWith("/preview") || pathname.endsWith("/commit-preview"));
+}
+
+function isOpportunityReviewPath(pathname: string): boolean {
+  return pathname === "/admin/opportunities/reviews" || pathname === "/admin/opportunities/strategy-scores" || (pathname.startsWith("/admin/opportunities/") && pathname.endsWith("/review"));
 }
 
 export default {
@@ -33,6 +38,10 @@ export default {
 
       if (isOpportunityDiscoveryPath(pathname)) {
         return await handleOpportunityDiscoveryAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (isOpportunityReviewPath(pathname)) {
+        return await handleOpportunityReviewAdmin(req, env, pathname, jsonResponse);
       }
 
       if (pathname.startsWith("/admin/opportunities")) {

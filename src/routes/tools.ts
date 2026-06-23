@@ -28,6 +28,7 @@ export async function handleTools(
         { name: "lead_list", route: "/admin/leads", mode: "read", cost: "cheap" },
         { name: "source_list", route: "/admin/sources", mode: "read", cost: "cheap" },
         { name: "source_add", route: "/admin/sources", mode: "write", cost: "cheap", requiresConfirm: true },
+        { name: "source_test", route: "/admin/sources/:id/test", mode: "write", cost: "bounded_fetch", requiresConfirm: true },
         { name: "source_cooldown", route: "/admin/sources/:id/cooldown", mode: "write", cost: "cheap", requiresConfirm: true },
       ],
     });

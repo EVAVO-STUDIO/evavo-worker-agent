@@ -16,6 +16,46 @@ function normalizeSourceUrl(raw: unknown): string {
   return String(raw || "").trim().replace(/\/+$/, "");
 }
 
+function absoluteUrl(href: string, baseUrl: string): string | null {
+  try {
+    return new URL(href, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractHrefLinks(html: string, baseUrl: string): string[] {
+  const out: string[] = [];
+  const regex = /href=["']([^"'#]+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    const next = absoluteUrl(match[1], baseUrl);
+    if (next) out.push(next.replace(/\/+$/, ""));
+  }
+  return Array.from(new Set(out));
+}
+
+function sourceProfileScore(url: string): number {
+  const lower = url.toLowerCase();
+  let score = 0;
+  if (/truelocal\.com\.au\/business\//i.test(lower)) score += 80;
+  if (/hipages\.com\.au\/connect\//i.test(lower)) score += 80;
+  if (/yellowpages\.com\.au\/[^/]+\/[^/]+-\d+/i.test(lower) && !/\/find\//i.test(lower)) score += 80;
+  if (/business|connect|profile|company|contractor|builder|agency|service/i.test(lower)) score += 20;
+  if (/login|signup|privacy|terms|articles|blog|category|search|find\//i.test(lower)) score -= 40;
+  if (/\.(jpg|jpeg|png|gif|svg|webp|css|js|pdf|zip)(\?|$)/i.test(lower)) score -= 100;
+  return score;
+}
+
+function pickCandidateLinks(html: string, baseUrl: string, limit: number) {
+  const links = extractHrefLinks(html, baseUrl)
+    .map((url) => ({ url, score: sourceProfileScore(url) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(1, Math.min(100, limit)));
+  return links;
+}
+
 async function getNumberSetting(env: Env, key: string, fallback: number): Promise<number> {
   const raw = await getSetting(env, key);
   const parsed = Number(raw);
@@ -137,6 +177,33 @@ async function testSource(env: Env, sourceId: string) {
   };
 }
 
+async function expandPreview(env: Env, sourceId: string, limit: number) {
+  const source = await env.DB.prepare("SELECT * FROM sources WHERE id = ? LIMIT 1").bind(sourceId).first<any>();
+  if (!source) return { ok: false, error: "source_not_found" };
+  if (["cooldown", "retired", "blocked", "needs_review"].includes(String(source.status))) {
+    return { ok: false, error: "source_not_active", sourceId, status: source.status };
+  }
+
+  const result = await fetchSourceHtml(String(source.url));
+  if (!result.ok) {
+    return { ok: false, error: "source_fetch_failed", sourceId, httpStatus: result.status, contentType: result.contentType };
+  }
+
+  const candidates = pickCandidateLinks(result.html, String(source.url), limit);
+  await logEvent(env, "source_expand_preview", `Previewed ${candidates.length} candidate links from source ${sourceId}`);
+  return {
+    ok: true,
+    mode: "preview_only",
+    sourceId,
+    sourceUrl: source.url,
+    httpStatus: result.status,
+    contentType: result.contentType,
+    htmlBytes: result.html.length,
+    candidateCount: candidates.length,
+    candidates,
+  };
+}
+
 export async function handleSourcesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -167,6 +234,13 @@ export async function handleSourcesAdmin(request: Request, env: Env, pathname: s
 
     await logEvent(env, "source_add", `Added or refreshed ${inserted.length} source URL(s)`);
     return json({ ok: true, sources: inserted });
+  }
+
+  const previewMatch = pathname.match(/^\/admin\/sources\/([^/]+)\/expand-preview$/);
+  if (previewMatch && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const limit = Math.max(1, Math.min(100, Number(body?.limit || 40)));
+    return json(await expandPreview(env, previewMatch[1], limit));
   }
 
   const testMatch = pathname.match(/^\/admin\/sources\/([^/]+)\/test$/);

@@ -1,4 +1,4 @@
-import { Env, getAdminToken, logEvent, nowISO, uuid } from "../db";
+import { Env, getAdminToken, getSetting, logEvent, nowISO, uuid } from "../db";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -14,6 +14,12 @@ function countryFromUrl(url: string): string {
 
 function normalizeSourceUrl(raw: unknown): string {
   return String(raw || "").trim().replace(/\/+$/, "");
+}
+
+async function getNumberSetting(env: Env, key: string, fallback: number): Promise<number> {
+  const raw = await getSetting(env, key);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 async function insertSource(env: Env, body: any, rawUrl: unknown) {
@@ -57,6 +63,34 @@ async function fetchSourceHtml(sourceUrl: string): Promise<{ ok: boolean; html: 
   }
 }
 
+async function applyFailurePolicy(env: Env, sourceId: string, completed: string, failedReason: string | null) {
+  const failureThreshold = await getNumberSetting(env, "source_failure_cooldown_threshold", 3);
+  const retireThreshold = await getNumberSetting(env, "source_failure_retire_threshold", 8);
+  const cooldownHours = await getNumberSetting(env, "source_cooldown_hours", 72);
+
+  const row = await env.DB.prepare("SELECT failure_count FROM sources WHERE id = ? LIMIT 1").bind(sourceId).first<{ failure_count: number }>();
+  const failures = Number(row?.failure_count || 0);
+
+  if (retireThreshold > 0 && failures >= retireThreshold) {
+    await env.DB.prepare("UPDATE sources SET status = 'needs_review', retired_reason = ?, updated_at_iso = ? WHERE id = ?")
+      .bind(failedReason || "repeated_source_failure", completed, sourceId)
+      .run();
+    await logEvent(env, "source_auto_review", `Source ${sourceId} moved to needs_review after ${failures} failures.`);
+    return { sourceAction: "needs_review", failureCount: failures };
+  }
+
+  if (failureThreshold > 0 && failures >= failureThreshold) {
+    const until = new Date(Date.now() + Math.max(1, cooldownHours) * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("UPDATE sources SET status = 'cooldown', cooldown_until_iso = ?, retired_reason = ?, updated_at_iso = ? WHERE id = ?")
+      .bind(until, failedReason || "repeated_source_failure", completed, sourceId)
+      .run();
+    await logEvent(env, "source_auto_cooldown", `Source ${sourceId} cooled down after ${failures} failures.`);
+    return { sourceAction: "cooldown", failureCount: failures, cooldownUntil: until };
+  }
+
+  return { sourceAction: "tracked_failure", failureCount: failures };
+}
+
 async function testSource(env: Env, sourceId: string) {
   const source = await env.DB.prepare("SELECT * FROM sources WHERE id = ? LIMIT 1").bind(sourceId).first<any>();
   if (!source) return { ok: false, error: "source_not_found" };
@@ -74,14 +108,17 @@ async function testSource(env: Env, sourceId: string) {
     "INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)"
   ).bind(uuid(), sourceId, status, started, completed, profileHintCount, failedReason, completed).run();
 
+  let sourcePolicy: any = { sourceAction: "none" };
   if (result.ok) {
     await env.DB.prepare("UPDATE sources SET status = 'active', success_count = success_count + 1, last_run_at_iso = ?, updated_at_iso = ?, retired_reason = NULL WHERE id = ?")
       .bind(completed, completed, sourceId)
       .run();
+    sourcePolicy = { sourceAction: "active" };
   } else {
     await env.DB.prepare("UPDATE sources SET failure_count = failure_count + 1, last_run_at_iso = ?, updated_at_iso = ? WHERE id = ?")
       .bind(completed, completed, sourceId)
       .run();
+    sourcePolicy = await applyFailurePolicy(env, sourceId, completed, failedReason);
   }
 
   await logEvent(env, result.ok ? "source_test_ok" : "source_test_fail", `Source ${sourceId} test ${status}: ${source.url}`);
@@ -96,6 +133,7 @@ async function testSource(env: Env, sourceId: string) {
     hrefCount,
     profileHintCount,
     htmlBytes: html.length,
+    sourcePolicy,
   };
 }
 

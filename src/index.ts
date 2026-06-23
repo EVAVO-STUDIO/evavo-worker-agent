@@ -22,7 +22,7 @@ export default {
       const url = new URL(req.url);
       const pathname = url.pathname;
 
-      if (pathname.startsWith("/admin/sources")) {
+      if (pathname.startsWith("/admin/sources") || pathname === "/admin/seeds") {
         return await handleSourcesAdmin(req, env, pathname, jsonResponse);
       }
 

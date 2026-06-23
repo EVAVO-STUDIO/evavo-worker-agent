@@ -2,7 +2,7 @@ import type { Env } from "./db";
 import { logEvent } from "./db";
 import { extractOpportunityCandidates } from "./core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "./core/opportunityPersistence";
-import { finishOpportunityRun, recordSourceRunResult, startOpportunityRun, type OpportunityRunSummary } from "./core/opportunityRuns";
+import { finishOpportunityRun, recordCandidateRejection, recordSourceRunResult, startOpportunityRun, type OpportunityRunSummary } from "./core/opportunityRuns";
 
 type OpportunityAutonomySettings = {
   opportunityDiscoveryEnabled: boolean;
@@ -140,6 +140,16 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
             summary.skipped += 1;
             summary.rejected += 1;
             candidatesRejected += 1;
+            await recordCandidateRejection(env, {
+              runId,
+              sourceId: source.id,
+              sourceUrl: source.url,
+              candidateUrl: result.normalizedUrl || candidate.url,
+              candidateTitle: result.normalizedTitle || candidate.title,
+              score: result.score ?? candidate.score,
+              reason: result.reason,
+              evidence: candidate.evidence || { signals: candidate.signals || [] },
+            });
           }
         }
 

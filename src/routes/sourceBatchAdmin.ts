@@ -1,10 +1,16 @@
-import { Env, getAdminToken, logEvent, nowISO, uuid } from "../db";
+import { Env, getAdminToken, getSetting, logEvent, nowISO, uuid } from "../db";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
+}
+
+async function numberSetting(env: Env, key: string, fallback: number): Promise<number> {
+  const raw = await getSetting(env, key);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 async function fetchHtml(url: string): Promise<{ ok: boolean; html: string; status: number; contentType: string }> {
@@ -37,6 +43,40 @@ function countLinks(html: string): number {
   return matches ? matches.length : 0;
 }
 
+function isFutureIso(value: unknown): boolean {
+  if (!value) return false;
+  const ms = Date.parse(String(value));
+  return Number.isFinite(ms) && ms > Date.now();
+}
+
+async function applyFailurePolicy(env: Env, sourceId: string, failedReason: string | null) {
+  const failureThreshold = await numberSetting(env, "source_failure_cooldown_threshold", 3);
+  const retireThreshold = await numberSetting(env, "source_failure_retire_threshold", 8);
+  const cooldownHours = await numberSetting(env, "source_cooldown_hours", 72);
+  const now = nowISO();
+  const row = await env.DB.prepare("SELECT failure_count FROM sources WHERE id = ? LIMIT 1").bind(sourceId).first<{ failure_count: number }>();
+  const failures = Number(row?.failure_count || 0);
+
+  if (retireThreshold > 0 && failures >= retireThreshold) {
+    await env.DB.prepare("UPDATE sources SET status = 'needs_review', retired_reason = ?, next_run_at_iso = NULL, updated_at_iso = ? WHERE id = ?")
+      .bind(failedReason || "repeated_source_failure", now, sourceId)
+      .run();
+    await logEvent(env, "source_auto_review", `Source ${sourceId} moved to needs_review after ${failures} failures.`);
+    return { action: "needs_review", failureCount: failures };
+  }
+
+  if (failureThreshold > 0 && failures >= failureThreshold) {
+    const cooldownUntil = new Date(Date.now() + Math.max(1, cooldownHours) * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("UPDATE sources SET status = 'cooldown', cooldown_until_iso = ?, next_run_at_iso = ?, retired_reason = ?, updated_at_iso = ? WHERE id = ?")
+      .bind(cooldownUntil, cooldownUntil, failedReason || "repeated_source_failure", now, sourceId)
+      .run();
+    await logEvent(env, "source_auto_cooldown", `Source ${sourceId} cooled down after ${failures} failures.`);
+    return { action: "cooldown", failureCount: failures, cooldownUntil };
+  }
+
+  return { action: "tracked_failure", failureCount: failures };
+}
+
 async function runOneSource(env: Env, source: any) {
   const started = nowISO();
   const result = await fetchHtml(String(source.url));
@@ -50,14 +90,19 @@ async function runOneSource(env: Env, source: any) {
     "INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)"
   ).bind(uuid(), source.id, status, started, completed, profilesFound, failedReason, completed).run();
 
+  let policy: any = { action: "active" };
   if (result.ok) {
-    await env.DB.prepare("UPDATE sources SET status = 'active', success_count = success_count + 1, last_run_at_iso = ?, updated_at_iso = ?, retired_reason = NULL WHERE id = ?")
-      .bind(completed, completed, source.id)
+    const nextRunAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("UPDATE sources SET status = 'active', success_count = success_count + 1, last_run_at_iso = ?, next_run_at_iso = ?, updated_at_iso = ?, retired_reason = NULL WHERE id = ?")
+      .bind(completed, nextRunAt, completed, source.id)
       .run();
+    policy = { action: "active", nextRunAt };
   } else {
-    await env.DB.prepare("UPDATE sources SET failure_count = failure_count + 1, last_run_at_iso = ?, updated_at_iso = ? WHERE id = ?")
-      .bind(completed, completed, source.id)
+    const retryAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("UPDATE sources SET failure_count = failure_count + 1, last_run_at_iso = ?, next_run_at_iso = ?, updated_at_iso = ? WHERE id = ?")
+      .bind(completed, retryAt, completed, source.id)
       .run();
+    policy = await applyFailurePolicy(env, source.id, failedReason);
   }
 
   return {
@@ -69,6 +114,7 @@ async function runOneSource(env: Env, source: any) {
     hrefCount,
     profileHintCount: profilesFound,
     htmlBytes: result.html.length,
+    policy,
   };
 }
 
@@ -82,17 +128,46 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
       return json({ ok: false, error: "confirm_required" }, { status: 400 });
     }
 
-    const limit = Math.max(1, Math.min(3, Number(body?.limit || 1)));
-    const rows = await env.DB.prepare(
-      "SELECT * FROM sources WHERE status = 'active' ORDER BY COALESCE(next_run_at_iso, created_at_iso), updated_at_iso LIMIT ?"
-    ).bind(limit).all<any>();
+    const perTickLimit = Math.max(1, Math.min(10, await numberSetting(env, "per_tick_source_page_limit", 2)));
+    const requestedLimit = Math.max(1, Math.min(10, Number(body?.limit || 1)));
+    const limit = Math.min(perTickLimit, requestedLimit, 3);
 
-    const sources = rows.results || [];
+    const candidateRows = await env.DB.prepare(
+      "SELECT * FROM sources WHERE status IN ('active', 'cooldown') ORDER BY COALESCE(next_run_at_iso, created_at_iso), updated_at_iso LIMIT 25"
+    ).all<any>();
+
+    const candidates = candidateRows.results || [];
+    const skipped: Array<{ sourceId: string; url: string; reason: string }> = [];
+    const runnable = [];
+
+    for (const source of candidates) {
+      if (runnable.length >= limit) break;
+      if (String(source.status) === "cooldown" && isFutureIso(source.cooldown_until_iso)) {
+        skipped.push({ sourceId: source.id, url: source.url, reason: "cooldown_until_future" });
+        continue;
+      }
+      if (source.next_run_at_iso && isFutureIso(source.next_run_at_iso)) {
+        skipped.push({ sourceId: source.id, url: source.url, reason: "next_run_in_future" });
+        continue;
+      }
+      runnable.push(source);
+    }
+
     const results = [];
-    for (const source of sources) results.push(await runOneSource(env, source));
+    for (const source of runnable) results.push(await runOneSource(env, source));
 
-    await logEvent(env, "source_run_tiny", `Ran tiny source batch over ${results.length} source(s).`);
-    return json({ ok: true, mode: "tiny_source_batch", requested: limit, processed: results.length, results });
+    await logEvent(env, "source_run_tiny", `Ran tiny source batch over ${results.length} source(s), skipped ${skipped.length}.`);
+    return json({
+      ok: true,
+      mode: "tiny_source_batch",
+      requested: requestedLimit,
+      perTickLimit,
+      effectiveLimit: limit,
+      considered: candidates.length,
+      processed: results.length,
+      skipped,
+      results,
+    });
   }
 
   return json({ ok: false, error: "Not found" }, { status: 404 });

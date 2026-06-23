@@ -9,11 +9,16 @@ import { handleSourceBatchAdmin } from "./routes/sourceBatchAdmin";
 import { handlePlannerAdmin } from "./routes/plannerAdmin";
 import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
 import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
+import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
   return new Response(JSON.stringify(data), { ...init, headers });
+}
+
+function isOpportunityDiscoveryPath(pathname: string): boolean {
+  return pathname.startsWith("/admin/opportunities/sources/") && (pathname.endsWith("/test") || pathname.endsWith("/preview"));
 }
 
 export default {
@@ -25,6 +30,10 @@ export default {
     try {
       const url = new URL(req.url);
       const pathname = url.pathname;
+
+      if (isOpportunityDiscoveryPath(pathname)) {
+        return await handleOpportunityDiscoveryAdmin(req, env, pathname, jsonResponse);
+      }
 
       if (pathname.startsWith("/admin/opportunities")) {
         return await handleOpportunitiesAdmin(req, env, pathname, jsonResponse);

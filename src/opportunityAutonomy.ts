@@ -1,6 +1,7 @@
 import type { Env } from "./db";
-import { logEvent, uuid } from "./db";
+import { logEvent } from "./db";
 import { extractOpportunityCandidates } from "./core/opportunityDiscovery";
+import { saveOpportunityCandidate } from "./core/opportunityPersistence";
 
 type OpportunityAutonomySettings = {
   opportunityDiscoveryEnabled: boolean;
@@ -62,47 +63,6 @@ async function updateSourceRun(env: Env, sourceId: string, ok: boolean, error: s
   ).bind(ok ? 1 : 0, ok ? 0 : 1, now, nextRun, error, now, sourceId).run();
 }
 
-async function saveCandidate(env: Env, source: OpportunitySource, candidate: any) {
-  const existing = await env.DB.prepare("SELECT id FROM opportunities WHERE url = ? AND title = ? LIMIT 1").bind(candidate.url, candidate.title).first<any>();
-  if (existing?.id) return { saved: false, reason: "duplicate", id: existing.id };
-
-  const now = new Date().toISOString();
-  const id = uuid();
-  await env.DB.prepare(
-    `INSERT INTO opportunities (
-      id, source_id, url, title, opportunity_type, issuer, country, region, category,
-      discovered_at_iso, updated_at_iso, status,
-      fit_score, urgency_score, value_score, effort_score, risk_score, total_score, confidence,
-      summary, recommended_action, evidence_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    id,
-    source.id,
-    candidate.url,
-    candidate.title,
-    candidate.opportunityType,
-    source.label || null,
-    source.country || null,
-    source.region || null,
-    source.category || null,
-    now,
-    now,
-    "new",
-    candidate.score,
-    candidate.signals?.some((signal: string) => String(signal).startsWith("intent:")) ? Math.min(100, candidate.score + 5) : candidate.score,
-    candidate.score,
-    Math.max(0, 100 - candidate.score),
-    candidate.confidence === "high" ? 10 : candidate.confidence === "medium" ? 25 : 45,
-    candidate.score,
-    candidate.confidence,
-    `Autonomous opportunity signal from ${source.label || source.url}: ${candidate.title}`,
-    candidate.recommendedAction,
-    JSON.stringify({ signals: candidate.signals || [], sourceUrl: source.url, scheduled: true })
-  ).run();
-
-  return { saved: true, id };
-}
-
 export async function runOpportunityAutonomy(env: Env, settings: OpportunityAutonomySettings) {
   const summary = { sourcesChecked: 0, candidatesFound: 0, saved: 0, duplicates: 0, failed: 0, skipped: 0 };
 
@@ -138,13 +98,17 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
         continue;
       }
 
-      const candidates = extractOpportunityCandidates(fetched.body, source.url, 50).filter((candidate) => candidate.score >= settings.minOpportunityScore);
+      const candidates = extractOpportunityCandidates(fetched.body, source.url, 50);
       summary.candidatesFound += candidates.length;
 
       for (const candidate of candidates.slice(0, 10)) {
-        const result = await saveCandidate(env, source, candidate);
+        const result = await saveOpportunityCandidate(env, source, candidate, {
+          minScore: settings.minOpportunityScore,
+          discoveredBy: "scheduled",
+        });
         if (result.saved) summary.saved += 1;
-        else summary.duplicates += 1;
+        else if (result.reason === "duplicate") summary.duplicates += 1;
+        else summary.skipped += 1;
       }
 
       await updateSourceRun(env, source.id, true, null);
@@ -154,6 +118,6 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
     }
   }
 
-  await logEvent(env, "opportunity_tick_ok", `Opportunity autonomy checked ${summary.sourcesChecked} sources | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | failed ${summary.failed}`);
+  await logEvent(env, "opportunity_tick_ok", `Opportunity autonomy checked ${summary.sourcesChecked} sources | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | failed ${summary.failed}`);
   return summary;
 }

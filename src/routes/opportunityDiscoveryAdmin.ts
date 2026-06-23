@@ -8,6 +8,10 @@ function authorized(request: Request, env: Env): boolean {
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
 }
 
+function uuid() {
+  return crypto.randomUUID();
+}
+
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
   const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1").bind(tableName).first<any>();
   return Boolean(row?.name);
@@ -24,6 +28,17 @@ async function fetchHtml(url: string) {
   const contentType = response.headers.get("content-type") || "";
   const body = await response.text();
   return { ok: response.ok, status: response.status, contentType, body, elapsedMs: Date.now() - started };
+}
+
+function parseSourceAction(pathname: string): { id: string; action: string } | null {
+  const prefix = "/admin/opportunities/sources/";
+  if (!pathname.startsWith(prefix)) return null;
+  const rest = pathname.slice(prefix.length);
+  const parts = rest.split("/").filter(Boolean);
+  if (parts.length !== 2) return null;
+  const action = parts[1];
+  if (!["test", "preview", "commit-preview"].includes(action)) return null;
+  return { id: decodeURIComponent(parts[0]), action };
 }
 
 async function testSource(env: Env, id: string) {
@@ -86,18 +101,101 @@ async function previewSource(env: Env, id: string, requestUrl: URL) {
   };
 }
 
+async function commitPreview(env: Env, id: string, request: Request) {
+  const source = await getSource(env, id);
+  if (!source || !(await tableExists(env, "opportunities"))) {
+    return { ok: false, error: "source_or_opportunities_table_missing", requiredMigration: "0004_opportunity_intelligence.sql" };
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const confirmed = body?.confirm === true || body?.confirm === "true" || body?.confirm === 1 || body?.confirm === "1";
+  if (!confirmed) return { ok: false, error: "confirm_required", expected: { confirm: true } };
+
+  const minScore = Math.max(1, Math.min(100, Number(body?.minScore || 45)));
+  const limit = Math.max(1, Math.min(100, Number(body?.limit || 50)));
+  const now = new Date().toISOString();
+  const fetched = await fetchHtml(source.url);
+  if (!fetched.ok) return { ok: false, mode: "opportunity_commit_preview", error: `http_${fetched.status}`, inserted: 0 };
+
+  const candidates = extractOpportunityCandidates(fetched.body, source.url, limit).filter((candidate) => candidate.score >= minScore);
+  const inserted: any[] = [];
+  const skipped: any[] = [];
+
+  for (const candidate of candidates) {
+    const existing = await env.DB.prepare("SELECT id FROM opportunities WHERE url = ? AND title = ? LIMIT 1").bind(candidate.url, candidate.title).first<any>();
+    if (existing?.id) {
+      skipped.push({ url: candidate.url, title: candidate.title, reason: "duplicate", existingId: existing.id });
+      continue;
+    }
+
+    const opportunityId = uuid();
+    await env.DB.prepare(
+      `INSERT INTO opportunities (
+        id, source_id, url, title, opportunity_type, issuer, country, region, category, amount_text, estimated_value_cents, currency,
+        opens_at_iso, closes_at_iso, discovered_at_iso, updated_at_iso, status,
+        fit_score, urgency_score, value_score, effort_score, risk_score, total_score, confidence,
+        summary, eligibility_summary, recommended_action, evidence_json, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      opportunityId,
+      source.id,
+      candidate.url,
+      candidate.title,
+      candidate.opportunityType,
+      source.label || null,
+      source.country || null,
+      source.region || null,
+      source.category || null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      now,
+      now,
+      "new",
+      candidate.score,
+      candidate.signals.some((signal: string) => signal.startsWith("intent:")) ? Math.min(100, candidate.score + 5) : candidate.score,
+      candidate.score,
+      Math.max(0, 100 - candidate.score),
+      candidate.confidence === "high" ? 10 : candidate.confidence === "medium" ? 25 : 45,
+      candidate.score,
+      candidate.confidence,
+      `Discovered from ${source.label || source.url}: ${candidate.title}`,
+      null,
+      candidate.recommendedAction,
+      JSON.stringify({ signals: candidate.signals, sourceUrl: source.url, sourceType: source.source_type, previewScore: candidate.score }),
+      null
+    ).run();
+
+    inserted.push({ id: opportunityId, url: candidate.url, title: candidate.title, score: candidate.score, opportunityType: candidate.opportunityType, confidence: candidate.confidence });
+  }
+
+  return {
+    ok: true,
+    mode: "opportunity_commit_preview",
+    source: { id: source.id, url: source.url, label: source.label },
+    minScore,
+    considered: candidates.length,
+    insertedCount: inserted.length,
+    skippedCount: skipped.length,
+    inserted,
+    skipped,
+    safety: { callsAI: false, sendsEmail: false, postsSocial: false, autoApplies: false, reviewRequired: true },
+  };
+}
+
 export async function handleOpportunityDiscoveryAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
   if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
 
-  const match = pathname.match(/^\/admin\/opportunities\/sources\/([^/]+)\/(test|preview)$/);
-  if (!match) return json({ ok: false, error: "Not found" }, { status: 404 });
-  const id = decodeURIComponent(match[1]);
-  const action = match[2];
+  const parsed = parseSourceAction(pathname);
+  if (!parsed) return json({ ok: false, error: "Not found" }, { status: 404 });
   const requestUrl = new URL(request.url);
 
-  if (action === "test") return json(await testSource(env, id));
-  if (action === "preview") return json(await previewSource(env, id, requestUrl));
+  if (parsed.action === "test") return json(await testSource(env, parsed.id));
+  if (parsed.action === "preview") return json(await previewSource(env, parsed.id, requestUrl));
+  if (parsed.action === "commit-preview") return json(await commitPreview(env, parsed.id, request));
   return json({ ok: false, error: "Not found" }, { status: 404 });
 }

@@ -4,6 +4,7 @@ import {
   listDrafts,
   updateLead,
   getSetting,
+  setSetting,
   listEvents,
   logEvent,
   getAdminToken,
@@ -13,6 +14,9 @@ import {
   parseLeadSignals,
 } from "../db";
 import { dailyTick, runDraftOnce, runScanOnce, runSendApproved } from "../engine";
+import { buildHealthReport, buildDiagnosticsReport } from "../core/health";
+import { buildSchemaReport } from "../core/schema";
+import { ALLOWED_SETTING_KEYS } from "../core/settings";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 type InferredKind = "agency" | "contractor" | "ecommerce" | "service" | "not_fit" | "general";
@@ -292,11 +296,35 @@ async function handleBackfill(env: Env, body: any, json: JsonResponse) {
   return json({ ok: true, updated });
 }
 
+async function handleSettingsPost(request: Request, env: Env, json: JsonResponse) {
+  const body = await request.json().catch(() => ({}));
+  const rawSettings = body?.settings && typeof body.settings === "object" ? body.settings : body;
+  const updated: Record<string, string> = {};
+  const rejected: string[] = [];
+
+  for (const [key, value] of Object.entries(rawSettings || {})) {
+    if (!ALLOWED_SETTING_KEYS.has(key)) {
+      rejected.push(key);
+      continue;
+    }
+    const nextValue = String(value);
+    await setSetting(env, key, nextValue);
+    updated[key] = nextValue;
+  }
+
+  if (rejected.length) {
+    return json({ ok: false, error: "unsupported_setting_keys", rejected, updated }, { status: 400 });
+  }
+
+  await logEvent(env, "settings_update", `Updated ${Object.keys(updated).length} free-safe setting(s)`);
+  return json({ ok: true, updated });
+}
+
 export async function handleAdmin(
   request: Request,
   env: Env,
   pathname: string,
-  _ctx?: ExecutionContext,
+  _ctx?: any,
   json: JsonResponse = defaultJson
 ) {
   if (request.method === "OPTIONS") return json({ ok: true });
@@ -306,6 +334,13 @@ export async function handleAdmin(
   if (!token || auth !== `Bearer ${token}`) {
     return json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
+
+  if (pathname === "/admin/health" && request.method === "GET") return json(await buildHealthReport(env));
+  if (pathname === "/admin/diagnostics" && request.method === "GET") {
+    const url = new URL(request.url);
+    return json(await buildDiagnosticsReport(env, { deep: url.searchParams.get("deep") === "1", confirm: url.searchParams.get("confirm") === "1" }));
+  }
+  if (pathname === "/admin/schema" && request.method === "GET") return json(await buildSchemaReport(env));
 
   if (pathname === "/admin/overview" && request.method === "GET") return handleOverview(env, json);
   if (pathname === "/admin/leads" && request.method === "GET") return handleLeads(request, env, json);
@@ -319,7 +354,9 @@ export async function handleAdmin(
       ok: true,
       settings: {
         engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
+        cost_mode: (await getSetting(env, "cost_mode")) || "free_safe",
         ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
+        ai_mode: (await getSetting(env, "ai_mode")) || "off",
         drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
         sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
         approval_required: (await getSetting(env, "approval_required")) || "1",
@@ -331,6 +368,8 @@ export async function handleAdmin(
       },
     });
   }
+
+  if (pathname === "/admin/settings" && request.method === "POST") return handleSettingsPost(request, env, json);
 
   if (pathname === "/admin/leads" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));

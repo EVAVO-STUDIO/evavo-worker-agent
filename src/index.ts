@@ -1,4 +1,4 @@
-import { dailyTick } from "./engine";
+import { dailyTickWithAutonomy } from "./engineAutonomy";
 import type { Env } from "./db";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/admin";
@@ -30,7 +30,7 @@ function isOpportunityReviewPath(pathname: string): boolean {
 
 export default {
   async scheduled(_controller: any, env: Env, ctx: any) {
-    ctx.waitUntil(dailyTick(env));
+    ctx.waitUntil(dailyTickWithAutonomy(env));
   },
 
   async fetch(req: Request, env: Env, ctx: any): Promise<Response> {

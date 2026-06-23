@@ -2,6 +2,8 @@ import { Env, getSetting, listEvents, listLeads, parseLeadSignals } from "../db"
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+type FallbackRunValues = Partial<Record<string, string | number | null | undefined>>;
+
 function defaultJson(data: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(data), {
     ...init,
@@ -71,7 +73,7 @@ function buildEmptyDiagnostics() {
   };
 }
 
-function buildFallbackRun(event: any, runMode: string, values: Partial<Record<string, number>> = {}) {
+function buildFallbackRun(event: any, runMode: string, values: FallbackRunValues = {}) {
   return {
     runId: `derived:${event?.id || "event"}`,
     started_at_iso: event?.created_at_iso || null,
@@ -207,7 +209,7 @@ export async function handlePublic(
   request: Request,
   env: Env,
   pathname: string,
-  _ctx?: ExecutionContext,
+  _ctx?: any,
   json: JsonResponse = defaultJson
 ) {
   if (request.method === "OPTIONS") return json({ ok: true });

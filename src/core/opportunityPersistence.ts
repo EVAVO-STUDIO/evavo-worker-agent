@@ -71,8 +71,9 @@ export function normalizeOpportunityTitle(rawTitle: unknown): string | null {
 }
 
 function buildEvidenceJson(source: OpportunitySourceLike, candidate: OpportunityCandidate, normalizedUrl: string, discoveredBy: string) {
+  const signals = Array.isArray(candidate.signals) ? candidate.signals.slice(0, 24) : [];
   return JSON.stringify({
-    schemaVersion: "opportunity_evidence_v1",
+    schemaVersion: "opportunity_evidence_v2",
     discoveredBy,
     source: {
       id: source.id,
@@ -90,7 +91,25 @@ function buildEvidenceJson(source: OpportunitySourceLike, candidate: Opportunity
       score: candidate.score,
       confidence: candidate.confidence,
       recommendedAction: candidate.recommendedAction || "review_manually",
-      signals: Array.isArray(candidate.signals) ? candidate.signals.slice(0, 24) : [],
+      signals,
+    },
+    evidence: candidate.evidence || {
+      sourceUrl: source.url,
+      linkText: candidate.title,
+      nearbyText: "",
+      matchedTerms: signals,
+    },
+    scoreBreakdown: candidate.scoreBreakdown || {
+      typeScore: 0,
+      intentScore: 0,
+      sourceAuthorityScore: 0,
+      evavoFitScore: 0,
+      urgencyScore: 0,
+      valueScore: 0,
+      effortScore: 0,
+      riskPenalty: 0,
+      learningAdjustment: 0,
+      total: candidate.score,
     },
   });
 }
@@ -131,9 +150,9 @@ export async function saveOpportunityCandidate(
   const id = uuid();
   const confidence = normalizeConfidence(candidate.confidence);
   const signals = Array.isArray(candidate.signals) ? candidate.signals : [];
-  const urgencyScore = signals.some((signal: string) => String(signal).startsWith("intent:")) ? Math.min(100, score + 5) : score;
-  const effortScore = Math.max(0, 100 - score);
-  const riskScore = confidence === "high" ? 10 : confidence === "medium" ? 25 : 45;
+  const urgencyScore = candidate.scoreBreakdown?.urgencyScore ? Math.min(100, score + candidate.scoreBreakdown.urgencyScore) : signals.some((signal: string) => String(signal).startsWith("intent:")) ? Math.min(100, score + 5) : score;
+  const effortScore = candidate.scoreBreakdown?.effortScore ?? Math.max(0, 100 - score);
+  const riskScore = candidate.scoreBreakdown?.riskPenalty ?? (confidence === "high" ? 10 : confidence === "medium" ? 25 : 45);
   const opportunityType = candidate.opportunityType || "unknown";
   const discoveredBy = options.discoveredBy || "manual";
 
@@ -154,17 +173,17 @@ export async function saveOpportunityCandidate(
     source.country || null,
     source.region || null,
     source.category || null,
+    candidate.evidence?.detectedValueText || null,
     null,
     null,
     null,
-    null,
-    null,
+    candidate.evidence?.detectedDeadlineText || null,
     now,
     now,
     "new",
     score,
     urgencyScore,
-    score,
+    candidate.scoreBreakdown?.valueScore ?? score,
     effortScore,
     riskScore,
     score,

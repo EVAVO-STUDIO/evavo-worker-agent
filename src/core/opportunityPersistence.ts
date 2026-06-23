@@ -39,6 +39,15 @@ export type SaveOpportunityCandidateOptions = {
   notes?: string | null;
 };
 
+type DbScoreFields = {
+  fitScore: number;
+  urgencyScore: number;
+  valueScore: number;
+  effortScore: number;
+  riskScore: number;
+  totalScore: number;
+};
+
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -68,6 +77,22 @@ export function normalizeOpportunityTitle(rawTitle: unknown): string | null {
   if (title.length < 3) return null;
   if (/^(click here|read more|learn more|more|view|details|download)$/i.test(title)) return null;
   return title.slice(0, 300);
+}
+
+function buildDbScoreFields(candidate: OpportunityCandidate, totalScore: number, confidence: "low" | "medium" | "high", signals: string[]): DbScoreFields {
+  const breakdown = candidate.scoreBreakdown;
+  const intentScore = breakdown?.intentScore ?? (signals.some((signal: string) => String(signal).startsWith("intent:")) ? 8 : 0);
+  const evavoFitScore = breakdown?.evavoFitScore ?? (signals.some((signal: string) => String(signal).startsWith("evavo_fit:")) ? 10 : 0);
+  const typeScore = breakdown?.typeScore ?? totalScore;
+
+  return {
+    fitScore: clampInt(typeScore + evavoFitScore, totalScore, 0, 100),
+    urgencyScore: clampInt(intentScore + (breakdown?.urgencyScore ?? 0), intentScore, 0, 100),
+    valueScore: clampInt(breakdown?.valueScore ?? totalScore, totalScore, 0, 100),
+    effortScore: clampInt(breakdown?.effortScore ?? Math.max(0, 100 - totalScore), Math.max(0, 100 - totalScore), 0, 100),
+    riskScore: clampInt(breakdown?.riskPenalty ?? (confidence === "high" ? 10 : confidence === "medium" ? 25 : 45), 45, 0, 100),
+    totalScore,
+  };
 }
 
 function buildEvidenceJson(source: OpportunitySourceLike, candidate: OpportunityCandidate, normalizedUrl: string, discoveredBy: string) {
@@ -150,11 +175,9 @@ export async function saveOpportunityCandidate(
   const id = uuid();
   const confidence = normalizeConfidence(candidate.confidence);
   const signals = Array.isArray(candidate.signals) ? candidate.signals : [];
-  const urgencyScore = candidate.scoreBreakdown?.urgencyScore ? Math.min(100, score + candidate.scoreBreakdown.urgencyScore) : signals.some((signal: string) => String(signal).startsWith("intent:")) ? Math.min(100, score + 5) : score;
-  const effortScore = candidate.scoreBreakdown?.effortScore ?? Math.max(0, 100 - score);
-  const riskScore = candidate.scoreBreakdown?.riskPenalty ?? (confidence === "high" ? 10 : confidence === "medium" ? 25 : 45);
   const opportunityType = candidate.opportunityType || "unknown";
   const discoveredBy = options.discoveredBy || "manual";
+  const dbScores = buildDbScoreFields(candidate, score, confidence, signals);
 
   await env.DB.prepare(
     `INSERT INTO opportunities (
@@ -177,16 +200,16 @@ export async function saveOpportunityCandidate(
     null,
     null,
     null,
-    candidate.evidence?.detectedDeadlineText || null,
+    null,
     now,
     now,
     "new",
-    score,
-    urgencyScore,
-    candidate.scoreBreakdown?.valueScore ?? score,
-    effortScore,
-    riskScore,
-    score,
+    dbScores.fitScore,
+    dbScores.urgencyScore,
+    dbScores.valueScore,
+    dbScores.effortScore,
+    dbScores.riskScore,
+    dbScores.totalScore,
     confidence,
     `Discovered from ${source.label || source.url}: ${normalizedTitle}`,
     null,

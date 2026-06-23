@@ -273,7 +273,7 @@ async function plannerExecutions(env: Env, limit: number) {
   return { ok: true, mode: "planner_executions", count: executions.length, executions };
 }
 
-async function plannerDashboard(env: Env) {
+async function plannerDashboard(env: Env, compact = false) {
   const [planner, latestRecommendationRow, latestExecutionRow] = await Promise.all([
     buildPlannerReport(env),
     latestDecision(env, "planner_recommendation"),
@@ -287,9 +287,9 @@ async function plannerDashboard(env: Env) {
   const risk = buildDashboardRisk(planner);
   const operatorChecklist = buildDashboardChecklist(planner, latestRecommendation, latestExecution);
 
-  return {
+  const base = {
     ok: true,
-    mode: "planner_dashboard",
+    mode: compact ? "planner_dashboard_compact" : "planner_dashboard",
     nowISO: new Date().toISOString(),
     risk,
     badges,
@@ -314,10 +314,16 @@ async function plannerDashboard(env: Env) {
       blockedActions: planner.decision?.blockedActions || [],
       why: planner.decision?.why || [],
       primaryAction,
-      actionCards: planner.decision?.actionCards || [],
+      actionCards: compact ? undefined : planner.decision?.actionCards || [],
     },
     latestRecommendation,
     latestExecution,
+  };
+
+  if (compact) return base;
+
+  return {
+    ...base,
     recent: {
       sourceRuns: planner.recent?.sourceRuns || [],
       events: planner.recent?.events || [],
@@ -396,7 +402,9 @@ export async function handlePlannerAdmin(request: Request, env: Env, pathname: s
   }
 
   if (pathname === "/admin/planner/dashboard" && request.method === "GET") {
-    return json(await plannerDashboard(env));
+    const url = new URL(request.url);
+    const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("compact") === "true";
+    return json(await plannerDashboard(env, compact));
   }
 
   if (pathname === "/admin/planner/history" && request.method === "GET") {

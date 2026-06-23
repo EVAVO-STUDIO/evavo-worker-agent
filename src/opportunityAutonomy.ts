@@ -2,7 +2,7 @@ import type { Env } from "./db";
 import { logEvent } from "./db";
 import { extractOpportunityCandidates } from "./core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "./core/opportunityPersistence";
-import { finishOpportunityRun, startOpportunityRun, type OpportunityRunSummary } from "./core/opportunityRuns";
+import { finishOpportunityRun, recordSourceRunResult, startOpportunityRun, type OpportunityRunSummary } from "./core/opportunityRuns";
 
 type OpportunityAutonomySettings = {
   opportunityDiscoveryEnabled: boolean;
@@ -97,15 +97,32 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
 
     for (const source of sources) {
       summary.sourcesChecked += 1;
+      let candidatesFound = 0;
+      let candidatesSaved = 0;
+      let candidatesRejected = 0;
+      let duplicates = 0;
+
       try {
         const fetched = await fetchHtml(source.url);
         if (!fetched.ok || !fetched.body || (fetched.contentType && !fetched.contentType.includes("html"))) {
+          const error = fetched.ok ? "non_html_response" : `http_${fetched.status}`;
           summary.failed += 1;
-          await updateSourceRun(env, source.id, false, fetched.ok ? "non_html_response" : `http_${fetched.status}`);
+          await updateSourceRun(env, source.id, false, error);
+          await recordSourceRunResult(env, {
+            runId: runId || "",
+            sourceId: source.id,
+            sourceUrl: source.url,
+            fetchStatus: fetched.status,
+            contentType: fetched.contentType,
+            elapsedMs: fetched.elapsedMs,
+            bytes: fetched.body.length,
+            error,
+          });
           continue;
         }
 
         const candidates = extractOpportunityCandidates(fetched.body, source.url, 50);
+        candidatesFound = candidates.length;
         summary.candidatesFound += candidates.length;
 
         for (const candidate of candidates.slice(0, 10)) {
@@ -113,18 +130,47 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
             minScore: settings.minOpportunityScore,
             discoveredBy: "scheduled",
           });
-          if (result.saved) summary.saved += 1;
-          else if (result.reason === "duplicate") summary.duplicates += 1;
-          else {
+          if (result.saved) {
+            summary.saved += 1;
+            candidatesSaved += 1;
+          } else if (result.reason === "duplicate") {
+            summary.duplicates += 1;
+            duplicates += 1;
+          } else {
             summary.skipped += 1;
             summary.rejected += 1;
+            candidatesRejected += 1;
           }
         }
 
         await updateSourceRun(env, source.id, true, null);
+        await recordSourceRunResult(env, {
+          runId: runId || "",
+          sourceId: source.id,
+          sourceUrl: source.url,
+          fetchStatus: fetched.status,
+          contentType: fetched.contentType,
+          elapsedMs: fetched.elapsedMs,
+          bytes: fetched.body.length,
+          candidatesFound,
+          candidatesSaved,
+          candidatesRejected,
+          duplicates,
+        });
       } catch (err: any) {
+        const error = String(err?.message || err);
         summary.failed += 1;
-        await updateSourceRun(env, source.id, false, String(err?.message || err));
+        await updateSourceRun(env, source.id, false, error);
+        await recordSourceRunResult(env, {
+          runId: runId || "",
+          sourceId: source.id,
+          sourceUrl: source.url,
+          candidatesFound,
+          candidatesSaved,
+          candidatesRejected,
+          duplicates,
+          error,
+        });
       }
     }
 

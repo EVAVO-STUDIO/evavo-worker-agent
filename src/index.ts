@@ -12,6 +12,7 @@ import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
 import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAdmin";
 import { handleOpportunityReviewAdmin } from "./routes/opportunityReviewAdmin";
 import { handleOpportunityLearningAdmin } from "./routes/opportunityLearningAdmin";
+import { handleOpportunityRunDueAdmin } from "./routes/opportunityRunDueAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
@@ -40,6 +41,10 @@ export default {
 
       if (pathname === "/admin/settings/autonomy") {
         return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (pathname === "/admin/opportunities/run-due") {
+        return await handleOpportunityRunDueAdmin(req, env, pathname, jsonResponse);
       }
 
       if (isOpportunityDiscoveryPath(pathname)) {

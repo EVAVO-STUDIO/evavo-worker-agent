@@ -1,3 +1,26 @@
+export type OpportunityEvidence = {
+  sourceUrl: string;
+  linkText: string;
+  nearbyText: string;
+  matchedTerms: string[];
+  detectedDeadlineText?: string;
+  detectedValueText?: string;
+  disqualifierText?: string;
+};
+
+export type OpportunityScoreBreakdown = {
+  typeScore: number;
+  intentScore: number;
+  sourceAuthorityScore: number;
+  evavoFitScore: number;
+  urgencyScore: number;
+  valueScore: number;
+  effortScore: number;
+  riskPenalty: number;
+  learningAdjustment: number;
+  total: number;
+};
+
 export type OpportunityCandidate = {
   url: string;
   title: string;
@@ -6,6 +29,8 @@ export type OpportunityCandidate = {
   confidence: "low" | "medium" | "high";
   signals: string[];
   recommendedAction: string;
+  evidence?: OpportunityEvidence;
+  scoreBreakdown?: OpportunityScoreBreakdown;
 };
 
 const TYPE_SIGNALS: Array<{ type: string; score: number; terms: string[] }> = [
@@ -20,11 +45,23 @@ const TYPE_SIGNALS: Array<{ type: string; score: number; terms: string[] }> = [
 ];
 
 const NEGATIVE_TERMS = ["privacy policy", "terms of use", "login", "sign in", "cookie", "accessibility", "subscribe", "newsletter", "media release", "annual report"];
-
+const DISQUALIFIER_TERMS = ["closed", "applications closed", "expired", "students only", "not accepting", "archived", "past event"];
 const HIGH_INTENT_TERMS = ["closes", "closing date", "applications close", "apply now", "submit proposal", "register interest", "request a quote", "funding available", "seeking", "looking for", "needed", "required", "suppliers wanted", "open now"];
+const EVAVO_FIT_TERMS = ["website", "web app", "app", "digital", "ux", "ui", "automation", "ecommerce", "e-commerce", "platform", "portal", "interactive", "3d", "ar", "vr", "ai", "chatbot", "software"];
+const VALUE_TERMS = ["funding", "grant", "$", "aud", "budget", "contract", "tender", "procurement"];
+const DEADLINE_PATTERN = /(closes?\s+[^.]{0,80}|closing date\s+[^.]{0,80}|applications close\s+[^.]{0,80}|deadline\s+[^.]{0,80})/i;
+const VALUE_PATTERN = /(\$\s?[0-9][0-9,]*(?:\.[0-9]+)?|AUD\s?[0-9][0-9,]*|funding\s+(?:of|up to)?\s?\$?\s?[0-9][0-9,]*)/i;
 
 function normalizeText(value: string): string {
-  return value.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+  return value.replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function includesAny(text: string, terms: string[]): string[] {
@@ -55,41 +92,89 @@ function absoluteUrl(href: string, baseUrl: string): string | null {
   }
 }
 
-function scoreCandidate(title: string, url: string): OpportunityCandidate | null {
-  const combined = `${title} ${url}`;
-  if (includesAny(combined, NEGATIVE_TERMS).length > 0) return null;
+function nearbyText(html: string, startIndex: number, endIndex: number): string {
+  const before = html.slice(Math.max(0, startIndex - 700), startIndex);
+  const after = html.slice(endIndex, Math.min(html.length, endIndex + 900));
+  return normalizeText(`${before} ${after}`).slice(0, 1400);
+}
+
+function firstPattern(text: string, pattern: RegExp): string | undefined {
+  const match = text.match(pattern);
+  return match?.[0]?.replace(/\s+/g, " ").trim().slice(0, 160);
+}
+
+function scoreCandidate(title: string, url: string, sourceUrl: string, contextText: string): OpportunityCandidate | null {
+  const combined = `${title} ${url} ${contextText}`;
+  const negativeMatches = includesAny(`${title} ${url}`, NEGATIVE_TERMS);
+  if (negativeMatches.length > 0) return null;
 
   let opportunityType = "unknown";
-  let score = 0;
+  let typeScore = 0;
   const signals: string[] = [];
+  const matchedTerms: string[] = [];
 
   for (const bucket of TYPE_SIGNALS) {
     const matches = includesAny(combined, bucket.terms);
     if (!matches.length) continue;
     const bucketScore = bucket.score + Math.min(20, matches.length * 6);
-    if (bucketScore > score) {
+    if (bucketScore > typeScore) {
       opportunityType = bucket.type;
-      score = bucketScore;
+      typeScore = bucketScore;
     }
+    matchedTerms.push(...matches);
     signals.push(...matches.map((match) => `${bucket.type}:${match}`));
   }
 
   const highIntent = includesAny(combined, HIGH_INTENT_TERMS);
-  if (highIntent.length) {
-    score += Math.min(24, highIntent.length * 8);
-    signals.push(...highIntent.map((match) => `intent:${match}`));
-  }
+  const evavoFit = includesAny(combined, EVAVO_FIT_TERMS);
+  const valueTerms = includesAny(combined, VALUE_TERMS);
+  const disqualifiers = includesAny(combined, DISQUALIFIER_TERMS);
+  const sourceAuthorityScore = /\.gov\.au|grants?|tenders?|procurement|business\.gov\.au/i.test(url) || /\.gov\.au|business\.gov\.au/i.test(sourceUrl) ? 10 : 0;
+  const intentScore = Math.min(24, highIntent.length * 8);
+  const evavoFitScore = Math.min(18, evavoFit.length * 4);
+  const valueScore = valueTerms.length ? 8 : 0;
+  const urgencyScore = highIntent.some((term) => /close|deadline/i.test(term)) ? 6 : 0;
+  const effortScore = opportunityType === "tender" || opportunityType === "rfp_or_eoi" ? 6 : 0;
+  const riskPenalty = Math.min(24, disqualifiers.length * 12);
 
-  if (/\$|aud|funding|grant|tender|rfp|eoi|procurement|quote/i.test(combined)) score += 8;
-  if (/\.gov\.au|grants?|tenders?|procurement|business\.gov\.au/i.test(url)) score += 10;
+  if (highIntent.length) signals.push(...highIntent.map((match) => `intent:${match}`));
+  if (evavoFit.length) signals.push(...evavoFit.map((match) => `evavo_fit:${match}`));
+  if (valueTerms.length) signals.push(...valueTerms.map((match) => `value:${match}`));
+  if (disqualifiers.length) signals.push(...disqualifiers.map((match) => `risk:${match}`));
+
   if (/jobs|careers|work-with-us|join-us/i.test(url) && opportunityType === "unknown") {
     opportunityType = "contract_role_signal";
-    score += 18;
+    typeScore = Math.max(typeScore, 18);
     signals.push("path:jobs_or_careers");
   }
 
+  const learningAdjustment = 0;
+  let score = typeScore + intentScore + sourceAuthorityScore + evavoFitScore + valueScore + urgencyScore - effortScore - riskPenalty + learningAdjustment;
   if (score < 18) return null;
   score = Math.max(0, Math.min(100, score));
+
+  const evidence: OpportunityEvidence = {
+    sourceUrl,
+    linkText: title,
+    nearbyText: contextText.slice(0, 1000),
+    matchedTerms: Array.from(new Set([...matchedTerms, ...highIntent, ...evavoFit, ...valueTerms])).slice(0, 24),
+    detectedDeadlineText: firstPattern(combined, DEADLINE_PATTERN),
+    detectedValueText: firstPattern(combined, VALUE_PATTERN),
+    disqualifierText: disqualifiers.length ? disqualifiers.join(", ") : undefined,
+  };
+
+  const scoreBreakdown: OpportunityScoreBreakdown = {
+    typeScore,
+    intentScore,
+    sourceAuthorityScore,
+    evavoFitScore,
+    urgencyScore,
+    valueScore,
+    effortScore,
+    riskPenalty,
+    learningAdjustment,
+    total: score,
+  };
 
   return {
     url,
@@ -97,8 +182,10 @@ function scoreCandidate(title: string, url: string): OpportunityCandidate | null
     opportunityType,
     score,
     confidence: confidenceFor(score),
-    signals: Array.from(new Set(signals)).slice(0, 12),
+    signals: Array.from(new Set(signals)).slice(0, 24),
     recommendedAction: actionFor(opportunityType, score),
+    evidence,
+    scoreBreakdown,
   };
 }
 
@@ -113,7 +200,8 @@ export function extractOpportunityCandidates(html: string, sourceUrl: string, li
     const title = normalizeText(match[2]);
     if (!url || seen.has(url) || !title || title.length < 3) continue;
     seen.add(url);
-    const candidate = scoreCandidate(title, url);
+    const context = nearbyText(html, match.index, match.index + match[0].length);
+    const candidate = scoreCandidate(title, url, sourceUrl, context);
     if (candidate) candidates.push(candidate);
   }
 

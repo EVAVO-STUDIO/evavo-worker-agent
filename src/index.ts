@@ -12,6 +12,7 @@ import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
 import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAdmin";
 import { handleOpportunityReviewAdmin } from "./routes/opportunityReviewAdmin";
 import { handleOpportunityLearningAdmin } from "./routes/opportunityLearningAdmin";
+import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -36,6 +37,10 @@ export default {
     try {
       const url = new URL(req.url);
       const pathname = url.pathname;
+
+      if (pathname === "/admin/settings/autonomy") {
+        return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
+      }
 
       if (isOpportunityDiscoveryPath(pathname)) {
         return await handleOpportunityDiscoveryAdmin(req, env, pathname, jsonResponse);

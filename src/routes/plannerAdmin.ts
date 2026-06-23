@@ -20,6 +20,62 @@ function safeParse(raw: unknown): any {
   }
 }
 
+function summarizeRecommendationRow(row: any) {
+  if (!row) return null;
+  const evidence = safeParse(row.evidence_json);
+  const report = evidence.report || {};
+  return {
+    id: row.id,
+    createdAt: row.created_at_iso,
+    recommendedNextAction: row.target_id,
+    primaryRoute: row.target_url,
+    reason: row.reason,
+    confidence: row.confidence,
+    recordedBy: evidence.recordedBy || null,
+    notes: evidence.notes || null,
+    healthStatus: report.state?.healthStatus || null,
+    draftBacklog: report.state?.draftBacklog ?? null,
+    safeActions: report.decision?.safeActions || [],
+    blockedActions: report.decision?.blockedActions || [],
+  };
+}
+
+function summarizeExecutionRow(row: any) {
+  if (!row) return null;
+  const evidence = safeParse(row.evidence_json);
+  const result = evidence.result || {};
+  return {
+    id: row.id,
+    createdAt: row.created_at_iso,
+    actionId: row.target_id,
+    route: row.target_url,
+    reason: row.reason,
+    confidence: row.confidence,
+    requestedBy: evidence.requestedBy || null,
+    notes: evidence.notes || null,
+    resultOk: result.ok === true,
+    resultMode: result.mode || null,
+    resultSummary: {
+      error: result.error || null,
+      selectedSourceCount: Array.isArray(result.selectedSources) ? result.selectedSources.length : null,
+      draftCount: Array.isArray(result.drafts) ? result.drafts.length : null,
+      sourceCount: Array.isArray(result.sources) ? result.sources.length : null,
+      hasSource: Boolean(result.source),
+    },
+  };
+}
+
+async function latestDecision(env: Env, decisionType: string) {
+  const row = await env.DB.prepare(
+    `SELECT id, target_id, target_url, reason, confidence, evidence_json, created_at_iso
+     FROM agent_decisions
+     WHERE decision_type = ?
+     ORDER BY created_at_iso DESC
+     LIMIT 1`
+  ).bind(decisionType).first<any>();
+  return row || null;
+}
+
 async function plannerHistory(env: Env, limit: number) {
   const rows = await env.DB.prepare(
     `SELECT id, target_id, target_url, reason, confidence, evidence_json, created_at_iso
@@ -29,32 +85,7 @@ async function plannerHistory(env: Env, limit: number) {
      LIMIT ?`
   ).bind(Math.max(1, Math.min(100, limit))).all<any>();
 
-  const history = (rows.results || []).map((row: any) => {
-    const evidence = safeParse(row.evidence_json);
-    const report = evidence.report || {};
-    return {
-      id: row.id,
-      createdAt: row.created_at_iso,
-      recommendedNextAction: row.target_id,
-      primaryRoute: row.target_url,
-      reason: row.reason,
-      confidence: row.confidence,
-      recordedBy: evidence.recordedBy || null,
-      notes: evidence.notes || null,
-      flags: report.flags || null,
-      state: report.state
-        ? {
-            healthStatus: report.state.healthStatus,
-            healthIssues: report.state.healthIssues,
-            draftBacklog: report.state.draftBacklog,
-            sourceCounts: report.state.sourceCounts,
-            draftCounts: report.state.draftCounts,
-          }
-        : null,
-      safeActions: report.decision?.safeActions || [],
-      blockedActions: report.decision?.blockedActions || [],
-    };
-  });
+  const history = (rows.results || []).map((row: any) => summarizeRecommendationRow(row));
 
   return { ok: true, mode: "planner_history", count: history.length, history };
 }
@@ -68,31 +99,55 @@ async function plannerExecutions(env: Env, limit: number) {
      LIMIT ?`
   ).bind(Math.max(1, Math.min(100, limit))).all<any>();
 
-  const executions = (rows.results || []).map((row: any) => {
-    const evidence = safeParse(row.evidence_json);
-    const result = evidence.result || {};
-    return {
-      id: row.id,
-      createdAt: row.created_at_iso,
-      actionId: row.target_id,
-      route: row.target_url,
-      reason: row.reason,
-      confidence: row.confidence,
-      requestedBy: evidence.requestedBy || null,
-      notes: evidence.notes || null,
-      resultOk: result.ok === true,
-      resultMode: result.mode || null,
-      resultSummary: {
-        error: result.error || null,
-        selectedSourceCount: Array.isArray(result.selectedSources) ? result.selectedSources.length : null,
-        draftCount: Array.isArray(result.drafts) ? result.drafts.length : null,
-        sourceCount: Array.isArray(result.sources) ? result.sources.length : null,
-        hasSource: Boolean(result.source),
-      },
-    };
-  });
+  const executions = (rows.results || []).map((row: any) => summarizeExecutionRow(row));
 
   return { ok: true, mode: "planner_executions", count: executions.length, executions };
+}
+
+async function plannerDashboard(env: Env) {
+  const [planner, latestRecommendationRow, latestExecutionRow] = await Promise.all([
+    buildPlannerReport(env),
+    latestDecision(env, "planner_recommendation"),
+    latestDecision(env, "planner_execute"),
+  ]);
+
+  const latestRecommendation = summarizeRecommendationRow(latestRecommendationRow);
+  const latestExecution = summarizeExecutionRow(latestExecutionRow);
+  const primaryAction = planner.decision?.primaryActionCard || null;
+
+  return {
+    ok: true,
+    mode: "planner_dashboard",
+    nowISO: new Date().toISOString(),
+    status: {
+      healthStatus: planner.state?.healthStatus || null,
+      healthIssues: planner.state?.healthIssues || [],
+      engineEnabled: planner.flags?.engineEnabled === true,
+      aiEnabled: planner.flags?.aiEnabled === true,
+      sendingEnabled: planner.flags?.sendingEnabled === true,
+      costMode: planner.flags?.costMode || "free_safe",
+    },
+    counts: {
+      draftBacklog: planner.state?.draftBacklog || 0,
+      leadCounts: planner.state?.leadCounts || {},
+      draftCounts: planner.state?.draftCounts || {},
+      sourceCounts: planner.state?.sourceCounts || {},
+    },
+    recommendation: {
+      recommendedNextAction: planner.decision?.recommendedNextAction || null,
+      safeActions: planner.decision?.safeActions || [],
+      blockedActions: planner.decision?.blockedActions || [],
+      why: planner.decision?.why || [],
+      primaryAction,
+      actionCards: planner.decision?.actionCards || [],
+    },
+    latestRecommendation,
+    latestExecution,
+    recent: {
+      sourceRuns: planner.recent?.sourceRuns || [],
+      events: planner.recent?.events || [],
+    },
+  };
 }
 
 async function recordExecution(env: Env, actionId: string, route: string, result: any, body: any) {
@@ -163,6 +218,10 @@ export async function handlePlannerAdmin(request: Request, env: Env, pathname: s
 
   if (pathname === "/admin/planner" && request.method === "GET") {
     return json(await buildPlannerReport(env));
+  }
+
+  if (pathname === "/admin/planner/dashboard" && request.method === "GET") {
+    return json(await plannerDashboard(env));
   }
 
   if (pathname === "/admin/planner/history" && request.method === "GET") {

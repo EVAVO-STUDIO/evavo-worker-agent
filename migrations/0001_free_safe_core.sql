@@ -1,0 +1,1 @@
+-- Free-safe core migration placeholder.

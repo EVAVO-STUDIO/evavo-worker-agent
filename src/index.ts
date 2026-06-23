@@ -18,7 +18,7 @@ function jsonResponse(data: any, init: ResponseInit = {}): Response {
 }
 
 function isOpportunityDiscoveryPath(pathname: string): boolean {
-  return pathname.startsWith("/admin/opportunities/sources/") && (pathname.endsWith("/test") || pathname.endsWith("/preview"));
+  return pathname.startsWith("/admin/opportunities/sources/") && (pathname.endsWith("/test") || pathname.endsWith("/preview") || pathname.endsWith("/commit-preview"));
 }
 
 export default {

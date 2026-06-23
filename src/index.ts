@@ -24,7 +24,7 @@ export default {
       const url = new URL(req.url);
       const pathname = url.pathname;
 
-      if (pathname === "/admin/planner") {
+      if (pathname === "/admin/planner" || pathname.startsWith("/admin/planner/")) {
         return await handlePlannerAdmin(req, env, pathname, jsonResponse);
       }
 

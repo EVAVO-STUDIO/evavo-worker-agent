@@ -1,5 +1,5 @@
 import type { Env } from "./db";
-import { getSetting, logEvent } from "./db";
+import { getSetting, logEvent, setSetting } from "./db";
 import { dailyTick as legacyDailyTick } from "./engine";
 
 type AutonomySettings = {
@@ -76,24 +76,51 @@ export async function readAutonomySettings(env: Env): Promise<AutonomySettings> 
   return settings;
 }
 
+async function syncLegacyEngineFlags(env: Env, settings: AutonomySettings): Promise<void> {
+  const legacyScanAllowed = settings.leadDiscoveryEnabled && settings.maxNetworkCallsPerRun > 0;
+  const legacyDraftAllowed = settings.aiDraftsEnabled && !settings.freeSafeOnly;
+  const legacySendAllowed = settings.sendingEnabled && !settings.freeSafeOnly;
+
+  await setSetting(env, "engine_enabled", settings.engineEnabled ? "1" : "0");
+  await setSetting(env, "crawl_cap_per_day", String(legacyScanAllowed ? Math.min(settings.dailySourceLimit, settings.maxNetworkCallsPerRun) : 0));
+  await setSetting(env, "draft_cap_per_day", legacyDraftAllowed ? "10" : "0");
+  await setSetting(env, "send_cap_per_day", legacySendAllowed ? "5" : "0");
+  await setSetting(env, "drafting_enabled", legacyDraftAllowed ? "1" : "0");
+  await setSetting(env, "sending_enabled", legacySendAllowed ? "1" : "0");
+}
+
+function hasLegacyStage(settings: AutonomySettings): boolean {
+  return Boolean(settings.leadDiscoveryEnabled || settings.aiDraftsEnabled || settings.sendingEnabled);
+}
+
 export async function dailyTickWithAutonomy(env: Env): Promise<void> {
   const settings = await readAutonomySettings(env);
 
   if (!settings.engineEnabled) {
+    await syncLegacyEngineFlags(env, settings);
     await logEvent(env, "tick_skip", "Autonomy engine disabled by autonomy_settings_v1.");
     return;
   }
 
   if (settings.maxNetworkCallsPerRun <= 0 && settings.mode !== "observe_only") {
+    await syncLegacyEngineFlags(env, settings);
     await logEvent(env, "tick_skip", "Autonomy engine blocked because maxNetworkCallsPerRun is zero.");
     return;
   }
 
   if (settings.freeSafeOnly && (settings.aiDraftsEnabled || settings.sendingEnabled)) {
+    await syncLegacyEngineFlags(env, settings);
     await logEvent(env, "tick_skip", "Autonomy settings invalid: freeSafeOnly blocks AI drafts and sending.");
     return;
   }
 
-  await logEvent(env, "tick_policy", `Autonomy mode ${settings.mode} | freeSafeOnly ${settings.freeSafeOnly ? "on" : "off"} | opportunityDiscovery ${settings.opportunityDiscoveryEnabled ? "on" : "off"}`);
+  await syncLegacyEngineFlags(env, settings);
+
+  if (!hasLegacyStage(settings)) {
+    await logEvent(env, "tick_skip", "Autonomy engine has no legacy stages enabled. Opportunity-only scheduled runner is pending.");
+    return;
+  }
+
+  await logEvent(env, "tick_policy", `Autonomy mode ${settings.mode} | freeSafeOnly ${settings.freeSafeOnly ? "on" : "off"} | leadDiscovery ${settings.leadDiscoveryEnabled ? "on" : "off"} | drafts ${settings.aiDraftsEnabled ? "on" : "off"} | sending ${settings.sendingEnabled ? "on" : "off"}`);
   await legacyDailyTick(env);
 }

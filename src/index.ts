@@ -16,6 +16,7 @@ import { handleOpportunityRunDueAdmin } from "./routes/opportunityRunDueAdmin";
 import { handleOpportunityRunsAdmin } from "./routes/opportunityRunsAdmin";
 import { handleOpportunitySourceHealthAdmin } from "./routes/opportunitySourceHealthAdmin";
 import { handleOpportunitySourceHealthActionsAdmin } from "./routes/opportunitySourceHealthActionsAdmin";
+import { handleOpportunityScoringDiagnosticsAdmin } from "./routes/opportunityScoringDiagnosticsAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
@@ -68,6 +69,10 @@ export default {
 
       if (pathname === "/admin/opportunities/sources/health") {
         return await handleOpportunitySourceHealthAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (pathname === "/admin/opportunities/scoring-diagnostics") {
+        return await handleOpportunityScoringDiagnosticsAdmin(req, env, pathname, jsonResponse);
       }
 
       if (isOpportunityDiscoveryPath(pathname)) {

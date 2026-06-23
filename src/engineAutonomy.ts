@@ -1,6 +1,7 @@
 import type { Env } from "./db";
 import { getSetting, logEvent, setSetting } from "./db";
 import { dailyTick as legacyDailyTick } from "./engine";
+import { runOpportunityAutonomy } from "./opportunityAutonomy";
 
 type AutonomySettings = {
   mode: string;
@@ -116,11 +117,15 @@ export async function dailyTickWithAutonomy(env: Env): Promise<void> {
 
   await syncLegacyEngineFlags(env, settings);
 
+  if (settings.opportunityDiscoveryEnabled) {
+    await runOpportunityAutonomy(env, settings);
+  }
+
   if (!hasLegacyStage(settings)) {
-    await logEvent(env, "tick_skip", "Autonomy engine has no legacy stages enabled. Opportunity-only scheduled runner is pending.");
+    await logEvent(env, "tick_ok", "Autonomy tick completed opportunity-only run with no legacy stages enabled.");
     return;
   }
 
-  await logEvent(env, "tick_policy", `Autonomy mode ${settings.mode} | freeSafeOnly ${settings.freeSafeOnly ? "on" : "off"} | leadDiscovery ${settings.leadDiscoveryEnabled ? "on" : "off"} | drafts ${settings.aiDraftsEnabled ? "on" : "off"} | sending ${settings.sendingEnabled ? "on" : "off"}`);
+  await logEvent(env, "tick_policy", `Autonomy mode ${settings.mode} | freeSafeOnly ${settings.freeSafeOnly ? "on" : "off"} | opportunityDiscovery ${settings.opportunityDiscoveryEnabled ? "on" : "off"} | leadDiscovery ${settings.leadDiscoveryEnabled ? "on" : "off"} | drafts ${settings.aiDraftsEnabled ? "on" : "off"} | sending ${settings.sendingEnabled ? "on" : "off"}`);
   await legacyDailyTick(env);
 }

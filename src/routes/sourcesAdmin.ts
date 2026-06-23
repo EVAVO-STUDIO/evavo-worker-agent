@@ -12,6 +12,31 @@ function countryFromUrl(url: string): string {
   return lower.includes(".nz") ? "NZ" : "AU";
 }
 
+function normalizeSourceUrl(raw: unknown): string {
+  return String(raw || "").trim().replace(/\/+$/, "");
+}
+
+async function insertSource(env: Env, body: any, rawUrl: unknown) {
+  const sourceUrl = normalizeSourceUrl(rawUrl);
+  if (!sourceUrl) return null;
+  const id = uuid();
+  const now = nowISO();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO sources (id, url, source_type, label, country, region, category, status, quality_score, failure_count, success_count, created_at_iso, updated_at_iso) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 50, 0, 0, ?, ?)"
+  ).bind(
+    id,
+    sourceUrl,
+    String(body?.sourceType || body?.type || "manual_seed"),
+    body?.label ? String(body.label) : null,
+    String(body?.country || countryFromUrl(sourceUrl)).toUpperCase(),
+    body?.region ? String(body.region) : null,
+    String(body?.category || "general"),
+    now,
+    now
+  ).run();
+  return { id, url: sourceUrl };
+}
+
 export async function handleSourcesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -26,27 +51,22 @@ export async function handleSourcesAdmin(request: Request, env: Env, pathname: s
     return json({ ok: true, sources: rows.results || [] });
   }
 
-  if (pathname === "/admin/sources" && request.method === "POST") {
+  if ((pathname === "/admin/sources" || pathname === "/admin/seeds") && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
-    const sourceUrl = String(body?.url || "").trim().replace(/\/+$/, "");
-    if (!sourceUrl) return json({ ok: false, error: "url_required" }, { status: 400 });
-    const id = uuid();
-    const now = nowISO();
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO sources (id, url, source_type, label, country, region, category, status, quality_score, failure_count, success_count, created_at_iso, updated_at_iso) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 50, 0, 0, ?, ?)"
-    ).bind(
-      id,
-      sourceUrl,
-      String(body?.sourceType || "manual_seed"),
-      body?.label ? String(body.label) : null,
-      String(body?.country || countryFromUrl(sourceUrl)).toUpperCase(),
-      body?.region ? String(body.region) : null,
-      String(body?.category || "general"),
-      now,
-      now
-    ).run();
-    await logEvent(env, "source_add", `Added source ${sourceUrl}`);
-    return json({ ok: true, source: { id, url: sourceUrl } });
+    const rawItems = Array.isArray(body?.items)
+      ? body.items
+      : Array.isArray(body?.urls)
+      ? body.urls.map((url: string) => ({ url }))
+      : [{ url: body?.url }];
+
+    const inserted = [];
+    for (const item of rawItems) {
+      const source = await insertSource(env, { ...body, ...item }, item?.url || item);
+      if (source) inserted.push(source);
+    }
+
+    await logEvent(env, "source_add", `Added or refreshed ${inserted.length} source URL(s)`);
+    return json({ ok: true, sources: inserted });
   }
 
   const match = pathname.match(/^\/admin\/sources\/([^/]+)\/(cooldown|retire|activate)$/);

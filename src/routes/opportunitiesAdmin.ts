@@ -61,7 +61,7 @@ async function listOpportunities(env: Env, url: URL) {
   binds.push(limit);
 
   const rows = await env.DB.prepare(
-    `SELECT id, source_id, url, title, opportunity_type, issuer, country, region, category, amount_text, currency, opens_at_iso, closes_at_iso, discovered_at_iso, status, fit_score, urgency_score, value_score, effort_score, risk_score, total_score, confidence, summary, eligibility_summary, recommended_action, updated_at_iso
+    `SELECT id, source_id, url, title, opportunity_type, issuer, country, region, category, amount_text, currency, opens_at_iso, closes_at_iso, discovered_at_iso, status, fit_score, urgency_score, value_score, effort_score, risk_score, total_score, confidence, summary, eligibility_summary, recommended_action, evidence_json, updated_at_iso
      FROM opportunities
      ${where}
      ORDER BY total_score DESC, updated_at_iso DESC

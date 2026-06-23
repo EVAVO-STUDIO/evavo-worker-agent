@@ -2,6 +2,7 @@ import { dailyTick } from "./engine";
 import type { Env } from "./db";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/admin";
+import { handleTools } from "./routes/tools";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -10,17 +11,21 @@ function jsonResponse(data: any, init: ResponseInit = {}): Response {
 }
 
 export default {
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+  async scheduled(_controller: any, env: Env, ctx: any) {
     ctx.waitUntil(dailyTick(env));
   },
 
-  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: any): Promise<Response> {
     try {
       const url = new URL(req.url);
       const pathname = url.pathname;
 
       if (pathname.startsWith("/admin")) {
         return await handleAdmin(req, env, pathname, ctx, jsonResponse);
+      }
+
+      if (pathname.startsWith("/tools")) {
+        return await handleTools(req, env, pathname, jsonResponse);
       }
 
       if (pathname.startsWith("/public")) {

@@ -7,6 +7,8 @@ type BadgeTone = "good" | "warning" | "danger" | "neutral";
 type RiskLevel = "low" | "medium" | "high";
 type ChecklistStatus = "done" | "attention" | "blocked" | "available";
 
+const PLANNER_DASHBOARD_CONTRACT_VERSION = "planner_dashboard_v1";
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -30,6 +32,38 @@ function badge(id: string, label: string, tone: BadgeTone, detail?: string) {
 
 function checklist(id: string, label: string, status: ChecklistStatus, detail: string, route?: string) {
   return { id, label, status, detail, route: route || null };
+}
+
+function buildDashboardSchemaHints(compact: boolean) {
+  return {
+    contractVersion: PLANNER_DASHBOARD_CONTRACT_VERSION,
+    mode: compact ? "compact" : "full",
+    stableTopLevelFields: [
+      "contractVersion",
+      "schemaHints",
+      "refreshHints",
+      "risk",
+      "badges",
+      "checklist",
+      "status",
+      "counts",
+      "recommendation",
+      "latestRecommendation",
+      "latestExecution",
+    ],
+    optionalFullModeFields: compact ? [] : ["recent", "recommendation.actionCards"],
+    badgeTones: ["good", "warning", "danger", "neutral"],
+    checklistStatuses: ["done", "attention", "blocked", "available"],
+    riskLevels: ["low", "medium", "high"],
+    uiSections: [
+      { id: "risk", label: "Operational risk", priority: 1 },
+      { id: "badges", label: "Status badges", priority: 2 },
+      { id: "checklist", label: "Operator checklist", priority: 3 },
+      { id: "recommendation", label: "Planner recommendation", priority: 4 },
+      { id: "latestRecommendation", label: "Latest recorded recommendation", priority: 5 },
+      { id: "latestExecution", label: "Latest planner execution", priority: 6 },
+    ],
+  };
 }
 
 function buildDashboardBadges(planner: any) {
@@ -333,10 +367,13 @@ async function plannerDashboard(env: Env, compact = false) {
   const risk = buildDashboardRisk(planner);
   const operatorChecklist = buildDashboardChecklist(planner, latestRecommendation, latestExecution);
   const refreshHints = buildDashboardRefreshHints(planner, compact);
+  const schemaHints = buildDashboardSchemaHints(compact);
 
   const base = {
     ok: true,
     mode: compact ? "planner_dashboard_compact" : "planner_dashboard",
+    contractVersion: PLANNER_DASHBOARD_CONTRACT_VERSION,
+    schemaHints,
     nowISO: new Date().toISOString(),
     refreshHints,
     risk,

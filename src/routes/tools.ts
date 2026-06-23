@@ -30,6 +30,7 @@ export async function handleTools(
         { name: "source_add", route: "/admin/sources", mode: "write", cost: "cheap", requiresConfirm: true },
         { name: "source_test", route: "/admin/sources/:id/test", mode: "write", cost: "bounded_fetch", requiresConfirm: true },
         { name: "source_expand_preview", route: "/admin/sources/:id/expand-preview", mode: "write", cost: "bounded_fetch_preview", requiresConfirm: true },
+        { name: "source_expand_commit", route: "/admin/sources/:id/expand-commit", mode: "write", cost: "bounded_fetch_and_write", requiresConfirm: true },
         { name: "source_cooldown", route: "/admin/sources/:id/cooldown", mode: "write", cost: "cheap", requiresConfirm: true },
       ],
     });

@@ -59,6 +59,42 @@ async function plannerHistory(env: Env, limit: number) {
   return { ok: true, mode: "planner_history", count: history.length, history };
 }
 
+async function plannerExecutions(env: Env, limit: number) {
+  const rows = await env.DB.prepare(
+    `SELECT id, target_id, target_url, reason, confidence, evidence_json, created_at_iso
+     FROM agent_decisions
+     WHERE decision_type = 'planner_execute'
+     ORDER BY created_at_iso DESC
+     LIMIT ?`
+  ).bind(Math.max(1, Math.min(100, limit))).all<any>();
+
+  const executions = (rows.results || []).map((row: any) => {
+    const evidence = safeParse(row.evidence_json);
+    const result = evidence.result || {};
+    return {
+      id: row.id,
+      createdAt: row.created_at_iso,
+      actionId: row.target_id,
+      route: row.target_url,
+      reason: row.reason,
+      confidence: row.confidence,
+      requestedBy: evidence.requestedBy || null,
+      notes: evidence.notes || null,
+      resultOk: result.ok === true,
+      resultMode: result.mode || null,
+      resultSummary: {
+        error: result.error || null,
+        selectedSourceCount: Array.isArray(result.selectedSources) ? result.selectedSources.length : null,
+        draftCount: Array.isArray(result.drafts) ? result.drafts.length : null,
+        sourceCount: Array.isArray(result.sources) ? result.sources.length : null,
+        hasSource: Boolean(result.source),
+      },
+    };
+  });
+
+  return { ok: true, mode: "planner_executions", count: executions.length, executions };
+}
+
 async function recordExecution(env: Env, actionId: string, route: string, result: any, body: any) {
   const id = uuid();
   await env.DB.prepare(
@@ -133,6 +169,12 @@ export async function handlePlannerAdmin(request: Request, env: Env, pathname: s
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") || 20);
     return json(await plannerHistory(env, limit));
+  }
+
+  if (pathname === "/admin/planner/executions" && request.method === "GET") {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get("limit") || 20);
+    return json(await plannerExecutions(env, limit));
   }
 
   if (pathname === "/admin/planner/execute" && request.method === "POST") {

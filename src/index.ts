@@ -6,6 +6,7 @@ import { handleTools } from "./routes/tools";
 import { handleDraftReviewAdmin } from "./routes/draftReviewAdmin";
 import { handleSourcesAdmin } from "./routes/sourcesAdmin";
 import { handleSourceBatchAdmin } from "./routes/sourceBatchAdmin";
+import { handlePlannerAdmin } from "./routes/plannerAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -22,6 +23,10 @@ export default {
     try {
       const url = new URL(req.url);
       const pathname = url.pathname;
+
+      if (pathname === "/admin/planner") {
+        return await handlePlannerAdmin(req, env, pathname, jsonResponse);
+      }
 
       if (pathname === "/admin/sources/run-tiny") {
         return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);

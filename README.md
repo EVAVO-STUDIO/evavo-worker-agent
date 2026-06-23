@@ -9,6 +9,12 @@ Patch 1 adds a free-safe control plane:
 - Compile-stability fixes for shared analysis/drafting types
 - Non-destructive migration for budget tables and indexes
 
+Patch 2 adds draft-review learning:
+- `draft_reviews` audit table
+- `strategy_scores` learning table
+- Review decisions for approved/rejected/needs-rewrite/good-fit/bad-fit style feedback
+- Authenticated admin routes for draft review and strategy score inspection
+
 ## Important production note
 
 The remote D1 database already contains live data. Do **not** blindly re-run `schema.sql` against the remote database unless you are intentionally rebuilding a fresh database.
@@ -17,6 +23,7 @@ For the existing production D1, use migrations such as:
 
 ```bash
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0002_draft_review_learning.sql
 ```
 
 ## Quick start
@@ -33,10 +40,11 @@ npm i
 npm run typecheck
 ```
 
-3) Apply the free-safe migration to the remote D1 database
+3) Apply migrations to the remote D1 database
 
 ```bash
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0002_draft_review_learning.sql
 ```
 
 4) Deploy
@@ -82,12 +90,28 @@ Admin, Bearer token required:
 - `GET /admin/drafts?status=queued&limit=50`
 - `POST /admin/drafts/:id/approve`
 - `POST /admin/drafts/:id/reject`
+- `POST /admin/draft-review/:id` `{ "decision": "approved", "reason": "good_fit", "notes": "..." }`
+- `GET /admin/strategy-scores?limit=50`
 - `POST /admin/run` `{ "kind": "draft" | "send" | "scan" | "tick" | "backfill" }`
 - `GET /admin/settings`
 - `POST /admin/settings` `{ "settings": { "daily_external_fetch_limit": "100" } }`
 
 Tools:
 - `GET /tools/capabilities`
+
+## Draft review decisions
+
+Supported review decisions:
+- `approved`
+- `rejected`
+- `needs_rewrite`
+- `too_generic`
+- `wrong_angle`
+- `bad_fit`
+- `bad_contact`
+- `good_angle`
+- `good_fit`
+- `do_not_contact`
 
 ## Test commands
 
@@ -99,6 +123,15 @@ Invoke-RestMethod "$Base/admin/health" -Headers @{ Authorization = "Bearer $Toke
 Invoke-RestMethod "$Base/admin/diagnostics" -Headers @{ Authorization = "Bearer $Token" } | ConvertTo-Json -Depth 20
 Invoke-RestMethod "$Base/admin/schema" -Headers @{ Authorization = "Bearer $Token" } | ConvertTo-Json -Depth 20
 Invoke-RestMethod "$Base/tools/capabilities" | ConvertTo-Json -Depth 20
+Invoke-RestMethod "$Base/admin/strategy-scores" -Headers @{ Authorization = "Bearer $Token" } | ConvertTo-Json -Depth 20
+```
+
+Draft review example:
+
+```powershell
+$DraftId = "DRAFT_ID_HERE"
+$Body = @{ decision = "needs_rewrite"; reason = "too_generic"; notes = "Make this more specific and grounded." } | ConvertTo-Json
+Invoke-RestMethod "$Base/admin/draft-review/$DraftId" -Method POST -Headers @{ Authorization = "Bearer $Token"; "Content-Type" = "application/json" } -Body $Body | ConvertTo-Json -Depth 20
 ```
 
 ## Common gotchas
@@ -111,6 +144,7 @@ For existing production, prefer explicit migration files:
 
 ```bash
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0002_draft_review_learning.sql
 ```
 
 ### Updating secrets

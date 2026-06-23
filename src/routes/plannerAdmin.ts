@@ -127,6 +127,52 @@ function buildDashboardRisk(planner: any) {
   return { riskLevel, riskScore, riskReasons };
 }
 
+function buildDashboardRefreshHints(planner: any, compact: boolean) {
+  const flags = planner.flags || {};
+  const state = planner.state || {};
+  const draftBacklog = Number(state.draftBacklog || 0);
+  const sourceCounts = state.sourceCounts || {};
+  const activeSources = Number(sourceCounts.active || 0);
+  const healthIssues = Array.isArray(state.healthIssues) ? state.healthIssues : [];
+
+  let suggestedIntervalSeconds = compact ? 120 : 180;
+  const reasons: string[] = [];
+
+  if (flags.engineEnabled || flags.sendingEnabled || flags.aiEnabled) {
+    suggestedIntervalSeconds = 60;
+    reasons.push("A higher-risk flag is enabled, so the dashboard should refresh more often.");
+  }
+  if (draftBacklog >= 50) {
+    suggestedIntervalSeconds = Math.min(suggestedIntervalSeconds, 90);
+    reasons.push("Draft backlog is high, so refresh moderately while operators review drafts.");
+  }
+  if (activeSources > 0) {
+    reasons.push("Active sources exist, so refresh after source test/preview/execute actions.");
+  }
+  if (healthIssues.length > 0) {
+    suggestedIntervalSeconds = Math.min(suggestedIntervalSeconds, 90);
+    reasons.push("Health issues are present, so refresh moderately until stable.");
+  }
+  if (reasons.length === 0) reasons.push("System is in safe manual mode; slow dashboard refresh is enough.");
+
+  return {
+    suggestedIntervalSeconds,
+    staleAfterSeconds: suggestedIntervalSeconds * 3,
+    refreshAfterAction: true,
+    refreshAfterRoutes: [
+      "/admin/planner/record",
+      "/admin/planner/execute",
+      "/admin/sources/run-tiny",
+      "/admin/sources/:id/test",
+      "/admin/sources/:id/expand-preview",
+      "/admin/sources/:id/expand-commit",
+      "/admin/draft-review/:id",
+      "/admin/settings",
+    ],
+    reason: reasons.join(" "),
+  };
+}
+
 function buildDashboardChecklist(planner: any, latestRecommendation: any, latestExecution: any) {
   const flags = planner.flags || {};
   const state = planner.state || {};
@@ -286,11 +332,13 @@ async function plannerDashboard(env: Env, compact = false) {
   const badges = buildDashboardBadges(planner);
   const risk = buildDashboardRisk(planner);
   const operatorChecklist = buildDashboardChecklist(planner, latestRecommendation, latestExecution);
+  const refreshHints = buildDashboardRefreshHints(planner, compact);
 
   const base = {
     ok: true,
     mode: compact ? "planner_dashboard_compact" : "planner_dashboard",
     nowISO: new Date().toISOString(),
+    refreshHints,
     risk,
     badges,
     checklist: operatorChecklist,

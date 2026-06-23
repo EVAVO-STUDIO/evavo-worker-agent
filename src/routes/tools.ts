@@ -23,7 +23,12 @@ export async function handleTools(
         { name: "agent_diagnose", route: "/admin/diagnostics", mode: "read", cost: "cheap" },
         { name: "schema_report", route: "/admin/schema", mode: "read", cost: "cheap" },
         { name: "draft_list", route: "/admin/drafts", mode: "read", cost: "cheap" },
+        { name: "draft_review", route: "/admin/draft-review/:id", mode: "write", cost: "cheap", requiresConfirm: true },
+        { name: "strategy_scores", route: "/admin/strategy-scores", mode: "read", cost: "cheap" },
         { name: "lead_list", route: "/admin/leads", mode: "read", cost: "cheap" },
+        { name: "source_list", route: "/admin/sources", mode: "read", cost: "cheap" },
+        { name: "source_add", route: "/admin/sources", mode: "write", cost: "cheap", requiresConfirm: true },
+        { name: "source_cooldown", route: "/admin/sources/:id/cooldown", mode: "write", cost: "cheap", requiresConfirm: true },
       ],
     });
   }

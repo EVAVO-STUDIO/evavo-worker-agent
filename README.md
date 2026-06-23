@@ -1,74 +1,120 @@
 # EVAVO Outbound Agent (Cloudflare Worker)
 
-This is a conservative outbound assistant:
-- Adds leads from **public websites** (manual URL add for v1)
-- Analyzes site + contact page
-- Drafts a short outreach email with Cloudflare AI
-- Queues drafts for **human approval**
-- Sends via MailChannels (optional) with an unsubscribe link (sending can be disabled)
-- Hard caps per day for crawl/draft/send
+This is the Worker-side runtime for the EVAVO Outbound Agent.
+
+Patch 1 adds a free-safe control plane:
+- Health, diagnostics, and schema inspection endpoints
+- Free-safe cost guard settings and usage counters
+- Tool capability discovery for future CLI / ChatGPT / Claude / Cursor use
+- Compile-stability fixes for shared analysis/drafting types
+- Non-destructive migration for budget tables and indexes
+
+## Important production note
+
+The remote D1 database already contains live data. Do **not** blindly re-run `schema.sql` against the remote database unless you are intentionally rebuilding a fresh database.
+
+For the existing production D1, use migrations such as:
+
+```bash
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
+```
 
 ## Quick start
 
 1) Install deps
+
 ```bash
 npm i
 ```
 
-2) Create the D1 database and apply schema
+2) Typecheck
 
 ```bash
-wrangler d1 create evavo_outbound_agent
-# copy the database_id into wrangler.toml (under [[d1_databases]])
-npm run db:init:remote
+npm run typecheck
 ```
 
-> Tip: `npm run db:init:local` applies the schema to Wrangler’s local dev database only.
-> Use `db:init:remote` to initialize the real cloud D1 database you just created.
+3) Apply the free-safe migration to the remote D1 database
 
-3) Set secrets
 ```bash
-wrangler secret put ADMIN_TOKEN
-wrangler secret put MAILCHANNELS_API_KEY   # optional (required to send)
-wrangler secret put FROM_EMAIL             # optional
-wrangler secret put REPLY_TO_EMAIL         # optional
-wrangler secret put PUBLIC_BASE_URL        # optional (https://evavo.com.au)
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
 ```
 
-4) Dev / Deploy
+4) Deploy
+
 ```bash
-npm run dev
 npm run deploy
 ```
+
+## Secrets
+
+```bash
+wrangler secret put ADMIN_TOKEN
+wrangler secret put MAILCHANNELS_API_KEY   # optional, only required to send
+wrangler secret put FROM_EMAIL             # optional
+wrangler secret put REPLY_TO_EMAIL         # optional
+wrangler secret put PUBLIC_BASE_URL        # optional, e.g. https://evavo.com.au
+```
+
+## Free-safe defaults
+
+The Worker defaults toward conservative, low-cost behaviour:
+- `cost_mode = free_safe`
+- AI disabled unless explicitly enabled
+- Sending disabled unless explicitly enabled
+- Deep diagnostics require confirmation
+- Budget counters are tracked in D1 once the migration is applied
+- Existing draft backlog should be reviewed before large new scans
 
 ## Endpoints
 
 Public:
 - `GET /public/status`
 - `GET /public/events?limit=18`
-- `GET /public/unsubscribe?email=...`
 
-Admin (Bearer token):
+Admin, Bearer token required:
+- `GET /admin/health`
+- `GET /admin/diagnostics`
+- `GET /admin/diagnostics?deep=1&confirm=1`
+- `GET /admin/schema`
 - `GET /admin/overview`
 - `GET /admin/leads?status=new&limit=50`
-- `POST /admin/leads` `{ websiteUrl }`
+- `POST /admin/leads` `{ "websiteUrl": "https://example.com" }`
 - `GET /admin/drafts?status=queued&limit=50`
 - `POST /admin/drafts/:id/approve`
 - `POST /admin/drafts/:id/reject`
-- `POST /admin/drafts/:id/send` (requires MailChannels)
-- `POST /admin/run` `{ kind: "draft" | "send" | "scan" }`
-- `POST /admin/engine` `{ enabled: boolean }` (v1 placeholder)
+- `POST /admin/run` `{ "kind": "draft" | "send" | "scan" | "tick" | "backfill" }`
+- `GET /admin/settings`
+- `POST /admin/settings` `{ "settings": { "daily_external_fetch_limit": "100" } }`
+
+Tools:
+- `GET /tools/capabilities`
+
+## Test commands
+
+```powershell
+$Base = "https://evavo-outbound-agent.evavo-studio.workers.dev"
+$Token = "YOUR_ADMIN_TOKEN"
+
+Invoke-RestMethod "$Base/admin/health" -Headers @{ Authorization = "Bearer $Token" } | ConvertTo-Json -Depth 20
+Invoke-RestMethod "$Base/admin/diagnostics" -Headers @{ Authorization = "Bearer $Token" } | ConvertTo-Json -Depth 20
+Invoke-RestMethod "$Base/admin/schema" -Headers @{ Authorization = "Bearer $Token" } | ConvertTo-Json -Depth 20
+Invoke-RestMethod "$Base/tools/capabilities" | ConvertTo-Json -Depth 20
+```
+
 ## Common gotchas
 
-### D1 schema executed locally (not remote)
+### D1 schema executed locally instead of remote
+
 If you see output mentioning `.wrangler/state/...` and `local database`, you initialized the local dev DB.
-Run this to initialize the real remote DB:
+
+For existing production, prefer explicit migration files:
 
 ```bash
-npm run db:init:remote
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
 ```
 
 ### Updating secrets
+
 To replace a secret value:
 
 ```bash

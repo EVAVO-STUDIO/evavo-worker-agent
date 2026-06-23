@@ -13,6 +13,7 @@ import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAd
 import { handleOpportunityReviewAdmin } from "./routes/opportunityReviewAdmin";
 import { handleOpportunityLearningAdmin } from "./routes/opportunityLearningAdmin";
 import { handleOpportunityRunDueAdmin } from "./routes/opportunityRunDueAdmin";
+import { handleOpportunityRunsAdmin } from "./routes/opportunityRunsAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
@@ -27,6 +28,10 @@ function isOpportunityDiscoveryPath(pathname: string): boolean {
 
 function isOpportunityReviewPath(pathname: string): boolean {
   return pathname === "/admin/opportunities/reviews" || pathname === "/admin/opportunities/strategy-scores" || (pathname.startsWith("/admin/opportunities/") && pathname.endsWith("/review"));
+}
+
+function isOpportunityRunAuditPath(pathname: string): boolean {
+  return pathname === "/admin/opportunities/runs" || pathname.startsWith("/admin/opportunities/runs/");
 }
 
 export default {
@@ -45,6 +50,10 @@ export default {
 
       if (pathname === "/admin/opportunities/run-due") {
         return await handleOpportunityRunDueAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (isOpportunityRunAuditPath(pathname)) {
+        return await handleOpportunityRunsAdmin(req, env, pathname, jsonResponse);
       }
 
       if (isOpportunityDiscoveryPath(pathname)) {

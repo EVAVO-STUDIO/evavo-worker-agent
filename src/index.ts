@@ -11,6 +11,7 @@ import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
 import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
 import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAdmin";
 import { handleOpportunityReviewAdmin } from "./routes/opportunityReviewAdmin";
+import { handleOpportunityLearningAdmin } from "./routes/opportunityLearningAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -38,6 +39,10 @@ export default {
 
       if (isOpportunityDiscoveryPath(pathname)) {
         return await handleOpportunityDiscoveryAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (pathname === "/admin/opportunities/learning") {
+        return await handleOpportunityLearningAdmin(req, env, pathname, jsonResponse);
       }
 
       if (isOpportunityReviewPath(pathname)) {

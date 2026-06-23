@@ -5,6 +5,7 @@ type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 type BadgeTone = "good" | "warning" | "danger" | "neutral";
 type RiskLevel = "low" | "medium" | "high";
+type ChecklistStatus = "done" | "attention" | "blocked" | "available";
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
@@ -25,6 +26,10 @@ function safeParse(raw: unknown): any {
 
 function badge(id: string, label: string, tone: BadgeTone, detail?: string) {
   return { id, label, tone, detail: detail || null };
+}
+
+function checklist(id: string, label: string, status: ChecklistStatus, detail: string, route?: string) {
+  return { id, label, status, detail, route: route || null };
 }
 
 function buildDashboardBadges(planner: any) {
@@ -120,6 +125,68 @@ function buildDashboardRisk(planner: any) {
   if (riskReasons.length === 0) riskReasons.push("No major operational risks detected in planner state.");
 
   return { riskLevel, riskScore, riskReasons };
+}
+
+function buildDashboardChecklist(planner: any, latestRecommendation: any, latestExecution: any) {
+  const flags = planner.flags || {};
+  const state = planner.state || {};
+  const sourceCounts = state.sourceCounts || {};
+  const draftBacklog = Number(state.draftBacklog || 0);
+  const activeSources = Number(sourceCounts.active || 0);
+  const primaryAction = planner.decision?.primaryActionCard || null;
+  const actionCards = planner.decision?.actionCards || [];
+
+  return [
+    checklist(
+      "confirm_engine_paused",
+      "Confirm engine is paused",
+      flags.engineEnabled ? "attention" : "done",
+      flags.engineEnabled ? "Engine is enabled. Keep it off while validating manual controls." : "Engine is paused for safe manual validation.",
+      "/admin/settings"
+    ),
+    checklist(
+      "confirm_ai_off",
+      "Confirm AI is off",
+      flags.aiEnabled ? "attention" : "done",
+      flags.aiEnabled ? "AI is enabled. Disable it unless intentionally testing paid generation." : "AI is off, so no AI budget is spent.",
+      "/admin/settings"
+    ),
+    checklist(
+      "confirm_sending_off",
+      "Confirm sending is off",
+      flags.sendingEnabled ? "blocked" : "done",
+      flags.sendingEnabled ? "Sending is enabled. Disable it until approval flow is proven." : "Sending is off, so no outbound email can be sent.",
+      "/admin/settings"
+    ),
+    checklist(
+      "review_draft_backlog",
+      "Review draft backlog",
+      draftBacklog > 0 ? "available" : "done",
+      draftBacklog > 0 ? `${draftBacklog} draft(s) are ready for review.` : "No created/queued/approved draft backlog currently needs review.",
+      "/admin/drafts?status=created&limit=20"
+    ),
+    checklist(
+      "add_or_test_source",
+      "Add or test sources",
+      activeSources > 0 ? "available" : "attention",
+      activeSources > 0 ? `${activeSources} active source(s) can be tested or previewed.` : "No active sources are available; add or reactivate one.",
+      "/admin/sources"
+    ),
+    checklist(
+      "record_planner_snapshot",
+      "Record planner snapshot",
+      latestRecommendation ? "done" : "available",
+      latestRecommendation ? `Latest recommendation recorded at ${latestRecommendation.createdAt}.` : "No planner recommendation snapshot has been recorded yet.",
+      "/admin/planner/record"
+    ),
+    checklist(
+      "run_conservative_execute",
+      "Run conservative planner execute",
+      latestExecution ? "done" : actionCards.length > 0 ? "available" : "attention",
+      latestExecution ? `Latest planner execution was ${latestExecution.actionId} at ${latestExecution.createdAt}.` : primaryAction ? `Primary action available: ${primaryAction.id}.` : "No primary action card is available.",
+      "/admin/planner/execute"
+    ),
+  ];
 }
 
 function summarizeRecommendationRow(row: any) {
@@ -218,6 +285,7 @@ async function plannerDashboard(env: Env) {
   const primaryAction = planner.decision?.primaryActionCard || null;
   const badges = buildDashboardBadges(planner);
   const risk = buildDashboardRisk(planner);
+  const operatorChecklist = buildDashboardChecklist(planner, latestRecommendation, latestExecution);
 
   return {
     ok: true,
@@ -225,6 +293,7 @@ async function plannerDashboard(env: Env) {
     nowISO: new Date().toISOString(),
     risk,
     badges,
+    checklist: operatorChecklist,
     status: {
       healthStatus: planner.state?.healthStatus || null,
       healthIssues: planner.state?.healthIssues || [],

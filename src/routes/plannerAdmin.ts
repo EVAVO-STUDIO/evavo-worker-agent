@@ -3,6 +3,8 @@ import { buildPlannerReport } from "../core/planner";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+type BadgeTone = "good" | "warning" | "danger" | "neutral";
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -18,6 +20,44 @@ function safeParse(raw: unknown): any {
   } catch {
     return {};
   }
+}
+
+function badge(id: string, label: string, tone: BadgeTone, detail?: string) {
+  return { id, label, tone, detail: detail || null };
+}
+
+function buildDashboardBadges(planner: any) {
+  const flags = planner.flags || {};
+  const state = planner.state || {};
+  const sourceCounts = state.sourceCounts || {};
+  const draftBacklog = Number(state.draftBacklog || 0);
+  const activeSources = Number(sourceCounts.active || 0);
+  const cooldownSources = Number(sourceCounts.cooldown || 0);
+  const healthIssues = Array.isArray(state.healthIssues) ? state.healthIssues : [];
+  const cards = planner.decision?.actionCards || [];
+
+  const badges = [];
+  badges.push(flags.engineEnabled ? badge("engine_on", "Engine on", "warning", "Cron loop can run.") : badge("engine_paused", "Engine paused", "good", "Manual bounded control is active."));
+  badges.push(flags.aiEnabled ? badge("ai_on", "AI on", "warning", "AI calls may spend budget.") : badge("ai_off", "AI off", "good", "No AI calls allowed."));
+  badges.push(flags.sendingEnabled ? badge("sending_on", "Sending on", "danger", "Outbound email sending is enabled.") : badge("sending_off", "Sending off", "good", "No outbound sends allowed."));
+
+  if (draftBacklog >= 50) badges.push(badge("draft_backlog_high", "Draft backlog high", "warning", `${draftBacklog} drafts need review before heavy discovery.`));
+  else if (draftBacklog > 0) badges.push(badge("draft_backlog_present", "Draft backlog present", "neutral", `${draftBacklog} drafts available for review.`));
+  else badges.push(badge("draft_backlog_clear", "Draft backlog clear", "good", "No created/queued/approved draft backlog."));
+
+  if (activeSources > 0) badges.push(badge("sources_available", "Sources available", "good", `${activeSources} active source(s).`));
+  else badges.push(badge("no_active_sources", "No active sources", "warning", "Add or reactivate a source before discovery."));
+
+  if (cooldownSources > 0) badges.push(badge("sources_in_cooldown", "Sources in cooldown", "neutral", `${cooldownSources} source(s) cooling down.`));
+
+  if (healthIssues.length > 0) badges.push(badge("health_issues", "Health issues", "warning", `${healthIssues.length} issue(s) reported.`));
+  else badges.push(badge("health_clear", "Health clear", "good", "No primary health issues reported."));
+
+  if (cards.length > 0) badges.push(badge("planner_ready", "Planner ready", "good", `${cards.length} safe action card(s) available.`));
+  else badges.push(badge("planner_no_actions", "No planner actions", "warning", "Planner did not return action cards."));
+
+  badges.push(badge("manual_action_required", "Manual action required", "neutral", "Planner will not execute unsafe actions automatically."));
+  return badges;
 }
 
 function summarizeRecommendationRow(row: any) {
@@ -114,11 +154,13 @@ async function plannerDashboard(env: Env) {
   const latestRecommendation = summarizeRecommendationRow(latestRecommendationRow);
   const latestExecution = summarizeExecutionRow(latestExecutionRow);
   const primaryAction = planner.decision?.primaryActionCard || null;
+  const badges = buildDashboardBadges(planner);
 
   return {
     ok: true,
     mode: "planner_dashboard",
     nowISO: new Date().toISOString(),
+    badges,
     status: {
       healthStatus: planner.state?.healthStatus || null,
       healthIssues: planner.state?.healthIssues || [],

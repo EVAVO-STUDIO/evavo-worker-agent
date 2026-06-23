@@ -3,13 +3,14 @@ import { Env, getAdminToken } from "../db";
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 type RouteSafety = "read_only" | "confirm_required" | "settings_gated" | "public_read_only";
+type RouteSection = "cockpit" | "planner" | "sources" | "opportunities" | "drafts" | "safety" | "public";
 
 type RouteCatalogueItem = {
   id: string;
   method: string;
   path: string;
   label: string;
-  section: "cockpit" | "planner" | "sources" | "drafts" | "safety" | "public";
+  section: RouteSection;
   safety: RouteSafety;
   readOnly: boolean;
   requiresConfirm: boolean;
@@ -28,8 +29,12 @@ function authorized(request: Request, env: Env): boolean {
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
 }
 
+function route(item: RouteCatalogueItem): RouteCatalogueItem {
+  return item;
+}
+
 const routes: RouteCatalogueItem[] = [
-  {
+  route({
     id: "planner_report",
     method: "GET",
     path: "/admin/planner",
@@ -46,8 +51,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Full planner state, safe actions, blocked actions, samples, and recommended next action.",
-  },
-  {
+  }),
+  route({
     id: "planner_dashboard",
     method: "GET",
     path: "/admin/planner/dashboard?compact=1",
@@ -64,8 +69,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Compact cockpit payload with risk, badges, checklist, counts, latest audit summaries, and refresh hints.",
-  },
-  {
+  }),
+  route({
     id: "planner_dashboard_full",
     method: "GET",
     path: "/admin/planner/dashboard",
@@ -82,8 +87,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: false,
     description: "Full cockpit payload including recent events and source runs for deeper investigation.",
-  },
-  {
+  }),
+  route({
     id: "planner_dashboard_self_test",
     method: "GET",
     path: "/admin/planner/dashboard/self-test?compact=1",
@@ -100,8 +105,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Validates the live dashboard contract for UI readiness without writing anything.",
-  },
-  {
+  }),
+  route({
     id: "planner_record",
     method: "POST",
     path: "/admin/planner/record",
@@ -118,8 +123,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Records the current planner recommendation as an audit row. Does not execute the action.",
-  },
-  {
+  }),
+  route({
     id: "planner_execute",
     method: "POST",
     path: "/admin/planner/execute",
@@ -135,9 +140,9 @@ const routes: RouteCatalogueItem[] = [
     costRisk: "none",
     operatorFacing: true,
     operationsHubRecommended: true,
-    description: "Runs only the conservative execution envelope. Current allowed actions are D1 reads plus audit insert; no AI, sending, source fetch, or lead insertion.",
-  },
-  {
+    description: "Runs only the conservative execution envelope. Current allowed actions are reads plus audit insert; no AI, sending, source fetch, or lead insertion.",
+  }),
+  route({
     id: "planner_history",
     method: "GET",
     path: "/admin/planner/history?limit=20",
@@ -154,8 +159,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Read-only list of recent planner recommendation audit rows.",
-  },
-  {
+  }),
+  route({
     id: "planner_executions",
     method: "GET",
     path: "/admin/planner/executions?limit=20",
@@ -172,8 +177,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Read-only list of recent conservative planner execution audit rows.",
-  },
-  {
+  }),
+  route({
     id: "source_list",
     method: "GET",
     path: "/admin/sources?limit=50",
@@ -190,8 +195,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Lists tracked sources and their state.",
-  },
-  {
+  }),
+  route({
     id: "source_add",
     method: "POST",
     path: "/admin/sources",
@@ -208,8 +213,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Adds a manually chosen source URL for later testing and discovery.",
-  },
-  {
+  }),
+  route({
     id: "source_test",
     method: "POST",
     path: "/admin/sources/:id/test",
@@ -225,9 +230,9 @@ const routes: RouteCatalogueItem[] = [
     costRisk: "low",
     operatorFacing: true,
     operationsHubRecommended: true,
-    description: "Fetches one source URL and records whether it looks useful. Applies failure memory/cooldown policy.",
-  },
-  {
+    description: "Fetches one source URL and records whether it looks useful. Applies failure memory and cooldown policy.",
+  }),
+  route({
     id: "source_expand_preview",
     method: "POST",
     path: "/admin/sources/:id/expand-preview",
@@ -243,9 +248,9 @@ const routes: RouteCatalogueItem[] = [
     costRisk: "low",
     operatorFacing: true,
     operationsHubRecommended: true,
-    description: "Fetches one source page and previews candidate profile/business links. Does not insert leads.",
-  },
-  {
+    description: "Fetches one source page and previews candidate profile or business links. Does not insert leads.",
+  }),
+  route({
     id: "source_expand_commit",
     method: "POST",
     path: "/admin/sources/:id/expand-commit",
@@ -262,8 +267,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Confirmed bounded expansion. Can insert deduped leads from a source, but does not call AI or send emails.",
-  },
-  {
+  }),
+  route({
     id: "source_run_tiny",
     method: "POST",
     path: "/admin/sources/run-tiny",
@@ -280,8 +285,170 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Runs a tiny bounded source test batch. Does not insert leads, call AI, send, or enable the engine.",
-  },
-  {
+  }),
+  route({
+    id: "opportunity_summary",
+    method: "GET",
+    path: "/admin/opportunities/summary",
+    label: "Opportunity summary",
+    section: "opportunities",
+    safety: "read_only",
+    readOnly: true,
+    requiresConfirm: false,
+    writesTables: [],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Read-only summary of opportunity sources, saved opportunities, types, and top review items.",
+  }),
+  route({
+    id: "opportunity_learning",
+    method: "GET",
+    path: "/admin/opportunities/learning",
+    label: "Opportunity learning",
+    section: "opportunities",
+    safety: "read_only",
+    readOnly: true,
+    requiresConfirm: false,
+    writesTables: [],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Read-only review history, decision counts, and opportunity strategy scores.",
+  }),
+  route({
+    id: "opportunity_list",
+    method: "GET",
+    path: "/admin/opportunities?limit=50",
+    label: "Opportunities",
+    section: "opportunities",
+    safety: "read_only",
+    readOnly: true,
+    requiresConfirm: false,
+    writesTables: [],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Lists saved opportunities waiting for review, watching, shortlist, or archive decisions.",
+  }),
+  route({
+    id: "opportunity_source_list",
+    method: "GET",
+    path: "/admin/opportunities/sources?limit=50",
+    label: "Opportunity sources",
+    section: "opportunities",
+    safety: "read_only",
+    readOnly: true,
+    requiresConfirm: false,
+    writesTables: [],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Lists tracked grant, tender, funding, partner, supplier, and contract-signal sources.",
+  }),
+  route({
+    id: "opportunity_source_add",
+    method: "POST",
+    path: "/admin/opportunities/sources",
+    label: "Add opportunity source",
+    section: "opportunities",
+    safety: "settings_gated",
+    readOnly: false,
+    requiresConfirm: false,
+    writesTables: ["opportunity_sources"],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Adds a manually selected opportunity source for later testing and preview.",
+  }),
+  route({
+    id: "opportunity_source_test",
+    method: "POST",
+    path: "/admin/opportunities/sources/:id/test",
+    label: "Test opportunity source",
+    section: "opportunities",
+    safety: "settings_gated",
+    readOnly: false,
+    requiresConfirm: false,
+    writesTables: ["opportunity_sources"],
+    callsNetwork: true,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "low",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Fetches one opportunity source and records source health plus candidate count. Does not save opportunities.",
+  }),
+  route({
+    id: "opportunity_source_preview",
+    method: "POST",
+    path: "/admin/opportunities/sources/:id/preview?limit=50",
+    label: "Preview opportunity source",
+    section: "opportunities",
+    safety: "settings_gated",
+    readOnly: false,
+    requiresConfirm: false,
+    writesTables: [],
+    callsNetwork: true,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "low",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Fetches one opportunity source and previews scored candidates. Does not save opportunities.",
+  }),
+  route({
+    id: "opportunity_commit_preview",
+    method: "POST",
+    path: "/admin/opportunities/sources/:id/commit-preview",
+    label: "Save previewed opportunities",
+    section: "opportunities",
+    safety: "confirm_required",
+    readOnly: false,
+    requiresConfirm: true,
+    writesTables: ["opportunities"],
+    callsNetwork: true,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "low",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Confirmed save step. Re-runs preview, dedupes, and saves high-score candidates as review items only.",
+  }),
+  route({
+    id: "opportunity_review",
+    method: "POST",
+    path: "/admin/opportunities/:id/review",
+    label: "Review opportunity",
+    section: "opportunities",
+    safety: "settings_gated",
+    readOnly: false,
+    requiresConfirm: false,
+    writesTables: ["opportunity_reviews", "opportunity_strategy_scores", "opportunities"],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: true,
+    description: "Records a review decision and updates learning scores so future ranking can improve.",
+  }),
+  route({
     id: "draft_review",
     method: "POST",
     path: "/admin/draft-review/:id",
@@ -298,8 +465,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Records human review decisions so draft quality and strategy scoring can improve.",
-  },
-  {
+  }),
+  route({
     id: "health",
     method: "GET",
     path: "/admin/health",
@@ -316,8 +483,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Read-only health report for counters, backlog, flags, and stuck-state detection.",
-  },
-  {
+  }),
+  route({
     id: "diagnostics",
     method: "GET",
     path: "/admin/diagnostics",
@@ -334,8 +501,8 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: true,
     operationsHubRecommended: true,
     description: "Read-only deeper diagnostic report for operational review.",
-  },
-  {
+  }),
+  route({
     id: "tools_capabilities",
     method: "GET",
     path: "/tools/capabilities",
@@ -352,7 +519,7 @@ const routes: RouteCatalogueItem[] = [
     operatorFacing: false,
     operationsHubRecommended: true,
     description: "Public-safe capability manifest. No admin data or controls.",
-  },
+  }),
 ];
 
 function groupedRoutes() {
@@ -371,16 +538,16 @@ export async function handlePlannerRoutesAdmin(request: Request, env: Env, _path
   return json({
     ok: true,
     mode: "planner_route_catalogue",
-    contractVersion: "planner_routes_v1",
+    contractVersion: "planner_routes_v2",
     generatedAtISO: new Date().toISOString(),
     summary: {
       total: routes.length,
-      operatorFacing: routes.filter((route) => route.operatorFacing).length,
-      operationsHubRecommended: routes.filter((route) => route.operationsHubRecommended).length,
-      confirmRequired: routes.filter((route) => route.requiresConfirm).length,
-      networkCalling: routes.filter((route) => route.callsNetwork).length,
-      aiCalling: routes.filter((route) => route.callsAI).length,
-      emailCapable: routes.filter((route) => route.canSendEmail).length,
+      operatorFacing: routes.filter((item) => item.operatorFacing).length,
+      operationsHubRecommended: routes.filter((item) => item.operationsHubRecommended).length,
+      confirmRequired: routes.filter((item) => item.requiresConfirm).length,
+      networkCalling: routes.filter((item) => item.callsNetwork).length,
+      aiCalling: routes.filter((item) => item.callsAI).length,
+      emailCapable: routes.filter((item) => item.canSendEmail).length,
     },
     safetyRules: {
       noAdminTokenInWebsiteCode: true,
@@ -393,6 +560,8 @@ export async function handlePlannerRoutesAdmin(request: Request, env: Env, _path
       recommendedQuickLinkLabel: "Outbound Agent Cockpit",
       recommendedDefaultView: "/admin/planner/dashboard?compact=1",
       recommendedSelfTestView: "/admin/planner/dashboard/self-test?compact=1",
+      recommendedOpportunityView: "/admin/opportunities/summary",
+      recommendedOpportunityLearningView: "/admin/opportunities/learning",
     },
     groups: groupedRoutes(),
     routes,

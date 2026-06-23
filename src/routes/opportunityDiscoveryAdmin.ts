@@ -1,15 +1,12 @@
 import { Env, getAdminToken } from "../db";
 import { extractOpportunityCandidates, summarizeOpportunityPreview } from "../core/opportunityDiscovery";
+import { saveOpportunityCandidate } from "../core/opportunityPersistence";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
-
-function uuid() {
-  return crypto.randomUUID();
 }
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
@@ -117,58 +114,22 @@ async function commitPreview(env: Env, id: string, request: Request) {
   const fetched = await fetchHtml(source.url);
   if (!fetched.ok) return { ok: false, mode: "opportunity_commit_preview", error: `http_${fetched.status}`, inserted: 0 };
 
-  const candidates = extractOpportunityCandidates(fetched.body, source.url, limit).filter((candidate) => candidate.score >= minScore);
+  const candidates = extractOpportunityCandidates(fetched.body, source.url, limit);
   const inserted: any[] = [];
   const skipped: any[] = [];
 
   for (const candidate of candidates) {
-    const existing = await env.DB.prepare("SELECT id FROM opportunities WHERE url = ? AND title = ? LIMIT 1").bind(candidate.url, candidate.title).first<any>();
-    if (existing?.id) {
-      skipped.push({ url: candidate.url, title: candidate.title, reason: "duplicate", existingId: existing.id });
-      continue;
+    const result = await saveOpportunityCandidate(env, source, candidate, {
+      minScore,
+      discoveredBy: "commit-preview",
+      nowISO: now,
+    });
+
+    if (result.saved) {
+      inserted.push({ id: result.id, url: result.normalizedUrl, title: result.normalizedTitle, score: result.score, opportunityType: result.opportunityType, confidence: result.confidence });
+    } else {
+      skipped.push({ url: result.normalizedUrl || candidate.url, title: result.normalizedTitle || candidate.title, score: result.score ?? candidate.score, opportunityType: result.opportunityType || candidate.opportunityType, reason: result.reason, existingId: result.existingId });
     }
-
-    const opportunityId = uuid();
-    await env.DB.prepare(
-      `INSERT INTO opportunities (
-        id, source_id, url, title, opportunity_type, issuer, country, region, category, amount_text, estimated_value_cents, currency,
-        opens_at_iso, closes_at_iso, discovered_at_iso, updated_at_iso, status,
-        fit_score, urgency_score, value_score, effort_score, risk_score, total_score, confidence,
-        summary, eligibility_summary, recommended_action, evidence_json, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      opportunityId,
-      source.id,
-      candidate.url,
-      candidate.title,
-      candidate.opportunityType,
-      source.label || null,
-      source.country || null,
-      source.region || null,
-      source.category || null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      now,
-      now,
-      "new",
-      candidate.score,
-      candidate.signals.some((signal: string) => signal.startsWith("intent:")) ? Math.min(100, candidate.score + 5) : candidate.score,
-      candidate.score,
-      Math.max(0, 100 - candidate.score),
-      candidate.confidence === "high" ? 10 : candidate.confidence === "medium" ? 25 : 45,
-      candidate.score,
-      candidate.confidence,
-      `Discovered from ${source.label || source.url}: ${candidate.title}`,
-      null,
-      candidate.recommendedAction,
-      JSON.stringify({ signals: candidate.signals, sourceUrl: source.url, sourceType: source.source_type, previewScore: candidate.score }),
-      null
-    ).run();
-
-    inserted.push({ id: opportunityId, url: candidate.url, title: candidate.title, score: candidate.score, opportunityType: candidate.opportunityType, confidence: candidate.confidence });
   }
 
   return {

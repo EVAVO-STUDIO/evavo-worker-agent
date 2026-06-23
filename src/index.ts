@@ -8,6 +8,7 @@ import { handleSourcesAdmin } from "./routes/sourcesAdmin";
 import { handleSourceBatchAdmin } from "./routes/sourceBatchAdmin";
 import { handlePlannerAdmin } from "./routes/plannerAdmin";
 import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
+import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -24,6 +25,10 @@ export default {
     try {
       const url = new URL(req.url);
       const pathname = url.pathname;
+
+      if (pathname.startsWith("/admin/opportunities")) {
+        return await handleOpportunitiesAdmin(req, env, pathname, jsonResponse);
+      }
 
       if (pathname === "/admin/planner/routes") {
         return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse);

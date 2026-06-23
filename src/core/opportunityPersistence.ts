@@ -1,6 +1,7 @@
 import type { Env } from "../db";
 import { uuid } from "../db";
 import type { OpportunityCandidate } from "./opportunityDiscovery";
+import { calibrateOpportunityScore, type ScoreCalibration } from "./opportunityScoring";
 
 type OpportunitySourceLike = {
   id: string;
@@ -19,6 +20,8 @@ export type SaveOpportunityCandidateResult =
       normalizedUrl: string;
       normalizedTitle: string;
       score: number;
+      rawScore: number;
+      scoreAdjustment: number;
       confidence: "low" | "medium" | "high";
       opportunityType: string;
     }
@@ -29,6 +32,8 @@ export type SaveOpportunityCandidateResult =
       normalizedUrl?: string;
       normalizedTitle?: string;
       score?: number;
+      rawScore?: number;
+      scoreAdjustment?: number;
       opportunityType?: string;
     };
 
@@ -95,10 +100,10 @@ function buildDbScoreFields(candidate: OpportunityCandidate, totalScore: number,
   };
 }
 
-function buildEvidenceJson(source: OpportunitySourceLike, candidate: OpportunityCandidate, normalizedUrl: string, discoveredBy: string) {
+function buildEvidenceJson(source: OpportunitySourceLike, candidate: OpportunityCandidate, normalizedUrl: string, discoveredBy: string, calibration: ScoreCalibration) {
   const signals = Array.isArray(candidate.signals) ? candidate.signals.slice(0, 24) : [];
   return JSON.stringify({
-    schemaVersion: "opportunity_evidence_v2",
+    schemaVersion: "opportunity_evidence_v3_calibrated_score",
     discoveredBy,
     source: {
       id: source.id,
@@ -113,11 +118,14 @@ function buildEvidenceJson(source: OpportunitySourceLike, candidate: Opportunity
       url: normalizedUrl,
       title: candidate.title,
       opportunityType: candidate.opportunityType || "unknown",
-      score: candidate.score,
+      rawScore: calibration.rawScore,
+      calibratedScore: calibration.calibratedScore,
+      scoreAdjustment: calibration.adjustment,
       confidence: candidate.confidence,
       recommendedAction: candidate.recommendedAction || "review_manually",
       signals,
     },
+    scoreCalibration: calibration,
     evidence: candidate.evidence || {
       sourceUrl: source.url,
       linkText: candidate.title,
@@ -133,8 +141,8 @@ function buildEvidenceJson(source: OpportunitySourceLike, candidate: Opportunity
       valueScore: 0,
       effortScore: 0,
       riskPenalty: 0,
-      learningAdjustment: 0,
-      total: candidate.score,
+      learningAdjustment: calibration.adjustment,
+      total: calibration.calibratedScore,
     },
   });
 }
@@ -153,7 +161,9 @@ export async function saveOpportunityCandidate(
   const normalizedTitle = normalizeOpportunityTitle(candidate.title);
   if (!normalizedTitle) return { saved: false, reason: "missing_title", normalizedUrl };
 
-  const score = clampInt(candidate.score, 0, 0, 100);
+  const rawScore = clampInt(candidate.score, 0, 0, 100);
+  const calibration = await calibrateOpportunityScore(env, source, candidate, rawScore);
+  const score = calibration.calibratedScore;
   const minScore = clampInt(options.minScore ?? 1, 1, 1, 100);
   if (score < minScore) {
     return {
@@ -162,6 +172,8 @@ export async function saveOpportunityCandidate(
       normalizedUrl,
       normalizedTitle,
       score,
+      rawScore,
+      scoreAdjustment: calibration.adjustment,
       opportunityType: candidate.opportunityType || "unknown",
     };
   }
@@ -169,7 +181,7 @@ export async function saveOpportunityCandidate(
   const existing = await env.DB.prepare("SELECT id FROM opportunities WHERE url = ? AND title = ? LIMIT 1")
     .bind(normalizedUrl, normalizedTitle)
     .first<any>();
-  if (existing?.id) return { saved: false, reason: "duplicate", existingId: existing.id, normalizedUrl, normalizedTitle, score, opportunityType: candidate.opportunityType || "unknown" };
+  if (existing?.id) return { saved: false, reason: "duplicate", existingId: existing.id, normalizedUrl, normalizedTitle, score, rawScore, scoreAdjustment: calibration.adjustment, opportunityType: candidate.opportunityType || "unknown" };
 
   const now = options.nowISO || new Date().toISOString();
   const id = uuid();
@@ -214,9 +226,9 @@ export async function saveOpportunityCandidate(
     `Discovered from ${source.label || source.url}: ${normalizedTitle}`,
     null,
     candidate.recommendedAction || "review_manually",
-    buildEvidenceJson(source, { ...candidate, title: normalizedTitle, url: normalizedUrl, score, confidence }, normalizedUrl, discoveredBy),
+    buildEvidenceJson(source, { ...candidate, title: normalizedTitle, url: normalizedUrl, score, confidence }, normalizedUrl, discoveredBy, calibration),
     options.notes || null,
   ).run();
 
-  return { saved: true, id, normalizedUrl, normalizedTitle, score, confidence, opportunityType };
+  return { saved: true, id, normalizedUrl, normalizedTitle, score, rawScore, scoreAdjustment: calibration.adjustment, confidence, opportunityType };
 }

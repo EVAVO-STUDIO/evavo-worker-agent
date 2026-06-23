@@ -8,7 +8,40 @@ export type LeadStatus =
   | "rejected"
   | "do_not_contact";
 
-export type DraftStatus = "created" | "approved" | "sent" | "failed" | "rejected";
+export type DraftStatus = "queued" | "created" | "approved" | "sent" | "failed" | "rejected";
+
+export type LeadClass =
+  | "ideal_client"
+  | "possible_client"
+  | "possible_partner"
+  | "agency_peer"
+  | "low_signal"
+  | "bad_fit"
+  | "do_not_contact";
+
+export interface ScoreBreakdown {
+  fit: number;
+  contactability: number;
+  opportunity: number;
+  risk: number;
+  total: number;
+}
+
+export interface LeadBrief {
+  companyName?: string | null;
+  businessType?: string | null;
+  geoHint?: string | null;
+  summary: string;
+  siteQualitySummary: string;
+  contactSummary: string;
+  siteFlags: string[];
+  serviceTags: string[];
+  techTags: string[];
+  outreachAngles: string[];
+  groundedFacts: string[];
+  avoidSaying: string[];
+  confidence: "low" | "medium" | "high";
+}
 
 export interface Env {
   DB: D1Database;
@@ -51,6 +84,7 @@ export interface LeadSignals {
   problemSummary?: string;
   leverageSummary?: string;
   recommendedAngle?: string;
+  sourceMigrated?: boolean;
 }
 
 export interface LeadRow {
@@ -106,6 +140,10 @@ export function nowISO(): string {
   return new Date().toISOString();
 }
 
+export function todayUTC(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function uuid(): string {
   return crypto.randomUUID();
 }
@@ -149,6 +187,32 @@ export async function bump(env: Env, key: string, delta: number): Promise<number
   return next;
 }
 
+export async function getUsageCounter(env: Env, key: string, day = todayUTC()): Promise<number> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT value FROM usage_counters WHERE day = ? AND key = ? LIMIT 1`
+    ).bind(day, key).first<{ value: number }>();
+    return Number(row?.value || 0);
+  } catch {
+    return 0;
+  }
+}
+
+export async function bumpUsageCounter(env: Env, key: string, amount = 1, day = todayUTC()): Promise<number> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO usage_counters (day, key, value, updated_at_iso)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(day, key) DO UPDATE SET
+         value = value + excluded.value,
+         updated_at_iso = excluded.updated_at_iso`
+    ).bind(day, key, amount, nowISO()).run();
+  } catch {
+    return 0;
+  }
+  return getUsageCounter(env, key, day);
+}
+
 export async function tryAcquireLock(env: Env, key: string, ttlSeconds: number): Promise<string | null> {
   const lockKey = `${LOCK_PREFIX}${key}`;
   const existing = await getSetting(env, lockKey);
@@ -179,12 +243,13 @@ export async function logEvent(env: Env, type: string, message: string, leadId: 
 }
 
 export async function listEvents(env: Env, limit = 50): Promise<EventRow[]> {
+  const safeLimit = Math.min(500, Math.max(1, limit));
   const { results } = (await env.DB.prepare(
     `SELECT id, type, message, lead_id, created_at_iso
      FROM events
      ORDER BY created_at_iso DESC
      LIMIT ?`
-  ).bind(limit).all()) as { results: EventRow[] };
+  ).bind(safeLimit).all()) as { results: EventRow[] };
   return results || [];
 }
 
@@ -379,6 +444,7 @@ export async function updateLead(env: Env, id: string, updates: LeadUpdateInput)
       params.push((updates as any)[key]);
     }
   }
+  if (!sets.length) return;
   sets.push("updated_at_iso = ?");
   params.push(nowISO());
   params.push(id);
@@ -482,6 +548,7 @@ export async function updateDraft(
       params.push((updates as any)[key]);
     }
   }
+  if (!sets.length) return;
   sets.push("updated_at_iso = ?");
   params.push(nowISO());
   params.push(id);
@@ -499,18 +566,13 @@ export interface TodayStats {
 }
 
 export async function getTodayStats(env: Env): Promise<TodayStats> {
-  const map = {
-    leadsNewToday: "leads_new_today",
-    draftsCreatedToday: "drafts_created_today",
-    approvalsToday: "approvals_today",
-    sendsSentToday: "sends_sent_today",
-    repliesToday: "replies_today",
-    bouncesToday: "bounces_today",
-    unsubscribesToday: "unsubscribes_today",
-  } as const;
-  const out: Record<string, number> = {};
-  for (const [targetKey, sourceKey] of Object.entries(map)) {
-    out[targetKey] = Number((await getSetting(env, sourceKey)) || 0);
-  }
-  return out as TodayStats;
+  return {
+    leadsNewToday: Number((await getSetting(env, "leads_new_today")) || 0),
+    draftsCreatedToday: Number((await getSetting(env, "drafts_created_today")) || 0),
+    approvalsToday: Number((await getSetting(env, "approvals_today")) || 0),
+    sendsSentToday: Number((await getSetting(env, "sends_sent_today")) || 0),
+    repliesToday: Number((await getSetting(env, "replies_today")) || 0),
+    bouncesToday: Number((await getSetting(env, "bounces_today")) || 0),
+    unsubscribesToday: Number((await getSetting(env, "unsubscribes_today")) || 0),
+  };
 }

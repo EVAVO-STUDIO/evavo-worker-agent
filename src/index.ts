@@ -3,6 +3,7 @@ import type { Env } from "./db";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/admin";
 import { handleTools } from "./routes/tools";
+import { handleDraftReviewAdmin } from "./routes/draftReviewAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -19,6 +20,10 @@ export default {
     try {
       const url = new URL(req.url);
       const pathname = url.pathname;
+
+      if (pathname.startsWith("/admin/draft-review") || pathname.startsWith("/admin/strategy-scores")) {
+        return await handleDraftReviewAdmin(req, env, pathname, jsonResponse);
+      }
 
       if (pathname.startsWith("/admin")) {
         return await handleAdmin(req, env, pathname, ctx, jsonResponse);

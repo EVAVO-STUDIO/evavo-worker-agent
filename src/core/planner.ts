@@ -20,7 +20,7 @@ interface PlannerActionCard {
   powershell: string;
 }
 
-async function countByStatus(env: Env, table: "sources" | "drafts" | "leads") {
+async function countByStatus(env: Env, table: "sources" | "drafts" | "leads"): Promise<Record<string, number>> {
   const { results } = (await env.DB.prepare(`SELECT status, COUNT(*) AS count FROM ${table} GROUP BY status`).all()) as { results?: CountRow[] };
   const out: Record<string, number> = {};
   for (const row of results || []) out[String(row.status || "unknown")] = Number(row.count || 0);
@@ -231,12 +231,13 @@ function decide(input: {
 }
 
 export async function buildPlannerReport(env: Env) {
+  const emptyCounts: Record<string, number> = {};
   const [health, budget, sourceCounts, draftCounts, leadCounts, events, sourceRuns, draftsForAction, activeSourcesForAction, cooldownSourcesForAction] = await Promise.all([
     buildHealthReport(env),
     getBudgetSnapshot(env),
-    countByStatus(env, "sources").catch(() => ({})),
-    countByStatus(env, "drafts").catch(() => ({})),
-    countByStatus(env, "leads").catch(() => ({})),
+    countByStatus(env, "sources").catch(() => emptyCounts),
+    countByStatus(env, "drafts").catch(() => emptyCounts),
+    countByStatus(env, "leads").catch(() => emptyCounts),
     listEvents(env, 15).catch(() => []),
     recentSourceRuns(env, 10),
     sampleDrafts(env, 5),

@@ -2,6 +2,7 @@ import type { Env } from "../db";
 import { getAdminToken } from "../db";
 import { bootstrapSourceExpansionSeeds, listSourceExpansionCandidates, runSourceExpansion } from "../core/sourceExpansionEngine";
 import { learnSourceExpansionQuality, listSourceExpansionStrategyScores } from "../core/sourceExpansionLearning";
+import { runSitemapSourceExpansion } from "../core/sourceExpansionSitemap";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -43,6 +44,18 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
       maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
     });
     return json(result);
+  }
+
+  if (pathname === "/admin/opportunities/sources/expansion/sitemap-scan") {
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    const body = await bodyJson(request);
+    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
+    return json(await runSitemapSourceExpansion(env, {
+      limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
+      maxFetches: boundedInteger(body?.maxFetches, 4, 1, 10),
+      maxSitemapUrls: boundedInteger(body?.maxSitemapUrls, 50, 5, 100),
+      maxCandidates: boundedInteger(body?.maxCandidates, 30, 5, 100),
+    }));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/learn") {

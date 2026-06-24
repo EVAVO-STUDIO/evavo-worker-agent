@@ -1,4 +1,5 @@
 import type { Env } from "../db";
+import { logEvent, nowISO, uuid } from "../db";
 
 type SourceCandidate = {
   url: string;
@@ -274,7 +275,7 @@ function candidateMatchesFilters(candidate: SourceCandidate, filters: { country?
   return true;
 }
 
-export async function previewOpportunitySourceCandidates(env: Env, options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {}) {
+async function buildCandidateList(env: Env, options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {}) {
   const existing = await existingOpportunitySources(env);
   const existingByDomain = new Map(existing.map((source) => [domainOf(normalizeUrl(source.url)), source]));
   const limit = Math.max(1, Math.min(100, Math.round(Number(options.limit || 50))));
@@ -287,6 +288,12 @@ export async function previewOpportunitySourceCandidates(env: Env, options: { co
     .filter((candidate) => candidateMatchesFilters(candidate, { country: options.country, category: options.category, includeDuplicates: options.includeDuplicates }))
     .sort((a, b) => b.score - a.score || a.url.localeCompare(b.url))
     .slice(0, limit);
+
+  return { candidates, existing, limit };
+}
+
+export async function previewOpportunitySourceCandidates(env: Env, options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {}) {
+  const { candidates, existing, limit } = await buildCandidateList(env, options);
 
   return {
     ok: true,
@@ -307,6 +314,78 @@ export async function previewOpportunitySourceCandidates(env: Env, options: { co
       sendsEmail: false,
       postsExternally: false,
       appliesExternally: false,
+      callsNetwork: false,
+    },
+  };
+}
+
+export async function saveOpportunitySourceCandidates(env: Env, options: { urls: string[]; reason?: string | null; actor?: string | null }) {
+  if (!(await tableExists(env, "opportunity_sources"))) {
+    return { ok: false, error: "missing_migration", missing: "opportunity_sources", requiredMigration: "0004_opportunity_intelligence.sql" };
+  }
+
+  const selectedUrls = Array.from(new Set((options.urls || []).map((url) => normalizeUrl(String(url || ""))).filter(Boolean))).slice(0, 25);
+  if (!selectedUrls.length) return { ok: false, error: "urls_required" };
+
+  const { candidates } = await buildCandidateList(env, { includeDuplicates: true, limit: 100 });
+  const candidateByUrl = new Map(candidates.map((candidate) => [candidate.url, candidate]));
+  const existing = await existingOpportunitySources(env);
+  const existingByDomain = new Map(existing.map((source) => [domainOf(normalizeUrl(source.url)), source]));
+  const now = nowISO();
+  const inserted: any[] = [];
+  const skipped: any[] = [];
+
+  for (const selectedUrl of selectedUrls) {
+    const candidate = candidateByUrl.get(selectedUrl);
+    if (!candidate) {
+      skipped.push({ url: selectedUrl, reason: "not_in_preview_candidate_set" });
+      continue;
+    }
+
+    const domain = domainOf(candidate.url);
+    const existingSource = existingByDomain.get(domain);
+    if (existingSource) {
+      skipped.push({ url: candidate.url, reason: "duplicate_domain", existingSourceId: existingSource.id });
+      continue;
+    }
+
+    const id = uuid();
+    const priority = Math.max(10, Math.min(90, Math.round(candidate.score)));
+    await env.DB.prepare(
+      `INSERT INTO opportunity_sources (id, url, label, source_type, country, region, category, status, priority, notes, created_at_iso, updated_at_iso)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
+    ).bind(
+      id,
+      candidate.url,
+      candidate.label,
+      candidate.sourceType,
+      candidate.country,
+      candidate.region || null,
+      candidate.category,
+      priority,
+      `Saved from source candidate preview${options.reason ? `: ${String(options.reason).slice(0, 240)}` : ""}`,
+      now,
+      now,
+    ).run();
+
+    inserted.push({ id, url: candidate.url, label: candidate.label, sourceType: candidate.sourceType, country: candidate.country, region: candidate.region || null, category: candidate.category, priority });
+    existingByDomain.set(domain, { id, url: candidate.url });
+  }
+
+  await logEvent(env, "opportunity_source_candidates_saved", `Saved ${inserted.length} opportunity source candidate(s); skipped ${skipped.length}.`);
+
+  return {
+    ok: true,
+    mode: "opportunity_source_candidate_save",
+    insertedCount: inserted.length,
+    skippedCount: skipped.length,
+    inserted,
+    skipped,
+    safety: {
+      confirmRequired: true,
+      writesTables: ["opportunity_sources", "events"],
+      callsAI: false,
+      sendsEmail: false,
       callsNetwork: false,
     },
   };

@@ -1,6 +1,7 @@
 import type { Env } from "../db";
 import { getAdminToken } from "../db";
 import { bootstrapSourceExpansionSeeds, listSourceExpansionCandidates, runSourceExpansion } from "../core/sourceExpansionEngine";
+import { learnSourceExpansionQuality, listSourceExpansionStrategyScores } from "../core/sourceExpansionLearning";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -42,6 +43,19 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
       maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
     });
     return json(result);
+  }
+
+  if (pathname === "/admin/opportunities/sources/expansion/learn") {
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    const body = await bodyJson(request);
+    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
+    return json(await learnSourceExpansionQuality(env));
+  }
+
+  if (pathname === "/admin/opportunities/sources/expansion/strategies") {
+    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    const url = new URL(request.url);
+    return json(await listSourceExpansionStrategyScores(env, boundedInteger(url.searchParams.get("limit"), 50, 1, 100)));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/candidates") {

@@ -13,6 +13,10 @@ type ExpansionSeed = {
   priority: number;
   depth: number;
   quality_score: number;
+  strategy_quality_score?: number | null;
+  strategy_recommendation?: string | null;
+  selection_score?: number | null;
+  selection_reason?: string | null;
 };
 
 type ExpansionCandidate = {
@@ -97,6 +101,7 @@ async function ensureTables(env: Env) {
     runs: await tableExists(env, "source_expansion_runs"),
     attempts: await tableExists(env, "source_expansion_attempts"),
     rejections: await tableExists(env, "source_expansion_rejections"),
+    strategyScores: await tableExists(env, "source_expansion_strategy_scores"),
   };
 }
 
@@ -117,24 +122,62 @@ export async function bootstrapSourceExpansionSeeds(env: Env) {
   return { ok: true, inserted, seedCount: DEFAULT_SEEDS.length };
 }
 
+function strategyAdjustment(recommendation?: string | null) {
+  if (recommendation === "prioritise_strategy") return 12;
+  if (recommendation === "continue_strategy") return 7;
+  if (recommendation === "tighten_strategy_filters") return -4;
+  if (recommendation === "cool_down_strategy") return -14;
+  if (recommendation === "deprioritise_strategy") return -18;
+  return 0;
+}
+
+function selectionReason(seed: ExpansionSeed) {
+  const parts = [`seed_priority:${seed.priority}`, `seed_quality:${seed.quality_score}`];
+  if (seed.strategy_quality_score !== null && seed.strategy_quality_score !== undefined) parts.push(`strategy_quality:${seed.strategy_quality_score}`);
+  if (seed.strategy_recommendation) parts.push(`strategy_recommendation:${seed.strategy_recommendation}`);
+  if (seed.selection_score !== null && seed.selection_score !== undefined) parts.push(`selection_score:${seed.selection_score}`);
+  return parts.join("|");
+}
+
 async function dueSeeds(env: Env, options: ExpansionOptions): Promise<ExpansionSeed[]> {
   const now = nowISO();
   const limit = Math.max(1, Math.min(25, Math.round(Number(options.limitSeeds || 5))));
-  const clauses = ["status = 'active'", "(cooldown_until_iso IS NULL OR cooldown_until_iso <= ?)", "(next_run_at_iso IS NULL OR next_run_at_iso <= ?)"];
+  const clauses = ["s.status = 'active'", "(s.cooldown_until_iso IS NULL OR s.cooldown_until_iso <= ?)", "(s.next_run_at_iso IS NULL OR s.next_run_at_iso <= ?)"];
   const binds: any[] = [now, now];
   if (options.strategy) {
-    clauses.push("strategy = ?");
+    clauses.push("s.strategy = ?");
     binds.push(options.strategy);
   }
   binds.push(limit);
+
+  const strategyJoin = await tableExists(env, "source_expansion_strategy_scores");
   const rows = await env.DB.prepare(
-    `SELECT id, url, label, strategy, country, region, category, status, priority, depth, quality_score
-     FROM source_expansion_seeds
+    `SELECT
+       s.id,
+       s.url,
+       s.label,
+       s.strategy,
+       s.country,
+       s.region,
+       s.category,
+       s.status,
+       s.priority,
+       s.depth,
+       s.quality_score,
+       ${strategyJoin ? "COALESCE(ss.quality_score, 50)" : "50"} AS strategy_quality_score,
+       ${strategyJoin ? "ss.recommendation" : "NULL"} AS strategy_recommendation,
+       (s.priority * 0.45 + s.quality_score * 0.35 + ${strategyJoin ? "COALESCE(ss.quality_score, 50)" : "50"} * 0.20 + ${strategyJoin ? "CASE ss.recommendation WHEN 'prioritise_strategy' THEN 12 WHEN 'continue_strategy' THEN 7 WHEN 'tighten_strategy_filters' THEN -4 WHEN 'cool_down_strategy' THEN -14 WHEN 'deprioritise_strategy' THEN -18 ELSE 0 END" : "0"}) AS selection_score
+     FROM source_expansion_seeds s
+     ${strategyJoin ? "LEFT JOIN source_expansion_strategy_scores ss ON ss.strategy = s.strategy" : ""}
      WHERE ${clauses.join(" AND ")}
-     ORDER BY priority DESC, quality_score DESC, updated_at_iso ASC
+     ORDER BY selection_score DESC, s.priority DESC, s.quality_score DESC, s.updated_at_iso ASC
      LIMIT ?`
   ).bind(...binds).all<ExpansionSeed>();
-  return rows.results || [];
+
+  return (rows.results || []).map((seed) => ({
+    ...seed,
+    selection_reason: selectionReason(seed),
+  }));
 }
 
 function extractLinks(html: string, baseUrl: string, maxLinks: number) {
@@ -185,6 +228,13 @@ function scoreLink(link: { url: string; text: string }, seed: ExpansionSeed): Ex
     score += 4;
     reasons.push("same_domain:seed_deepening");
   }
+  if (seed.strategy_quality_score !== null && seed.strategy_quality_score !== undefined) {
+    const adjustment = Math.round((Number(seed.strategy_quality_score) - 50) * 0.18) + strategyAdjustment(seed.strategy_recommendation);
+    if (adjustment !== 0) {
+      score += adjustment;
+      reasons.push(`strategy_quality_adjustment:${adjustment}`);
+    }
+  }
 
   if (!reasons.length || score < 35) return null;
   score = Math.max(0, Math.min(100, Math.round(score)));
@@ -200,7 +250,7 @@ function scoreLink(link: { url: string; text: string }, seed: ExpansionSeed): Ex
     confidence: classifyConfidence(score),
     strategy: seed.strategy,
     reasons,
-    evidence: { seedId: seed.id, seedUrl: seed.url, linkText: link.text, discoveredAtISO: nowISO() },
+    evidence: { seedId: seed.id, seedUrl: seed.url, seedSelectionReason: seed.selection_reason, strategyQualityScore: seed.strategy_quality_score ?? null, strategyRecommendation: seed.strategy_recommendation ?? null, linkText: link.text, discoveredAtISO: nowISO() },
   };
 }
 
@@ -248,13 +298,13 @@ async function upsertCandidate(env: Env, candidate: ExpansionCandidate, seed: Ex
   return result.meta?.changes ? "saved" as const : "updated" as const;
 }
 
-async function startRun(env: Env, options: ExpansionOptions) {
+async function startRun(env: Env, options: ExpansionOptions, seeds: ExpansionSeed[]) {
   const id = uuid();
   const now = nowISO();
   await env.DB.prepare(
     `INSERT INTO source_expansion_runs (id, run_type, strategy, started_at_iso, status, settings_json)
      VALUES (?, 'source_expansion', ?, ?, 'running', ?)`
-  ).bind(id, options.strategy || null, now, JSON.stringify(options)).run();
+  ).bind(id, options.strategy || null, now, JSON.stringify({ ...options, selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })) })).run();
   return id;
 }
 
@@ -302,7 +352,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
   const maxLinksPerSeed = Math.max(5, Math.min(80, Math.round(Number(options.maxLinksPerSeed || 40))));
   const maxCandidates = Math.max(5, Math.min(100, Math.round(Number(options.maxCandidates || 40))));
   const seeds = await dueSeeds(env, { ...options, limitSeeds: Math.min(options.limitSeeds || maxFetches, maxFetches) });
-  const runId = await startRun(env, { ...options, maxFetches, maxLinksPerSeed, maxCandidates });
+  const runId = await startRun(env, { ...options, maxFetches, maxLinksPerSeed, maxCandidates }, seeds);
   const existingDomains = await existingSourceDomains(env);
   const seenCandidates: ExpansionCandidate[] = [];
   let pagesFetched = 0;
@@ -369,9 +419,10 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
            success_count = success_count + 1,
            candidate_count = candidate_count + ?,
            quality_score = MIN(100, quality_score + ?),
+           notes = ?,
            updated_at_iso = ?
          WHERE id = ?`
-      ).bind(nowISO(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), seedCandidatesFound, seedCandidatesFound ? 3 : 0, nowISO(), seed.id).run();
+      ).bind(nowISO(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), seedCandidatesFound, seedCandidatesFound ? 3 : 0, `Last selected: ${seed.selection_reason}`, nowISO(), seed.id).run();
     } catch (err) {
       failed += 1;
       error = err instanceof Error ? err.message : String(err);
@@ -382,15 +433,16 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
            cooldown_until_iso = ?,
            failure_count = failure_count + 1,
            quality_score = MAX(0, quality_score - 8),
+           notes = ?,
            updated_at_iso = ?
          WHERE id = ?`
-      ).bind(nowISO(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), nowISO(), seed.id).run();
+      ).bind(nowISO(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), `Failed after selection: ${seed.selection_reason}`, nowISO(), seed.id).run();
     }
 
     await env.DB.prepare(
       `INSERT INTO source_expansion_attempts (id, run_id, seed_id, seed_url, strategy, fetch_status, content_type, elapsed_ms, bytes, links_found, candidates_found, candidates_new, candidates_updated, candidates_rejected, error, created_at_iso)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(attemptId, runId, seed.id, seed.url, seed.strategy, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
+    ).bind(attemptId, runId, seed.id, seed.url, `${seed.strategy}|${seed.selection_reason || "selection_reason:unknown"}`, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
   }
 
   await finishRun(env, runId, {
@@ -413,6 +465,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     mode: "source_expansion_run",
     runId,
     seedsChecked: seeds.length,
+    selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })),
     pagesFetched,
     linksFound,
     candidatesFound,

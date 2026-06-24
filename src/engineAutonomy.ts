@@ -3,6 +3,7 @@ import { getSetting, logEvent, setSetting } from "./db";
 import { dailyTick as legacyDailyTick } from "./engine";
 import { runOpportunityAutonomy } from "./opportunityAutonomy";
 import { runSourceExpansion } from "./core/sourceExpansionEngine";
+import { learnSourceExpansionQuality } from "./core/sourceExpansionLearning";
 
 type AutonomySettings = {
   mode: string;
@@ -104,6 +105,15 @@ function hasLegacyStage(settings: AutonomySettings): boolean {
   return Boolean(settings.leadDiscoveryEnabled || settings.aiDraftsEnabled || settings.sendingEnabled);
 }
 
+async function learnExpansionQualityIfPossible(env: Env): Promise<void> {
+  const result = await learnSourceExpansionQuality(env);
+  if (result?.ok) {
+    await logEvent(env, "source_expansion_learning_tick_ok", `Source expansion learning updated ${result.learnedCount || 0} strategy row(s).`);
+  } else {
+    await logEvent(env, "source_expansion_learning_tick_skip", `Source expansion learning skipped: ${result?.error || "unknown"}.`);
+  }
+}
+
 async function runSourceExpansionIfAllowed(env: Env, settings: AutonomySettings): Promise<void> {
   if (!settings.sourceExpansionEnabled) return;
   if (settings.maxNetworkCallsPerRun <= 0) {
@@ -153,11 +163,12 @@ export async function dailyTickWithAutonomy(env: Env): Promise<void> {
   }
 
   await syncLegacyEngineFlags(env, settings);
-
+  await learnExpansionQualityIfPossible(env);
   await runSourceExpansionIfAllowed(env, settings);
 
   if (settings.opportunityDiscoveryEnabled) {
     await runOpportunityAutonomy(env, settings);
+    await learnExpansionQualityIfPossible(env);
   }
 
   if (!hasLegacyStage(settings)) {

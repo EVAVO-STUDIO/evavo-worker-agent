@@ -26,17 +26,28 @@ async function listOpportunitySources(env: Env, url: URL) {
   }
 
   const status = url.searchParams.get("status") || "";
+  const origin = url.searchParams.get("origin") || "";
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") || 50)));
-  const where = status ? "WHERE status = ?" : "";
-  const stmt = env.DB.prepare(
-    `SELECT id, url, label, source_type, country, region, category, status, priority, success_count, failure_count, last_run_at_iso, next_run_at_iso, cooldown_until_iso, last_error, updated_at_iso
+  const clauses: string[] = [];
+  const binds: any[] = [];
+  if (status) {
+    clauses.push("status = ?");
+    binds.push(status);
+  }
+  if (origin === "candidate_preview") {
+    clauses.push("notes LIKE ?");
+    binds.push("Saved from source candidate preview%");
+  }
+  binds.push(limit);
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = await env.DB.prepare(
+    `SELECT id, url, label, source_type, country, region, category, status, priority, success_count, failure_count, last_run_at_iso, next_run_at_iso, cooldown_until_iso, last_error, notes, created_at_iso, updated_at_iso
      FROM opportunity_sources
      ${where}
-     ORDER BY priority DESC, updated_at_iso DESC
+     ORDER BY updated_at_iso DESC, priority DESC
      LIMIT ?`
-  );
-  const rows = status ? await stmt.bind(status, limit).all<any>() : await stmt.bind(limit).all<any>();
-  return { ok: true, mode: "opportunity_sources", count: rows.results?.length || 0, sources: rows.results || [] };
+  ).bind(...binds).all<any>();
+  return { ok: true, mode: "opportunity_sources", count: rows.results?.length || 0, sources: rows.results || [], filters: { status: status || null, origin: origin || null, limit } };
 }
 
 async function listOpportunities(env: Env, url: URL) {

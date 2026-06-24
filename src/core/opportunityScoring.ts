@@ -14,6 +14,7 @@ export type ScoreCalibration = {
   calibratedScore: number;
   adjustment: number;
   reasons: string[];
+  guardrails: string[];
   sourceHealth?: {
     runCount: number;
     saved: number;
@@ -114,6 +115,66 @@ async function getReviewLearningSignal(env: Env, source: SourceLike, candidate: 
   return null;
 }
 
+function candidateHasStrongReviewSignals(candidate: OpportunityCandidate): boolean {
+  const signals = Array.isArray(candidate.signals) ? candidate.signals : [];
+  const breakdown = candidate.scoreBreakdown;
+  const hasFitSignal = signals.some((signal) => String(signal).startsWith("evavo_fit:"));
+  const hasIntentSignal = signals.some((signal) => String(signal).startsWith("intent:"));
+  const fitScore = Number(breakdown?.evavoFitScore || 0);
+  const urgencyScore = Number(breakdown?.urgencyScore || 0);
+  const valueScore = Number(breakdown?.valueScore || 0);
+  return hasFitSignal || hasIntentSignal || fitScore >= 8 || urgencyScore >= 8 || valueScore >= 10;
+}
+
+function applyGuardrails(rawScore: number, candidate: OpportunityCandidate, proposedAdjustment: number, reasons: string[]) {
+  const guardrails: string[] = [];
+  const confidence = candidate.confidence || "low";
+  const strongSignals = candidateHasStrongReviewSignals(candidate);
+
+  let boundedAdjustment = clampInt(proposedAdjustment, 0, -18, 18);
+  if (boundedAdjustment !== Math.round(proposedAdjustment)) guardrails.push("guardrail:adjustment_cap_18");
+
+  if (confidence === "low" && boundedAdjustment > 6) {
+    boundedAdjustment = 6;
+    guardrails.push("guardrail:low_confidence_boost_cap_6");
+  }
+
+  if (confidence === "medium" && boundedAdjustment > 12) {
+    boundedAdjustment = 12;
+    guardrails.push("guardrail:medium_confidence_boost_cap_12");
+  }
+
+  let calibratedScore = clampInt(rawScore + boundedAdjustment, rawScore, 0, 100);
+
+  if (confidence === "low" && !strongSignals && calibratedScore > 55) {
+    calibratedScore = Math.min(calibratedScore, 55);
+    guardrails.push("guardrail:low_confidence_no_strong_signal_ceiling_55");
+  }
+
+  if (confidence === "medium" && !strongSignals && calibratedScore > 70) {
+    calibratedScore = Math.min(calibratedScore, 70);
+    guardrails.push("guardrail:medium_confidence_no_strong_signal_ceiling_70");
+  }
+
+  if (strongSignals && rawScore >= 45 && calibratedScore < 40) {
+    calibratedScore = 40;
+    guardrails.push("guardrail:strong_signal_review_floor_40");
+  }
+
+  if (strongSignals && rawScore >= 60 && calibratedScore < 55) {
+    calibratedScore = 55;
+    guardrails.push("guardrail:strong_signal_review_floor_55");
+  }
+
+  if (guardrails.length) reasons.push(...guardrails);
+
+  return {
+    calibratedScore,
+    adjustment: calibratedScore - rawScore,
+    guardrails,
+  };
+}
+
 export async function calibrateOpportunityScore(env: Env, source: SourceLike, candidate: OpportunityCandidate, rawScoreInput: number): Promise<ScoreCalibration> {
   const rawScore = clampInt(rawScoreInput, 0, 0, 100);
   const reasons: string[] = [];
@@ -154,13 +215,14 @@ export async function calibrateOpportunityScore(env: Env, source: SourceLike, ca
     reasons.push(`review_learning:${learning.source}:${learning.scoreAdjustment > 0 ? "boost" : "penalty"}`);
   }
 
-  const calibratedScore = clampInt(rawScore + adjustment, rawScore, 0, 100);
+  const guarded = applyGuardrails(rawScore, candidate, adjustment, reasons);
 
   return {
     rawScore,
-    calibratedScore,
-    adjustment: calibratedScore - rawScore,
+    calibratedScore: guarded.calibratedScore,
+    adjustment: guarded.adjustment,
     reasons,
+    guardrails: guarded.guardrails,
     sourceHealth: sourceHealth
       ? {
           runCount: sourceHealth.runCount,

@@ -58,10 +58,27 @@ function slimOpportunity(row: OpportunityRow, calibration: any) {
     calibratedScore: calibration?.calibratedScore ?? null,
     adjustment: calibration?.adjustment ?? 0,
     reasons: Array.isArray(calibration?.reasons) ? calibration.reasons : [],
+    guardrails: Array.isArray(calibration?.guardrails) ? calibration.guardrails : [],
     reviewLearning: calibration?.reviewLearning || null,
     sourceHealth: calibration?.sourceHealth || null,
     updatedAtISO: row.updated_at_iso || null,
   };
+}
+
+function warningList(summary: { calibratedCount: number; positive: number; negative: number; totalAdjustment: number }, guardrailCounts: Record<string, number>) {
+  const warnings: string[] = [];
+  if (!summary.calibratedCount) return warnings;
+  const averageAdjustment = summary.totalAdjustment / summary.calibratedCount;
+  const positiveRate = summary.positive / summary.calibratedCount;
+  const negativeRate = summary.negative / summary.calibratedCount;
+  const guardrailTotal = Object.values(guardrailCounts).reduce((total, value) => total + value, 0);
+
+  if (averageAdjustment >= 10) warnings.push("diagnostic:average_boost_high");
+  if (averageAdjustment <= -10) warnings.push("diagnostic:average_penalty_high");
+  if (positiveRate >= 0.75 && summary.calibratedCount >= 8) warnings.push("diagnostic:boost_rate_high");
+  if (negativeRate >= 0.75 && summary.calibratedCount >= 8) warnings.push("diagnostic:penalty_rate_high");
+  if (guardrailTotal >= Math.max(5, Math.ceil(summary.calibratedCount * 0.4))) warnings.push("diagnostic:guardrails_triggering_often");
+  return warnings;
 }
 
 async function diagnostics(env: Env, url: URL) {
@@ -80,9 +97,11 @@ async function diagnostics(env: Env, url: URL) {
   const reasonCounts: Record<string, number> = {};
   const reviewLearningCounts: Record<string, number> = {};
   const sourceHealthReasonCounts: Record<string, number> = {};
+  const guardrailCounts: Record<string, number> = {};
   const typeAdjustmentTotals: Record<string, { count: number; totalAdjustment: number }> = {};
   const boosted: any[] = [];
   const penalised: any[] = [];
+  const guardrailed: any[] = [];
   const uncalibrated: any[] = [];
   let calibratedCount = 0;
   let totalAdjustment = 0;
@@ -114,15 +133,21 @@ async function diagnostics(env: Env, url: URL) {
       inc(reasonCounts, reason);
       if (String(reason).startsWith("source_health:")) inc(sourceHealthReasonCounts, reason);
       if (String(reason).startsWith("review_learning:")) inc(reviewLearningCounts, reason);
+      if (String(reason).startsWith("guardrail:")) inc(guardrailCounts, reason);
+    }
+    for (const guardrail of Array.isArray(calibration.guardrails) ? calibration.guardrails : []) {
+      inc(guardrailCounts, guardrail);
     }
 
     const slim = slimOpportunity(row, calibration);
     if (adjustment > 0) boosted.push(slim);
     if (adjustment < 0) penalised.push(slim);
+    if (slim.guardrails.length) guardrailed.push(slim);
   }
 
   boosted.sort((a, b) => Math.abs(b.adjustment) - Math.abs(a.adjustment));
   penalised.sort((a, b) => Math.abs(b.adjustment) - Math.abs(a.adjustment));
+  guardrailed.sort((a, b) => (b.guardrails?.length || 0) - (a.guardrails?.length || 0));
 
   const typeAverages = Object.entries(typeAdjustmentTotals).map(([opportunityType, value]) => ({
     opportunityType,
@@ -131,25 +156,30 @@ async function diagnostics(env: Env, url: URL) {
     totalAdjustment: value.totalAdjustment,
   })).sort((a, b) => Math.abs(b.averageAdjustment) - Math.abs(a.averageAdjustment));
 
+  const summary = {
+    positive,
+    negative,
+    neutral,
+    averageAdjustment: calibratedCount ? Number((totalAdjustment / calibratedCount).toFixed(2)) : 0,
+    totalAdjustment,
+  };
+
   return {
     ok: true,
     mode: "opportunity_scoring_diagnostics",
     inspected: rows.results?.length || 0,
     calibratedCount,
     uncalibratedCount: uncalibrated.length,
-    summary: {
-      positive,
-      negative,
-      neutral,
-      averageAdjustment: calibratedCount ? Number((totalAdjustment / calibratedCount).toFixed(2)) : 0,
-      totalAdjustment,
-    },
+    summary,
+    warnings: warningList({ calibratedCount, positive, negative, totalAdjustment }, guardrailCounts),
     reasonCounts,
     sourceHealthReasonCounts,
     reviewLearningCounts,
+    guardrailCounts,
     typeAverages,
     boosted: boosted.slice(0, 20),
     penalised: penalised.slice(0, 20),
+    guardrailed: guardrailed.slice(0, 20),
     uncalibrated: uncalibrated.slice(0, 20),
     safety: {
       readOnly: true,

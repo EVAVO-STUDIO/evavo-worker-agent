@@ -18,6 +18,7 @@ import { handleOpportunitySourceHealthAdmin } from "./routes/opportunitySourceHe
 import { handleOpportunitySourceHealthActionsAdmin } from "./routes/opportunitySourceHealthActionsAdmin";
 import { handleOpportunityScoringDiagnosticsAdmin } from "./routes/opportunityScoringDiagnosticsAdmin";
 import { handleOpportunitySourceCandidatesAdmin } from "./routes/opportunitySourceCandidatesAdmin";
+import { handleSourceExpansionAdmin } from "./routes/sourceExpansionAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
@@ -46,6 +47,10 @@ function isOpportunitySourceCandidatePath(pathname: string): boolean {
   return pathname === "/admin/opportunities/sources/candidates/preview" || pathname === "/admin/opportunities/sources/candidates/commit";
 }
 
+function isSourceExpansionPath(pathname: string): boolean {
+  return pathname.startsWith("/admin/opportunities/sources/expansion/");
+}
+
 export default {
   async scheduled(_controller: any, env: Env, ctx: any) {
     ctx.waitUntil(dailyTickWithAutonomy(env));
@@ -70,6 +75,10 @@ export default {
 
       if (isOpportunitySourceHealthActionPath(pathname)) {
         return await handleOpportunitySourceHealthActionsAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (isSourceExpansionPath(pathname)) {
+        return await handleSourceExpansionAdmin(req, env, pathname, jsonResponse);
       }
 
       if (isOpportunitySourceCandidatePath(pathname)) {

@@ -19,12 +19,15 @@ const defaultSettings = {
   engineEnabled: false,
   freeSafeOnly: true,
   opportunityDiscoveryEnabled: true,
+  sourceExpansionEnabled: false,
   leadDiscoveryEnabled: false,
   aiDraftsEnabled: false,
   sendingEnabled: false,
   dailySourceLimit: 10,
   maxNetworkCallsPerRun: 20,
   minOpportunityScore: 45,
+  maxExpansionFetchesPerRun: 2,
+  maxExpansionCandidatesPerRun: 25,
   updatedAtISO: null as string | null,
   updatedBy: "system-default",
 };
@@ -63,12 +66,15 @@ function normalizeSettings(input: any) {
     engineEnabled: boolValue(input?.engineEnabled, defaultSettings.engineEnabled),
     freeSafeOnly,
     opportunityDiscoveryEnabled: boolValue(input?.opportunityDiscoveryEnabled, defaultSettings.opportunityDiscoveryEnabled),
+    sourceExpansionEnabled: boolValue(input?.sourceExpansionEnabled, defaultSettings.sourceExpansionEnabled),
     leadDiscoveryEnabled: boolValue(input?.leadDiscoveryEnabled, defaultSettings.leadDiscoveryEnabled),
     aiDraftsEnabled: boolValue(input?.aiDraftsEnabled, defaultSettings.aiDraftsEnabled),
     sendingEnabled: boolValue(input?.sendingEnabled, defaultSettings.sendingEnabled),
     dailySourceLimit: intValue(input?.dailySourceLimit, defaultSettings.dailySourceLimit, 0, 100),
     maxNetworkCallsPerRun: intValue(input?.maxNetworkCallsPerRun, defaultSettings.maxNetworkCallsPerRun, 0, 250),
     minOpportunityScore: intValue(input?.minOpportunityScore, defaultSettings.minOpportunityScore, 1, 100),
+    maxExpansionFetchesPerRun: intValue(input?.maxExpansionFetchesPerRun, defaultSettings.maxExpansionFetchesPerRun, 0, 10),
+    maxExpansionCandidatesPerRun: intValue(input?.maxExpansionCandidatesPerRun, defaultSettings.maxExpansionCandidatesPerRun, 0, 100),
     updatedAtISO: typeof input?.updatedAtISO === "string" ? input.updatedAtISO : null,
     updatedBy: typeof input?.updatedBy === "string" ? input.updatedBy : "operator",
   };
@@ -85,6 +91,12 @@ function normalizeSettings(input: any) {
     settings.sendingEnabled = false;
   }
 
+  if (settings.maxNetworkCallsPerRun <= 0) {
+    settings.sourceExpansionEnabled = false;
+    settings.opportunityDiscoveryEnabled = false;
+    settings.leadDiscoveryEnabled = false;
+  }
+
   return settings;
 }
 
@@ -92,6 +104,8 @@ function policyFor(settings: ReturnType<typeof normalizeSettings>) {
   return {
     canRunScheduledEngine: settings.engineEnabled,
     canFetchSources: settings.engineEnabled && settings.maxNetworkCallsPerRun > 0,
+    canExpandSourceCandidates: settings.engineEnabled && settings.sourceExpansionEnabled && settings.maxNetworkCallsPerRun > 0 && settings.maxExpansionFetchesPerRun > 0,
+    canSaveExpansionCandidatesAutomatically: false,
     canSaveOpportunities: settings.opportunityDiscoveryEnabled,
     canSaveLeads: settings.leadDiscoveryEnabled && !settings.freeSafeOnly,
     canGenerateDrafts: settings.aiDraftsEnabled && !settings.freeSafeOnly,
@@ -99,6 +113,8 @@ function policyFor(settings: ReturnType<typeof normalizeSettings>) {
     dailySourceLimit: settings.dailySourceLimit,
     maxNetworkCallsPerRun: settings.maxNetworkCallsPerRun,
     minOpportunityScore: settings.minOpportunityScore,
+    maxExpansionFetchesPerRun: settings.maxExpansionFetchesPerRun,
+    maxExpansionCandidatesPerRun: settings.maxExpansionCandidatesPerRun,
   };
 }
 
@@ -116,6 +132,7 @@ async function readSettings(env: Env) {
       aiOffWhenFreeSafe: true,
       sendingOffWhenFreeSafe: true,
       readSecretsFromServerOnly: true,
+      sourceExpansionSaveRequiresConfirmation: true,
     },
   };
 }
@@ -134,6 +151,7 @@ async function writeSettings(env: Env, body: any) {
       callsAI: false,
       sendsEmail: false,
       writesSettingsOnly: true,
+      sourceExpansionSaveRequiresConfirmation: true,
     },
   };
 }

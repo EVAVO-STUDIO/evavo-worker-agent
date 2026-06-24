@@ -3,6 +3,7 @@ import { getAdminToken } from "../db";
 import { bootstrapSourceExpansionSeeds, listSourceExpansionCandidates, runSourceExpansion } from "../core/sourceExpansionEngine";
 import { learnSourceExpansionQuality, listSourceExpansionStrategyScores } from "../core/sourceExpansionLearning";
 import { runSitemapSourceExpansion } from "../core/sourceExpansionSitemap";
+import { listQueryHints, saveQueryHints } from "../core/sourceExpansionQueryHints";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -55,6 +56,26 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
       maxFetches: boundedInteger(body?.maxFetches, 4, 1, 10),
       maxSitemapUrls: boundedInteger(body?.maxSitemapUrls, 50, 5, 100),
       maxCandidates: boundedInteger(body?.maxCandidates, 30, 5, 100),
+    }));
+  }
+
+  if (pathname === "/admin/opportunities/sources/expansion/query-hints/generate") {
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    const body = await bodyJson(request);
+    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
+    return json(await saveQueryHints(env, {
+      limit: boundedInteger(body?.limit, 80, 1, 150),
+      strategy: typeof body?.strategy === "string" ? body.strategy : undefined,
+    }));
+  }
+
+  if (pathname === "/admin/opportunities/sources/expansion/query-hints") {
+    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    const url = new URL(request.url);
+    return json(await listQueryHints(env, {
+      status: url.searchParams.get("status") || "candidate",
+      strategy: url.searchParams.get("strategy") || undefined,
+      limit: boundedInteger(url.searchParams.get("limit"), 80, 1, 150),
     }));
   }
 

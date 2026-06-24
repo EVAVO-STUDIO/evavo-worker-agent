@@ -42,6 +42,10 @@ function isOpportunitySourceHealthActionPath(pathname: string): boolean {
   return /^\/admin\/opportunities\/sources\/[^/]+\/health-action$/.test(pathname);
 }
 
+function isOpportunitySourceCandidatePath(pathname: string): boolean {
+  return pathname === "/admin/opportunities/sources/candidates/preview" || pathname === "/admin/opportunities/sources/candidates/commit";
+}
+
 export default {
   async scheduled(_controller: any, env: Env, ctx: any) {
     ctx.waitUntil(dailyTickWithAutonomy(env));
@@ -68,7 +72,7 @@ export default {
         return await handleOpportunitySourceHealthActionsAdmin(req, env, pathname, jsonResponse);
       }
 
-      if (pathname === "/admin/opportunities/sources/candidates/preview") {
+      if (isOpportunitySourceCandidatePath(pathname)) {
         return await handleOpportunitySourceCandidatesAdmin(req, env, pathname, jsonResponse);
       }
 

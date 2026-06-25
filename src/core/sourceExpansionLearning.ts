@@ -19,6 +19,7 @@ type StrategyScoreRow = {
   recommendation: string;
   origin_saved_count: number;
   origin_query_hint_count: number;
+  origin_public_link_graph_count: number;
   origin_sitemap_count: number;
   origin_source_expansion_count: number;
 };
@@ -65,6 +66,7 @@ function computeQuality(row: any) {
   const averageSourcePriority = Number(row.average_source_priority || 0);
   const originSavedCount = Number(row.origin_saved_count || 0);
   const originQueryHintCount = Number(row.origin_query_hint_count || 0);
+  const originPublicLinkGraphCount = Number(row.origin_public_link_graph_count || 0);
   const originSitemapCount = Number(row.origin_sitemap_count || 0);
   const originSourceExpansionCount = Number(row.origin_source_expansion_count || 0);
 
@@ -75,6 +77,7 @@ function computeQuality(row: any) {
   score += Math.min(10, sourceSuccessCount * 2);
   score += Math.min(10, originSavedCount * 2);
   score += Math.min(8, originQueryHintCount * 2);
+  score += Math.min(8, originPublicLinkGraphCount * 2);
   score += Math.min(8, originSitemapCount * 2);
   score += Math.min(8, originSourceExpansionCount * 2);
   score += Math.round((averageCandidateScore - 50) * 0.22);
@@ -108,6 +111,7 @@ async function strategyAggregates(env: Env) {
        AVG(s.priority) AS average_source_priority,
        SUM(CASE WHEN s.notes LIKE '%origin=%' THEN 1 ELSE 0 END) AS origin_saved_count,
        SUM(CASE WHEN s.notes LIKE '%origin=query_hint%' THEN 1 ELSE 0 END) AS origin_query_hint_count,
+       SUM(CASE WHEN s.notes LIKE '%origin=public_link_graph%' THEN 1 ELSE 0 END) AS origin_public_link_graph_count,
        SUM(CASE WHEN s.notes LIKE '%origin=sitemap%' THEN 1 ELSE 0 END) AS origin_sitemap_count,
        SUM(CASE WHEN s.notes LIKE '%origin=source_expansion%' THEN 1 ELSE 0 END) AS origin_source_expansion_count
      FROM source_expansion_candidates c
@@ -153,6 +157,7 @@ export async function learnSourceExpansionQuality(env: Env) {
       recommendation,
       origin_saved_count: Number(raw.origin_saved_count || 0),
       origin_query_hint_count: Number(raw.origin_query_hint_count || 0),
+      origin_public_link_graph_count: Number(raw.origin_public_link_graph_count || 0),
       origin_sitemap_count: Number(raw.origin_sitemap_count || 0),
       origin_source_expansion_count: Number(raw.origin_source_expansion_count || 0),
     };
@@ -217,8 +222,8 @@ export async function learnSourceExpansionQuality(env: Env) {
     learned.push(row);
   }
 
-  await logEvent(env, "source_expansion_quality_learned", `Learned source expansion quality for ${learned.length} strategy row(s), including saved-origin reward signals.`);
-  return { ok: true, mode: "source_expansion_quality_learning", learnedCount: learned.length, strategies: learned, originAware: true };
+  await logEvent(env, "source_expansion_quality_learned", `Learned source expansion quality for ${learned.length} strategy row(s), including saved-origin reward signals and public-link graph yield.`);
+  return { ok: true, mode: "source_expansion_quality_learning", learnedCount: learned.length, strategies: learned, originAware: true, publicLinkGraphAware: true };
 }
 
 export async function listSourceExpansionStrategyScores(env: Env, limit = 50) {

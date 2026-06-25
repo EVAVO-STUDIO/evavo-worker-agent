@@ -19,6 +19,7 @@ import { handleOpportunitySourceHealthActionsAdmin } from "./routes/opportunityS
 import { handleOpportunityScoringDiagnosticsAdmin } from "./routes/opportunityScoringDiagnosticsAdmin";
 import { handleOpportunitySourceCandidatesAdmin } from "./routes/opportunitySourceCandidatesAdmin";
 import { handleSourceExpansionAdmin } from "./routes/sourceExpansionAdmin";
+import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpansionQueryHintResolverAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
@@ -75,6 +76,10 @@ export default {
 
       if (isOpportunitySourceHealthActionPath(pathname)) {
         return await handleOpportunitySourceHealthActionsAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (pathname === "/admin/opportunities/sources/expansion/query-hints/resolve") {
+        return await handleSourceExpansionQueryHintResolverAdmin(req, env, pathname, jsonResponse);
       }
 
       if (isSourceExpansionPath(pathname)) {

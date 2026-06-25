@@ -41,9 +41,11 @@ function noteValue(notes: string | null | undefined, key: string): string | null
 function classifyOrigin(notes: string | null | undefined) {
   const origin = noteValue(notes, "origin");
   if (origin === "query_hint") return "query_hint";
+  if (origin === "public_link_graph") return "public_link_graph";
   if (origin === "sitemap") return "sitemap";
   if (origin === "source_expansion") return "source_expansion";
   if (origin === "source_candidate_preview") return "source_candidate_preview";
+  if (String(notes || "").startsWith("Saved from public link graph")) return "public_link_graph";
   if (String(notes || "").startsWith("Saved from source candidate preview")) return "source_candidate_preview";
   if (String(notes || "").startsWith("Saved from")) return "other_saved_candidate";
   return "manual_or_unknown";
@@ -65,7 +67,7 @@ async function originMetrics(env: Env): Promise<OriginMetric[]> {
   if (!(await tableExists(env, "opportunity_sources"))) return [];
   const rows = await env.DB.prepare("SELECT status, priority, notes FROM opportunity_sources LIMIT 10000").all<any>();
   const map = new Map<string, any>();
-  for (const origin of ["query_hint", "sitemap", "source_expansion", "source_candidate_preview", "other_saved_candidate", "manual_or_unknown"]) {
+  for (const origin of ["query_hint", "public_link_graph", "sitemap", "source_expansion", "source_candidate_preview", "other_saved_candidate", "manual_or_unknown"]) {
     map.set(origin, { origin, count: 0, active: 0, paused: 0, failed: 0, priorityTotal: 0 });
   }
   for (const row of rows.results || []) {
@@ -118,6 +120,7 @@ export async function handleSourceExpansionBudgetRecommendationsAdmin(request: R
 
   const nextRun = {
     queryHintResolvePriority: originRecommendations.find((row) => row.origin === "query_hint")?.action || "seed_more",
+    publicLinkScanPriority: originRecommendations.find((row) => row.origin === "public_link_graph")?.action || "seed_more",
     sitemapScanPriority: originRecommendations.find((row) => row.origin === "sitemap")?.action || "seed_more",
     boundedExpansionPriority: originRecommendations.find((row) => row.origin === "source_expansion")?.action || "seed_more",
     candidatePreviewPriority: originRecommendations.find((row) => row.origin === "source_candidate_preview")?.action || "monitor",

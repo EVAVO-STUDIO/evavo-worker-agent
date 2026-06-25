@@ -26,6 +26,16 @@ type ExistingSource = {
   priority?: number | null;
 };
 
+type ExpansionCandidateMeta = {
+  url: string;
+  strategy?: string | null;
+  reasons_json?: string | null;
+  evidence_json?: string | null;
+  seed_id?: string | null;
+  score?: number | null;
+  quality_score?: number | null;
+};
+
 const BASE_CANDIDATES: Array<Omit<SourceCandidate, "score" | "reasons" | "duplicate" | "existingSourceId">> = [
   { url: "https://www.tenders.gov.au/", label: "Australian Government AusTender", sourceType: "government_tenders", country: "AU", region: "national", category: "tenders" },
   { url: "https://www.grants.gov.au/", label: "Australian Government GrantConnect", sourceType: "government_grants", country: "AU", region: "national", category: "grants" },
@@ -137,6 +147,73 @@ async function expansionMemoryCandidates(env: Env, existingByDomain: Map<string,
   });
 }
 
+async function expansionCandidateMetaByUrl(env: Env, urls: string[]): Promise<Map<string, ExpansionCandidateMeta>> {
+  const meta = new Map<string, ExpansionCandidateMeta>();
+  if (!urls.length || !(await tableExists(env, "source_expansion_candidates"))) return meta;
+  const uniqueUrls = Array.from(new Set(urls.map(normalizeUrl))).slice(0, 25);
+  for (const url of uniqueUrls) {
+    const row = await env.DB.prepare(
+      `SELECT url, strategy, reasons_json, evidence_json, seed_id, score, quality_score
+       FROM source_expansion_candidates
+       WHERE url = ?
+       LIMIT 1`
+    ).bind(url).first<ExpansionCandidateMeta>();
+    if (row) meta.set(url, row);
+  }
+  return meta;
+}
+
+function parseJsonObject(raw?: string | null): Record<string, any> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseJsonArray(raw?: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function originFromExpansionMeta(meta?: ExpansionCandidateMeta | null) {
+  if (!meta) return { key: "source_candidate_preview", label: "source candidate preview", detail: null as string | null };
+  const evidence = parseJsonObject(meta.evidence_json);
+  const reasons = parseJsonArray(meta.reasons_json);
+  if (meta.strategy === "query_hint_resolved" || evidence.queryHintId || reasons.some((reason) => reason.includes("query_hint"))) {
+    return { key: "query_hint", label: "query hint", detail: evidence.queryText ? String(evidence.queryText).slice(0, 180) : null };
+  }
+  if (meta.strategy === "sitemap_discovery" || evidence.sitemapStrategy || reasons.some((reason) => reason.includes("sitemap"))) {
+    return { key: "sitemap", label: "sitemap discovery", detail: evidence.seedUrl ? String(evidence.seedUrl).slice(0, 180) : null };
+  }
+  if (evidence.seedSelectionReason || evidence.seedUrl || meta.seed_id) {
+    return { key: "source_expansion", label: "bounded source expansion", detail: evidence.seedUrl ? String(evidence.seedUrl).slice(0, 180) : null };
+  }
+  return { key: "source_candidate_preview", label: "source candidate preview", detail: null as string | null };
+}
+
+function buildSavedSourceNotes(candidate: SourceCandidate, meta: ExpansionCandidateMeta | undefined, options: { reason?: string | null; actor?: string | null }) {
+  const origin = originFromExpansionMeta(meta);
+  const noteParts = [
+    `Saved from ${origin.label}`,
+    `origin=${origin.key}`,
+    `score=${Math.round(candidate.score)}`,
+  ];
+  if (candidate.reasons.length) noteParts.push(`preview_reasons=${candidate.reasons.slice(0, 4).join("|")}`);
+  if (meta?.strategy) noteParts.push(`expansion_strategy=${meta.strategy}`);
+  if (origin.detail) noteParts.push(`origin_detail=${origin.detail}`);
+  if (options.reason) noteParts.push(`operator_reason=${String(options.reason).slice(0, 220)}`);
+  if (options.actor) noteParts.push(`actor=${String(options.actor).slice(0, 80)}`);
+  return noteParts.join("; ").slice(0, 950);
+}
+
 async function buildCandidateList(env: Env, options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {}) {
   const existing = await existingOpportunitySources(env);
   const existingByDomain = new Map(existing.map((source) => [domainOf(normalizeUrl(source.url)), source]));
@@ -183,6 +260,7 @@ export async function saveOpportunitySourceCandidates(env: Env, options: { urls:
 
   const { candidates } = await buildCandidateList(env, { includeDuplicates: true, limit: 100 });
   const candidateByUrl = new Map(candidates.map((candidate) => [candidate.url, candidate]));
+  const expansionMeta = await expansionCandidateMetaByUrl(env, selectedUrls);
   const existing = await existingOpportunitySources(env);
   const existingByDomain = new Map(existing.map((source) => [domainOf(normalizeUrl(source.url)), source]));
   const now = nowISO();
@@ -198,16 +276,19 @@ export async function saveOpportunitySourceCandidates(env: Env, options: { urls:
 
     const id = uuid();
     const priority = Math.max(10, Math.min(90, Math.round(candidate.score)));
+    const meta = expansionMeta.get(candidate.url);
+    const origin = originFromExpansionMeta(meta);
+    const notes = buildSavedSourceNotes(candidate, meta, options);
     await env.DB.prepare(
       `INSERT INTO opportunity_sources (id, url, label, source_type, country, region, category, status, priority, notes, created_at_iso, updated_at_iso)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
-    ).bind(id, candidate.url, candidate.label, candidate.sourceType, candidate.country, candidate.region || null, candidate.category, priority, `Saved from source candidate preview${options.reason ? `: ${String(options.reason).slice(0, 240)}` : ""}`, now, now).run();
+    ).bind(id, candidate.url, candidate.label, candidate.sourceType, candidate.country, candidate.region || null, candidate.category, priority, notes, now, now).run();
 
     if (await tableExists(env, "source_expansion_candidates")) {
       await env.DB.prepare(`UPDATE source_expansion_candidates SET status = 'saved', saved_source_id = ?, reviewed_at_iso = ?, last_seen_at_iso = ? WHERE url = ?`).bind(id, now, now, candidate.url).run();
     }
 
-    inserted.push({ id, url: candidate.url, label: candidate.label, sourceType: candidate.sourceType, country: candidate.country, region: candidate.region || null, category: candidate.category, priority });
+    inserted.push({ id, url: candidate.url, label: candidate.label, sourceType: candidate.sourceType, country: candidate.country, region: candidate.region || null, category: candidate.category, priority, origin: origin.key, notes });
     existingByDomain.set(domain, { id, url: candidate.url });
   }
 

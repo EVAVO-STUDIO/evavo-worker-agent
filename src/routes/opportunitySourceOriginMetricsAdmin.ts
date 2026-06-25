@@ -28,9 +28,11 @@ function noteValue(notes: string | null | undefined, key: string): string | null
 function classifyOrigin(notes: string | null | undefined) {
   const origin = noteValue(notes, "origin");
   if (origin === "query_hint") return "query_hint";
+  if (origin === "public_link_graph") return "public_link_graph";
   if (origin === "sitemap") return "sitemap";
   if (origin === "source_expansion") return "source_expansion";
   if (origin === "source_candidate_preview") return "source_candidate_preview";
+  if (String(notes || "").startsWith("Saved from public link graph")) return "public_link_graph";
   if (String(notes || "").startsWith("Saved from source candidate preview")) return "source_candidate_preview";
   if (String(notes || "").startsWith("Saved from")) return "other_saved_candidate";
   return "manual_or_unknown";
@@ -62,7 +64,7 @@ export async function handleOpportunitySourceOriginMetricsAdmin(request: Request
   ).all<SourceOriginRow>();
 
   const buckets = new Map<string, ReturnType<typeof blankBucket>>();
-  const order = ["query_hint", "sitemap", "source_expansion", "source_candidate_preview", "other_saved_candidate", "manual_or_unknown"];
+  const order = ["query_hint", "public_link_graph", "sitemap", "source_expansion", "source_candidate_preview", "other_saved_candidate", "manual_or_unknown"];
   for (const origin of order) buckets.set(origin, blankBucket(origin));
 
   for (const row of rows.results || []) {

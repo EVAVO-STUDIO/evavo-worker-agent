@@ -17,6 +17,10 @@ type StrategyScoreRow = {
   average_source_priority: number;
   quality_score: number;
   recommendation: string;
+  origin_saved_count: number;
+  origin_query_hint_count: number;
+  origin_sitemap_count: number;
+  origin_source_expansion_count: number;
 };
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
@@ -59,12 +63,20 @@ function computeQuality(row: any) {
   const rejectedCount = Number(row.rejected_count || 0);
   const averageCandidateScore = Number(row.average_candidate_score || 0);
   const averageSourcePriority = Number(row.average_source_priority || 0);
+  const originSavedCount = Number(row.origin_saved_count || 0);
+  const originQueryHintCount = Number(row.origin_query_hint_count || 0);
+  const originSitemapCount = Number(row.origin_sitemap_count || 0);
+  const originSourceExpansionCount = Number(row.origin_source_expansion_count || 0);
 
   let score = 42;
   score += Math.min(18, savedCount * 4);
   score += Math.min(18, opportunityCount * 3);
   score += Math.min(12, shortlistedCount * 5);
   score += Math.min(10, sourceSuccessCount * 2);
+  score += Math.min(10, originSavedCount * 2);
+  score += Math.min(8, originQueryHintCount * 2);
+  score += Math.min(8, originSitemapCount * 2);
+  score += Math.min(8, originSourceExpansionCount * 2);
   score += Math.round((averageCandidateScore - 50) * 0.22);
   score += Math.round((averageSourcePriority - 50) * 0.12);
   score -= Math.min(18, duplicateCount * 2);
@@ -93,7 +105,11 @@ async function strategyAggregates(env: Env) {
        SUM(CASE WHEN o.status IN ('shortlisted', 'watching') THEN 1 ELSE 0 END) AS shortlisted_count,
        SUM(CASE WHEN o.status IN ('rejected', 'archived', 'duplicate') THEN 1 ELSE 0 END) AS rejected_count,
        AVG(c.score) AS average_candidate_score,
-       AVG(s.priority) AS average_source_priority
+       AVG(s.priority) AS average_source_priority,
+       SUM(CASE WHEN s.notes LIKE '%origin=%' THEN 1 ELSE 0 END) AS origin_saved_count,
+       SUM(CASE WHEN s.notes LIKE '%origin=query_hint%' THEN 1 ELSE 0 END) AS origin_query_hint_count,
+       SUM(CASE WHEN s.notes LIKE '%origin=sitemap%' THEN 1 ELSE 0 END) AS origin_sitemap_count,
+       SUM(CASE WHEN s.notes LIKE '%origin=source_expansion%' THEN 1 ELSE 0 END) AS origin_source_expansion_count
      FROM source_expansion_candidates c
      LEFT JOIN opportunity_sources s ON s.id = c.saved_source_id
      LEFT JOIN opportunities o ON o.source_id = c.saved_source_id
@@ -135,6 +151,10 @@ export async function learnSourceExpansionQuality(env: Env) {
       average_source_priority: Number(raw.average_source_priority || 0),
       quality_score: qualityScore,
       recommendation,
+      origin_saved_count: Number(raw.origin_saved_count || 0),
+      origin_query_hint_count: Number(raw.origin_query_hint_count || 0),
+      origin_sitemap_count: Number(raw.origin_sitemap_count || 0),
+      origin_source_expansion_count: Number(raw.origin_source_expansion_count || 0),
     };
 
     await env.DB.prepare(
@@ -197,8 +217,8 @@ export async function learnSourceExpansionQuality(env: Env) {
     learned.push(row);
   }
 
-  await logEvent(env, "source_expansion_quality_learned", `Learned source expansion quality for ${learned.length} strategy row(s).`);
-  return { ok: true, mode: "source_expansion_quality_learning", learnedCount: learned.length, strategies: learned };
+  await logEvent(env, "source_expansion_quality_learned", `Learned source expansion quality for ${learned.length} strategy row(s), including saved-origin reward signals.`);
+  return { ok: true, mode: "source_expansion_quality_learning", learnedCount: learned.length, strategies: learned, originAware: true };
 }
 
 export async function listSourceExpansionStrategyScores(env: Env, limit = 50) {

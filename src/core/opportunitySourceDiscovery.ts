@@ -190,6 +190,10 @@ function originFromExpansionMeta(meta?: ExpansionCandidateMeta | null) {
   if (meta.strategy === "query_hint_resolved" || evidence.queryHintId || reasons.some((reason) => reason.includes("query_hint"))) {
     return { key: "query_hint", label: "query hint", detail: evidence.queryText ? String(evidence.queryText).slice(0, 180) : null };
   }
+  if (meta.strategy === "relationship_graph" || evidence.discoveryMethod === "relationship_graph" || reasons.some((reason) => reason.includes("graph_discovery"))) {
+    const detail = evidence.sourceSeedUrl || evidence.seedUrl || evidence.relationshipDomain || null;
+    return { key: "public_link_graph", label: "public link graph", detail: detail ? String(detail).slice(0, 180) : null };
+  }
   if (meta.strategy === "sitemap_discovery" || evidence.sitemapStrategy || reasons.some((reason) => reason.includes("sitemap"))) {
     return { key: "sitemap", label: "sitemap discovery", detail: evidence.seedUrl ? String(evidence.seedUrl).slice(0, 180) : null };
   }

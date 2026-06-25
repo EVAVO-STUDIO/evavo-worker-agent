@@ -21,6 +21,7 @@ import { handleOpportunitySourceCandidatesAdmin } from "./routes/opportunitySour
 import { handleOpportunitySourceOriginMetricsAdmin } from "./routes/opportunitySourceOriginMetricsAdmin";
 import { handleSourceExpansionAdmin } from "./routes/sourceExpansionAdmin";
 import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpansionQueryHintResolverAdmin";
+import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/sourceExpansionBudgetRecommendationsAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
@@ -81,6 +82,10 @@ export default {
 
       if (pathname === "/admin/opportunities/sources/origin-metrics") {
         return await handleOpportunitySourceOriginMetricsAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (pathname === "/admin/opportunities/sources/expansion/budget-recommendations") {
+        return await handleSourceExpansionBudgetRecommendationsAdmin(req, env, pathname, jsonResponse);
       }
 
       if (pathname === "/admin/opportunities/sources/expansion/query-hints/resolve") {

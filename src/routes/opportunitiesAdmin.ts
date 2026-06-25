@@ -2,6 +2,17 @@ import { Env, getAdminToken } from "../db";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const allowedSourceOrigins = new Set([
+  "query_hint",
+  "public_link_graph",
+  "sitemap",
+  "source_expansion",
+  "source_candidate_preview",
+  "other_saved_candidate",
+  "manual_or_unknown",
+  "candidate_preview",
+]);
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -20,6 +31,20 @@ async function tableExists(env: Env, tableName: string): Promise<boolean> {
   return Boolean(row?.name);
 }
 
+function addOriginFilter(origin: string, clauses: string[], binds: any[]) {
+  if (!origin) return;
+  const normalised = origin === "candidate_preview" ? "source_candidate_preview" : origin;
+  if (!allowedSourceOrigins.has(origin) && !allowedSourceOrigins.has(normalised)) return;
+
+  if (normalised === "manual_or_unknown") {
+    clauses.push("(notes IS NULL OR notes = '' OR notes NOT LIKE '%origin=%')");
+    return;
+  }
+
+  clauses.push("(notes LIKE ? OR notes LIKE ?)");
+  binds.push(`%origin=${normalised}%`, `%Saved from ${normalised.replace(/_/g, " ")}%`);
+}
+
 async function listOpportunitySources(env: Env, url: URL) {
   if (!(await tableExists(env, "opportunity_sources"))) {
     return { ok: false, error: "missing_migration", missing: "opportunity_sources", requiredMigration: "0004_opportunity_intelligence.sql" };
@@ -34,10 +59,7 @@ async function listOpportunitySources(env: Env, url: URL) {
     clauses.push("status = ?");
     binds.push(status);
   }
-  if (origin === "candidate_preview") {
-    clauses.push("notes LIKE ?");
-    binds.push("Saved from source candidate preview%");
-  }
+  addOriginFilter(origin, clauses, binds);
   binds.push(limit);
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = await env.DB.prepare(
@@ -47,7 +69,13 @@ async function listOpportunitySources(env: Env, url: URL) {
      ORDER BY updated_at_iso DESC, priority DESC
      LIMIT ?`
   ).bind(...binds).all<any>();
-  return { ok: true, mode: "opportunity_sources", count: rows.results?.length || 0, sources: rows.results || [], filters: { status: status || null, origin: origin || null, limit } };
+  return {
+    ok: true,
+    mode: "opportunity_sources",
+    count: rows.results?.length || 0,
+    sources: rows.results || [],
+    filters: { status: status || null, origin: origin || null, limit, originFilterSupported: true },
+  };
 }
 
 async function listOpportunities(env: Env, url: URL) {

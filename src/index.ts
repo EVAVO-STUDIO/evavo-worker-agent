@@ -18,6 +18,7 @@ import { handleOpportunitySourceHealthAdmin } from "./routes/opportunitySourceHe
 import { handleOpportunitySourceHealthActionsAdmin } from "./routes/opportunitySourceHealthActionsAdmin";
 import { handleOpportunityScoringDiagnosticsAdmin } from "./routes/opportunityScoringDiagnosticsAdmin";
 import { handleOpportunitySourceCandidatesAdmin } from "./routes/opportunitySourceCandidatesAdmin";
+import { handleOpportunitySourceOriginMetricsAdmin } from "./routes/opportunitySourceOriginMetricsAdmin";
 import { handleSourceExpansionAdmin } from "./routes/sourceExpansionAdmin";
 import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpansionQueryHintResolverAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
@@ -76,6 +77,10 @@ export default {
 
       if (isOpportunitySourceHealthActionPath(pathname)) {
         return await handleOpportunitySourceHealthActionsAdmin(req, env, pathname, jsonResponse);
+      }
+
+      if (pathname === "/admin/opportunities/sources/origin-metrics") {
+        return await handleOpportunitySourceOriginMetricsAdmin(req, env, pathname, jsonResponse);
       }
 
       if (pathname === "/admin/opportunities/sources/expansion/query-hints/resolve") {

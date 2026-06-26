@@ -8,6 +8,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const helperScripts = [
   'scripts/apply-one-migration.mjs',
+  'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
   'scripts/print-d1-verification-commands.mjs',
   'scripts/print-migration-commands.mjs',
@@ -58,6 +59,7 @@ if (!fs.existsSync(packageJsonPath)) {
     'db:migrations:print': 'node scripts/print-migration-commands.mjs',
     'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
+    'scripts:check': 'node scripts/check-helper-scripts.mjs',
   };
 
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {

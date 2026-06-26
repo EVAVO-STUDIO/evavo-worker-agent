@@ -60,6 +60,7 @@ if (!fs.existsSync(packageJsonPath)) {
     'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
     'scripts:check': 'node scripts/check-helper-scripts.mjs',
+    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run typecheck',
   };
 
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {

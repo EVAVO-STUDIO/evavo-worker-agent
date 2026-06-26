@@ -9,7 +9,7 @@ The current operating model is **free-safe first**:
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Live sources are promoted only through explicit review and confirmation gates.
-- Growth Autonomy read routes are GET-only and do not send, post, submit forms, or call AI.
+- Growth Autonomy read routes are GET-only, and confirmed strategy/channel writes do not send, post, submit forms, execute actions, or call AI.
 - The browser must never receive the Worker admin token.
 
 ## Current operating docs
@@ -83,7 +83,7 @@ The Worker defaults toward conservative, low-cost behaviour:
 - Settings and policy gates decide whether scheduled work can run
 - Source expansion stores candidates before live source saves
 - Candidate-source promotion requires explicit confirmation
-- Growth Autonomy routes are read-only until later schema-backed write routes are deliberately added
+- Growth Autonomy strategy/channel writes require explicit confirmation and are metadata-only
 - Budget counters and run history are tracked in D1 once migrations are applied
 
 ## Zero-source startup summary
@@ -106,13 +106,14 @@ Zero-source startup must remain public-source-only, capped, origin-preserving, c
 
 The Growth Autonomy layer adds strategy/channel/budget structure above the opportunity engine.
 
-Current Worker support is read-only:
+Current Worker support:
 
 1. Read Growth overview.
 2. Read active Growth goals.
 3. Read channel rules/memory.
 4. Read or create the current budget ledger for visibility.
-5. Return safety metadata proving no AI, email, posting, form submission, or action execution occurs.
+5. Confirm-save Growth goals and channels as metadata only.
+6. Return safety metadata proving no AI, email, posting, form submission, or action execution occurs.
 
 Execution routes for posting, sending, form submission, and draft generation should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, and review controls are in place.
 
@@ -135,7 +136,9 @@ Admin, Bearer token required:
 - `GET /admin/growth`
 - `GET /admin/growth/overview`
 - `GET /admin/growth/strategy?limit=25`
+- `POST /admin/growth/strategy?confirm=1`
 - `GET /admin/growth/channels?limit=50`
+- `POST /admin/growth/channels?confirm=1`
 - `GET /admin/growth/budget?profile=free_safe`
 - `GET /admin/opportunities/summary`
 - `GET /admin/opportunities/runs`

@@ -105,6 +105,22 @@ function hasLegacyStage(settings: AutonomySettings): boolean {
   return Boolean(settings.leadDiscoveryEnabled || settings.aiDraftsEnabled || settings.sendingEnabled);
 }
 
+function scheduledFallbackSummary(result: any): string {
+  const seedsChecked = Number(result?.seedsChecked || 0);
+  const pagesFetched = Number(result?.pagesFetched || 0);
+  const linksFound = Number(result?.linksFound || 0);
+  const candidatesFound = Number(result?.candidatesFound || 0);
+  const candidatesNew = Number(result?.candidatesNew || 0);
+  const failed = Number(result?.failed || 0);
+
+  if (!seedsChecked) return "fallback=no_due_seeds next=bootstrap_or_rotate_strategy guardrail=do_not_raise_caps_first";
+  if (failed && !pagesFetched) return "fallback=all_fetches_failed next=source_health_or_sitemap guardrail=review_failures_before_retry";
+  if (pagesFetched && !linksFound) return "fallback=thin_seed_pages next=sitemap_or_public_link_graph guardrail=rotate_method_before_depth";
+  if (linksFound && !candidatesFound) return "fallback=links_without_candidates next=query_hints_or_filter_review guardrail=avoid_weak_manual_saves";
+  if (candidatesFound && !candidatesNew) return "fallback=known_or_duplicate_candidates next=candidate_review_or_origin_rotation guardrail=do_not_count_duplicates_as_new_coverage";
+  return "fallback=fresh_candidates_found next=candidate_review guardrail=confirmed_source_save_only";
+}
+
 async function learnExpansionQualityIfPossible(env: Env): Promise<void> {
   const result = await learnSourceExpansionQuality(env);
   if (result?.ok) {
@@ -135,7 +151,7 @@ async function runSourceExpansionIfAllowed(env: Env, settings: AutonomySettings)
   });
 
   if (result?.ok) {
-    await logEvent(env, "source_expansion_tick_ok", `Scheduled source expansion found ${result.candidatesFound || 0} candidate(s), new ${result.candidatesNew || 0}.`);
+    await logEvent(env, "source_expansion_tick_ok", `Scheduled source expansion found ${result.candidatesFound || 0} candidate(s), new ${result.candidatesNew || 0}. ${scheduledFallbackSummary(result)}.`);
   } else {
     await logEvent(env, "source_expansion_tick_skip", `Scheduled source expansion did not run: ${result?.error || "unknown"}.`);
   }

@@ -29,6 +29,11 @@ async function tableExists(env: Env, tableName: string): Promise<boolean> {
   return Boolean(row?.name);
 }
 
+async function columnExists(env: Env, tableName: string, columnName: string): Promise<boolean> {
+  const rows = await env.DB.prepare(`PRAGMA table_info(${tableName})`).all<any>();
+  return Boolean((rows.results || []).some((row: any) => row?.name === columnName));
+}
+
 async function requiredTables(env: Env) {
   return {
     candidates: await tableExists(env, "source_expansion_candidates"),
@@ -37,6 +42,12 @@ async function requiredTables(env: Env) {
     opportunities: await tableExists(env, "opportunities"),
     sourceResults: await tableExists(env, "opportunity_run_source_results"),
   };
+}
+
+async function strategyOriginColumnsReady(env: Env) {
+  const tableReady = await tableExists(env, "source_expansion_strategy_scores");
+  if (!tableReady) return false;
+  return columnExists(env, "source_expansion_strategy_scores", "origin_public_link_graph_count");
 }
 
 function clampScore(score: number) {
@@ -128,6 +139,16 @@ async function strategyAggregates(env: Env) {
 export async function learnSourceExpansionQuality(env: Env) {
   const aggregates = await strategyAggregates(env);
   if (!aggregates.ok) return aggregates;
+  const originColumnsReady = await strategyOriginColumnsReady(env);
+  if (!originColumnsReady) {
+    return {
+      ok: false,
+      error: "missing_migration",
+      missing: "source_expansion_strategy_origin_yield_columns",
+      requiredMigration: "0010_source_expansion_strategy_origin_yield.sql",
+      tables: aggregates.tables,
+    };
+  }
   const now = nowISO();
   const learned: StrategyScoreRow[] = [];
 
@@ -167,8 +188,9 @@ export async function learnSourceExpansionQuality(env: Env) {
          strategy, candidate_count, saved_count, duplicate_count, failure_count, source_count,
          source_success_count, source_failure_count, opportunity_count, shortlisted_count, rejected_count,
          average_candidate_score, average_source_priority, quality_score, recommendation,
+         origin_saved_count, origin_query_hint_count, origin_public_link_graph_count, origin_sitemap_count, origin_source_expansion_count,
          last_learned_at_iso, created_at_iso, updated_at_iso
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(strategy) DO UPDATE SET
          candidate_count = excluded.candidate_count,
          saved_count = excluded.saved_count,
@@ -184,6 +206,11 @@ export async function learnSourceExpansionQuality(env: Env) {
          average_source_priority = excluded.average_source_priority,
          quality_score = excluded.quality_score,
          recommendation = excluded.recommendation,
+         origin_saved_count = excluded.origin_saved_count,
+         origin_query_hint_count = excluded.origin_query_hint_count,
+         origin_public_link_graph_count = excluded.origin_public_link_graph_count,
+         origin_sitemap_count = excluded.origin_sitemap_count,
+         origin_source_expansion_count = excluded.origin_source_expansion_count,
          last_learned_at_iso = excluded.last_learned_at_iso,
          updated_at_iso = excluded.updated_at_iso`
     ).bind(
@@ -202,6 +229,11 @@ export async function learnSourceExpansionQuality(env: Env) {
       row.average_source_priority,
       row.quality_score,
       row.recommendation,
+      row.origin_saved_count,
+      row.origin_query_hint_count,
+      row.origin_public_link_graph_count,
+      row.origin_sitemap_count,
+      row.origin_source_expansion_count,
       now,
       now,
       now,
@@ -222,22 +254,33 @@ export async function learnSourceExpansionQuality(env: Env) {
     learned.push(row);
   }
 
-  await logEvent(env, "source_expansion_quality_learned", `Learned source expansion quality for ${learned.length} strategy row(s), including saved-origin reward signals and public-link graph yield.`);
-  return { ok: true, mode: "source_expansion_quality_learning", learnedCount: learned.length, strategies: learned, originAware: true, publicLinkGraphAware: true };
+  await logEvent(env, "source_expansion_quality_learned", `Learned source expansion quality for ${learned.length} strategy row(s), including persisted saved-origin reward signals and public-link graph yield.`);
+  return { ok: true, mode: "source_expansion_quality_learning", learnedCount: learned.length, strategies: learned, originAware: true, publicLinkGraphAware: true, originYieldPersisted: true };
 }
 
 export async function listSourceExpansionStrategyScores(env: Env, limit = 50) {
   const tables = await requiredTables(env);
   if (!tables.strategies) return { ok: false, error: "missing_migration", requiredMigration: "0008_source_expansion_strategy_quality.sql", tables };
+  const originColumnsReady = await strategyOriginColumnsReady(env);
+  if (!originColumnsReady) {
+    return {
+      ok: false,
+      error: "missing_migration",
+      missing: "source_expansion_strategy_origin_yield_columns",
+      requiredMigration: "0010_source_expansion_strategy_origin_yield.sql",
+      tables,
+    };
+  }
   const safeLimit = Math.max(1, Math.min(100, Math.round(Number(limit || 50))));
   const rows = await env.DB.prepare(
     `SELECT strategy, candidate_count, saved_count, duplicate_count, failure_count, source_count,
             source_success_count, source_failure_count, opportunity_count, shortlisted_count, rejected_count,
             average_candidate_score, average_source_priority, quality_score, recommendation,
+            origin_saved_count, origin_query_hint_count, origin_public_link_graph_count, origin_sitemap_count, origin_source_expansion_count,
             last_learned_at_iso, updated_at_iso
      FROM source_expansion_strategy_scores
      ORDER BY quality_score DESC, updated_at_iso DESC
      LIMIT ?`
   ).bind(safeLimit).all<any>();
-  return { ok: true, mode: "source_expansion_strategy_scores", count: rows.results?.length || 0, strategies: rows.results || [] };
+  return { ok: true, mode: "source_expansion_strategy_scores", count: rows.results?.length || 0, strategies: rows.results || [], originYieldPersisted: true };
 }

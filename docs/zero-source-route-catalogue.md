@@ -4,6 +4,29 @@ This document describes the safe route sequence for running the Opportunity Inte
 
 Zero-source startup is not a scraping mode. It is a candidate-memory-first recovery path that creates safe seed memory, runs tiny bounded public discovery, and routes all useful findings through review before they become live opportunity sources.
 
+## Catalogue advertisement
+
+The Worker route catalogue advertises zero-source startup as read-only route-map metadata, not as a separate execution endpoint.
+
+Catalogue item:
+
+- `id: zero_source_route_map`
+- `label: Zero-source route map`
+- `method: GET`
+- `path: /admin/planner/routes`
+- `section: planner`
+- `safety: read_only`
+- `costRisk: none`
+- `callsNetwork: false`
+- `callsAI: false`
+- `canSendEmail: false`
+
+Purpose:
+
+- let the Next Ops console, CLI tools, and operator workflows discover the zero-source backend sequence from the same route catalogue as all other safe actions
+- keep zero-source startup visible without inventing a fake backend action
+- make clear that the actual write/network steps remain the existing confirm-gated bootstrap, scan, sitemap, public-link, query-hint, candidate-save, and run-due routes
+
 ## Route sequence
 
 ### 1. Read settings and policy

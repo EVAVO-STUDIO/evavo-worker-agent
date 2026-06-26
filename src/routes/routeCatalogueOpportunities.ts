@@ -292,7 +292,7 @@ export const opportunityRouteCatalogue: RouteCatalogueItem[] = [
   route({
     id: "opportunity_source_list",
     method: "GET",
-    path: "/admin/opportunities/sources?limit=50",
+    path: "/admin/opportunities/sources?limit=50&origin=public_link_graph",
     label: "Opportunity sources",
     section: "opportunities",
     safety: "read_only",
@@ -305,7 +305,7 @@ export const opportunityRouteCatalogue: RouteCatalogueItem[] = [
     costRisk: "none",
     operatorFacing: true,
     operationsHubRecommended: true,
-    description: "Lists tracked grant, tender, funding, partner, supplier, and contract-signal sources.",
+    description: "Lists tracked grant, tender, funding, partner, supplier, and contract-signal sources. Supports read-only source-origin filtering with origin=query_hint, public_link_graph, sitemap, source_expansion, source_candidate_preview, other_saved_candidate, manual_or_unknown, and legacy candidate_preview.",
   }),
   route({
     id: "opportunity_source_candidate_preview",

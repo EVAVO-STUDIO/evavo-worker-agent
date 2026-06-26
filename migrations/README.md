@@ -27,6 +27,7 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0008_sou
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0009_source_expansion_query_hints.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0010_source_expansion_strategy_origin_yield.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0011_source_expansion_strategy_origin_yield_backfill.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0012_growth_autonomy_core.sql
 ```
 
 ## Notes
@@ -37,3 +38,4 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0011_sou
 - `0011_source_expansion_strategy_origin_yield_backfill.sql` is a rerunnable data backfill. It refreshes the origin-yield counts for existing strategy rows.
 - After applying `0010` and `0011`, run the source expansion learning route again so quality scores and recommendations are recalculated from the persisted origin-yield fields.
 - If `0010` has already been applied, do not re-run it unless the database has been reset. Re-run `0011` whenever existing saved-source origin data needs to be backfilled again.
+- `0012_growth_autonomy_core.sql` is additive schema only. It creates the Growth Autonomy data model for goals, channels, channel rules, signals, actions, drafts, outcomes, budget ledger, and suppression rules. It does not enable sending, posting, contact-form submission, AI drafting, or public execution.

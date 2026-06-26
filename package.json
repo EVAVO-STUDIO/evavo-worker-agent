@@ -10,6 +10,7 @@
     "db:init:remote": "wrangler d1 execute evavo_outbound_agent --file=./schema.sql --remote",
     "db:migrations:check": "node scripts/check-migrations-present.mjs",
     "db:migrations:print": "node scripts/print-migration-commands.mjs",
+    "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

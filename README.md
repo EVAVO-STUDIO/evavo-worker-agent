@@ -1,6 +1,6 @@
 # EVAVO Outbound Agent (Cloudflare Worker)
 
-This is the Worker-side runtime for the EVAVO Outbound Agent: a governed opportunity intelligence system for safe source discovery, opportunity review, and controlled outbound preparation.
+This is the Worker-side runtime for the EVAVO Outbound Agent: a governed opportunity intelligence system for safe source discovery, opportunity review, controlled outbound preparation, and the emerging Growth Autonomy layer.
 
 The current operating model is **free-safe first**:
 
@@ -9,6 +9,7 @@ The current operating model is **free-safe first**:
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Live sources are promoted only through explicit review and confirmation gates.
+- Growth Autonomy read routes are GET-only and do not send, post, submit forms, or call AI.
 - The browser must never receive the Worker admin token.
 
 ## Current operating docs
@@ -17,6 +18,10 @@ Start here for the modern opportunity/source-expansion workflow:
 
 - [`docs/zero-source-startup.md`](docs/zero-source-startup.md) — contract for starting safely when no manual source list exists.
 - [`docs/zero-source-route-catalogue.md`](docs/zero-source-route-catalogue.md) — backend route sequence for zero-source startup, fallback guidance, query hints, candidate review, source health, and opportunity discovery.
+- [`docs/growth-autonomy-agent.md`](docs/growth-autonomy-agent.md) — contract for the Growth Autonomy Agent above the opportunity/source layer.
+- [`docs/growth-channel-policy.md`](docs/growth-channel-policy.md) — channel classes, link policy, disclosure policy, execution policy, and cooldown rules.
+- [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
+- [`docs/growth-cost-governor.md`](docs/growth-cost-governor.md) — budget ledger, rest triggers, cost caps, and fail-closed rules.
 - [`migrations/README.md`](migrations/README.md) — migration ordering and remote D1 safety notes.
 
 ## Important production note
@@ -78,6 +83,7 @@ The Worker defaults toward conservative, low-cost behaviour:
 - Settings and policy gates decide whether scheduled work can run
 - Source expansion stores candidates before live source saves
 - Candidate-source promotion requires explicit confirmation
+- Growth Autonomy routes are read-only until later schema-backed write routes are deliberately added
 - Budget counters and run history are tracked in D1 once migrations are applied
 
 ## Zero-source startup summary
@@ -96,6 +102,20 @@ When no manual source list exists, the safe path is:
 
 Zero-source startup must remain public-source-only, capped, origin-preserving, candidate-memory-first, and free-safe by default.
 
+## Growth Autonomy summary
+
+The Growth Autonomy layer adds strategy/channel/budget structure above the opportunity engine.
+
+Current Worker support is read-only:
+
+1. Read Growth overview.
+2. Read active Growth goals.
+3. Read channel rules/memory.
+4. Read or create the current budget ledger for visibility.
+5. Return safety metadata proving no AI, email, posting, form submission, or action execution occurs.
+
+Execution routes for posting, sending, form submission, and draft generation should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, and review controls are in place.
+
 ## Endpoints
 
 Public:
@@ -112,6 +132,11 @@ Admin, Bearer token required:
 - `GET /admin/overview`
 - `GET /admin/settings/autonomy`
 - `POST /admin/settings/autonomy`
+- `GET /admin/growth`
+- `GET /admin/growth/overview`
+- `GET /admin/growth/strategy?limit=25`
+- `GET /admin/growth/channels?limit=50`
+- `GET /admin/growth/budget?profile=free_safe`
 - `GET /admin/opportunities/summary`
 - `GET /admin/opportunities/runs`
 - `GET /admin/opportunities/sources`
@@ -187,10 +212,4 @@ To replace a secret value:
 
 ```bash
 wrangler secret put ADMIN_TOKEN
-```
-
-To delete an optional secret:
-
-```bash
-wrangler secret delete MAILCHANNELS_API_KEY
 ```

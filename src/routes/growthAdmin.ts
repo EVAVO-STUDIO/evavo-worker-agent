@@ -10,6 +10,7 @@ import {
   upsertGrowthGoal,
 } from "../core/growthAutonomy";
 import { listGrowthAuditEvents, logGrowthAuditEvent } from "../core/growthAudit";
+import { upsertGrowthAction } from "../core/growthActions";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 import { upsertGrowthSignal } from "../core/growthSignals";
 
@@ -268,6 +269,32 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
         mode: "growth_signal_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         signal: saved,
+        audit,
+        safety: routeSafety,
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/growth/actions") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return writeBlocked(json);
+      const saved = await upsertGrowthAction(env, body.action || body, body.id || body.action?.id);
+      const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
+      const audit = await logGrowthAuditEvent(env, {
+        eventType: "growth_action_saved",
+        entityType: "growth_action",
+        entityId: saved.id,
+        actor: "admin",
+        automationMode: saved.recommended_mode,
+        reason: "Confirmed Growth action metadata save. The action is queued only; no draft generation, outreach, posting, form submission, AI call, approval, or external execution performed.",
+        inputSnapshot: { id: body.id || body.action?.id || null, body: body.action || body },
+        outputSnapshot: { action: saved },
+        safetyResult: routeSafety,
+      });
+      return json({
+        ok: true,
+        mode: "growth_action_saved",
+        contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
+        action: saved,
         audit,
         safety: routeSafety,
       });

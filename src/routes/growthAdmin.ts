@@ -11,6 +11,7 @@ import {
 } from "../core/growthAutonomy";
 import { listGrowthAuditEvents, logGrowthAuditEvent } from "../core/growthAudit";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
+import { upsertGrowthSignal } from "../core/growthSignals";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -41,6 +42,7 @@ function safetyBase() {
   return {
     readOnly: true,
     writesGrowthStrategyOnly: false,
+    writesGrowthQueueOnly: false,
     callsAI: false,
     sendsEmail: false,
     postsPublicly: false,
@@ -57,10 +59,11 @@ function safety(overrides: SafetyOverrides = {}) {
 function migrationError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   const missingGrowthTable = /no such table: growth_/i.test(message);
+  const duplicateSignal = /UNIQUE constraint failed: growth_signals\.duplicate_key/i.test(message);
   return {
     ok: false,
     mode: "growth_admin_error",
-    error: missingGrowthTable ? "growth_schema_missing" : "growth_admin_failed",
+    error: missingGrowthTable ? "growth_schema_missing" : duplicateSignal ? "growth_signal_duplicate" : "growth_admin_failed",
     message,
     requiredMigration: missingGrowthTable ? "latest Growth migration, including 0012_growth_autonomy_core.sql and 0013_growth_audit_events.sql" : null,
     safety: safety({ readOnly: true }),
@@ -79,8 +82,8 @@ function writeBlocked(json: JsonResponse) {
   return json({
     ok: false,
     error: "confirm_required",
-    reason: "Growth Strategy writes require confirm=1 or { confirm: true }. No execution, AI, email, posting, or form submission is performed by this route.",
-    safety: safety({ readOnly: false, writesGrowthStrategyOnly: true }),
+    reason: "Growth writes require confirm=1 or { confirm: true }. No execution, AI, email, posting, or form submission is performed by this route.",
+    safety: safety({ readOnly: false, writesGrowthStrategyOnly: true, writesGrowthQueueOnly: true }),
   }, { status: 400 });
 }
 
@@ -244,9 +247,35 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       });
     }
 
+    if (request.method === "POST" && pathname === "/admin/growth/signals") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return writeBlocked(json);
+      const saved = await upsertGrowthSignal(env, body.signal || body, body.id || body.signal?.id);
+      const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
+      const audit = await logGrowthAuditEvent(env, {
+        eventType: "growth_signal_saved",
+        entityType: "growth_signal",
+        entityId: saved.id,
+        actor: "admin",
+        automationMode: "observe",
+        reason: "Confirmed Growth signal metadata save. No draft generation, outreach, posting, form submission, AI call, or external execution performed.",
+        inputSnapshot: { id: body.id || body.signal?.id || null, body: body.signal || body },
+        outputSnapshot: { signal: saved },
+        safetyResult: routeSafety,
+      });
+      return json({
+        ok: true,
+        mode: "growth_signal_saved",
+        contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
+        signal: saved,
+        audit,
+        safety: routeSafety,
+      });
+    }
+
     return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
   } catch (error) {
     const payload = migrationError(error);
-    return json(payload, { status: payload.error === "growth_schema_missing" ? 200 : 500 });
+    return json(payload, { status: payload.error === "growth_schema_missing" || payload.error === "growth_signal_duplicate" ? 200 : 500 });
   }
 }

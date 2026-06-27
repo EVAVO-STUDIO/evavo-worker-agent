@@ -111,9 +111,11 @@ Current Worker support:
 1. Read Growth overview.
 2. Read active Growth goals.
 3. Read channel rules/memory.
-4. Read or create the current budget ledger for visibility.
-5. Confirm-save Growth goals and channels as metadata only.
-6. Return safety metadata proving no AI, email, posting, form submission, or action execution occurs.
+4. Read saved Growth signals.
+5. Read queued Growth action records.
+6. Read or create the current budget ledger for visibility.
+7. Confirm-save Growth goals and channels as metadata only.
+8. Return safety metadata proving no AI, email, posting, form submission, or action execution occurs.
 
 Execution routes for posting, sending, form submission, and draft generation should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, and review controls are in place.
 
@@ -139,6 +141,8 @@ Admin, Bearer token required:
 - `POST /admin/growth/strategy?confirm=1`
 - `GET /admin/growth/channels?limit=50`
 - `POST /admin/growth/channels?confirm=1`
+- `GET /admin/growth/signals?limit=50`
+- `GET /admin/growth/actions?limit=50`
 - `GET /admin/growth/budget?profile=free_safe`
 - `GET /admin/opportunities/summary`
 - `GET /admin/opportunities/runs`

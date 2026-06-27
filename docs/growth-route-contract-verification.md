@@ -49,7 +49,7 @@ growth_audit
 growth_budget
 ```
 
-## Quick PowerShell check
+## Full PowerShell contract check
 
 ```powershell
 $expectedGrowthRouteIds = @(
@@ -79,12 +79,28 @@ if ($routes.groups) {
 
 $growthRoutes = $allRoutes | Where-Object { $_.section -eq "growth" }
 $missing = $expectedGrowthRouteIds | Where-Object { $id = $_; -not ($growthRoutes | Where-Object { $_.id -eq $id }) }
+$unsafe = $growthRoutes | Where-Object { $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.costRisk -ne "none" }
+$badConfirm = $growthRoutes | Where-Object { $_.id -like "*_save" -or $_.id -like "*_status" -or $_.id -eq "growth_action_plan" } | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
 
 if ($missing.Count -gt 0) {
   Write-Host "Missing Growth route ids:" -ForegroundColor Yellow
   $missing
 } else {
   Write-Host "All expected Growth route ids are advertised." -ForegroundColor Green
+}
+
+if ($unsafe.Count -gt 0) {
+  Write-Host "Unsafe Growth route metadata found:" -ForegroundColor Red
+  $unsafe | Select-Object id,callsNetwork,callsAI,canSendEmail,costRisk | Format-Table -AutoSize
+} else {
+  Write-Host "All Growth routes advertise no network, no AI, no email, and cost none." -ForegroundColor Green
+}
+
+if ($badConfirm.Count -gt 0) {
+  Write-Host "Growth metadata-write routes missing confirm_required posture:" -ForegroundColor Red
+  $badConfirm | Select-Object id,safety,readOnly,requiresConfirm | Format-Table -AutoSize
+} else {
+  Write-Host "All Growth metadata-write routes advertise confirm_required posture." -ForegroundColor Green
 }
 ```
 
@@ -128,6 +144,22 @@ growth_action_status    -> growth_actions, growth_audit_events
 ```
 
 These routes write metadata and audit records only. They do not generate draft text, call AI, contact anyone, publish anything, submit forms, or execute Growth actions.
+
+## Smoke printer shortcut
+
+The same route-contract checks are included in:
+
+```powershell
+npm run growth:smoke:print
+```
+
+Expected pass messages:
+
+```text
+All expected Growth route ids are advertised by the Worker.
+All Growth routes advertise no network, no AI, no email, and cost none.
+All Growth metadata-write routes advertise confirm_required posture.
+```
 
 ## Next UI verification
 

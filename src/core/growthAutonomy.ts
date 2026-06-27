@@ -4,6 +4,15 @@ export type GrowthAutomationMode = "observe" | "draft" | "assist" | "approved_au
 export type GrowthChannelClass = "owned" | "provider_expected" | "direct" | "community" | "procurement" | "blocked";
 export type GrowthBudgetProfileId = "free_safe" | "research_budgeted" | "growth_budgeted";
 
+export const growthAutomationModes: GrowthAutomationMode[] = [
+  "observe",
+  "draft",
+  "assist",
+  "approved_autopilot",
+  "owned_channel_autopilot",
+  "blocked",
+];
+
 export interface GrowthGoalRow {
   id: string;
   title: string;

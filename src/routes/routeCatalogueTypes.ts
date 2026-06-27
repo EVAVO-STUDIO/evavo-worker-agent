@@ -1,5 +1,5 @@
 export type RouteSafety = "read_only" | "confirm_required" | "settings_gated" | "public_read_only";
-export type RouteSection = "cockpit" | "planner" | "sources" | "opportunities" | "drafts" | "safety" | "public";
+export type RouteSection = "cockpit" | "planner" | "sources" | "opportunities" | "drafts" | "safety" | "growth" | "public";
 
 export type RouteCatalogueItem = {
   id: string;

@@ -9,7 +9,7 @@ import {
   upsertGrowthChannel,
   upsertGrowthGoal,
 } from "../core/growthAutonomy";
-import { logGrowthAuditEvent } from "../core/growthAudit";
+import { listGrowthAuditEvents, logGrowthAuditEvent } from "../core/growthAudit";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -30,6 +30,11 @@ function intParam(url: URL, key: string, fallback: number, min: number, max: num
 function optionalStatus(url: URL): string | undefined {
   const status = url.searchParams.get("status") || undefined;
   return status && status.length <= 48 ? status : undefined;
+}
+
+function optionalEntityType(url: URL): string | undefined {
+  const entityType = url.searchParams.get("entityType") || undefined;
+  return entityType && entityType.length <= 64 ? entityType : undefined;
 }
 
 function safetyBase() {
@@ -57,7 +62,7 @@ function migrationError(error: unknown) {
     mode: "growth_admin_error",
     error: missingGrowthTable ? "growth_schema_missing" : "growth_admin_failed",
     message,
-    requiredMigration: missingGrowthTable ? "0012_growth_autonomy_core.sql" : null,
+    requiredMigration: missingGrowthTable ? "latest Growth migration, including 0012_growth_autonomy_core.sql and 0013_growth_audit_events.sql" : null,
     safety: safety({ readOnly: true }),
   };
 }
@@ -151,6 +156,21 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
           actions,
           count: actions.length,
           filter: { status: status || null },
+          safety: safety(),
+        });
+      }
+
+      if (pathname === "/admin/growth/audit") {
+        const limit = intParam(url, "limit", 50, 1, 200);
+        const entityType = optionalEntityType(url);
+        const events = await listGrowthAuditEvents(env, limit, entityType);
+        return json({
+          ok: true,
+          mode: "growth_audit_events",
+          contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
+          events,
+          count: events.length,
+          filter: { entityType: entityType || null },
           safety: safety(),
         });
       }

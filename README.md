@@ -9,7 +9,7 @@ The current operating model is **free-safe first**:
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Live sources are promoted only through explicit review and confirmation gates.
-- Growth Autonomy read routes are GET-only, and confirmed strategy/channel writes do not send, post, submit forms, execute actions, or call AI.
+- Growth Autonomy read routes and confirmed metadata-write routes do not send, post, submit forms, execute actions, or call AI.
 - The browser must never receive the Worker admin token.
 
 ## Current operating docs
@@ -22,6 +22,7 @@ Start here for the modern opportunity/source-expansion workflow:
 - [`docs/growth-channel-policy.md`](docs/growth-channel-policy.md) — channel classes, link policy, disclosure policy, execution policy, and cooldown rules.
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
 - [`docs/growth-cost-governor.md`](docs/growth-cost-governor.md) — budget ledger, rest triggers, cost caps, and fail-closed rules.
+- [`docs/growth-route-contract-verification.md`](docs/growth-route-contract-verification.md) — verifies the full Growth route catalogue, expected IDs, safety flags, and confirmed metadata-write routes.
 - [`migrations/README.md`](migrations/README.md) — migration ordering and remote D1 safety notes.
 
 ## Important production note
@@ -83,7 +84,7 @@ The Worker defaults toward conservative, low-cost behaviour:
 - Settings and policy gates decide whether scheduled work can run
 - Source expansion stores candidates before live source saves
 - Candidate-source promotion requires explicit confirmation
-- Growth Autonomy strategy/channel writes require explicit confirmation and are metadata-only
+- Growth Autonomy strategy/channel/signal/action writes require explicit confirmation and are metadata-only
 - Budget counters and run history are tracked in D1 once migrations are applied
 
 ## Zero-source startup summary
@@ -104,18 +105,23 @@ Zero-source startup must remain public-source-only, capped, origin-preserving, c
 
 ## Growth Autonomy summary
 
-The Growth Autonomy layer adds strategy/channel/budget structure above the opportunity engine.
+The Growth Autonomy layer adds strategy/channel/budget/queue structure above the opportunity engine.
 
 Current Worker support:
 
 1. Read Growth overview.
-2. Read active Growth goals.
-3. Read channel rules/memory.
-4. Read saved Growth signals.
-5. Read queued Growth action records.
-6. Read or create the current budget ledger for visibility.
-7. Confirm-save Growth goals and channels as metadata only.
-8. Return safety metadata proving no AI, email, posting, form submission, or action execution occurs.
+2. Read the canonical Growth daily brief.
+3. Read active Growth goals.
+4. Read channel rules/memory.
+5. Read saved Growth signals.
+6. Read queued Growth action records.
+7. Read Growth audit events.
+8. Read or initialize the current budget ledger for visibility.
+9. Confirm-save Growth goals and channels as metadata only.
+10. Confirm-save Growth signals/actions as metadata only.
+11. Confirm-plan deterministic action queue records from saved signals without AI or network calls.
+12. Confirm-update signal/action status as metadata-only review decisions.
+13. Return route-catalogue safety metadata proving no AI, email, posting, form submission, or action execution occurs.
 
 Execution routes for posting, sending, form submission, and draft generation should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, and review controls are in place.
 
@@ -138,13 +144,17 @@ $env:WORKER_URL="https://..."
 The smoke commands check:
 
 - `GET /admin/growth/overview`
+- `GET /admin/growth/brief?profile=free_safe`
 - `GET /admin/growth/strategy?limit=25`
 - `GET /admin/growth/channels?limit=50`
+- `GET /admin/planner/routes` and the full Growth route contract
+- Optional safe metadata-only `POST /admin/growth/signals?confirm=1`
 - `GET /admin/growth/signals?limit=50`
 - `GET /admin/growth/actions?limit=50`
+- `GET /admin/growth/audit?limit=50`
 - `GET /admin/growth/budget?profile=free_safe`
 
-Expected result: each endpoint returns JSON with Growth mode/safety metadata and no external action execution.
+Expected result: each endpoint returns JSON with Growth mode/safety metadata and no external action execution. The route-contract check should print `All expected Growth route ids are advertised by the Worker.`
 
 ## Endpoints
 
@@ -162,14 +172,22 @@ Admin, Bearer token required:
 - `GET /admin/overview`
 - `GET /admin/settings/autonomy`
 - `POST /admin/settings/autonomy`
+- `GET /admin/planner/routes`
 - `GET /admin/growth`
 - `GET /admin/growth/overview`
+- `GET /admin/growth/brief?profile=free_safe`
 - `GET /admin/growth/strategy?limit=25`
 - `POST /admin/growth/strategy?confirm=1`
 - `GET /admin/growth/channels?limit=50`
 - `POST /admin/growth/channels?confirm=1`
 - `GET /admin/growth/signals?limit=50`
+- `POST /admin/growth/signals?confirm=1`
+- `POST /admin/growth/signals/status?confirm=1`
 - `GET /admin/growth/actions?limit=50`
+- `POST /admin/growth/actions?confirm=1`
+- `POST /admin/growth/actions/plan?confirm=1`
+- `POST /admin/growth/actions/status?confirm=1`
+- `GET /admin/growth/audit?limit=50`
 - `GET /admin/growth/budget?profile=free_safe`
 - `GET /admin/opportunities/summary`
 - `GET /admin/opportunities/runs`
@@ -237,13 +255,3 @@ npm run growth:smoke:print
 ### D1 schema executed locally instead of remote
 
 If you see output mentioning `.wrangler/state/...` and `local database`, you initialized the local dev DB.
-
-For existing production, prefer explicit migration files and the migration helper scripts documented in [`migrations/README.md`](migrations/README.md).
-
-### Updating secrets
-
-To replace a secret value:
-
-```bash
-wrangler secret put ADMIN_TOKEN
-```

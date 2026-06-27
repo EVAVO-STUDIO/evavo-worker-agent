@@ -154,7 +154,21 @@ The smoke commands check:
 - `GET /admin/growth/audit?limit=50`
 - `GET /admin/growth/budget?profile=free_safe`
 
-Expected result: each endpoint returns JSON with Growth mode/safety metadata and no external action execution. The route-contract check should print `All expected Growth route ids are advertised by the Worker.`
+Expected result: each endpoint returns JSON with Growth mode/safety metadata and no external action execution. The route-contract checks should print:
+
+```text
+All expected Growth route ids are advertised by the Worker.
+All Growth routes advertise no network, no AI, no email, and cost none.
+All Growth metadata-write routes advertise confirm_required posture.
+```
+
+If a stale or unsafe catalogue is deployed, the smoke command prints one of these visible failure labels:
+
+```text
+Missing Growth route ids:
+Unsafe Growth route metadata found:
+Growth metadata-write routes missing confirm_required posture:
+```
 
 ## Endpoints
 

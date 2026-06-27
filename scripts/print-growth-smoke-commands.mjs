@@ -25,6 +25,9 @@ Invoke-RestMethod "$env:WORKER_URL/admin/growth/signals?limit=50" -Headers $head
 Invoke-RestMethod "$env:WORKER_URL/admin/growth/actions?limit=50" -Headers $headers |
   ConvertTo-Json -Depth 100
 
+Invoke-RestMethod "$env:WORKER_URL/admin/growth/audit?limit=50" -Headers $headers |
+  ConvertTo-Json -Depth 100
+
 Invoke-RestMethod "$env:WORKER_URL/admin/growth/budget?profile=free_safe" -Headers $headers |
   ConvertTo-Json -Depth 100
 `;

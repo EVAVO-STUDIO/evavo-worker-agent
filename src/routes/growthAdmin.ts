@@ -9,6 +9,7 @@ import {
   upsertGrowthChannel,
   upsertGrowthGoal,
 } from "../core/growthAutonomy";
+import { logGrowthAuditEvent } from "../core/growthAudit";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -175,12 +176,25 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       const body = await parseBody(request);
       if (!confirmed(url, body)) return writeBlocked(json);
       const saved = await upsertGrowthGoal(env, body.goal || body, body.id || body.goal?.id);
+      const routeSafety = safety({ readOnly: false, writesGrowthStrategyOnly: true });
+      const audit = await logGrowthAuditEvent(env, {
+        eventType: "growth_strategy_saved",
+        entityType: "growth_goal",
+        entityId: saved.id,
+        actor: "admin",
+        automationMode: saved.automation_mode,
+        reason: "Confirmed Growth Strategy metadata save. No execution, AI, email, posting, or form submission performed.",
+        inputSnapshot: { id: body.id || body.goal?.id || null, body: body.goal || body },
+        outputSnapshot: { goal: saved },
+        safetyResult: routeSafety,
+      });
       return json({
         ok: true,
         mode: "growth_strategy_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         goal: saved,
-        safety: safety({ readOnly: false, writesGrowthStrategyOnly: true }),
+        audit,
+        safety: routeSafety,
       });
     }
 
@@ -188,12 +202,25 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       const body = await parseBody(request);
       if (!confirmed(url, body)) return writeBlocked(json);
       const saved = await upsertGrowthChannel(env, body.channel || body, body.id || body.channel?.id);
+      const routeSafety = safety({ readOnly: false, writesGrowthStrategyOnly: true });
+      const audit = await logGrowthAuditEvent(env, {
+        eventType: "growth_channel_saved",
+        entityType: "growth_channel",
+        entityId: saved.id,
+        actor: "admin",
+        automationMode: saved.automation_mode,
+        reason: "Confirmed Growth channel metadata save. No outreach, posting, form submission, AI generation, or external execution performed.",
+        inputSnapshot: { id: body.id || body.channel?.id || null, body: body.channel || body },
+        outputSnapshot: { channel: saved },
+        safetyResult: routeSafety,
+      });
       return json({
         ok: true,
         mode: "growth_channel_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         channel: saved,
-        safety: safety({ readOnly: false, writesGrowthStrategyOnly: true }),
+        audit,
+        safety: routeSafety,
       });
     }
 

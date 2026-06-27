@@ -22,6 +22,43 @@ Invoke-RestMethod "$env:WORKER_URL/admin/growth/strategy?limit=25" -Headers $hea
 Invoke-RestMethod "$env:WORKER_URL/admin/growth/channels?limit=50" -Headers $headers |
   ConvertTo-Json -Depth 100
 
+# Route contract check: confirms the Worker catalogue advertises every expected Growth route id.
+$routePayload = Invoke-RestMethod "$env:WORKER_URL/admin/planner/routes" -Headers $headers
+$expectedGrowthRouteIds = @(
+  "growth_overview",
+  "growth_brief",
+  "growth_strategy",
+  "growth_strategy_save",
+  "growth_channels",
+  "growth_channels_save",
+  "growth_signals",
+  "growth_signal_save",
+  "growth_signal_status",
+  "growth_actions",
+  "growth_action_save",
+  "growth_action_plan",
+  "growth_action_status",
+  "growth_audit",
+  "growth_budget"
+)
+
+$allRoutes = @()
+if ($routePayload.groups) {
+  $routePayload.groups.PSObject.Properties | ForEach-Object { $allRoutes += $_.Value }
+} elseif ($routePayload.routes) {
+  $allRoutes = $routePayload.routes
+}
+
+$growthRoutes = $allRoutes | Where-Object { $_.section -eq "growth" }
+$missing = $expectedGrowthRouteIds | Where-Object { $id = $_; -not ($growthRoutes | Where-Object { $_.id -eq $id }) }
+
+if ($missing.Count -gt 0) {
+  Write-Host "Missing Growth route ids:" -ForegroundColor Yellow
+  $missing
+} else {
+  Write-Host "All expected Growth route ids are advertised by the Worker." -ForegroundColor Green
+}
+
 # Optional safe test signal save. This writes metadata only.
 $signalBody = @{
   confirm = $true

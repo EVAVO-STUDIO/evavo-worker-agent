@@ -156,13 +156,21 @@ growth_action_status    -> growth_actions, growth_audit_events
 
 These routes write metadata and audit records only. They do not generate draft text, call AI, contact anyone, publish anything, submit forms, or execute Growth actions.
 
-## Smoke printer shortcut
+## Smoke printer shortcuts
 
-The same fail-hard route-contract checks are included in:
+For a route-contract-only check that does not write Growth metadata, print and run:
+
+```powershell
+npm run growth:route-contract:print
+```
+
+For the broader Growth smoke flow, including the optional safe owned-site test signal write, print and run:
 
 ```powershell
 npm run growth:smoke:print
 ```
+
+Both shortcuts include the same fail-hard route-contract checks.
 
 Expected pass messages:
 

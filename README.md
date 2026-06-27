@@ -127,7 +127,14 @@ Execution routes for posting, sending, form submission, and draft generation sho
 
 ## Growth smoke verification
 
-Print the standard Growth Autonomy smoke-test commands:
+Print the route-contract-only Growth check when you only need to validate the Worker route catalogue and do not want to run the optional metadata-write signal smoke step:
+
+```powershell
+cd C:\GitRepos\evavo-worker-agent
+npm run growth:route-contract:print
+```
+
+Print the broader standard Growth Autonomy smoke-test commands when you want endpoint reads plus the optional owned-site metadata-write signal smoke step:
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
@@ -141,7 +148,7 @@ $env:ADMIN_TOKEN="..."
 $env:WORKER_URL="https://..."
 ```
 
-The smoke commands check:
+The broader smoke commands check:
 
 - `GET /admin/growth/overview`
 - `GET /admin/growth/brief?profile=free_safe`
@@ -162,7 +169,7 @@ All Growth routes advertise no network, no AI, no email, and cost none.
 All Growth metadata-write routes advertise confirm_required posture.
 ```
 
-If a stale or unsafe catalogue is deployed, the smoke command exits with code `1` and prints one of these visible failure labels plus the final failure line:
+If a stale or unsafe catalogue is deployed, the route-contract checks exit with code `1` and print one of these visible failure labels plus the final failure line:
 
 ```text
 Missing Growth route ids:
@@ -262,6 +269,7 @@ Supported review decisions:
 cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run check:local
+npm run growth:route-contract:print
 npm run growth:smoke:print
 ```
 

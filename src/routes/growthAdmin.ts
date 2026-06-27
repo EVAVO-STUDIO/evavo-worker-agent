@@ -9,6 +9,7 @@ import {
   upsertGrowthChannel,
   upsertGrowthGoal,
 } from "../core/growthAutonomy";
+import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -23,6 +24,11 @@ function intParam(url: URL, key: string, fallback: number, min: number, max: num
   const value = Number(url.searchParams.get(key));
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function optionalStatus(url: URL): string | undefined {
+  const status = url.searchParams.get("status") || undefined;
+  return status && status.length <= 48 ? status : undefined;
 }
 
 function safetyBase() {
@@ -114,6 +120,36 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
           contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
           channels,
           count: channels.length,
+          safety: safety(),
+        });
+      }
+
+      if (pathname === "/admin/growth/signals") {
+        const limit = intParam(url, "limit", 50, 1, 200);
+        const status = optionalStatus(url);
+        const signals = await listGrowthSignals(env, limit, status);
+        return json({
+          ok: true,
+          mode: "growth_signals",
+          contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
+          signals,
+          count: signals.length,
+          filter: { status: status || null },
+          safety: safety(),
+        });
+      }
+
+      if (pathname === "/admin/growth/actions") {
+        const limit = intParam(url, "limit", 50, 1, 200);
+        const status = optionalStatus(url);
+        const actions = await listGrowthActions(env, limit, status);
+        return json({
+          ok: true,
+          mode: "growth_actions",
+          contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
+          actions,
+          count: actions.length,
+          filter: { status: status || null },
           safety: safety(),
         });
       }

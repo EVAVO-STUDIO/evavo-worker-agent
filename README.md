@@ -162,12 +162,13 @@ All Growth routes advertise no network, no AI, no email, and cost none.
 All Growth metadata-write routes advertise confirm_required posture.
 ```
 
-If a stale or unsafe catalogue is deployed, the smoke command prints one of these visible failure labels:
+If a stale or unsafe catalogue is deployed, the smoke command exits with code `1` and prints one of these visible failure labels plus the final failure line:
 
 ```text
 Missing Growth route ids:
 Unsafe Growth route metadata found:
 Growth metadata-write routes missing confirm_required posture:
+Growth route contract smoke check failed.
 ```
 
 ## Endpoints

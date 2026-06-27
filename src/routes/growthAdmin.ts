@@ -12,6 +12,7 @@ import {
 import { listGrowthAuditEvents, logGrowthAuditEvent } from "../core/growthAudit";
 import { planGrowthActionFromSignal } from "../core/growthActionPlanner";
 import { upsertGrowthAction } from "../core/growthActions";
+import { getGrowthBrief } from "../core/growthBrief";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 import { updateGrowthActionStatus, updateGrowthSignalStatus } from "../core/growthQueueReview";
 import { upsertGrowthSignal } from "../core/growthSignals";
@@ -101,6 +102,11 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       if (pathname === "/admin/growth" || pathname === "/admin/growth/overview") {
         const overview = await getGrowthOverview(env);
         return json({ ok: true, mode: "growth_overview", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", ...overview, allowedAutomationModes: growthAutomationModes, safety: safety() });
+      }
+      if (pathname === "/admin/growth/brief") {
+        const profileId = url.searchParams.get("profile") || "free_safe";
+        const brief = await getGrowthBrief(env, profileId);
+        return json({ ok: true, mode: "growth_brief", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", ...brief });
       }
       if (pathname === "/admin/growth/strategy") {
         const goals = await listGrowthGoals(env, intParam(url, "limit", 25, 1, 100));

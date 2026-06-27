@@ -119,6 +119,33 @@ Current Worker support:
 
 Execution routes for posting, sending, form submission, and draft generation should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, and review controls are in place.
 
+## Growth smoke verification
+
+Print the standard Growth Autonomy smoke-test commands:
+
+```powershell
+cd C:\GitRepos\evavo-worker-agent
+npm run growth:smoke:print
+```
+
+Then run the printed commands after setting:
+
+```powershell
+$env:ADMIN_TOKEN="..."
+$env:WORKER_URL="https://..."
+```
+
+The smoke commands check:
+
+- `GET /admin/growth/overview`
+- `GET /admin/growth/strategy?limit=25`
+- `GET /admin/growth/channels?limit=50`
+- `GET /admin/growth/signals?limit=50`
+- `GET /admin/growth/actions?limit=50`
+- `GET /admin/growth/budget?profile=free_safe`
+
+Expected result: each endpoint returns JSON with Growth mode/safety metadata and no external action execution.
+
 ## Endpoints
 
 Public:
@@ -201,8 +228,8 @@ Supported review decisions:
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
 git pull
-npm run typecheck
-npm run db:migrations:check
+npm run check:local
+npm run growth:smoke:print
 ```
 
 ## Common gotchas

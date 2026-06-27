@@ -10,6 +10,7 @@ import {
   upsertGrowthGoal,
 } from "../core/growthAutonomy";
 import { listGrowthAuditEvents, logGrowthAuditEvent } from "../core/growthAudit";
+import { planGrowthActionFromSignal } from "../core/growthActionPlanner";
 import { upsertGrowthAction } from "../core/growthActions";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 import { updateGrowthActionStatus, updateGrowthSignalStatus } from "../core/growthQueueReview";
@@ -167,6 +168,15 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
       const audit = await logGrowthAuditEvent(env, { eventType: "growth_action_saved", entityType: "growth_action", entityId: saved.id, actor: "admin", automationMode: saved.recommended_mode, reason: "Confirmed Growth action metadata save. The action is queued only; no draft generation, outreach, posting, form submission, AI call, approval, or external execution performed.", inputSnapshot: { id: body.id || body.action?.id || null, body: body.action || body }, outputSnapshot: { action: saved }, safetyResult: routeSafety });
       return json({ ok: true, mode: "growth_action_saved", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", action: saved, audit, safety: routeSafety });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/growth/actions/plan") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return writeBlocked(json);
+      const saved = await planGrowthActionFromSignal(env, String(body.signalId || body.id || ""));
+      const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
+      const audit = await logGrowthAuditEvent(env, { eventType: "growth_action_planned", entityType: "growth_action", entityId: saved.id, actor: "system", automationMode: saved.recommended_mode, reason: "Deterministic Growth queue plan from a saved signal. Queue metadata only.", inputSnapshot: { signalId: body.signalId || body.id || null }, outputSnapshot: { action: saved }, safetyResult: routeSafety, budgetResult: { aiCalls: 0, networkFetches: 0, publicActions: 0, contactActions: 0 } });
+      return json({ ok: true, mode: "growth_action_planned", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", action: saved, audit, safety: routeSafety });
     }
 
     if (request.method === "POST" && pathname === "/admin/growth/signals/status") {

@@ -3,6 +3,7 @@ import { Env, nowISO, todayUTC, uuid, safeJsonParse } from "../db";
 export type GrowthAutomationMode = "observe" | "draft" | "assist" | "approved_autopilot" | "owned_channel_autopilot" | "blocked";
 export type GrowthChannelClass = "owned" | "provider_expected" | "direct" | "community" | "procurement" | "blocked";
 export type GrowthBudgetProfileId = "free_safe" | "research_budgeted" | "growth_budgeted";
+export type GrowthBudgetState = "ok" | "near_cap" | "hard_stopped";
 
 export const growthAutomationModes: GrowthAutomationMode[] = [
   "observe",
@@ -155,6 +156,15 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
 
 function toJson(value: unknown): string {
   return JSON.stringify(value ?? []);
+}
+
+function hasReachedCap(used: number, cap: number): boolean {
+  return cap <= 0 ? used > 0 : used >= cap;
+}
+
+function isNearCap(used: number, cap: number): boolean {
+  if (cap <= 0) return used > 0;
+  return used >= Math.max(1, Math.floor(cap * 0.8));
 }
 
 export function parseGrowthJsonArray(value: string | null | undefined): unknown[] {
@@ -345,37 +355,56 @@ export async function getOrCreateGrowthBudgetLedger(env: Env, profileId: string,
 export function assessGrowthBudget(ledger: GrowthBudgetLedgerRow, profileId: string): {
   ok: boolean;
   profile: GrowthBudgetProfile;
+  budgetState: GrowthBudgetState;
   softStop: boolean;
+  restRecommended: boolean;
+  restReason: string | null;
   hardStopReason: string | null;
   usage: Record<string, number>;
+  caps: Record<string, number>;
 } {
   const profile = getGrowthBudgetProfile(profileId);
   const hardStopReason = ledger.hard_stop_reason;
   const usage = {
-    networkFetches: ledger.network_fetches,
-    aiDrafts: ledger.ai_calls,
-    d1Writes: ledger.d1_rows_written,
-    publicActions: ledger.public_actions_executed,
-    contactActions: ledger.contact_actions_executed,
+    networkFetches: ledger.network_fetches || 0,
+    aiDrafts: ledger.ai_calls || 0,
+    d1Writes: ledger.d1_rows_written || 0,
+    publicActions: ledger.public_actions_executed || 0,
+    contactActions: ledger.contact_actions_executed || 0,
   };
-  const overHardCap = Boolean(hardStopReason)
-    || usage.networkFetches >= profile.maxNetworkFetchesPerDay
-    || usage.aiDrafts >= profile.maxAiDraftsPerDay
-    || usage.d1Writes >= profile.maxD1WritesPerDay
-    || usage.publicActions >= profile.maxPublicActionsPerDay
-    || usage.contactActions >= profile.maxContactActionsPerDay;
-  const softStop = usage.networkFetches >= Math.floor(profile.maxNetworkFetchesPerDay * 0.8)
-    || usage.aiDrafts >= Math.floor(profile.maxAiDraftsPerDay * 0.8)
-    || usage.d1Writes >= Math.floor(profile.maxD1WritesPerDay * 0.8)
-    || usage.publicActions >= Math.floor(profile.maxPublicActionsPerDay * 0.8)
-    || usage.contactActions >= Math.floor(profile.maxContactActionsPerDay * 0.8);
+  const caps = {
+    networkFetches: profile.maxNetworkFetchesPerDay,
+    aiDrafts: profile.maxAiDraftsPerDay,
+    d1Writes: profile.maxD1WritesPerDay,
+    publicActions: profile.maxPublicActionsPerDay,
+    contactActions: profile.maxContactActionsPerDay,
+  };
+  const hardCapEntries = [
+    ["networkFetches", usage.networkFetches, caps.networkFetches],
+    ["aiDrafts", usage.aiDrafts, caps.aiDrafts],
+    ["d1Writes", usage.d1Writes, caps.d1Writes],
+    ["publicActions", usage.publicActions, caps.publicActions],
+    ["contactActions", usage.contactActions, caps.contactActions],
+  ] as const;
+  const hardCapHit = hardCapEntries.find(([, used, cap]) => hasReachedCap(used, cap));
+  const softCapHit = hardCapEntries.find(([, used, cap]) => isNearCap(used, cap));
+  const overHardCap = Boolean(hardStopReason) || Boolean(hardCapHit);
+  const softStop = !overHardCap && Boolean(softCapHit);
+  const budgetState: GrowthBudgetState = overHardCap ? "hard_stopped" : softStop ? "near_cap" : "ok";
+  const restReason = hardStopReason
+    || (hardCapHit ? `${hardCapHit[0]} cap reached` : null)
+    || (softCapHit ? `${softCapHit[0]} near cap` : null);
 
   return {
     ok: !overHardCap,
     profile,
+    budgetState,
     softStop,
+    restRecommended: overHardCap || softStop,
+    restReason,
     hardStopReason,
     usage,
+    caps,
   };
 }
 

@@ -13,6 +13,9 @@ $headers = @{ Authorization = "Bearer $env:ADMIN_TOKEN" }
 Invoke-RestMethod "$env:WORKER_URL/admin/growth/overview" -Headers $headers |
   ConvertTo-Json -Depth 100
 
+Invoke-RestMethod "$env:WORKER_URL/admin/growth/brief?profile=free_safe" -Headers $headers |
+  ConvertTo-Json -Depth 100
+
 Invoke-RestMethod "$env:WORKER_URL/admin/growth/strategy?limit=25" -Headers $headers |
   ConvertTo-Json -Depth 100
 
@@ -50,6 +53,9 @@ Invoke-RestMethod "$env:WORKER_URL/admin/growth/audit?limit=50" -Headers $header
   ConvertTo-Json -Depth 100
 
 Invoke-RestMethod "$env:WORKER_URL/admin/growth/budget?profile=free_safe" -Headers $headers |
+  ConvertTo-Json -Depth 100
+
+Invoke-RestMethod "$env:WORKER_URL/admin/growth/brief?profile=free_safe" -Headers $headers |
   ConvertTo-Json -Depth 100
 `;
 

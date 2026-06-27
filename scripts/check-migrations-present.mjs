@@ -19,6 +19,7 @@ const expected = [
   '0009_source_expansion_query_hints.sql',
   '0010_source_expansion_strategy_origin_yield.sql',
   '0011_source_expansion_strategy_origin_yield_backfill.sql',
+  '0012_growth_autonomy_core.sql',
 ];
 
 const missing = [];

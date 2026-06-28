@@ -18,6 +18,15 @@ const helperScripts = [
   'scripts/print-next-ops-smoke-commands.mjs',
 ];
 
+const typeScriptFiles = [
+  'src/core/growthCapabilities.ts',
+  'src/routes/growthCapabilitiesAdmin.ts',
+];
+
+const docs = [
+  'docs/growth-capability-registry.md',
+];
+
 const packageJsonPath = path.join(repoRoot, 'package.json');
 let failed = false;
 
@@ -49,6 +58,24 @@ for (const relativePath of helperScripts) {
   }
 
   pass(`${relativePath} exists and parses`);
+}
+
+for (const relativePath of typeScriptFiles) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    fail(`${relativePath} is missing`);
+  } else {
+    pass(`${relativePath} exists`);
+  }
+}
+
+for (const relativePath of docs) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    fail(`${relativePath} is missing`);
+  } else {
+    pass(`${relativePath} exists`);
+  }
 }
 
 if (!fs.existsSync(packageJsonPath)) {

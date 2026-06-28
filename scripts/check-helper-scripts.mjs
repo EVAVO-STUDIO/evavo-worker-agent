@@ -13,6 +13,7 @@ const helperScripts = [
   'scripts/print-d1-verification-commands.mjs',
   'scripts/print-growth-route-contract-check.mjs',
   'scripts/print-growth-smoke-commands.mjs',
+  'scripts/print-main-branch-audit.mjs',
   'scripts/print-migration-commands.mjs',
   'scripts/print-next-ops-smoke-commands.mjs',
 ];
@@ -60,6 +61,7 @@ if (!fs.existsSync(packageJsonPath)) {
     'db:migrations:check': 'node scripts/check-migrations-present.mjs',
     'db:migrations:print': 'node scripts/print-migration-commands.mjs',
     'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
+    'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
     'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
     'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',

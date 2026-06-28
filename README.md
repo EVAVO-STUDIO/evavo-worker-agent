@@ -23,6 +23,7 @@ Start here for the modern opportunity/source-expansion workflow:
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
 - [`docs/growth-cost-governor.md`](docs/growth-cost-governor.md) — budget ledger, rest triggers, cost caps, and fail-closed rules.
 - [`docs/growth-route-contract-verification.md`](docs/growth-route-contract-verification.md) — verifies the full Growth route catalogue, expected IDs, safety flags, and confirmed metadata-write routes.
+- [`docs/growth-capability-registry.md`](docs/growth-capability-registry.md) — first capability registry for the EVAVO Growth Operator, including autonomy levels, blocked future execution placeholders, and local route wiring notes.
 - [`migrations/README.md`](migrations/README.md) — migration ordering and remote D1 safety notes.
 
 ## Important production note
@@ -117,13 +118,46 @@ Current Worker support:
 6. Read queued Growth action records.
 7. Read Growth audit events.
 8. Read or initialize the current budget ledger for visibility.
-9. Confirm-save Growth goals and channels as metadata only.
-10. Confirm-save Growth signals/actions as metadata only.
-11. Confirm-plan deterministic action queue records from saved signals without AI or network calls.
-12. Confirm-update signal/action status as metadata-only review decisions.
-13. Return route-catalogue safety metadata proving no AI, email, posting, form submission, or action execution occurs.
+9. Read the static Growth capability registry once routed locally.
+10. Confirm-save Growth goals and channels as metadata only.
+11. Confirm-save Growth signals/actions as metadata only.
+12. Confirm-plan deterministic action queue records from saved signals without AI or network calls.
+13. Confirm-update signal/action status as metadata-only review decisions.
+14. Return route-catalogue safety metadata proving no AI, email, posting, form submission, or action execution occurs.
 
-Execution routes for posting, sending, form submission, and draft generation should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, and review controls are in place.
+Execution routes for external delivery, publishing, browser submission, and AI drafting should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, approval requests, suppression checks, evidence logging, and review controls are in place.
+
+## Growth capability registry
+
+The first Growth Operator capability model lives in:
+
+```text
+src/core/growthCapabilities.ts
+src/routes/growthCapabilitiesAdmin.ts
+docs/growth-capability-registry.md
+```
+
+Current capability classes include:
+
+```text
+research
+analysis
+drafting
+browser
+external_delivery
+internal_ops
+reporting
+```
+
+The registry defines autonomy levels from read-only through autonomous campaign mode. It is a control-plane model only and does not execute capabilities by itself.
+
+The intended route is:
+
+```text
+GET /admin/growth/capabilities
+```
+
+The route handler exists, but if the route is not live yet, wire it locally in `src/index.ts` before the generic `/admin/growth/` branch as documented in `docs/growth-capability-registry.md`.
 
 ## Growth smoke verification
 
@@ -198,6 +232,7 @@ Admin, Bearer token required:
 - `GET /admin/growth`
 - `GET /admin/growth/overview`
 - `GET /admin/growth/brief?profile=free_safe`
+- `GET /admin/growth/capabilities` once locally wired in `src/index.ts`
 - `GET /admin/growth/strategy?limit=25`
 - `POST /admin/growth/strategy?confirm=1`
 - `GET /admin/growth/channels?limit=50`
@@ -211,42 +246,8 @@ Admin, Bearer token required:
 - `POST /admin/growth/actions/status?confirm=1`
 - `GET /admin/growth/audit?limit=50`
 - `GET /admin/growth/budget?profile=free_safe`
-- `GET /admin/opportunities/summary`
-- `GET /admin/opportunities/runs`
-- `GET /admin/opportunities/sources`
-- `GET /admin/opportunities/sources/health`
-- `GET /admin/opportunities/sources/origin-metrics`
-- `POST /admin/opportunities/sources/expansion/bootstrap`
-- `POST /admin/opportunities/sources/expansion/scan`
-- `POST /admin/opportunities/sources/expansion/sitemap-scan`
-- `POST /admin/opportunities/sources/expansion/public-directory-scan`
-- `GET /admin/opportunities/sources/expansion/query-hints`
-- `POST /admin/opportunities/sources/expansion/query-hints/generate`
-- `POST /admin/opportunities/sources/expansion/query-hints/resolve`
-- `GET /admin/opportunities/sources/expansion/budget-recommendations`
-- `GET /admin/opportunities/sources/expansion/candidates`
-- `POST /admin/opportunities/sources/expansion/learn`
-- `GET /admin/opportunities/sources/expansion/strategies`
-- `GET /admin/opportunities/sources/candidates/preview`
-- `POST /admin/opportunities/sources/candidates/commit`
-- `POST /admin/opportunities/run-due`
 
-Legacy / retained admin endpoints:
-
-- `GET /admin/leads?status=new&limit=50`
-- `POST /admin/leads`
-- `GET /admin/drafts?status=queued&limit=50`
-- `POST /admin/drafts/:id/approve`
-- `POST /admin/drafts/:id/reject`
-- `POST /admin/draft-review/:id`
-- `GET /admin/strategy-scores?limit=50`
-- `POST /admin/run`
-- `GET /admin/settings`
-- `POST /admin/settings`
-
-Tools:
-
-- `GET /tools/capabilities`
+See the existing route catalogue for the full endpoint list.
 
 ## Draft review decisions
 
@@ -271,6 +272,7 @@ git pull
 npm run check:local
 npm run growth:route-contract:print
 npm run growth:smoke:print
+npm run git:main-audit:print
 ```
 
 ## Common gotchas

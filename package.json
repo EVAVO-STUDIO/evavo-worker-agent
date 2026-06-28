@@ -13,11 +13,12 @@
     "db:migrations:print": "node scripts/print-migration-commands.mjs",
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
+    "growth:capabilities:check": "node scripts/check-growth-capability-registry.mjs",
     "growth:route-contract:print": "node scripts/print-growth-route-contract-check.mjs",
     "growth:smoke:print": "node scripts/print-growth-smoke-commands.mjs",
     "ops:smoke:print": "node scripts/print-next-ops-smoke-commands.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
-    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run typecheck",
+    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

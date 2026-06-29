@@ -21,6 +21,7 @@ const expected = [
   '0011_source_expansion_strategy_origin_yield_backfill.sql',
   '0012_growth_autonomy_core.sql',
   '0013_growth_audit_events.sql',
+  '0014_growth_campaign_intelligence.sql',
 ];
 
 const missing = [];

@@ -1,0 +1,93 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '..');
+
+const requiredFiles = [
+  'migrations/0016_growth_strategy_memory.sql',
+  'src/core/growthStrategyMemory.ts',
+  'src/routes/growthStrategyMemoryAdmin.ts',
+  'src/core/growthAutonomousRuntime.ts',
+  'src/routes/growthCampaignIntelligenceAdmin.ts',
+];
+
+const requiredTokens = {
+  'migrations/0016_growth_strategy_memory.sql': [
+    'growth_objectives',
+    'growth_key_results',
+    'growth_target_segments',
+    'growth_offer_profiles',
+    'growth_positioning_profiles',
+    'growth_runtime_constraints',
+  ],
+  'src/core/growthStrategyMemory.ts': [
+    'upsertGrowthObjective',
+    'upsertGrowthKeyResult',
+    'upsertGrowthTargetSegment',
+    'upsertGrowthOfferProfile',
+    'upsertGrowthPositioningProfile',
+    'upsertGrowthRuntimeConstraint',
+    'loadGrowthStrategyMemory',
+  ],
+  'src/routes/growthStrategyMemoryAdmin.ts': [
+    '/admin/growth/strategy-memory',
+    '/admin/growth/objectives',
+    '/admin/growth/key-results',
+    '/admin/growth/segments',
+    '/admin/growth/offers',
+    '/admin/growth/positioning',
+    '/admin/growth/runtime-constraints',
+    'growth_strategy_memory',
+    'growth_objective_saved',
+    'growth_runtime_constraint_saved',
+    'externalStateChange: false',
+  ],
+  'src/core/growthAutonomousRuntime.ts': [
+    'strategicIntent',
+    'missing_objectives',
+    'missing_target_segments',
+    'missing_offer_profiles',
+    'missing_positioning_profiles',
+    'missing_runtime_constraints',
+    'growth_autonomous_runtime_v2_strategy_memory',
+  ],
+  'src/routes/growthCampaignIntelligenceAdmin.ts': [
+    'loadGrowthStrategyMemory',
+    'strategyMemory',
+    'buildGrowthAutonomousRuntime({ operatorCycle: cycle, strategyMemory })',
+  ],
+};
+
+let failed = false;
+
+function fail(message) {
+  failed = true;
+  console.error(`FAIL ${message}`);
+}
+
+function pass(message) {
+  console.log(`OK   ${message}`);
+}
+
+for (const relativePath of requiredFiles) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    fail(`${relativePath} is missing`);
+    continue;
+  }
+  pass(`${relativePath} exists`);
+  const content = fs.readFileSync(absolutePath, 'utf8');
+  for (const token of requiredTokens[relativePath] || []) {
+    if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
+    else pass(`${relativePath} contains ${token}`);
+  }
+}
+
+if (failed) {
+  console.error('Growth strategy memory check failed.');
+  process.exit(1);
+}
+
+console.log('Growth strategy memory check passed.');

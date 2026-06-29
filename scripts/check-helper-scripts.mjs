@@ -7,27 +7,38 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
 const helperScripts = [
+  'scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
   'scripts/apply-growth-operator-route-wiring.mjs',
   'scripts/apply-one-migration.mjs',
   'scripts/check-growth-campaign-intelligence.mjs',
   'scripts/check-growth-capability-registry.mjs',
+  'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
   'scripts/print-d1-verification-commands.mjs',
   'scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
   'scripts/print-growth-route-contract-check.mjs',
   'scripts/print-growth-smoke-commands.mjs',
+  'scripts/print-growth-strategy-memory-smoke-commands.mjs',
   'scripts/print-main-branch-audit.mjs',
   'scripts/print-migration-commands.mjs',
   'scripts/print-next-ops-smoke-commands.mjs',
 ];
 
 const typeScriptFiles = [
+  'src/core/growthAutonomousRuntime.ts',
   'src/core/growthCapabilities.ts',
+  'src/core/growthCampaignAnalysis.ts',
   'src/core/growthCampaignIntelligence.ts',
   'src/core/growthCampaignDecisions.ts',
+  'src/core/growthCampaignRecords.ts',
+  'src/core/growthOperatorCycle.ts',
+  'src/core/growthOperatorCycleEvents.ts',
+  'src/core/growthOperatorLoop.ts',
+  'src/core/growthStrategyMemory.ts',
   'src/routes/growthCapabilitiesAdmin.ts',
   'src/routes/growthCampaignIntelligenceAdmin.ts',
+  'src/routes/growthStrategyMemoryAdmin.ts',
 ];
 
 const docs = [
@@ -100,12 +111,15 @@ if (!fs.existsSync(packageJsonPath)) {
     'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',
     'growth:campaigns:smoke:print': 'node scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
     'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
+    'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
     'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
     'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
+    'growth:strategy:check': 'node scripts/check-growth-strategy-memory.mjs',
+    'growth:strategy:smoke:print': 'node scripts/print-growth-strategy-memory-smoke-commands.mjs',
     'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
     'scripts:check': 'node scripts/check-helper-scripts.mjs',
-    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run typecheck',
+    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run typecheck',
   };
 
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {

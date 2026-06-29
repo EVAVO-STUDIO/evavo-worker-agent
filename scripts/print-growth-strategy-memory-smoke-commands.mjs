@@ -11,6 +11,9 @@ $base = $env:WORKER_URL.TrimEnd('/')
 Write-Host "Read strategy memory before seed" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/strategy-memory" -Headers $headers | ConvertTo-Json -Depth 100
 
+Write-Host "Read strategy-aware cycle before seed" -ForegroundColor Cyan
+Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
+
 Write-Host "Seed objective" -ForegroundColor Cyan
 $objectiveBody = @{
   confirm = $true
@@ -94,8 +97,24 @@ Invoke-RestMethod "$base/admin/growth/runtime-constraints?confirm=1" -Headers $h
 Write-Host "Read strategy memory after seed" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/strategy-memory" -Headers $headers | ConvertTo-Json -Depth 100
 
+Write-Host "Read strategy-aware cycle after seed" -ForegroundColor Cyan
+$cycle = Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers
+$cycle | ConvertTo-Json -Depth 100
+if ($cycle.contractVersion -ne "growth_operator_cycle_v2_strategy_memory_read_only") { throw "Unexpected cycle contractVersion: $($cycle.contractVersion)" }
+if (-not $cycle.strategy) { throw "Cycle is missing strategy section." }
+if (-not $cycle.strategy.activeObjectives -or $cycle.strategy.activeObjectives.Count -lt 1) { throw "Cycle strategy is missing active objectives." }
+if (-not $cycle.strategy.targetSegments -or $cycle.strategy.targetSegments.Count -lt 1) { throw "Cycle strategy is missing target segments." }
+if (-not $cycle.strategy.offerProfiles -or $cycle.strategy.offerProfiles.Count -lt 1) { throw "Cycle strategy is missing offer profiles." }
+if (-not $cycle.strategy.positioningProfiles -or $cycle.strategy.positioningProfiles.Count -lt 1) { throw "Cycle strategy is missing positioning profiles." }
+if (-not $cycle.strategy.runtimeConstraints -or $cycle.strategy.runtimeConstraints.Count -lt 1) { throw "Cycle strategy is missing runtime constraints." }
+Write-Host "Strategy-aware cycle contract verified." -ForegroundColor Green
+
 Write-Host "Read autonomy after strategy seed" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/autonomy" -Headers $headers | ConvertTo-Json -Depth 100
+$autonomy = Invoke-RestMethod "$base/admin/growth/autonomy" -Headers $headers
+$autonomy | ConvertTo-Json -Depth 100
+if ($autonomy.contractVersion -ne "growth_autonomous_runtime_v2_strategy_memory") { throw "Unexpected autonomy contractVersion: $($autonomy.contractVersion)" }
+if (-not $autonomy.strategicIntent) { throw "Autonomy is missing strategicIntent." }
+Write-Host "Autonomy strategy contract verified." -ForegroundColor Green
 
 Write-Host "Growth Strategy Memory smoke checks complete." -ForegroundColor Green
 `;

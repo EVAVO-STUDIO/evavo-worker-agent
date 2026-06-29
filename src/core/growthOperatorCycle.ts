@@ -9,6 +9,7 @@ export interface GrowthOperatorCycleInput {
   metrics: any[];
   evidence: any[];
   learning: any[];
+  strategyMemory?: any;
 }
 
 function latestMetricFor(metrics: any[], campaignId: string) {
@@ -29,6 +30,37 @@ function groupDecisions(decisions: any[], campaignId: string) {
   return decisions.filter((decision) => decision.campaign_id === campaignId).slice(0, 5);
 }
 
+function firstNames(rows: any[] = [], limit = 5): string[] {
+  return rows.slice(0, limit).map((row) => String(row.name || row.id || "unnamed"));
+}
+
+function strategySetup(strategyMemory: any) {
+  const counts = strategyMemory?.counts || {};
+  const hasObjectives = Boolean((counts.objectives || 0) > 0);
+  const hasSegments = Boolean((counts.targetSegments || 0) > 0);
+  const hasOffers = Boolean((counts.offerProfiles || 0) > 0);
+  const hasPositioning = Boolean((counts.positioningProfiles || 0) > 0);
+  const hasRuntimeConstraints = Boolean((counts.runtimeConstraints || 0) > 0);
+  const missing = [
+    !hasObjectives ? "missing_objectives" : null,
+    !hasSegments ? "missing_target_segments" : null,
+    !hasOffers ? "missing_offer_profiles" : null,
+    !hasPositioning ? "missing_positioning_profiles" : null,
+    !hasRuntimeConstraints ? "missing_runtime_constraints" : null,
+  ].filter(Boolean) as string[];
+
+  return {
+    complete: missing.length === 0,
+    missing,
+    counts,
+    activeObjectives: firstNames(strategyMemory?.objectives),
+    targetSegments: firstNames(strategyMemory?.targetSegments),
+    offerProfiles: firstNames(strategyMemory?.offerProfiles),
+    positioningProfiles: firstNames(strategyMemory?.positioningProfiles),
+    runtimeConstraints: firstNames(strategyMemory?.runtimeConstraints),
+  };
+}
+
 export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   const analyses = input.campaigns.map((campaign) => analyzeGrowthCampaign({
     campaign,
@@ -41,6 +73,7 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   const readiness = summarizeGrowthOperatorReadiness(analyses);
   const loopPlan = planGrowthOperatorLoop(input);
   const capabilityRegistry = listGrowthCapabilities();
+  const strategy = strategySetup(input.strategyMemory);
 
   const campaignBriefs = input.campaigns.map((campaign) => {
     const analysis = analyses.find((item) => item.campaignId === campaign.id);
@@ -60,6 +93,7 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
 
   const blocked = [] as string[];
   if (!input.campaigns.length) blocked.push("no_campaigns");
+  if (!strategy.complete) blocked.push(...strategy.missing);
   if (loopPlan.selectedStep === "add_metric_snapshot") blocked.push("missing_metric_snapshot");
   if (loopPlan.selectedStep === "add_evidence") blocked.push("missing_evidence");
   if (loopPlan.selectedStep === "plan_decision") blocked.push("missing_reasoned_decision");
@@ -67,12 +101,13 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   return {
     ok: true,
     mode: "growth_operator_cycle",
-    contractVersion: "growth_operator_cycle_v1_read_only",
+    contractVersion: "growth_operator_cycle_v2_strategy_memory_read_only",
     readiness,
+    strategy,
     loopPlan,
     campaignBriefs,
     capabilitySummary: capabilityRegistry.summary,
-    blocked,
+    blocked: Array.from(new Set(blocked)),
     counts: {
       campaigns: input.campaigns.length,
       experiments: input.experiments.length,
@@ -81,6 +116,11 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
       evidence: input.evidence.length,
       learning: input.learning.length,
       analyses: analyses.length,
+      objectives: strategy.counts.objectives || 0,
+      targetSegments: strategy.counts.targetSegments || 0,
+      offerProfiles: strategy.counts.offerProfiles || 0,
+      positioningProfiles: strategy.counts.positioningProfiles || 0,
+      runtimeConstraints: strategy.counts.runtimeConstraints || 0,
     },
     safety: {
       readOnly: true,

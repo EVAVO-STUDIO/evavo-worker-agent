@@ -10,6 +10,7 @@ export interface GrowthOperatorCycleInput {
   evidence: any[];
   learning: any[];
   strategyMemory?: any;
+  blackboard?: any;
 }
 
 function latestMetricFor(metrics: any[], campaignId: string) {
@@ -31,7 +32,7 @@ function groupDecisions(decisions: any[], campaignId: string) {
 }
 
 function firstNames(rows: any[] = [], limit = 5): string[] {
-  return rows.slice(0, limit).map((row) => String(row.name || row.id || "unnamed"));
+  return rows.slice(0, limit).map((row) => String(row.name || row.subject_name || row.summary || row.id || "unnamed"));
 }
 
 function strategySetup(strategyMemory: any) {
@@ -61,6 +62,32 @@ function strategySetup(strategyMemory: any) {
   };
 }
 
+function blackboardSetup(blackboard: any) {
+  const counts = blackboard?.counts || {};
+  const hasFacts = Boolean((counts.facts || 0) > 0);
+  const hasEntities = Boolean((counts.entities || 0) > 0);
+  const hasRelationships = Boolean((counts.relationships || 0) > 0);
+  const hasMarketSignals = Boolean((counts.marketSignals || 0) > 0);
+  const hasAssets = Boolean((counts.assets || 0) > 0);
+  const missing = [
+    !hasFacts ? "missing_blackboard_facts" : null,
+    !hasEntities ? "missing_growth_entities" : null,
+    !hasRelationships ? "missing_entity_relationships" : null,
+    !hasMarketSignals ? "missing_market_signals" : null,
+    !hasAssets ? "missing_asset_inventory" : null,
+  ].filter(Boolean) as string[];
+
+  return {
+    complete: missing.length === 0,
+    missing,
+    counts,
+    facts: firstNames(blackboard?.facts, 5),
+    entities: firstNames(blackboard?.entities, 5),
+    marketSignals: firstNames(blackboard?.marketSignals, 5),
+    assets: firstNames(blackboard?.assets, 5),
+  };
+}
+
 export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   const analyses = input.campaigns.map((campaign) => analyzeGrowthCampaign({
     campaign,
@@ -74,6 +101,7 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   const loopPlan = planGrowthOperatorLoop(input);
   const capabilityRegistry = listGrowthCapabilities();
   const strategy = strategySetup(input.strategyMemory);
+  const blackboard = blackboardSetup(input.blackboard);
 
   const campaignBriefs = input.campaigns.map((campaign) => {
     const analysis = analyses.find((item) => item.campaignId === campaign.id);
@@ -94,6 +122,7 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   const blocked = [] as string[];
   if (!input.campaigns.length) blocked.push("no_campaigns");
   if (!strategy.complete) blocked.push(...strategy.missing);
+  if (!blackboard.complete) blocked.push(...blackboard.missing);
   if (loopPlan.selectedStep === "add_metric_snapshot") blocked.push("missing_metric_snapshot");
   if (loopPlan.selectedStep === "add_evidence") blocked.push("missing_evidence");
   if (loopPlan.selectedStep === "plan_decision") blocked.push("missing_reasoned_decision");
@@ -101,9 +130,10 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   return {
     ok: true,
     mode: "growth_operator_cycle",
-    contractVersion: "growth_operator_cycle_v2_strategy_memory_read_only",
+    contractVersion: "growth_operator_cycle_v3_strategy_blackboard_read_only",
     readiness,
     strategy,
+    blackboard,
     loopPlan,
     campaignBriefs,
     capabilitySummary: capabilityRegistry.summary,
@@ -121,6 +151,11 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
       offerProfiles: strategy.counts.offerProfiles || 0,
       positioningProfiles: strategy.counts.positioningProfiles || 0,
       runtimeConstraints: strategy.counts.runtimeConstraints || 0,
+      blackboardFacts: blackboard.counts.facts || 0,
+      blackboardEntities: blackboard.counts.entities || 0,
+      blackboardRelationships: blackboard.counts.relationships || 0,
+      marketSignals: blackboard.counts.marketSignals || 0,
+      assets: blackboard.counts.assets || 0,
     },
     safety: {
       readOnly: true,

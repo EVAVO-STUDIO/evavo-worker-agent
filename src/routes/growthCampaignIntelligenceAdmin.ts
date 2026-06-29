@@ -78,6 +78,12 @@ async function loadGrowthOperatorState(env: Env, url: URL) {
   return { campaigns, experiments, decisions, metrics, evidence, learning };
 }
 
+async function loadGrowthCycleState(env: Env, url: URL) {
+  const state = await loadGrowthOperatorState(env, url);
+  const strategyMemory = await loadGrowthStrategyMemory(env);
+  return { ...state, strategyMemory };
+}
+
 export async function handleGrowthCampaignIntelligenceAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -86,14 +92,13 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
 
   try {
     if (request.method === "GET" && pathname === "/admin/growth/autonomy") {
-      const state = await loadGrowthOperatorState(env, url);
-      const cycle = buildGrowthOperatorCycle(state);
-      const strategyMemory = await loadGrowthStrategyMemory(env);
-      return json(buildGrowthAutonomousRuntime({ operatorCycle: cycle, strategyMemory }));
+      const cycleState = await loadGrowthCycleState(env, url);
+      const cycle = buildGrowthOperatorCycle(cycleState);
+      return json(buildGrowthAutonomousRuntime({ operatorCycle: cycle, strategyMemory: cycleState.strategyMemory }));
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/cycle") {
-      return json(buildGrowthOperatorCycle(await loadGrowthOperatorState(env, url)));
+      return json(buildGrowthOperatorCycle(await loadGrowthCycleState(env, url)));
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/cycle/events") {
@@ -104,7 +109,7 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
     if (request.method === "POST" && pathname === "/admin/growth/cycle/record") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const cycle = buildGrowthOperatorCycle(await loadGrowthOperatorState(env, url));
+      const cycle = buildGrowthOperatorCycle(await loadGrowthCycleState(env, url));
       const event = await saveGrowthOperatorCycleEvent(env, cycle);
       return json({ ok: true, mode: "growth_operator_cycle_recorded", event, cycle, safety: writeSafety });
     }

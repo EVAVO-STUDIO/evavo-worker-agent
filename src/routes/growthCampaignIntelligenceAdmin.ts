@@ -1,4 +1,5 @@
 import { Env, getAdminToken } from "../db";
+import { analyzeGrowthCampaign, summarizeGrowthOperatorReadiness } from "../core/growthCampaignAnalysis";
 import {
   getLatestCampaignMetrics,
   listGrowthCampaigns,
@@ -76,17 +77,29 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
       const metrics = await listGrowthCampaignMetrics(env, intParam(url, "metricLimit", 10, 1, 50));
       const evidence = await listGrowthEvidenceItems(env, intParam(url, "evidenceLimit", 10, 1, 50));
       const learning = await listGrowthLearningNotes(env, intParam(url, "learningLimit", 10, 1, 50));
+      const analyses = campaigns.map((campaign) => {
+        const latestMetric = metrics.find((metric: any) => metric.campaign_id === campaign.id) as any;
+        return analyzeGrowthCampaign({
+          campaign,
+          metrics: latestMetric || null,
+          evidenceCount: evidence.filter((item: any) => item.campaign_id === campaign.id).length,
+          learningCount: learning.filter((item: any) => item.campaign_id === campaign.id).length,
+          decisionCount: decisions.filter((item) => item.campaign_id === campaign.id).length,
+        });
+      });
       return json({
         ok: true,
         mode: "growth_operator_intelligence",
-        contractVersion: "growth_campaign_intelligence_v1_metadata_only",
+        contractVersion: "growth_campaign_intelligence_v2_analysis_metadata_only",
         campaigns,
         experiments,
         decisions,
         metrics,
         evidence,
         learning,
-        counts: { campaigns: campaigns.length, experiments: experiments.length, decisions: decisions.length, metrics: metrics.length, evidence: evidence.length, learning: learning.length },
+        analyses,
+        readiness: summarizeGrowthOperatorReadiness(analyses),
+        counts: { campaigns: campaigns.length, experiments: experiments.length, decisions: decisions.length, metrics: metrics.length, evidence: evidence.length, learning: learning.length, analyses: analyses.length },
         safety: readSafety,
       });
     }

@@ -18,42 +18,55 @@ export type GrowthAutonomousRuntimeMode =
 export interface GrowthAutonomousRuntimeInput {
   operatorCycle?: any;
   operatorOverview?: any;
+  strategyMemory?: any;
 }
 
 function stage(stage: GrowthCognitionStage, label: string, description: string, status: "ready" | "blocked" | "needs_data", outputs: string[]) {
   return { stage, label, description, status, outputs };
 }
 
+function firstNames(rows: any[] = [], limit = 5): string[] {
+  return rows.slice(0, limit).map((row) => String(row.name || row.id || "unnamed"));
+}
+
 export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput = {}) {
   const capabilities = listGrowthCapabilities();
   const cycle = input.operatorCycle || null;
+  const strategyMemory = input.strategyMemory || null;
   const loopPlan = cycle?.loopPlan || input.operatorOverview?.loopPlan || null;
   const readiness = cycle?.readiness || input.operatorOverview?.readiness || null;
   const blocked = Array.isArray(cycle?.blocked) ? cycle.blocked : [];
   const hasCampaigns = Boolean((cycle?.counts?.campaigns || input.operatorOverview?.counts?.campaigns || 0) > 0);
   const hasCycle = Boolean(cycle);
+  const strategyCounts = strategyMemory?.counts || {};
+  const hasObjectives = Boolean((strategyCounts.objectives || 0) > 0);
+  const hasSegments = Boolean((strategyCounts.targetSegments || 0) > 0);
+  const hasOffers = Boolean((strategyCounts.offerProfiles || 0) > 0);
+  const hasPositioning = Boolean((strategyCounts.positioningProfiles || 0) > 0);
+  const hasRuntimeConstraints = Boolean((strategyCounts.runtimeConstraints || 0) > 0);
+  const hasStrategicIntent = hasObjectives && hasSegments && hasOffers && hasPositioning;
 
   const cognitionStages = [
     stage(
       "sense",
       "Sense current state",
-      "Read campaigns, experiments, metrics, evidence, learning notes, decisions, cycle events, and capability posture.",
+      "Read strategy memory, campaigns, experiments, metrics, evidence, learning notes, decisions, cycle events, and capability posture.",
       hasCycle ? "ready" : "needs_data",
-      ["operator state", "campaign records", "cycle memory", "capability registry"]
+      ["strategy memory", "operator state", "campaign records", "cycle memory", "capability registry"]
     ),
     stage(
       "interpret",
       "Interpret signals",
-      "Convert raw metadata into campaign health, readiness, risk, blockers, and opportunity context.",
-      hasCampaigns ? "ready" : "needs_data",
-      ["analysis scores", "risk posture", "readiness posture", "blocker list"]
+      "Convert raw metadata into strategic fit, campaign health, readiness, risk, blockers, and opportunity context.",
+      hasCampaigns && hasStrategicIntent ? "ready" : "needs_data",
+      ["strategic fit", "analysis scores", "risk posture", "readiness posture", "blocker list"]
     ),
     stage(
       "prioritise",
       "Prioritise next focus",
-      "Pick the most important campaign or setup gap using deterministic priority and risk rules.",
-      loopPlan ? "ready" : "needs_data",
-      ["selected campaign", "selected step", "priority", "rationale"]
+      "Pick the most important objective, segment, campaign, or setup gap using deterministic priority and risk rules.",
+      loopPlan && hasStrategicIntent ? "ready" : "needs_data",
+      ["selected objective", "selected campaign", "selected step", "priority", "rationale"]
     ),
     stage(
       "plan",
@@ -65,9 +78,9 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
     stage(
       "govern",
       "Govern risk and permission",
-      "Apply autonomy level, write confirmation, external action, cost, AI, network, and channel gates before any capability could execute.",
-      "ready",
-      ["safety posture", "blocked capabilities", "approval requirements"]
+      "Apply runtime constraints, autonomy level, write confirmation, external action, cost, AI, network, and channel gates before any capability could execute.",
+      hasRuntimeConstraints ? "ready" : "needs_data",
+      ["runtime constraints", "safety posture", "blocked capabilities", "approval requirements"]
     ),
     stage(
       "prepare",
@@ -107,12 +120,28 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
     "bulk_unapproved_outreach",
   ];
 
+  const setupBlocks = [
+    !hasObjectives ? "missing_objectives" : null,
+    !hasSegments ? "missing_target_segments" : null,
+    !hasOffers ? "missing_offer_profiles" : null,
+    !hasPositioning ? "missing_positioning_profiles" : null,
+    !hasRuntimeConstraints ? "missing_runtime_constraints" : null,
+  ].filter(Boolean) as string[];
+
   return {
     ok: true,
     mode: "growth_autonomous_runtime",
-    contractVersion: "growth_autonomous_runtime_v1_supervised_brain_only",
+    contractVersion: "growth_autonomous_runtime_v2_strategy_memory",
     runtimeMode: "supervised_internal_metadata" as GrowthAutonomousRuntimeMode,
-    mission: "Continuously improve EVAVO growth operations by sensing campaign state, interpreting signals, choosing the next safest internal step, recording memory, and preparing for future governed execution.",
+    mission: "Continuously improve EVAVO growth operations by sensing strategic intent and campaign state, interpreting signals, choosing the next safest internal step, recording memory, and preparing for future governed execution.",
+    strategicIntent: strategyMemory ? {
+      counts: strategyCounts,
+      activeObjectives: firstNames(strategyMemory.objectives),
+      targetSegments: firstNames(strategyMemory.targetSegments),
+      offerProfiles: firstNames(strategyMemory.offerProfiles),
+      positioningProfiles: firstNames(strategyMemory.positioningProfiles),
+      runtimeConstraints: firstNames(strategyMemory.runtimeConstraints),
+    } : null,
     currentFocus: loopPlan ? {
       selectedStep: loopPlan.selectedStep,
       targetCampaignId: loopPlan.targetCampaignId,
@@ -122,7 +151,7 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       rationale: loopPlan.rationale || [],
     } : null,
     readiness,
-    blockers: Array.from(new Set([...blocked, ...hardBlocks])),
+    blockers: Array.from(new Set([...setupBlocks, ...blocked, ...hardBlocks])),
     cognitionStages,
     autonomyLevels,
     capabilitySummary: capabilities.summary,
@@ -138,8 +167,10 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       canRunBrowser: false,
       canSpendMoney: false,
       canImpersonateHuman: false,
+      hasRuntimeConstraints,
     },
     nextRuntimeMilestones: [
+      "Seed objectives, target segments, offers, positioning, and runtime constraints for EVAVO.",
       "Add evidence pack schema for every proposed external action.",
       "Add approval request records with reviewer, expiry, and action-specific payloads.",
       "Add suppression, caps, channel policy, and contact-permission gates.",

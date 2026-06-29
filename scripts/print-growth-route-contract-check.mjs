@@ -13,6 +13,14 @@ $routePayload = Invoke-RestMethod "$env:WORKER_URL/admin/planner/routes" -Header
 $expectedGrowthRouteIds = @(
   "growth_overview",
   "growth_brief",
+  "growth_capabilities",
+  "growth_operator",
+  "growth_campaigns",
+  "growth_campaign_save",
+  "growth_experiments",
+  "growth_experiment_save",
+  "growth_decisions",
+  "growth_decision_plan",
   "growth_strategy",
   "growth_strategy_save",
   "growth_channels",
@@ -38,7 +46,7 @@ if ($routePayload.groups) {
 $growthRoutes = $allRoutes | Where-Object { $_.section -eq "growth" }
 $missing = $expectedGrowthRouteIds | Where-Object { $id = $_; -not ($growthRoutes | Where-Object { $_.id -eq $id }) }
 $unsafe = $growthRoutes | Where-Object { $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.costRisk -ne "none" }
-$badConfirm = $growthRoutes | Where-Object { $_.id -like "*_save" -or $_.id -like "*_status" -or $_.id -eq "growth_action_plan" } | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
+$badConfirm = $growthRoutes | Where-Object { $_.id -like "*_save" -or $_.id -like "*_status" -or $_.id -eq "growth_action_plan" -or $_.id -eq "growth_decision_plan" } | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
 $contractFailed = $false
 
 if ($missing.Count -gt 0) {

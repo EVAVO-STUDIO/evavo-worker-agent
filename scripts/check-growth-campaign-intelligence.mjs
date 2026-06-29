@@ -7,9 +7,11 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const requiredFiles = [
   'migrations/0014_growth_campaign_intelligence.sql',
+  'migrations/0015_growth_operator_cycle_events.sql',
   'src/core/growthCampaignAnalysis.ts',
   'src/core/growthOperatorLoop.ts',
   'src/core/growthOperatorCycle.ts',
+  'src/core/growthOperatorCycleEvents.ts',
   'src/core/growthCampaignIntelligence.ts',
   'src/core/growthCampaignDecisions.ts',
   'src/core/growthCampaignRecords.ts',
@@ -26,6 +28,14 @@ const requiredTokens = {
     'growth_candidate_actions',
     'growth_evidence_items',
     'growth_learning_notes',
+  ],
+  'migrations/0015_growth_operator_cycle_events.sql': [
+    'growth_operator_cycle_events',
+    'selected_step',
+    'target_campaign_id',
+    'readiness_json',
+    'loop_plan_json',
+    'safety_json',
   ],
   'src/core/growthCampaignAnalysis.ts': [
     'analyzeGrowthCampaign',
@@ -52,6 +62,12 @@ const requiredTokens = {
     'blocked',
     'callsNetwork: false',
   ],
+  'src/core/growthOperatorCycleEvents.ts': [
+    'saveGrowthOperatorCycleEvent',
+    'listGrowthOperatorCycleEvents',
+    'growth_operator_cycle_events',
+    'read_only_snapshot',
+  ],
   'src/core/growthCampaignIntelligence.ts': [
     'upsertGrowthCampaign',
     'upsertGrowthExperiment',
@@ -76,6 +92,10 @@ const requiredTokens = {
   ],
   'src/routes/growthCampaignIntelligenceAdmin.ts': [
     '/admin/growth/cycle',
+    '/admin/growth/cycle/events',
+    '/admin/growth/cycle/record',
+    'growth_operator_cycle_events',
+    'growth_operator_cycle_recorded',
     'growth_operator_intelligence',
     'growth_campaigns',
     'growth_experiments',

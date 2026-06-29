@@ -15,6 +15,7 @@ $expectedGrowthRouteIds = @(
   "growth_brief",
   "growth_capabilities",
   "growth_operator",
+  "growth_autonomy",
   "growth_cycle",
   "growth_cycle_events",
   "growth_cycle_record",

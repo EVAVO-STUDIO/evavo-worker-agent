@@ -1,6 +1,7 @@
 import { Env, getAdminToken } from "../db";
 import { analyzeGrowthCampaign, summarizeGrowthOperatorReadiness } from "../core/growthCampaignAnalysis";
 import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
+import { buildGrowthOperatorCycle } from "../core/growthOperatorCycle";
 import {
   getLatestCampaignMetrics,
   listGrowthCampaigns,
@@ -64,6 +65,16 @@ function migrationError(error: unknown) {
 const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
 const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
 
+async function loadGrowthOperatorState(env: Env, url: URL) {
+  const campaigns = await listGrowthCampaigns(env, intParam(url, "limit", 10, 1, 50), url.searchParams.get("status") || undefined);
+  const experiments = await listGrowthExperiments(env, intParam(url, "experimentLimit", 10, 1, 50));
+  const decisions = await listGrowthDecisions(env, intParam(url, "decisionLimit", 10, 1, 50));
+  const metrics = await listGrowthCampaignMetrics(env, intParam(url, "metricLimit", 10, 1, 50));
+  const evidence = await listGrowthEvidenceItems(env, intParam(url, "evidenceLimit", 10, 1, 50));
+  const learning = await listGrowthLearningNotes(env, intParam(url, "learningLimit", 10, 1, 50));
+  return { campaigns, experiments, decisions, metrics, evidence, learning };
+}
+
 export async function handleGrowthCampaignIntelligenceAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -71,13 +82,12 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
   const url = new URL(request.url);
 
   try {
+    if (request.method === "GET" && pathname === "/admin/growth/cycle") {
+      return json(buildGrowthOperatorCycle(await loadGrowthOperatorState(env, url)));
+    }
+
     if (request.method === "GET" && pathname === "/admin/growth/operator") {
-      const campaigns = await listGrowthCampaigns(env, intParam(url, "limit", 10, 1, 50), url.searchParams.get("status") || undefined);
-      const experiments = await listGrowthExperiments(env, intParam(url, "experimentLimit", 10, 1, 50));
-      const decisions = await listGrowthDecisions(env, intParam(url, "decisionLimit", 10, 1, 50));
-      const metrics = await listGrowthCampaignMetrics(env, intParam(url, "metricLimit", 10, 1, 50));
-      const evidence = await listGrowthEvidenceItems(env, intParam(url, "evidenceLimit", 10, 1, 50));
-      const learning = await listGrowthLearningNotes(env, intParam(url, "learningLimit", 10, 1, 50));
+      const { campaigns, experiments, decisions, metrics, evidence, learning } = await loadGrowthOperatorState(env, url);
       const analyses = campaigns.map((campaign) => {
         const latestMetric = metrics.find((metric: any) => metric.campaign_id === campaign.id) as any;
         return analyzeGrowthCampaign({

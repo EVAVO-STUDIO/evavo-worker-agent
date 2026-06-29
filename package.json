@@ -16,6 +16,7 @@
     "growth:campaigns:check": "node scripts/check-growth-campaign-intelligence.mjs",
     "growth:campaigns:smoke:print": "node scripts/print-growth-campaign-intelligence-smoke-commands.mjs",
     "growth:capabilities:check": "node scripts/check-growth-capability-registry.mjs",
+    "growth:route-catalogue:apply": "node scripts/apply-growth-campaign-analytics-route-catalogue.mjs",
     "growth:route-contract:print": "node scripts/print-growth-route-contract-check.mjs",
     "growth:smoke:print": "node scripts/print-growth-smoke-commands.mjs",
     "growth:wiring:apply": "node scripts/apply-growth-operator-route-wiring.mjs",

@@ -7,12 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
 const helperScripts = [
+  'scripts/apply-growth-operator-route-wiring.mjs',
   'scripts/apply-one-migration.mjs',
   'scripts/check-growth-campaign-intelligence.mjs',
   'scripts/check-growth-capability-registry.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
   'scripts/print-d1-verification-commands.mjs',
+  'scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
   'scripts/print-growth-route-contract-check.mjs',
   'scripts/print-growth-smoke-commands.mjs',
   'scripts/print-main-branch-audit.mjs',
@@ -96,9 +98,11 @@ if (!fs.existsSync(packageJsonPath)) {
     'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
     'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
     'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',
+    'growth:campaigns:smoke:print': 'node scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
     'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
     'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
     'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
+    'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
     'scripts:check': 'node scripts/check-helper-scripts.mjs',
     'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run typecheck',

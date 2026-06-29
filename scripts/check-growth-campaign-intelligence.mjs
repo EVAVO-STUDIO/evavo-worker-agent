@@ -7,6 +7,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const requiredFiles = [
   'migrations/0014_growth_campaign_intelligence.sql',
+  'src/core/growthCampaignAnalysis.ts',
   'src/core/growthCampaignIntelligence.ts',
   'src/core/growthCampaignDecisions.ts',
   'src/core/growthCampaignRecords.ts',
@@ -23,6 +24,14 @@ const requiredTokens = {
     'growth_candidate_actions',
     'growth_evidence_items',
     'growth_learning_notes',
+  ],
+  'src/core/growthCampaignAnalysis.ts': [
+    'analyzeGrowthCampaign',
+    'summarizeGrowthOperatorReadiness',
+    'signalScore',
+    'riskScore',
+    'readinessScore',
+    'recommendedNextActions',
   ],
   'src/core/growthCampaignIntelligence.ts': [
     'upsertGrowthCampaign',
@@ -55,6 +64,8 @@ const requiredTokens = {
     'growth_evidence_items',
     'growth_learning_notes',
     'growth_decision_planned',
+    'analyses',
+    'readiness',
     'externalStateChange: false',
   ],
   'docs/growth-campaign-intelligence.md': [

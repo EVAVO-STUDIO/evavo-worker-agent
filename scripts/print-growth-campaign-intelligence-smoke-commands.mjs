@@ -1,6 +1,6 @@
 const commands = String.raw`
 # Growth Campaign Intelligence smoke checks
-# Run from PowerShell after deploy and after applying migration 0014.
+# Run from PowerShell after deploy and after applying migrations 0014 and 0015.
 
 if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
@@ -120,6 +120,12 @@ Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers | ConvertTo-Js
 
 Write-Host "Read Growth operator cycle after analytics records" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
+
+Write-Host "Record current Growth operator cycle" -ForegroundColor Cyan
+Invoke-RestMethod "$base/admin/growth/cycle/record?confirm=1" -Headers $headers -Method POST -Body '{"confirm":true}' -ContentType "application/json" | ConvertTo-Json -Depth 100
+
+Write-Host "List Growth operator cycle events" -ForegroundColor Cyan
+Invoke-RestMethod "$base/admin/growth/cycle/events?limit=10" -Headers $headers | ConvertTo-Json -Depth 100
 
 Write-Host "Growth Campaign Intelligence smoke checks complete." -ForegroundColor Green
 `;

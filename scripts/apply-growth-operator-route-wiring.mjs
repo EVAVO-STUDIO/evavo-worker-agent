@@ -44,10 +44,12 @@ function addRoute(routeLine, anchor) {
 
 addImport('import { handleGrowthCapabilitiesAdmin } from "./routes/growthCapabilitiesAdmin";', 'import { handleGrowthAdmin } from "./routes/growthAdmin";');
 addImport('import { handleGrowthCampaignIntelligenceAdmin } from "./routes/growthCampaignIntelligenceAdmin";', 'import { handleGrowthCapabilitiesAdmin } from "./routes/growthCapabilitiesAdmin";');
+addImport('import { handleGrowthStrategyMemoryAdmin } from "./routes/growthStrategyMemoryAdmin";', 'import { handleGrowthCampaignIntelligenceAdmin } from "./routes/growthCampaignIntelligenceAdmin";');
 
 const genericGrowthRoute = 'if (pathname === "/admin/growth" || pathname.startsWith("/admin/growth/")) return await handleGrowthAdmin(req, env, pathname, jsonResponse);';
 
 addRoute('      if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);', genericGrowthRoute);
+addRoute('      if (pathname === "/admin/growth/strategy-memory" || pathname === "/admin/growth/objectives" || pathname === "/admin/growth/key-results" || pathname === "/admin/growth/segments" || pathname === "/admin/growth/offers" || pathname === "/admin/growth/positioning" || pathname === "/admin/growth/runtime-constraints") return await handleGrowthStrategyMemoryAdmin(req, env, pathname, jsonResponse);', genericGrowthRoute);
 addRoute('      if (pathname === "/admin/growth/autonomy" || pathname === "/admin/growth/cycle" || pathname === "/admin/growth/cycle/events" || pathname === "/admin/growth/cycle/record" || pathname === "/admin/growth/operator" || pathname === "/admin/growth/campaigns" || pathname === "/admin/growth/experiments" || pathname === "/admin/growth/decisions" || pathname === "/admin/growth/decisions/plan" || pathname === "/admin/growth/metrics" || pathname === "/admin/growth/evidence" || pathname === "/admin/growth/learning") return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);', genericGrowthRoute);
 
 if (changed) {

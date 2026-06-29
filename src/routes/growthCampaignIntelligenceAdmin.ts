@@ -7,6 +7,14 @@ import {
   upsertGrowthExperiment,
 } from "../core/growthCampaignIntelligence";
 import { listGrowthDecisions, planGrowthCampaignDecision, saveGrowthDecision } from "../core/growthCampaignDecisions";
+import {
+  createGrowthEvidenceItem,
+  createGrowthLearningNote,
+  listGrowthCampaignMetrics,
+  listGrowthEvidenceItems,
+  listGrowthLearningNotes,
+  upsertGrowthCampaignMetric,
+} from "../core/growthCampaignRecords";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -33,7 +41,7 @@ function blockedWrite(json: JsonResponse) {
   return json({
     ok: false,
     error: "confirm_required",
-    reason: "Campaign intelligence writes require confirmation and only write internal planning metadata.",
+    reason: "Campaign intelligence writes require confirmation and only write internal planning or analytics metadata.",
     safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
   }, { status: 400 });
 }
@@ -51,6 +59,9 @@ function migrationError(error: unknown) {
   };
 }
 
+const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
+const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
+
 export async function handleGrowthCampaignIntelligenceAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -62,6 +73,9 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
       const campaigns = await listGrowthCampaigns(env, intParam(url, "limit", 10, 1, 50), url.searchParams.get("status") || undefined);
       const experiments = await listGrowthExperiments(env, intParam(url, "experimentLimit", 10, 1, 50));
       const decisions = await listGrowthDecisions(env, intParam(url, "decisionLimit", 10, 1, 50));
+      const metrics = await listGrowthCampaignMetrics(env, intParam(url, "metricLimit", 10, 1, 50));
+      const evidence = await listGrowthEvidenceItems(env, intParam(url, "evidenceLimit", 10, 1, 50));
+      const learning = await listGrowthLearningNotes(env, intParam(url, "learningLimit", 10, 1, 50));
       return json({
         ok: true,
         mode: "growth_operator_intelligence",
@@ -69,38 +83,77 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
         campaigns,
         experiments,
         decisions,
-        counts: { campaigns: campaigns.length, experiments: experiments.length, decisions: decisions.length },
-        safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+        metrics,
+        evidence,
+        learning,
+        counts: { campaigns: campaigns.length, experiments: experiments.length, decisions: decisions.length, metrics: metrics.length, evidence: evidence.length, learning: learning.length },
+        safety: readSafety,
       });
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/campaigns") {
       const campaigns = await listGrowthCampaigns(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ ok: true, mode: "growth_campaigns", campaigns, count: campaigns.length, safety: { readOnly: true, internalMetadataOnly: true } });
+      return json({ ok: true, mode: "growth_campaigns", campaigns, count: campaigns.length, safety: readSafety });
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/experiments") {
       const experiments = await listGrowthExperiments(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("campaignId") || undefined);
-      return json({ ok: true, mode: "growth_experiments", experiments, count: experiments.length, safety: { readOnly: true, internalMetadataOnly: true } });
+      return json({ ok: true, mode: "growth_experiments", experiments, count: experiments.length, safety: readSafety });
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/decisions") {
       const decisions = await listGrowthDecisions(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("campaignId") || undefined);
-      return json({ ok: true, mode: "growth_decisions", decisions, count: decisions.length, safety: { readOnly: true, internalMetadataOnly: true } });
+      return json({ ok: true, mode: "growth_decisions", decisions, count: decisions.length, safety: readSafety });
+    }
+
+    if (request.method === "GET" && pathname === "/admin/growth/metrics") {
+      const metrics = await listGrowthCampaignMetrics(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("campaignId") || undefined);
+      return json({ ok: true, mode: "growth_campaign_metrics", metrics, count: metrics.length, safety: readSafety });
+    }
+
+    if (request.method === "GET" && pathname === "/admin/growth/evidence") {
+      const evidence = await listGrowthEvidenceItems(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("campaignId") || undefined, url.searchParams.get("targetRef") || undefined);
+      return json({ ok: true, mode: "growth_evidence_items", evidence, count: evidence.length, safety: readSafety });
+    }
+
+    if (request.method === "GET" && pathname === "/admin/growth/learning") {
+      const learning = await listGrowthLearningNotes(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("campaignId") || undefined);
+      return json({ ok: true, mode: "growth_learning_notes", learning, count: learning.length, safety: readSafety });
     }
 
     if (request.method === "POST" && pathname === "/admin/growth/campaigns") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const saved = await upsertGrowthCampaign(env, body.campaign || body, body.id || body.campaign?.id);
-      return json({ ok: true, mode: "growth_campaign_saved", campaign: saved, safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false } });
+      return json({ ok: true, mode: "growth_campaign_saved", campaign: saved, safety: writeSafety });
     }
 
     if (request.method === "POST" && pathname === "/admin/growth/experiments") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const saved = await upsertGrowthExperiment(env, body.experiment || body, body.id || body.experiment?.id);
-      return json({ ok: true, mode: "growth_experiment_saved", experiment: saved, safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false } });
+      return json({ ok: true, mode: "growth_experiment_saved", experiment: saved, safety: writeSafety });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/growth/metrics") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const saved = await upsertGrowthCampaignMetric(env, body.metric || body, body.id || body.metric?.id);
+      return json({ ok: true, mode: "growth_campaign_metric_saved", metric: saved, safety: writeSafety });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/growth/evidence") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const saved = await createGrowthEvidenceItem(env, body.evidence || body, body.id || body.evidence?.id);
+      return json({ ok: true, mode: "growth_evidence_saved", evidence: saved, safety: writeSafety });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/growth/learning") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const saved = await createGrowthLearningNote(env, body.learning || body, body.id || body.learning?.id);
+      return json({ ok: true, mode: "growth_learning_note_saved", learning: saved, safety: writeSafety });
     }
 
     if (request.method === "POST" && pathname === "/admin/growth/decisions/plan") {
@@ -114,9 +167,10 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
       const experiments = await listGrowthExperiments(env, 10, campaign.id);
       const experiment = experiments.find((item) => ["active", "testing", "draft"].includes(item.status)) || experiments[0] || null;
       const metrics = await getLatestCampaignMetrics(env, campaign.id);
-      const plan = planGrowthCampaignDecision({ campaign, experiment, metrics, pendingReviewCount: Number(body.pendingReviewCount || 0), evidenceCount: Number(body.evidenceCount || 0) });
+      const evidence = await listGrowthEvidenceItems(env, 100, campaign.id);
+      const plan = planGrowthCampaignDecision({ campaign, experiment, metrics, pendingReviewCount: Number(body.pendingReviewCount || 0), evidenceCount: Number(body.evidenceCount || evidence.length || 0) });
       const decision = await saveGrowthDecision(env, { campaignId: campaign.id, experimentId: experiment?.id || null, plan });
-      return json({ ok: true, mode: "growth_decision_planned", decision, plan, safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false } });
+      return json({ ok: true, mode: "growth_decision_planned", decision, plan, safety: writeSafety });
     }
 
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });

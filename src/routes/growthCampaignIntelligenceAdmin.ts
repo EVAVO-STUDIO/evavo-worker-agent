@@ -4,6 +4,7 @@ import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
 import { buildGrowthOperatorCycle } from "../core/growthOperatorCycle";
 import { buildGrowthAutonomousRuntime } from "../core/growthAutonomousRuntime";
 import { listGrowthOperatorCycleEvents, saveGrowthOperatorCycleEvent } from "../core/growthOperatorCycleEvents";
+import { loadGrowthStrategyMemory } from "../core/growthStrategyMemory";
 import {
   getLatestCampaignMetrics,
   listGrowthCampaigns,
@@ -57,9 +58,9 @@ function migrationError(error: unknown) {
   return {
     ok: false,
     mode: "growth_campaign_intelligence_error",
-    error: missingGrowthTable ? "growth_campaign_schema_missing" : "growth_campaign_intelligence_failed",
+    error: missingGrowthTable ? "growth_schema_missing" : "growth_campaign_intelligence_failed",
     message,
-    requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql or 0015_growth_operator_cycle_events.sql" : null,
+    requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql, 0015_growth_operator_cycle_events.sql, or 0016_growth_strategy_memory.sql" : null,
     safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
   };
 }
@@ -87,7 +88,8 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
     if (request.method === "GET" && pathname === "/admin/growth/autonomy") {
       const state = await loadGrowthOperatorState(env, url);
       const cycle = buildGrowthOperatorCycle(state);
-      return json(buildGrowthAutonomousRuntime({ operatorCycle: cycle }));
+      const strategyMemory = await loadGrowthStrategyMemory(env);
+      return json(buildGrowthAutonomousRuntime({ operatorCycle: cycle, strategyMemory }));
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/cycle") {
@@ -222,6 +224,6 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });
   } catch (error) {
     const normalized = migrationError(error);
-    return json(normalized, { status: normalized.error === "growth_campaign_schema_missing" ? 500 : 500 });
+    return json(normalized, { status: normalized.error === "growth_schema_missing" ? 500 : 500 });
   }
 }

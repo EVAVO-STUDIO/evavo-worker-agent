@@ -16,6 +16,19 @@ $expectedGrowthRouteIds = @(
   "growth_capabilities",
   "growth_operator",
   "growth_autonomy",
+  "growth_strategy_memory",
+  "growth_objectives",
+  "growth_objective_save",
+  "growth_key_results",
+  "growth_key_result_save",
+  "growth_segments",
+  "growth_segment_save",
+  "growth_offers",
+  "growth_offer_save",
+  "growth_positioning",
+  "growth_positioning_save",
+  "growth_runtime_constraints",
+  "growth_runtime_constraint_save",
   "growth_cycle",
   "growth_cycle_events",
   "growth_cycle_record",
@@ -56,7 +69,7 @@ if ($routePayload.groups) {
 $growthRoutes = $allRoutes | Where-Object { $_.section -eq "growth" }
 $missing = $expectedGrowthRouteIds | Where-Object { $id = $_; -not ($growthRoutes | Where-Object { $_.id -eq $id }) }
 $unsafe = $growthRoutes | Where-Object { $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.costRisk -ne "none" }
-$badConfirm = $growthRoutes | Where-Object { $_.id -like "*_save" -or $_.id -like "*_status" -or $_.id -eq "growth_action_plan" -or $_.id -eq "growth_decision_plan" -or $_.id -eq "growth_cycle_record" } | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
+$badConfirm = $growthRoutes | Where-Object { $_.id -like "*_save" -or $_.id -like "*_status" -or $_.id -eq "growth_action_plan" -or $_.id -eq "growth_decision_plan" -or $_.id -eq "growth_cycle_record" -or $_.id -eq "growth_key_result_save" -or $_.id -eq "growth_segment_save" -or $_.id -eq "growth_offer_save" -or $_.id -eq "growth_positioning_save" -or $_.id -eq "growth_runtime_constraint_save" } | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
 $contractFailed = $false
 
 if ($missing.Count -gt 0) {

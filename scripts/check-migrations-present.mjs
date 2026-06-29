@@ -22,6 +22,7 @@ const expected = [
   '0012_growth_autonomy_core.sql',
   '0013_growth_audit_events.sql',
   '0014_growth_campaign_intelligence.sql',
+  '0015_growth_operator_cycle_events.sql',
 ];
 
 const missing = [];

@@ -8,6 +8,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const helperScripts = [
   'scripts/apply-one-migration.mjs',
+  'scripts/check-growth-campaign-intelligence.mjs',
   'scripts/check-growth-capability-registry.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
@@ -21,11 +22,15 @@ const helperScripts = [
 
 const typeScriptFiles = [
   'src/core/growthCapabilities.ts',
+  'src/core/growthCampaignIntelligence.ts',
+  'src/core/growthCampaignDecisions.ts',
   'src/routes/growthCapabilitiesAdmin.ts',
+  'src/routes/growthCampaignIntelligenceAdmin.ts',
 ];
 
 const docs = [
   'docs/growth-capability-registry.md',
+  'docs/growth-campaign-intelligence.md',
 ];
 
 const packageJsonPath = path.join(repoRoot, 'package.json');
@@ -90,12 +95,13 @@ if (!fs.existsSync(packageJsonPath)) {
     'db:migrations:print': 'node scripts/print-migration-commands.mjs',
     'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
     'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
+    'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',
     'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
     'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
     'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
     'scripts:check': 'node scripts/check-helper-scripts.mjs',
-    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run typecheck',
+    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run typecheck',
   };
 
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {

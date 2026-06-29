@@ -11,6 +11,9 @@ $base = $env:WORKER_URL.TrimEnd('/')
 Write-Host "Read Growth operator overview" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers | ConvertTo-Json -Depth 100
 
+Write-Host "Read Growth operator cycle" -ForegroundColor Cyan
+Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
+
 Write-Host "Create metadata-only campaign" -ForegroundColor Cyan
 $campaignBody = @{
   confirm = $true
@@ -114,6 +117,9 @@ Invoke-RestMethod "$base/admin/growth/decisions?campaignId=$campaignId" -Headers
 
 Write-Host "Read Growth operator overview after analytics records" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers | ConvertTo-Json -Depth 100
+
+Write-Host "Read Growth operator cycle after analytics records" -ForegroundColor Cyan
+Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
 
 Write-Host "Growth Campaign Intelligence smoke checks complete." -ForegroundColor Green
 `;

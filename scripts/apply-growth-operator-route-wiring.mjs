@@ -48,7 +48,7 @@ addImport('import { handleGrowthCampaignIntelligenceAdmin } from "./routes/growt
 const genericGrowthRoute = 'if (pathname === "/admin/growth" || pathname.startsWith("/admin/growth/")) return await handleGrowthAdmin(req, env, pathname, jsonResponse);';
 
 addRoute('      if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);', genericGrowthRoute);
-addRoute('      if (pathname === "/admin/growth/operator" || pathname === "/admin/growth/campaigns" || pathname === "/admin/growth/experiments" || pathname === "/admin/growth/decisions" || pathname === "/admin/growth/decisions/plan") return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);', genericGrowthRoute);
+addRoute('      if (pathname === "/admin/growth/operator" || pathname === "/admin/growth/campaigns" || pathname === "/admin/growth/experiments" || pathname === "/admin/growth/decisions" || pathname === "/admin/growth/decisions/plan" || pathname === "/admin/growth/metrics" || pathname === "/admin/growth/evidence" || pathname === "/admin/growth/learning") return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);', genericGrowthRoute);
 
 if (changed) {
   fs.writeFileSync(indexPath, source);

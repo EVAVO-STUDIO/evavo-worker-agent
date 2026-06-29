@@ -44,6 +44,7 @@ const typeScriptFiles = [
 const docs = [
   'docs/growth-capability-registry.md',
   'docs/growth-campaign-intelligence.md',
+  'docs/growth-strategy-memory.md',
 ];
 
 const packageJsonPath = path.join(repoRoot, 'package.json');

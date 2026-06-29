@@ -2,6 +2,7 @@ import { Env, getAdminToken } from "../db";
 import { analyzeGrowthCampaign, summarizeGrowthOperatorReadiness } from "../core/growthCampaignAnalysis";
 import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
 import { buildGrowthOperatorCycle } from "../core/growthOperatorCycle";
+import { listGrowthOperatorCycleEvents, saveGrowthOperatorCycleEvent } from "../core/growthOperatorCycleEvents";
 import {
   getLatestCampaignMetrics,
   listGrowthCampaigns,
@@ -57,7 +58,7 @@ function migrationError(error: unknown) {
     mode: "growth_campaign_intelligence_error",
     error: missingGrowthTable ? "growth_campaign_schema_missing" : "growth_campaign_intelligence_failed",
     message,
-    requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql" : null,
+    requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql or 0015_growth_operator_cycle_events.sql" : null,
     safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
   };
 }
@@ -84,6 +85,19 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
   try {
     if (request.method === "GET" && pathname === "/admin/growth/cycle") {
       return json(buildGrowthOperatorCycle(await loadGrowthOperatorState(env, url)));
+    }
+
+    if (request.method === "GET" && pathname === "/admin/growth/cycle/events") {
+      const events = await listGrowthOperatorCycleEvents(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("selectedStep") || undefined);
+      return json({ ok: true, mode: "growth_operator_cycle_events", events, count: events.length, safety: readSafety });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/growth/cycle/record") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const cycle = buildGrowthOperatorCycle(await loadGrowthOperatorState(env, url));
+      const event = await saveGrowthOperatorCycleEvent(env, cycle);
+      return json({ ok: true, mode: "growth_operator_cycle_recorded", event, cycle, safety: writeSafety });
     }
 
     if (request.method === "GET" && pathname === "/admin/growth/operator") {

@@ -2,6 +2,7 @@ import { Env, getAdminToken } from "../db";
 import { analyzeGrowthCampaign, summarizeGrowthOperatorReadiness } from "../core/growthCampaignAnalysis";
 import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
 import { buildGrowthOperatorCycle } from "../core/growthOperatorCycle";
+import { buildGrowthAutonomousRuntime } from "../core/growthAutonomousRuntime";
 import { listGrowthOperatorCycleEvents, saveGrowthOperatorCycleEvent } from "../core/growthOperatorCycleEvents";
 import {
   getLatestCampaignMetrics,
@@ -83,6 +84,12 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
   const url = new URL(request.url);
 
   try {
+    if (request.method === "GET" && pathname === "/admin/growth/autonomy") {
+      const state = await loadGrowthOperatorState(env, url);
+      const cycle = buildGrowthOperatorCycle(state);
+      return json(buildGrowthAutonomousRuntime({ operatorCycle: cycle }));
+    }
+
     if (request.method === "GET" && pathname === "/admin/growth/cycle") {
       return json(buildGrowthOperatorCycle(await loadGrowthOperatorState(env, url)));
     }

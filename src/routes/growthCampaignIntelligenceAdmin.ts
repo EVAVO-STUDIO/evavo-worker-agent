@@ -4,6 +4,7 @@ import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
 import { buildGrowthOperatorCycle } from "../core/growthOperatorCycle";
 import { buildGrowthAutonomousRuntime } from "../core/growthAutonomousRuntime";
 import { listGrowthOperatorCycleEvents, saveGrowthOperatorCycleEvent } from "../core/growthOperatorCycleEvents";
+import { loadGrowthBlackboard } from "../core/growthBlackboard";
 import { loadGrowthStrategyMemory } from "../core/growthStrategyMemory";
 import {
   getLatestCampaignMetrics,
@@ -60,7 +61,7 @@ function migrationError(error: unknown) {
     mode: "growth_campaign_intelligence_error",
     error: missingGrowthTable ? "growth_schema_missing" : "growth_campaign_intelligence_failed",
     message,
-    requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql, 0015_growth_operator_cycle_events.sql, or 0016_growth_strategy_memory.sql" : null,
+    requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql, 0015_growth_operator_cycle_events.sql, 0016_growth_strategy_memory.sql, or 0017_growth_blackboard.sql" : null,
     safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
   };
 }
@@ -81,7 +82,8 @@ async function loadGrowthOperatorState(env: Env, url: URL) {
 async function loadGrowthCycleState(env: Env, url: URL) {
   const state = await loadGrowthOperatorState(env, url);
   const strategyMemory = await loadGrowthStrategyMemory(env);
-  return { ...state, strategyMemory };
+  const blackboard = await loadGrowthBlackboard(env);
+  return { ...state, strategyMemory, blackboard };
 }
 
 export async function handleGrowthCampaignIntelligenceAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {

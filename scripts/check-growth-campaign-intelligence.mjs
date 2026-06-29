@@ -9,6 +9,7 @@ const requiredFiles = [
   'migrations/0014_growth_campaign_intelligence.sql',
   'src/core/growthCampaignAnalysis.ts',
   'src/core/growthOperatorLoop.ts',
+  'src/core/growthOperatorCycle.ts',
   'src/core/growthCampaignIntelligence.ts',
   'src/core/growthCampaignDecisions.ts',
   'src/core/growthCampaignRecords.ts',
@@ -43,6 +44,14 @@ const requiredTokens = {
     'plan_decision',
     'record_learning',
   ],
+  'src/core/growthOperatorCycle.ts': [
+    'buildGrowthOperatorCycle',
+    'growth_operator_cycle',
+    'campaignBriefs',
+    'capabilitySummary',
+    'blocked',
+    'callsNetwork: false',
+  ],
   'src/core/growthCampaignIntelligence.ts': [
     'upsertGrowthCampaign',
     'upsertGrowthExperiment',
@@ -66,6 +75,7 @@ const requiredTokens = {
     'listGrowthLearningNotes',
   ],
   'src/routes/growthCampaignIntelligenceAdmin.ts': [
+    '/admin/growth/cycle',
     'growth_operator_intelligence',
     'growth_campaigns',
     'growth_experiments',

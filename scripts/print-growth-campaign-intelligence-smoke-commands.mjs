@@ -2,8 +2,8 @@ const commands = String.raw`
 # Growth Campaign Intelligence smoke checks
 # Run from PowerShell after deploy and after applying migration 0014.
 
-if (-not $env:WORKER_URL) { throw "Set WORKER_URL first, e.g. `$env:WORKER_URL='https://...'" }
-if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first, e.g. `$env:ADMIN_TOKEN='...'" }
+if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
+if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
 
 $headers = @{ Authorization = "Bearer $env:ADMIN_TOKEN" }
 $base = $env:WORKER_URL.TrimEnd('/')

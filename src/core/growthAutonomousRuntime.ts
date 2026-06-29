@@ -26,7 +26,7 @@ function stage(stage: GrowthCognitionStage, label: string, description: string, 
 }
 
 function firstNames(rows: any[] = [], limit = 5): string[] {
-  return rows.slice(0, limit).map((row) => String(row.name || row.id || "unnamed"));
+  return rows.slice(0, limit).map((row) => String(row.name || row.subjectName || row.summary || row.id || "unnamed"));
 }
 
 export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput = {}) {
@@ -39,34 +39,43 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
   const hasCampaigns = Boolean((cycle?.counts?.campaigns || input.operatorOverview?.counts?.campaigns || 0) > 0);
   const hasCycle = Boolean(cycle);
   const strategyCounts = strategyMemory?.counts || {};
+  const blackboard = cycle?.blackboard || null;
+  const blackboardCounts = blackboard?.counts || {};
   const hasObjectives = Boolean((strategyCounts.objectives || 0) > 0);
   const hasSegments = Boolean((strategyCounts.targetSegments || 0) > 0);
   const hasOffers = Boolean((strategyCounts.offerProfiles || 0) > 0);
   const hasPositioning = Boolean((strategyCounts.positioningProfiles || 0) > 0);
   const hasRuntimeConstraints = Boolean((strategyCounts.runtimeConstraints || 0) > 0);
   const hasStrategicIntent = hasObjectives && hasSegments && hasOffers && hasPositioning;
+  const hasKnowledgeSubstrate = Boolean(
+    (blackboardCounts.facts || 0) > 0 &&
+    (blackboardCounts.entities || 0) > 0 &&
+    (blackboardCounts.relationships || 0) > 0 &&
+    (blackboardCounts.marketSignals || 0) > 0 &&
+    (blackboardCounts.assets || 0) > 0
+  );
 
   const cognitionStages = [
     stage(
       "sense",
       "Sense current state",
-      "Read strategy memory, campaigns, experiments, metrics, evidence, learning notes, decisions, cycle events, and capability posture.",
+      "Read strategy memory, blackboard knowledge, campaigns, experiments, metrics, evidence, learning notes, decisions, cycle events, and capability posture.",
       hasCycle ? "ready" : "needs_data",
-      ["strategy memory", "operator state", "campaign records", "cycle memory", "capability registry"]
+      ["strategy memory", "blackboard", "operator state", "campaign records", "cycle memory", "capability registry"]
     ),
     stage(
       "interpret",
       "Interpret signals",
-      "Convert raw metadata into strategic fit, campaign health, readiness, risk, blockers, and opportunity context.",
-      hasCampaigns && hasStrategicIntent ? "ready" : "needs_data",
-      ["strategic fit", "analysis scores", "risk posture", "readiness posture", "blocker list"]
+      "Convert raw metadata into strategic fit, knowledge context, campaign health, readiness, risk, blockers, and opportunity context.",
+      hasCampaigns && hasStrategicIntent && hasKnowledgeSubstrate ? "ready" : "needs_data",
+      ["strategic fit", "knowledge context", "analysis scores", "risk posture", "readiness posture", "blocker list"]
     ),
     stage(
       "prioritise",
       "Prioritise next focus",
-      "Pick the most important objective, segment, campaign, or setup gap using deterministic priority and risk rules.",
+      "Pick the most important objective, segment, campaign, knowledge gap, or setup gap using deterministic priority and risk rules.",
       loopPlan && hasStrategicIntent ? "ready" : "needs_data",
-      ["selected objective", "selected campaign", "selected step", "priority", "rationale"]
+      ["selected objective", "selected campaign", "selected knowledge gap", "selected step", "priority", "rationale"]
     ),
     stage(
       "plan",
@@ -92,9 +101,9 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
     stage(
       "learn",
       "Learn from outcomes",
-      "Record metric snapshots, evidence, learning notes, decisions, and cycle events so the next loop has memory.",
+      "Record metric snapshots, evidence, learning notes, blackboard facts, decisions, and cycle events so the next loop has memory.",
       "ready",
-      ["learning notes", "cycle events", "decision history", "metrics"]
+      ["learning notes", "blackboard facts", "cycle events", "decision history", "metrics"]
     ),
   ];
 
@@ -126,14 +135,15 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
     !hasOffers ? "missing_offer_profiles" : null,
     !hasPositioning ? "missing_positioning_profiles" : null,
     !hasRuntimeConstraints ? "missing_runtime_constraints" : null,
+    !hasKnowledgeSubstrate ? "missing_knowledge_substrate" : null,
   ].filter(Boolean) as string[];
 
   return {
     ok: true,
     mode: "growth_autonomous_runtime",
-    contractVersion: "growth_autonomous_runtime_v2_strategy_memory",
+    contractVersion: "growth_autonomous_runtime_v3_strategy_blackboard",
     runtimeMode: "supervised_internal_metadata" as GrowthAutonomousRuntimeMode,
-    mission: "Continuously improve EVAVO growth operations by sensing strategic intent and campaign state, interpreting signals, choosing the next safest internal step, recording memory, and preparing for future governed execution.",
+    mission: "Continuously improve EVAVO growth operations by sensing strategic intent, blackboard knowledge, and campaign state, interpreting signals, choosing the next safest internal step, recording memory, and preparing for future governed execution.",
     strategicIntent: strategyMemory ? {
       counts: strategyCounts,
       activeObjectives: firstNames(strategyMemory.objectives),
@@ -141,6 +151,15 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       offerProfiles: firstNames(strategyMemory.offerProfiles),
       positioningProfiles: firstNames(strategyMemory.positioningProfiles),
       runtimeConstraints: firstNames(strategyMemory.runtimeConstraints),
+    } : null,
+    knowledgeSubstrate: blackboard ? {
+      complete: blackboard.complete,
+      missing: blackboard.missing || [],
+      counts: blackboardCounts,
+      facts: blackboard.facts || [],
+      entities: blackboard.entities || [],
+      marketSignals: blackboard.marketSignals || [],
+      assets: blackboard.assets || [],
     } : null,
     currentFocus: loopPlan ? {
       selectedStep: loopPlan.selectedStep,
@@ -168,9 +187,10 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       canSpendMoney: false,
       canImpersonateHuman: false,
       hasRuntimeConstraints,
+      hasKnowledgeSubstrate,
     },
     nextRuntimeMilestones: [
-      "Seed objectives, target segments, offers, positioning, and runtime constraints for EVAVO.",
+      "Seed objectives, target segments, offers, positioning, runtime constraints, and blackboard knowledge for EVAVO.",
       "Add evidence pack schema for every proposed external action.",
       "Add approval request records with reviewer, expiry, and action-specific payloads.",
       "Add suppression, caps, channel policy, and contact-permission gates.",

@@ -1,6 +1,6 @@
 const commands = String.raw`
 # Growth Strategy Memory smoke checks
-# Run from PowerShell after deploy and after applying migration 0016.
+# Run from PowerShell after deploy and after applying migrations 0016 and 0017.
 
 if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
@@ -100,8 +100,9 @@ Invoke-RestMethod "$base/admin/growth/strategy-memory" -Headers $headers | Conve
 Write-Host "Read strategy-aware cycle after seed" -ForegroundColor Cyan
 $cycle = Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers
 $cycle | ConvertTo-Json -Depth 100
-if ($cycle.contractVersion -ne "growth_operator_cycle_v2_strategy_memory_read_only") { throw "Unexpected cycle contractVersion: $($cycle.contractVersion)" }
+if ($cycle.contractVersion -ne "growth_operator_cycle_v3_strategy_blackboard_read_only") { throw "Unexpected cycle contractVersion: $($cycle.contractVersion)" }
 if (-not $cycle.strategy) { throw "Cycle is missing strategy section." }
+if (-not $cycle.blackboard) { throw "Cycle is missing blackboard section." }
 if (-not $cycle.strategy.activeObjectives -or $cycle.strategy.activeObjectives.Count -lt 1) { throw "Cycle strategy is missing active objectives." }
 if (-not $cycle.strategy.targetSegments -or $cycle.strategy.targetSegments.Count -lt 1) { throw "Cycle strategy is missing target segments." }
 if (-not $cycle.strategy.offerProfiles -or $cycle.strategy.offerProfiles.Count -lt 1) { throw "Cycle strategy is missing offer profiles." }
@@ -112,9 +113,10 @@ Write-Host "Strategy-aware cycle contract verified." -ForegroundColor Green
 Write-Host "Read autonomy after strategy seed" -ForegroundColor Cyan
 $autonomy = Invoke-RestMethod "$base/admin/growth/autonomy" -Headers $headers
 $autonomy | ConvertTo-Json -Depth 100
-if ($autonomy.contractVersion -ne "growth_autonomous_runtime_v2_strategy_memory") { throw "Unexpected autonomy contractVersion: $($autonomy.contractVersion)" }
+if ($autonomy.contractVersion -ne "growth_autonomous_runtime_v3_strategy_blackboard") { throw "Unexpected autonomy contractVersion: $($autonomy.contractVersion)" }
 if (-not $autonomy.strategicIntent) { throw "Autonomy is missing strategicIntent." }
-Write-Host "Autonomy strategy contract verified." -ForegroundColor Green
+if (-not $autonomy.knowledgeSubstrate) { throw "Autonomy is missing knowledgeSubstrate." }
+Write-Host "Autonomy strategy and blackboard contract verified." -ForegroundColor Green
 
 Write-Host "Growth Strategy Memory smoke checks complete." -ForegroundColor Green
 `;

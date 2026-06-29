@@ -10,6 +10,7 @@ const requiredFiles = [
   'src/core/growthStrategyMemory.ts',
   'src/routes/growthStrategyMemoryAdmin.ts',
   'src/core/growthAutonomousRuntime.ts',
+  'src/core/growthOperatorCycle.ts',
   'src/routes/growthCampaignIntelligenceAdmin.ts',
 ];
 
@@ -53,10 +54,19 @@ const requiredTokens = {
     'missing_runtime_constraints',
     'growth_autonomous_runtime_v2_strategy_memory',
   ],
+  'src/core/growthOperatorCycle.ts': [
+    'strategyMemory',
+    'strategySetup',
+    'growth_operator_cycle_v2_strategy_memory_read_only',
+    'missing_objectives',
+    'targetSegments',
+    'runtimeConstraints',
+  ],
   'src/routes/growthCampaignIntelligenceAdmin.ts': [
     'loadGrowthStrategyMemory',
-    'strategyMemory',
-    'buildGrowthAutonomousRuntime({ operatorCycle: cycle, strategyMemory })',
+    'loadGrowthCycleState',
+    'buildGrowthOperatorCycle(await loadGrowthCycleState(env, url))',
+    'buildGrowthAutonomousRuntime({ operatorCycle: cycle, strategyMemory: cycleState.strategyMemory })',
   ],
 };
 

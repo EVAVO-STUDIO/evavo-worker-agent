@@ -1,5 +1,6 @@
 import { Env, getAdminToken } from "../db";
 import { analyzeGrowthCampaign, summarizeGrowthOperatorReadiness } from "../core/growthCampaignAnalysis";
+import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
 import {
   getLatestCampaignMetrics,
   listGrowthCampaigns,
@@ -90,7 +91,7 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
       return json({
         ok: true,
         mode: "growth_operator_intelligence",
-        contractVersion: "growth_campaign_intelligence_v2_analysis_metadata_only",
+        contractVersion: "growth_campaign_intelligence_v3_operator_loop_metadata_only",
         campaigns,
         experiments,
         decisions,
@@ -99,6 +100,7 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
         learning,
         analyses,
         readiness: summarizeGrowthOperatorReadiness(analyses),
+        loopPlan: planGrowthOperatorLoop({ campaigns, metrics, evidence, learning, decisions }),
         counts: { campaigns: campaigns.length, experiments: experiments.length, decisions: decisions.length, metrics: metrics.length, evidence: evidence.length, learning: learning.length, analyses: analyses.length },
         safety: readSafety,
       });

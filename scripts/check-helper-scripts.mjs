@@ -52,6 +52,19 @@ const docs = [
   'docs/growth-strategy-memory.md',
 ];
 
+const requiredFileTokens = {
+  'scripts/print-growth-route-contract-check.mjs': [
+    'Growth v3 runtime contracts are valid.',
+    'growth_operator_cycle_v3_strategy_blackboard_read_only',
+    'growth_autonomous_runtime_v3_strategy_blackboard',
+    '/admin/growth/cycle/events?limit=5',
+    'Latest Growth cycle event is missing hydrated strategy snapshot.',
+    'Latest Growth cycle event is missing hydrated blackboard snapshot.',
+    'Latest Growth cycle event is missing raw strategy_json column.',
+    'Latest Growth cycle event is missing raw blackboard_json column.',
+  ],
+};
+
 const packageJsonPath = path.join(repoRoot, 'package.json');
 let failed = false;
 
@@ -62,6 +75,18 @@ function fail(message) {
 
 function pass(message) {
   console.log(`OK   ${message}`);
+}
+
+function checkRequiredTokens(relativePath) {
+  const tokens = requiredFileTokens[relativePath] || [];
+  if (!tokens.length) return;
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) return;
+  const content = fs.readFileSync(absolutePath, 'utf8');
+  for (const token of tokens) {
+    if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
+    else pass(`${relativePath} contains ${token}`);
+  }
 }
 
 for (const relativePath of helperScripts) {
@@ -83,6 +108,7 @@ for (const relativePath of helperScripts) {
   }
 
   pass(`${relativePath} exists and parses`);
+  checkRequiredTokens(relativePath);
 }
 
 for (const relativePath of typeScriptFiles) {

@@ -10,6 +10,16 @@ npm run db:migrations:check
 npm run db:migrations:print
 ```
 
+For current work, prefer the guarded one-migration helper:
+
+```powershell
+npm run db:migration:one -- 0014 --execute
+npm run db:migration:one -- 0015 --execute
+npm run db:migration:one -- 0016 --execute
+npm run db:migration:one -- 0017 --execute
+npm run db:migration:one -- 0018 --execute
+```
+
 At the time of writing, the full remote order is:
 
 ```powershell
@@ -29,6 +39,11 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0010_sou
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0011_source_expansion_strategy_origin_yield_backfill.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0012_growth_autonomy_core.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0013_growth_audit_events.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0014_growth_campaign_intelligence.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0015_growth_operator_cycle_events.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0016_growth_strategy_memory.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0017_growth_blackboard.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0018_growth_cycle_memory_snapshots.sql
 ```
 
 ## Notes
@@ -41,3 +56,8 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0013_gro
 - If `0010` has already been applied, do not re-run it unless the database has been reset. Re-run `0011` whenever existing saved-source origin data needs to be backfilled again.
 - `0012_growth_autonomy_core.sql` is additive schema only. It creates the Growth Autonomy data model for goals, channels, channel rules, signals, actions, drafts, outcomes, budget ledger, and suppression rules. It does not enable sending, posting, contact-form submission, AI drafting, or public execution.
 - `0013_growth_audit_events.sql` is additive schema only. It creates the append-only Growth audit trail used to explain future autonomous decisions, metadata saves, safety gates, budget checks, and execution attempts. It does not enable external actions.
+- `0014_growth_campaign_intelligence.sql` creates campaign, experiment, metric, evidence, decision, candidate-action, and learning tables for the internal campaign brain.
+- `0015_growth_operator_cycle_events.sql` creates durable cycle event records for read-only operator snapshots.
+- `0016_growth_strategy_memory.sql` creates objectives, key results, target segments, offer profiles, positioning profiles, and runtime constraints.
+- `0017_growth_blackboard.sql` creates facts, entities, relationships, market signals, and asset inventory for the internal knowledge substrate.
+- `0018_growth_cycle_memory_snapshots.sql` adds `strategy_json` and `blackboard_json` to cycle events so recorded history preserves the strategy and knowledge state used by each snapshot.

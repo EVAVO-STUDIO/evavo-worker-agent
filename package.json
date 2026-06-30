@@ -13,6 +13,7 @@
     "db:migrations:print": "node scripts/print-migration-commands.mjs",
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
+    "growth:backend:final:print": "node scripts/print-growth-final-backend-validation.mjs",
     "growth:blackboard:check": "node scripts/check-growth-blackboard.mjs",
     "growth:blackboard:smoke:print": "node scripts/print-growth-blackboard-smoke-commands.mjs",
     "growth:campaigns:check": "node scripts/check-growth-campaign-intelligence.mjs",

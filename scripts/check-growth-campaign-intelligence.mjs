@@ -17,6 +17,7 @@ const requiredFiles = [
   'src/core/growthCampaignDecisions.ts',
   'src/core/growthCampaignRecords.ts',
   'src/routes/growthCampaignIntelligenceAdmin.ts',
+  'scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
   'docs/growth-campaign-intelligence.md',
 ];
 
@@ -117,6 +118,16 @@ const requiredTokens = {
     'readiness',
     'loopPlan',
     'externalStateChange: false',
+  ],
+  'scripts/print-growth-campaign-intelligence-smoke-commands.mjs': [
+    '0014 through 0018',
+    'growth_operator_cycle_v3_strategy_blackboard_read_only',
+    'Recorded cycle event is missing hydrated strategy snapshot.',
+    'Recorded cycle event is missing hydrated blackboard snapshot.',
+    'Latest cycle event is missing hydrated strategy snapshot.',
+    'Latest cycle event is missing hydrated blackboard snapshot.',
+    'strategy_json',
+    'blackboard_json',
   ],
   'docs/growth-campaign-intelligence.md': [
     'Growth Campaign Intelligence Brain',

@@ -1,6 +1,6 @@
 const commands = String.raw`
 # Growth Campaign Intelligence smoke checks
-# Run from PowerShell after deploy and after applying migrations 0014 and 0015.
+# Run from PowerShell after deploy and after applying migrations 0014 through 0018.
 
 if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
@@ -12,7 +12,11 @@ Write-Host "Read Growth operator overview" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers | ConvertTo-Json -Depth 100
 
 Write-Host "Read Growth operator cycle" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
+$cycleBefore = Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers
+$cycleBefore | ConvertTo-Json -Depth 100
+if ($cycleBefore.contractVersion -ne "growth_operator_cycle_v3_strategy_blackboard_read_only") { throw "Unexpected cycle contractVersion: $($cycleBefore.contractVersion)" }
+if (-not $cycleBefore.strategy) { throw "Cycle is missing strategy section." }
+if (-not $cycleBefore.blackboard) { throw "Cycle is missing blackboard section." }
 
 Write-Host "Create metadata-only campaign" -ForegroundColor Cyan
 $campaignBody = @{
@@ -119,13 +123,29 @@ Write-Host "Read Growth operator overview after analytics records" -ForegroundCo
 Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers | ConvertTo-Json -Depth 100
 
 Write-Host "Read Growth operator cycle after analytics records" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
+$cycleAfter = Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers
+$cycleAfter | ConvertTo-Json -Depth 100
+if ($cycleAfter.contractVersion -ne "growth_operator_cycle_v3_strategy_blackboard_read_only") { throw "Unexpected cycle contractVersion after records: $($cycleAfter.contractVersion)" }
+if (-not $cycleAfter.strategy) { throw "Cycle after records is missing strategy section." }
+if (-not $cycleAfter.blackboard) { throw "Cycle after records is missing blackboard section." }
 
 Write-Host "Record current Growth operator cycle" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/cycle/record?confirm=1" -Headers $headers -Method POST -Body '{"confirm":true}' -ContentType "application/json" | ConvertTo-Json -Depth 100
+$recorded = Invoke-RestMethod "$base/admin/growth/cycle/record?confirm=1" -Headers $headers -Method POST -Body '{"confirm":true}' -ContentType "application/json"
+$recorded | ConvertTo-Json -Depth 100
+if (-not $recorded.event.strategy) { throw "Recorded cycle event is missing hydrated strategy snapshot." }
+if (-not $recorded.event.blackboard) { throw "Recorded cycle event is missing hydrated blackboard snapshot." }
+if (-not $recorded.event.strategy_json) { throw "Recorded cycle event is missing raw strategy_json column." }
+if (-not $recorded.event.blackboard_json) { throw "Recorded cycle event is missing raw blackboard_json column." }
 
 Write-Host "List Growth operator cycle events" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/cycle/events?limit=10" -Headers $headers | ConvertTo-Json -Depth 100
+$eventsResult = Invoke-RestMethod "$base/admin/growth/cycle/events?limit=10" -Headers $headers
+$eventsResult | ConvertTo-Json -Depth 100
+$latestEvent = @($eventsResult.events)[0]
+if (-not $latestEvent) { throw "Expected at least one recorded cycle event." }
+if (-not $latestEvent.strategy) { throw "Latest cycle event is missing hydrated strategy snapshot." }
+if (-not $latestEvent.blackboard) { throw "Latest cycle event is missing hydrated blackboard snapshot." }
+if (-not $latestEvent.strategy_json) { throw "Latest cycle event is missing raw strategy_json column." }
+if (-not $latestEvent.blackboard_json) { throw "Latest cycle event is missing raw blackboard_json column." }
 
 Write-Host "Growth Campaign Intelligence smoke checks complete." -ForegroundColor Green
 `;

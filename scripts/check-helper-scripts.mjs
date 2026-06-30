@@ -19,6 +19,7 @@ const helperScripts = [
   'scripts/print-d1-verification-commands.mjs',
   'scripts/print-growth-blackboard-smoke-commands.mjs',
   'scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
+  'scripts/print-growth-final-backend-validation.mjs',
   'scripts/print-growth-route-contract-check.mjs',
   'scripts/print-growth-smoke-commands.mjs',
   'scripts/print-growth-strategy-memory-smoke-commands.mjs',
@@ -53,6 +54,17 @@ const docs = [
 ];
 
 const requiredFileTokens = {
+  'scripts/print-growth-final-backend-validation.mjs': [
+    'EVAVO Growth backend final validation',
+    'npm run growth:wiring:apply',
+    'npm run growth:route-catalogue:apply',
+    'npm run check:local',
+    'npm run deploy',
+    'npm run growth:route-contract:print',
+    'npm run growth:campaigns:smoke:print',
+    'npm run growth:strategy:smoke:print',
+    'npm run growth:blackboard:smoke:print',
+  ],
   'scripts/print-growth-route-contract-check.mjs': [
     'Growth v3 runtime contracts are valid.',
     'growth_operator_cycle_v3_strategy_blackboard_read_only',
@@ -140,6 +152,7 @@ if (!fs.existsSync(packageJsonPath)) {
     'db:migrations:print': 'node scripts/print-migration-commands.mjs',
     'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
     'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
+    'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
     'growth:blackboard:check': 'node scripts/check-growth-blackboard.mjs',
     'growth:blackboard:smoke:print': 'node scripts/print-growth-blackboard-smoke-commands.mjs',
     'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',

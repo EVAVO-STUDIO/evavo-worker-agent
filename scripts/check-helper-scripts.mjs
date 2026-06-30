@@ -46,6 +46,7 @@ const typeScriptFiles = [
 ];
 
 const docs = [
+  'docs/growth-blackboard.md',
   'docs/growth-capability-registry.md',
   'docs/growth-campaign-intelligence.md',
   'docs/growth-strategy-memory.md',

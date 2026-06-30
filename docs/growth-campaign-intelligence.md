@@ -35,6 +35,7 @@ migrations/0014_growth_campaign_intelligence.sql
 migrations/0015_growth_operator_cycle_events.sql
 migrations/0016_growth_strategy_memory.sql
 migrations/0017_growth_blackboard.sql
+migrations/0018_growth_cycle_memory_snapshots.sql
 src/core/growthCampaignAnalysis.ts
 src/core/growthCampaignIntelligence.ts
 src/core/growthCampaignDecisions.ts
@@ -58,6 +59,7 @@ npm run db:migration:one -- 0014 --execute
 npm run db:migration:one -- 0015 --execute
 npm run db:migration:one -- 0016 --execute
 npm run db:migration:one -- 0017 --execute
+npm run db:migration:one -- 0018 --execute
 ```
 
 ## Tables
@@ -374,8 +376,23 @@ recommended_command
 readiness_json
 loop_plan_json
 counts_json
+strategy_json
+blackboard_json
 safety_json
 created_at
+```
+
+`GET /admin/growth/cycle/events` returns hydrated parsed convenience fields alongside the raw JSON columns:
+
+```text
+rationale
+blocked
+readiness
+loopPlan
+counts
+strategy
+blackboard
+safety
 ```
 
 ## Safety posture

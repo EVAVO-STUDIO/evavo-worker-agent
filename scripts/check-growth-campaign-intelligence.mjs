@@ -8,6 +8,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const requiredFiles = [
   'migrations/0014_growth_campaign_intelligence.sql',
   'migrations/0015_growth_operator_cycle_events.sql',
+  'migrations/0018_growth_cycle_memory_snapshots.sql',
   'src/core/growthCampaignAnalysis.ts',
   'src/core/growthOperatorLoop.ts',
   'src/core/growthOperatorCycle.ts',
@@ -37,6 +38,11 @@ const requiredTokens = {
     'loop_plan_json',
     'safety_json',
   ],
+  'migrations/0018_growth_cycle_memory_snapshots.sql': [
+    'growth_operator_cycle_events',
+    'strategy_json',
+    'blackboard_json',
+  ],
   'src/core/growthCampaignAnalysis.ts': [
     'analyzeGrowthCampaign',
     'summarizeGrowthOperatorReadiness',
@@ -60,12 +66,15 @@ const requiredTokens = {
     'campaignBriefs',
     'capabilitySummary',
     'blocked',
+    'blackboard',
     'callsNetwork: false',
   ],
   'src/core/growthOperatorCycleEvents.ts': [
     'saveGrowthOperatorCycleEvent',
     'listGrowthOperatorCycleEvents',
-    'growth_operator_cycle_events',
+    'hydrateCycleEvent',
+    'strategy_json',
+    'blackboard_json',
     'read_only_snapshot',
   ],
   'src/core/growthCampaignIntelligence.ts': [
@@ -113,6 +122,8 @@ const requiredTokens = {
     'Growth Campaign Intelligence Brain',
     'metadata only',
     '/admin/growth/operator',
+    'growth_operator_cycle_v3_strategy_blackboard_read_only',
+    'growth_autonomous_runtime_v3_strategy_blackboard',
   ],
 };
 

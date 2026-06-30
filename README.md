@@ -1,6 +1,6 @@
 # EVAVO Outbound Agent (Cloudflare Worker)
 
-This is the Worker-side runtime for the EVAVO Outbound Agent: a governed opportunity intelligence system for safe source discovery, opportunity review, controlled outbound preparation, and the emerging Growth Autonomy layer.
+This is the Worker-side runtime for the EVAVO Outbound Agent: a governed opportunity intelligence system for safe source discovery, opportunity review, controlled outbound preparation, and the EVAVO Growth Operator.
 
 The current operating model is **free-safe first**:
 
@@ -9,7 +9,7 @@ The current operating model is **free-safe first**:
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Live sources are promoted only through explicit review and confirmation gates.
-- Growth Autonomy read routes and confirmed metadata-write routes do not send, post, submit forms, execute actions, or call AI.
+- Growth Operator read routes and confirmed metadata-write routes do not send, post, submit forms, execute browser actions, browse, spend, or call AI.
 - The browser must never receive the Worker admin token.
 
 ## Current operating docs
@@ -23,18 +23,24 @@ Start here for the modern opportunity/source-expansion workflow:
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
 - [`docs/growth-cost-governor.md`](docs/growth-cost-governor.md) — budget ledger, rest triggers, cost caps, and fail-closed rules.
 - [`docs/growth-route-contract-verification.md`](docs/growth-route-contract-verification.md) — verifies the full Growth route catalogue, expected IDs, safety flags, and confirmed metadata-write routes.
-- [`docs/growth-capability-registry.md`](docs/growth-capability-registry.md) — first capability registry for the EVAVO Growth Operator, including autonomy levels, blocked future execution placeholders, and local route wiring notes.
+- [`docs/growth-capability-registry.md`](docs/growth-capability-registry.md) — capability registry for the EVAVO Growth Operator, including autonomy levels and blocked future execution placeholders.
+- [`docs/growth-campaign-intelligence.md`](docs/growth-campaign-intelligence.md) — current v3 campaign, strategy, blackboard, cycle, autonomy, and decision-brain contract.
+- [`docs/growth-strategy-memory.md`](docs/growth-strategy-memory.md) — objectives, key results, target segments, offers, positioning, and runtime constraints.
+- [`docs/growth-blackboard.md`](docs/growth-blackboard.md) — internal knowledge substrate for facts, entities, relationships, market signals, and proof assets.
 - [`migrations/README.md`](migrations/README.md) — migration ordering and remote D1 safety notes.
 
 ## Important production note
 
 The remote D1 database already contains live data. Do **not** blindly re-run `schema.sql` against the remote database unless you are intentionally rebuilding a fresh database.
 
-For the existing production D1, use migrations such as:
+For current installs, use the migration helper and apply individual migrations intentionally:
 
-```bash
-npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0001_free_safe_core.sql
-npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0002_draft_review_learning.sql
+```powershell
+cd C:\GitRepos\evavo-worker-agent
+npm run db:migration:one -- 0014 --execute
+npm run db:migration:one -- 0015 --execute
+npm run db:migration:one -- 0016 --execute
+npm run db:migration:one -- 0017 --execute
 ```
 
 For current source-expansion/origin-learning installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
@@ -47,19 +53,13 @@ For current source-expansion/origin-learning installs, follow the migration orde
 npm i
 ```
 
-2) Typecheck
+2) Run local checks
 
-```bash
-npm run typecheck
+```powershell
+npm run check:local
 ```
 
-3) Check migration files are present
-
-```bash
-npm run db:migrations:check
-```
-
-4) Deploy
+3) Deploy
 
 ```bash
 npm run deploy
@@ -69,7 +69,7 @@ npm run deploy
 
 ```bash
 wrangler secret put ADMIN_TOKEN
-wrangler secret put MAILCHANNELS_API_KEY   # optional, only required to send
+wrangler secret put MAILCHANNELS_API_KEY   # optional, only required to send in future approved execution layers
 wrangler secret put FROM_EMAIL             # optional
 wrangler secret put REPLY_TO_EMAIL         # optional
 wrangler secret put PUBLIC_BASE_URL        # optional, e.g. https://evavo.com.au
@@ -85,7 +85,7 @@ The Worker defaults toward conservative, low-cost behaviour:
 - Settings and policy gates decide whether scheduled work can run
 - Source expansion stores candidates before live source saves
 - Candidate-source promotion requires explicit confirmation
-- Growth Autonomy strategy/channel/signal/action writes require explicit confirmation and are metadata-only
+- Growth goals, strategy, channels, signals, actions, campaigns, metrics, evidence, learning, strategy memory, and blackboard writes require explicit confirmation and are metadata-only
 - Budget counters and run history are tracked in D1 once migrations are applied
 
 ## Zero-source startup summary
@@ -104,32 +104,42 @@ When no manual source list exists, the safe path is:
 
 Zero-source startup must remain public-source-only, capped, origin-preserving, candidate-memory-first, and free-safe by default.
 
-## Growth Autonomy summary
+## Growth Operator v3 summary
 
-The Growth Autonomy layer adds strategy/channel/budget/queue structure above the opportunity engine.
+The current Growth Operator brain combines:
+
+```text
+campaign intelligence
+strategy memory
+blackboard knowledge
+capability registry
+route safety catalogue
+```
+
+Current read-only brain contracts:
+
+```text
+growth_operator_cycle_v3_strategy_blackboard_read_only
+growth_autonomous_runtime_v3_strategy_blackboard
+```
 
 Current Worker support:
 
-1. Read Growth overview.
-2. Read the canonical Growth daily brief.
-3. Read active Growth goals.
-4. Read channel rules/memory.
-5. Read saved Growth signals.
-6. Read queued Growth action records.
-7. Read Growth audit events.
-8. Read or initialize the current budget ledger for visibility.
-9. Read the static Growth capability registry once routed locally.
-10. Confirm-save Growth goals and channels as metadata only.
-11. Confirm-save Growth signals/actions as metadata only.
-12. Confirm-plan deterministic action queue records from saved signals without AI or network calls.
-13. Confirm-update signal/action status as metadata-only review decisions.
-14. Return route-catalogue safety metadata proving no AI, email, posting, form submission, or action execution occurs.
+1. Read Growth overview and free-safe brief.
+2. Read the Growth capability registry and route safety catalogue.
+3. Read Growth operator overview, cycle, autonomy contract, and cycle history.
+4. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
+5. Confirm-record cycle snapshots into cycle memory.
+6. Read and write strategy memory as confirmed internal metadata: objectives, key results, segments, offers, positioning, and runtime constraints.
+7. Read and write blackboard knowledge as confirmed internal metadata: facts, entities, relationships, market signals, and proof assets.
+8. Confirm-plan deterministic campaign decisions without AI, browsing, sending, posting, form submission, or external state changes.
+9. Return route-catalogue safety metadata proving no AI, email, posting, form submission, browser execution, or action execution occurs.
 
-Execution routes for external delivery, publishing, browser submission, and AI drafting should only be added after strategy, channel policy, scoring gates, budget ledger, engagement queue, approval requests, suppression checks, evidence logging, and review controls are in place.
+Execution routes for external delivery, publishing, browser submission, and AI drafting should only be added after evidence packs, approval records, suppression checks, caps, identity controls, audit events, and channel-specific governance are in place.
 
 ## Growth capability registry
 
-The first Growth Operator capability model lives in:
+The Growth Operator capability model lives in:
 
 ```text
 src/core/growthCapabilities.ts
@@ -151,51 +161,53 @@ reporting
 
 The registry defines autonomy levels from read-only through autonomous campaign mode. It is a control-plane model only and does not execute capabilities by itself.
 
-The intended route is:
+The route is:
 
 ```text
 GET /admin/growth/capabilities
 ```
 
-The route handler exists, but if the route is not live yet, wire it locally in `src/index.ts` before the generic `/admin/growth/` branch as documented in `docs/growth-capability-registry.md`.
+Wire route additions locally in `src/index.ts` before the generic `/admin/growth/` branch by running:
+
+```powershell
+npm run growth:wiring:apply
+```
 
 ## Growth smoke verification
 
-Print the route-contract-only Growth check when you only need to validate the Worker route catalogue and do not want to run the optional metadata-write signal smoke step:
+Run the core Worker checks:
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
+git pull
+npm run growth:wiring:apply
+npm run growth:route-catalogue:apply
+npm run check:local
+```
+
+Print the route-contract-only Growth check when you only need to validate the Worker route catalogue and do not want to run optional metadata-write smoke steps:
+
+```powershell
 npm run growth:route-contract:print
 ```
 
-Print the broader standard Growth Autonomy smoke-test commands when you want endpoint reads plus the optional owned-site metadata-write signal smoke step:
+Print the broader smoke-test commands:
 
 ```powershell
-cd C:\GitRepos\evavo-worker-agent
 npm run growth:smoke:print
+npm run growth:campaigns:smoke:print
+npm run growth:strategy:smoke:print
+npm run growth:blackboard:smoke:print
 ```
 
 Then run the printed commands after setting:
 
 ```powershell
 $env:ADMIN_TOKEN="..."
-$env:WORKER_URL="https://..."
+$env:WORKER_URL="https://evavo-outbound-agent.evavo-studio.workers.dev"
 ```
 
-The broader smoke commands check:
-
-- `GET /admin/growth/overview`
-- `GET /admin/growth/brief?profile=free_safe`
-- `GET /admin/growth/strategy?limit=25`
-- `GET /admin/growth/channels?limit=50`
-- `GET /admin/planner/routes` and the full Growth route contract
-- Optional safe metadata-only `POST /admin/growth/signals?confirm=1`
-- `GET /admin/growth/signals?limit=50`
-- `GET /admin/growth/actions?limit=50`
-- `GET /admin/growth/audit?limit=50`
-- `GET /admin/growth/budget?profile=free_safe`
-
-Expected result: each endpoint returns JSON with Growth mode/safety metadata and no external action execution. The route-contract checks should print:
+The route-contract checks should print:
 
 ```text
 All expected Growth route ids are advertised by the Worker.
@@ -229,10 +241,66 @@ Admin, Bearer token required:
 - `GET /admin/settings/autonomy`
 - `POST /admin/settings/autonomy`
 - `GET /admin/planner/routes`
+
+Core Growth:
+
 - `GET /admin/growth`
 - `GET /admin/growth/overview`
 - `GET /admin/growth/brief?profile=free_safe`
-- `GET /admin/growth/capabilities` once locally wired in `src/index.ts`
+- `GET /admin/growth/capabilities`
+- `GET /admin/growth/operator`
+- `GET /admin/growth/autonomy`
+- `GET /admin/growth/cycle`
+- `GET /admin/growth/cycle/events?limit=25`
+- `POST /admin/growth/cycle/record?confirm=1`
+
+Campaign intelligence:
+
+- `GET /admin/growth/campaigns?limit=25`
+- `POST /admin/growth/campaigns?confirm=1`
+- `GET /admin/growth/experiments?limit=25`
+- `POST /admin/growth/experiments?confirm=1`
+- `GET /admin/growth/decisions?limit=25`
+- `POST /admin/growth/decisions/plan?confirm=1`
+- `GET /admin/growth/metrics?limit=25`
+- `POST /admin/growth/metrics?confirm=1`
+- `GET /admin/growth/evidence?limit=25`
+- `POST /admin/growth/evidence?confirm=1`
+- `GET /admin/growth/learning?limit=25`
+- `POST /admin/growth/learning?confirm=1`
+
+Strategy memory:
+
+- `GET /admin/growth/strategy-memory`
+- `GET /admin/growth/objectives?limit=25`
+- `POST /admin/growth/objectives?confirm=1`
+- `GET /admin/growth/key-results?limit=50`
+- `POST /admin/growth/key-results?confirm=1`
+- `GET /admin/growth/segments?limit=25`
+- `POST /admin/growth/segments?confirm=1`
+- `GET /admin/growth/offers?limit=25`
+- `POST /admin/growth/offers?confirm=1`
+- `GET /admin/growth/positioning?limit=25`
+- `POST /admin/growth/positioning?confirm=1`
+- `GET /admin/growth/runtime-constraints?limit=50`
+- `POST /admin/growth/runtime-constraints?confirm=1`
+
+Blackboard:
+
+- `GET /admin/growth/blackboard`
+- `GET /admin/growth/blackboard/facts?limit=50`
+- `POST /admin/growth/blackboard/facts?confirm=1`
+- `GET /admin/growth/blackboard/entities?limit=50`
+- `POST /admin/growth/blackboard/entities?confirm=1`
+- `GET /admin/growth/blackboard/relationships?limit=50`
+- `POST /admin/growth/blackboard/relationships?confirm=1`
+- `GET /admin/growth/blackboard/signals?limit=50`
+- `POST /admin/growth/blackboard/signals?confirm=1`
+- `GET /admin/growth/blackboard/assets?limit=50`
+- `POST /admin/growth/blackboard/assets?confirm=1`
+
+Legacy Growth metadata routes:
+
 - `GET /admin/growth/strategy?limit=25`
 - `POST /admin/growth/strategy?confirm=1`
 - `GET /admin/growth/channels?limit=50`
@@ -247,7 +315,7 @@ Admin, Bearer token required:
 - `GET /admin/growth/audit?limit=50`
 - `GET /admin/growth/budget?profile=free_safe`
 
-See the existing route catalogue for the full endpoint list.
+See the route catalogue for the full endpoint list and safety metadata.
 
 ## Draft review decisions
 
@@ -269,9 +337,13 @@ Supported review decisions:
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
 git pull
+npm run growth:wiring:apply
+npm run growth:route-catalogue:apply
 npm run check:local
 npm run growth:route-contract:print
-npm run growth:smoke:print
+npm run growth:campaigns:smoke:print
+npm run growth:strategy:smoke:print
+npm run growth:blackboard:smoke:print
 npm run git:main-audit:print
 ```
 
@@ -279,4 +351,8 @@ npm run git:main-audit:print
 
 ### D1 schema executed locally instead of remote
 
-If you see output mentioning `.wrangler/state/...` and `local database`, you initialized the local dev DB.
+If you see output mentioning `.wrangler/state/...` and `local database`, you initialized the local dev DB. Use the migration helper with `--execute` for intentional remote migration runs.
+
+### Wrangler auth during D1 imports
+
+If a migration import fails with Cloudflare `Authentication error [code: 10000]` but earlier runs succeeded, confirm your Wrangler login/session before retrying. Do not repeatedly rerun already-applied migrations unless an endpoint reports a missing table.

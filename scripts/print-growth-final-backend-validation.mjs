@@ -1,7 +1,8 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
-# Run from PowerShell after deploy.
-# This prints and runs read-only contract checks plus optional metadata-only smoke flows.
+# Run from PowerShell after migrations 0014 through 0018 are applied.
+# This prints read-only contract checks plus optional metadata-only smoke flows.
+# It does not send, post, submit, browse, call AI, or execute external actions.
 
 cd C:\GitRepos\evavo-worker-agent
 

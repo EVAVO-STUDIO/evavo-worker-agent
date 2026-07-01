@@ -42,6 +42,7 @@ function chooseNextStep(cycle: any, loopPlan: any, blocked: string[]) {
     recommendedPayloadHint: loopPlan.recommendedPayloadHint || null,
     dashboardAnchor: loopPlan.dashboardAnchor || null,
     setupGap: loopPlan.setupGap || null,
+    approvalPack: loopPlan.approvalPack || null,
     rationale: loopPlan.rationale || [],
     blockedBy: Array.from(new Set([...(loopPlan.blockedBy || []), ...blocked])),
     safety: loopPlan.safety || { internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
@@ -56,6 +57,7 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
   const readiness = cycle?.readiness || input.operatorOverview?.readiness || null;
   const blocked = Array.isArray(cycle?.blocked) ? cycle.blocked : [];
   const nextBestInternalStep = chooseNextStep(cycle, loopPlan, blocked);
+  const approvalPack = nextBestInternalStep?.approvalPack || cycle?.approvalPack || loopPlan?.approvalPack || null;
   const hasCampaigns = Boolean((cycle?.counts?.campaigns || input.operatorOverview?.counts?.campaigns || 0) > 0);
   const hasCycle = Boolean(cycle);
   const strategyCounts = strategyMemory?.counts || {};
@@ -100,9 +102,9 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
     stage(
       "plan",
       "Plan next-best internal step",
-      "Prepare the next internal command or candidate action set without sending, posting, browsing, or calling AI.",
-      nextBestInternalStep ? "ready" : "needs_data",
-      ["recommended command", "payload hint", "candidate actions", "decision plan"]
+      "Prepare an approval pack for the next internal metadata command without sending, posting, browsing, or calling AI.",
+      approvalPack ? "ready" : "needs_data",
+      ["recommended command", "payload hint", "approval pack", "review checklist", "decision plan"]
     ),
     stage(
       "govern",
@@ -114,9 +116,9 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
     stage(
       "prepare",
       "Prepare controlled work",
-      "At the current phase this only prepares internal metadata. Drafting, browser work, email, posting, and CRM actions remain blocked.",
+      "At the current phase this only prepares internal metadata approval packs. Drafting, browser work, email, posting, and CRM actions remain blocked.",
       "blocked",
-      ["internal metadata only", "no external state change"]
+      ["internal metadata only", "approval pack only", "no external state change"]
     ),
     stage(
       "learn",
@@ -187,9 +189,11 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       targetCampaignName: loopPlan.targetCampaignName,
       priority: loopPlan.priority,
       recommendedCommand: loopPlan.recommendedCommand,
+      approvalPack,
       rationale: loopPlan.rationale || [],
     } : null,
     nextBestInternalStep,
+    approvalPack,
     readiness,
     blockers: Array.from(new Set([...setupBlocks, ...blocked, ...hardBlocks])),
     cognitionStages,
@@ -209,7 +213,7 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       canImpersonateHuman: false,
       hasRuntimeConstraints,
       hasKnowledgeSubstrate,
-      nextStepRequiresConfirmation: Boolean(nextBestInternalStep?.recommendedCommand?.includes("confirm=1")),
+      nextStepRequiresConfirmation: Boolean(approvalPack?.requiresConfirm || nextBestInternalStep?.recommendedCommand?.includes("confirm=1")),
     },
     nextRuntimeMilestones: [
       "Seed objectives, target segments, offers, positioning, runtime constraints, and blackboard knowledge for EVAVO.",

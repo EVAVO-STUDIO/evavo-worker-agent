@@ -3,6 +3,8 @@ import { listGrowthCapabilities } from "../core/growthCapabilities";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -17,5 +19,6 @@ export async function handleGrowthCapabilitiesAdmin(request: Request, env: Env, 
     ok: true,
     mode: "growth_capabilities",
     ...listGrowthCapabilities(),
+    safety: readSafety,
   });
 }

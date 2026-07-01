@@ -14,12 +14,20 @@ export type RouteCatalogueItem = {
   callsNetwork: boolean;
   callsAI: boolean;
   canSendEmail: boolean;
+  canPostSocial: boolean;
+  canSubmitForms: boolean;
   costRisk: "none" | "low" | "medium" | "high";
   operatorFacing: boolean;
   operationsHubRecommended: boolean;
   description: string;
 };
 
-export function route(item: RouteCatalogueItem): RouteCatalogueItem {
-  return item;
+type RouteCatalogueInput = Omit<RouteCatalogueItem, "canPostSocial" | "canSubmitForms"> & Partial<Pick<RouteCatalogueItem, "canPostSocial" | "canSubmitForms">>;
+
+export function route(item: RouteCatalogueInput): RouteCatalogueItem {
+  return {
+    canPostSocial: false,
+    canSubmitForms: false,
+    ...item,
+  };
 }

@@ -229,6 +229,7 @@ const requiredTokens = {
     'npm run growth:wiring:apply',
     'npm run growth:route-catalogue:apply',
     'npm run growth:route-delegates:check',
+    'npm run growth:route-safety-flags:check',
     'npm run growth:review-queue:check',
     'npm run check:local',
     'npm run deploy',

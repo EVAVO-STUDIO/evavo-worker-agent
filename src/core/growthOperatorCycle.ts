@@ -88,6 +88,22 @@ function blackboardSetup(blackboard: any) {
   };
 }
 
+function nextBestInternalStep(loopPlan: any, blocked: string[]) {
+  return {
+    step: loopPlan.selectedStep,
+    priority: loopPlan.priority,
+    targetCampaignId: loopPlan.targetCampaignId,
+    targetCampaignName: loopPlan.targetCampaignName,
+    recommendedCommand: loopPlan.recommendedCommand,
+    recommendedPayloadHint: loopPlan.recommendedPayloadHint || null,
+    dashboardAnchor: loopPlan.dashboardAnchor || null,
+    setupGap: loopPlan.setupGap || null,
+    rationale: loopPlan.rationale || [],
+    blockedBy: Array.from(new Set([...(loopPlan.blockedBy || []), ...blocked])),
+    safety: loopPlan.safety,
+  };
+}
+
 export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   const analyses = input.campaigns.map((campaign) => analyzeGrowthCampaign({
     campaign,
@@ -127,6 +143,8 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   if (loopPlan.selectedStep === "add_evidence") blocked.push("missing_evidence");
   if (loopPlan.selectedStep === "plan_decision") blocked.push("missing_reasoned_decision");
 
+  const uniqueBlocked = Array.from(new Set(blocked));
+
   return {
     ok: true,
     mode: "growth_operator_cycle",
@@ -135,9 +153,10 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
     strategy,
     blackboard,
     loopPlan,
+    nextBestInternalStep: nextBestInternalStep(loopPlan, uniqueBlocked),
     campaignBriefs,
     capabilitySummary: capabilityRegistry.summary,
-    blocked: Array.from(new Set(blocked)),
+    blocked: uniqueBlocked,
     counts: {
       campaigns: input.campaigns.length,
       experiments: input.experiments.length,

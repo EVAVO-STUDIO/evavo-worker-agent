@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
-# Run from PowerShell after migrations 0014 through 0018 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows.
+# Run from PowerShell after migrations 0014 through 0019 are applied.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including the internal review queue persistence check.
 # It does not send, post, submit, browse, call AI, or execute external actions.
 
 cd C:\GitRepos\evavo-worker-agent
@@ -9,6 +9,7 @@ cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
+npm run growth:review-queue:check
 npm run check:local
 
 if (-not $env:WORKER_URL) { $env:WORKER_URL = "https://evavo-outbound-agent.evavo-studio.workers.dev" }

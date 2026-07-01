@@ -16,10 +16,44 @@ import { getGrowthBrief } from "../core/growthBrief";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 import { updateGrowthActionStatus, updateGrowthSignalStatus } from "../core/growthQueueReview";
 import { upsertGrowthSignal } from "../core/growthSignals";
+import { handleGrowthBlackboardAdmin } from "./growthBlackboardAdmin";
+import { handleGrowthCapabilitiesAdmin } from "./growthCapabilitiesAdmin";
+import { handleGrowthCampaignIntelligenceAdmin } from "./growthCampaignIntelligenceAdmin";
+import { handleGrowthStrategyMemoryAdmin } from "./growthStrategyMemoryAdmin";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 type SafetyOverrides = Partial<ReturnType<typeof safetyBase>>;
+
+const campaignIntelligencePrefixes = [
+  "/admin/growth/autonomy",
+  "/admin/growth/cycle",
+  "/admin/growth/operator",
+  "/admin/growth/campaigns",
+  "/admin/growth/experiments",
+  "/admin/growth/decisions",
+  "/admin/growth/metrics",
+  "/admin/growth/evidence",
+  "/admin/growth/learning",
+];
+
+const strategyMemoryPrefixes = [
+  "/admin/growth/strategy-memory",
+  "/admin/growth/objectives",
+  "/admin/growth/key-results",
+  "/admin/growth/segments",
+  "/admin/growth/offers",
+  "/admin/growth/positioning",
+  "/admin/growth/runtime-constraints",
+];
+
+const blackboardPrefixes = [
+  "/admin/growth/blackboard",
+];
+
+function pathMatches(pathname: string, prefixes: string[]) {
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
@@ -69,7 +103,7 @@ function migrationError(error: unknown) {
     mode: "growth_admin_error",
     error: missingGrowthTable ? "growth_schema_missing" : duplicateSignal ? "growth_signal_duplicate" : "growth_admin_failed",
     message,
-    requiredMigration: missingGrowthTable ? "latest Growth migration, including 0012_growth_autonomy_core.sql and 0013_growth_audit_events.sql" : null,
+    requiredMigration: missingGrowthTable ? "latest Growth migration, including 0012_growth_autonomy_core.sql through 0019_growth_approval_requests.sql" : null,
     safety: safety({ readOnly: true }),
   };
 }
@@ -98,6 +132,11 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
   const url = new URL(request.url);
 
   try {
+    if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(request, env, pathname, json);
+    if (pathMatches(pathname, campaignIntelligencePrefixes)) return await handleGrowthCampaignIntelligenceAdmin(request, env, pathname, json);
+    if (pathMatches(pathname, strategyMemoryPrefixes)) return await handleGrowthStrategyMemoryAdmin(request, env, pathname, json);
+    if (pathMatches(pathname, blackboardPrefixes)) return await handleGrowthBlackboardAdmin(request, env, pathname, json);
+
     if (request.method === "GET") {
       if (pathname === "/admin/growth" || pathname === "/admin/growth/overview") {
         const overview = await getGrowthOverview(env);

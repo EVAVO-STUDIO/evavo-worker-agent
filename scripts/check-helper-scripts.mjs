@@ -59,6 +59,17 @@ const docs = [
   'docs/growth-strategy-memory.md',
 ];
 
+const fullSafetyTokens = [
+  'readOnly: true',
+  'internalMetadataOnly: true',
+  'externalStateChange: false',
+  'callsAI: false',
+  'callsNetwork: false',
+  'canSendEmail: false',
+  'canPostSocial: false',
+  'canSubmitForms: false',
+];
+
 const requiredFileTokens = {
   'scripts/check-growth-route-delegates.mjs': [
     'Growth route delegate check passed.',
@@ -94,6 +105,36 @@ const requiredFileTokens = {
     '/admin/growth/operator',
     '/admin/growth/strategy-memory',
     '/admin/growth/blackboard',
+  ],
+  'src/routes/growthCapabilitiesAdmin.ts': [
+    'handleGrowthCapabilitiesAdmin',
+    'listGrowthCapabilities',
+    'safety: readSafety',
+    ...fullSafetyTokens,
+  ],
+  'src/routes/growthCampaignIntelligenceAdmin.ts': [
+    'handleGrowthCampaignIntelligenceAdmin',
+    'readSafety',
+    'writeSafety',
+    'safety: readSafety',
+    'safety: writeSafety',
+    ...fullSafetyTokens,
+  ],
+  'src/routes/growthStrategyMemoryAdmin.ts': [
+    'handleGrowthStrategyMemoryAdmin',
+    'readSafety',
+    'writeSafety',
+    'safety: readSafety',
+    'safety: writeSafety',
+    ...fullSafetyTokens,
+  ],
+  'src/routes/growthBlackboardAdmin.ts': [
+    'handleGrowthBlackboardAdmin',
+    'readSafety',
+    'writeSafety',
+    'safety: readSafety',
+    'safety: writeSafety',
+    ...fullSafetyTokens,
   ],
   'src/core/growthApprovalRequests.ts': [
     'GrowthApprovalRequestInput',
@@ -206,8 +247,11 @@ const requiredFileTokens = {
     '$delegatedReadPaths',
     'Read and verify delegated Growth v3 route families',
     'Delegated Growth route failed:',
-    'Delegated Growth route has unsafe read safety:',
+    'Delegated Growth route has missing or unsafe read safety:',
     'Delegated Growth route threw:',
+    'canSendEmail',
+    'canPostSocial',
+    'canSubmitForms',
     '/admin/growth/capabilities',
     '/admin/growth/operator',
     '/admin/growth/campaigns?limit=5',

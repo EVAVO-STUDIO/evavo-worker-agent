@@ -29,6 +29,25 @@ function firstNames(rows: any[] = [], limit = 5): string[] {
   return rows.slice(0, limit).map((row) => String(row.name || row.subjectName || row.summary || row.id || "unnamed"));
 }
 
+function chooseNextStep(cycle: any, loopPlan: any, blocked: string[]) {
+  const existing = cycle?.nextBestInternalStep;
+  if (existing) return existing;
+  if (!loopPlan) return null;
+  return {
+    step: loopPlan.selectedStep,
+    priority: loopPlan.priority,
+    targetCampaignId: loopPlan.targetCampaignId,
+    targetCampaignName: loopPlan.targetCampaignName,
+    recommendedCommand: loopPlan.recommendedCommand,
+    recommendedPayloadHint: loopPlan.recommendedPayloadHint || null,
+    dashboardAnchor: loopPlan.dashboardAnchor || null,
+    setupGap: loopPlan.setupGap || null,
+    rationale: loopPlan.rationale || [],
+    blockedBy: Array.from(new Set([...(loopPlan.blockedBy || []), ...blocked])),
+    safety: loopPlan.safety || { internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+  };
+}
+
 export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput = {}) {
   const capabilities = listGrowthCapabilities();
   const cycle = input.operatorCycle || null;
@@ -36,6 +55,7 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
   const loopPlan = cycle?.loopPlan || input.operatorOverview?.loopPlan || null;
   const readiness = cycle?.readiness || input.operatorOverview?.readiness || null;
   const blocked = Array.isArray(cycle?.blocked) ? cycle.blocked : [];
+  const nextBestInternalStep = chooseNextStep(cycle, loopPlan, blocked);
   const hasCampaigns = Boolean((cycle?.counts?.campaigns || input.operatorOverview?.counts?.campaigns || 0) > 0);
   const hasCycle = Boolean(cycle);
   const strategyCounts = strategyMemory?.counts || {};
@@ -74,15 +94,15 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       "prioritise",
       "Prioritise next focus",
       "Pick the most important objective, segment, campaign, knowledge gap, or setup gap using deterministic priority and risk rules.",
-      loopPlan && hasStrategicIntent ? "ready" : "needs_data",
+      nextBestInternalStep ? "ready" : "needs_data",
       ["selected objective", "selected campaign", "selected knowledge gap", "selected step", "priority", "rationale"]
     ),
     stage(
       "plan",
-      "Plan next-best action",
+      "Plan next-best internal step",
       "Prepare the next internal command or candidate action set without sending, posting, browsing, or calling AI.",
-      loopPlan ? "ready" : "needs_data",
-      ["recommended command", "candidate actions", "decision plan"]
+      nextBestInternalStep ? "ready" : "needs_data",
+      ["recommended command", "payload hint", "candidate actions", "decision plan"]
     ),
     stage(
       "govern",
@@ -169,6 +189,7 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       recommendedCommand: loopPlan.recommendedCommand,
       rationale: loopPlan.rationale || [],
     } : null,
+    nextBestInternalStep,
     readiness,
     blockers: Array.from(new Set([...setupBlocks, ...blocked, ...hardBlocks])),
     cognitionStages,
@@ -188,6 +209,7 @@ export function buildGrowthAutonomousRuntime(input: GrowthAutonomousRuntimeInput
       canImpersonateHuman: false,
       hasRuntimeConstraints,
       hasKnowledgeSubstrate,
+      nextStepRequiresConfirmation: Boolean(nextBestInternalStep?.recommendedCommand?.includes("confirm=1")),
     },
     nextRuntimeMilestones: [
       "Seed objectives, target segments, offers, positioning, runtime constraints, and blackboard knowledge for EVAVO.",

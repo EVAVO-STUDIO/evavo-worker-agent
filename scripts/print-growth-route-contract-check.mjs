@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth route-contract smoke check
 # Run from PowerShell after setting ADMIN_TOKEN and WORKER_URL.
-# This validates the Worker route catalogue, read-only Growth runtime contracts, and confirmation-gated Growth metadata routes. It does not write Growth metadata.
+# This validates the Worker route catalogue, read-only Growth runtime contracts, next-best internal step payloads, and confirmation-gated Growth metadata routes. It does not write Growth metadata.
 
 cd C:\GitRepos\evavo-worker-agent
 
@@ -130,6 +130,16 @@ if (-not $cycle.blackboard) {
   $contractFailed = $true
   Write-Host "Growth cycle is missing blackboard section." -ForegroundColor Red
 }
+if (-not $cycle.nextBestInternalStep) {
+  $contractFailed = $true
+  Write-Host "Growth cycle is missing nextBestInternalStep." -ForegroundColor Red
+}
+if ($cycle.nextBestInternalStep -and $cycle.nextBestInternalStep.safety) {
+  if ($cycle.nextBestInternalStep.safety.externalStateChange -or $cycle.nextBestInternalStep.safety.callsAI -or $cycle.nextBestInternalStep.safety.callsNetwork) {
+    $contractFailed = $true
+    Write-Host "Growth cycle nextBestInternalStep safety is unsafe." -ForegroundColor Red
+  }
+}
 if (-not $cycle.safety -or $cycle.safety.callsNetwork -or $cycle.safety.callsAI -or $cycle.safety.externalStateChange) {
   $contractFailed = $true
   Write-Host "Growth cycle safety contract is unsafe or missing." -ForegroundColor Red
@@ -148,6 +158,16 @@ if (-not $autonomy.strategicIntent) {
 if (-not $autonomy.knowledgeSubstrate) {
   $contractFailed = $true
   Write-Host "Growth autonomy is missing knowledgeSubstrate." -ForegroundColor Red
+}
+if (-not $autonomy.nextBestInternalStep) {
+  $contractFailed = $true
+  Write-Host "Growth autonomy is missing nextBestInternalStep." -ForegroundColor Red
+}
+if ($autonomy.nextBestInternalStep -and $autonomy.nextBestInternalStep.safety) {
+  if ($autonomy.nextBestInternalStep.safety.externalStateChange -or $autonomy.nextBestInternalStep.safety.callsAI -or $autonomy.nextBestInternalStep.safety.callsNetwork) {
+    $contractFailed = $true
+    Write-Host "Growth autonomy nextBestInternalStep safety is unsafe." -ForegroundColor Red
+  }
 }
 if (-not $autonomy.safety -or $autonomy.safety.callsNetwork -or $autonomy.safety.callsAI -or $autonomy.safety.externalStateChange) {
   $contractFailed = $true

@@ -14,6 +14,7 @@ const helperScripts = [
   'scripts/check-growth-campaign-intelligence.mjs',
   'scripts/check-growth-capability-registry.mjs',
   'scripts/check-growth-review-queue.mjs',
+  'scripts/check-growth-route-delegates.mjs',
   'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
@@ -42,6 +43,7 @@ const typeScriptFiles = [
   'src/core/growthOperatorCycleEvents.ts',
   'src/core/growthOperatorLoop.ts',
   'src/core/growthStrategyMemory.ts',
+  'src/routes/growthAdmin.ts',
   'src/routes/growthApprovalRequestsAdmin.ts',
   'src/routes/growthBlackboardAdmin.ts',
   'src/routes/growthCapabilitiesAdmin.ts',
@@ -58,6 +60,14 @@ const docs = [
 ];
 
 const requiredFileTokens = {
+  'scripts/check-growth-route-delegates.mjs': [
+    'Growth route delegate check passed.',
+    'src/routes/growthAdmin.ts',
+    'handleGrowthCapabilitiesAdmin',
+    'handleGrowthCampaignIntelligenceAdmin',
+    'handleGrowthStrategyMemoryAdmin',
+    'handleGrowthBlackboardAdmin',
+  ],
   'scripts/check-growth-review-queue.mjs': [
     'Growth review queue check passed.',
     'migrations/0019_growth_approval_requests.sql',
@@ -66,6 +76,24 @@ const requiredFileTokens = {
     'growth_approval_requests',
     'growth_approval_request_save',
     'growth_approval_request_status',
+  ],
+  'src/routes/growthAdmin.ts': [
+    'handleGrowthCapabilitiesAdmin',
+    'handleGrowthCampaignIntelligenceAdmin',
+    'handleGrowthStrategyMemoryAdmin',
+    'handleGrowthBlackboardAdmin',
+    'campaignIntelligencePrefixes',
+    'strategyMemoryPrefixes',
+    'blackboardPrefixes',
+    'pathMatches(pathname, campaignIntelligencePrefixes)',
+    'pathMatches(pathname, strategyMemoryPrefixes)',
+    'pathMatches(pathname, blackboardPrefixes)',
+    '/admin/growth/capabilities',
+    '/admin/growth/autonomy',
+    '/admin/growth/cycle',
+    '/admin/growth/operator',
+    '/admin/growth/strategy-memory',
+    '/admin/growth/blackboard',
   ],
   'src/core/growthApprovalRequests.ts': [
     'GrowthApprovalRequestInput',
@@ -288,13 +316,14 @@ if (!fs.existsSync(packageJsonPath)) {
     'growth:review-queue:check': 'node scripts/check-growth-review-queue.mjs',
     'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
     'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
+    'growth:route-delegates:check': 'node scripts/check-growth-route-delegates.mjs',
     'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
     'growth:strategy:check': 'node scripts/check-growth-strategy-memory.mjs',
     'growth:strategy:smoke:print': 'node scripts/print-growth-strategy-memory-smoke-commands.mjs',
     'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
     'scripts:check': 'node scripts/check-helper-scripts.mjs',
-    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
+    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
   };
 
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {

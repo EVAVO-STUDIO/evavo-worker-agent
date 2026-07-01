@@ -26,6 +26,7 @@ const expected = [
   '0016_growth_strategy_memory.sql',
   '0017_growth_blackboard.sql',
   '0018_growth_cycle_memory_snapshots.sql',
+  '0019_growth_approval_requests.sql',
 ];
 
 const missing = [];

@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth route-contract smoke check
 # Run from PowerShell after setting ADMIN_TOKEN and WORKER_URL.
-# This validates the Worker route catalogue, read-only Growth runtime contracts, next-best internal step approval packs, approval request review routes, and confirmation-gated Growth metadata routes. It does not execute approval requests or write external state.
+# This validates the Worker route catalogue, delegated Growth v3 read routes, read-only runtime contracts, next-best internal step approval packs, approval request review routes, and confirmation-gated Growth metadata routes. It does not execute approval requests or write external state.
 
 cd C:\GitRepos\evavo-worker-agent
 
@@ -78,6 +78,29 @@ $confirmRequiredGrowthRouteIds = @(
   "growth_approval_request_save",
   "growth_approval_request_status"
 )
+$delegatedReadPaths = @(
+  "/admin/growth/capabilities",
+  "/admin/growth/operator",
+  "/admin/growth/campaigns?limit=5",
+  "/admin/growth/experiments?limit=5",
+  "/admin/growth/decisions?limit=5",
+  "/admin/growth/metrics?limit=5",
+  "/admin/growth/evidence?limit=5",
+  "/admin/growth/learning?limit=5",
+  "/admin/growth/strategy-memory",
+  "/admin/growth/objectives?limit=5",
+  "/admin/growth/key-results?limit=5",
+  "/admin/growth/segments?limit=5",
+  "/admin/growth/offers?limit=5",
+  "/admin/growth/positioning?limit=5",
+  "/admin/growth/runtime-constraints?limit=5",
+  "/admin/growth/blackboard",
+  "/admin/growth/blackboard/facts?limit=5",
+  "/admin/growth/blackboard/entities?limit=5",
+  "/admin/growth/blackboard/relationships?limit=5",
+  "/admin/growth/blackboard/signals?limit=5",
+  "/admin/growth/blackboard/assets?limit=5"
+)
 $expectedGrowthRouteIds = @($readGrowthRouteIds + $confirmRequiredGrowthRouteIds | Select-Object -Unique)
 
 $allRoutes = @()
@@ -117,6 +140,24 @@ if ($badConfirm.Count -gt 0) {
   $badConfirm | Select-Object id,safety,readOnly,requiresConfirm | Format-Table -AutoSize
 } else {
   Write-Host "All Growth metadata-write routes advertise confirm_required posture." -ForegroundColor Green
+}
+
+Write-Host "Read and verify delegated Growth v3 route families" -ForegroundColor Cyan
+foreach ($path in $delegatedReadPaths) {
+  try {
+    $payload = Invoke-RestMethod "$base$path" -Headers $headers
+    if ($payload.ok -ne $true) {
+      $contractFailed = $true
+      Write-Host "Delegated Growth route failed: $path" -ForegroundColor Red
+    }
+    if ($payload.safety -and (-not $payload.safety.readOnly -or $payload.safety.externalStateChange -or $payload.safety.callsAI -or $payload.safety.callsNetwork)) {
+      $contractFailed = $true
+      Write-Host "Delegated Growth route has unsafe read safety: $path" -ForegroundColor Red
+    }
+  } catch {
+    $contractFailed = $true
+    Write-Host "Delegated Growth route threw: $path :: $($_.Exception.Message)" -ForegroundColor Red
+  }
 }
 
 Write-Host "Read and verify Growth v3 cycle contract" -ForegroundColor Cyan

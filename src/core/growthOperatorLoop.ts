@@ -30,6 +30,30 @@ export interface GrowthOperatorLoopInput {
   blackboard?: any;
 }
 
+export interface GrowthNextStepApprovalPack {
+  title: string;
+  route: string;
+  method: "GET" | "POST";
+  requiresConfirm: boolean;
+  dashboardAnchor: string | null;
+  setupGap: string | null;
+  targetCampaignId: string | null;
+  targetCampaignName: string | null;
+  payloadHint: Record<string, unknown> | null;
+  reviewChecklist: string[];
+  explicitBlocks: string[];
+  auditReason: string[];
+  safety: {
+    internalMetadataOnly: boolean;
+    externalStateChange: boolean;
+    callsAI: boolean;
+    callsNetwork: boolean;
+    canSendEmail: boolean;
+    canPostSocial: boolean;
+    canSubmitForms: boolean;
+  };
+}
+
 export interface GrowthOperatorLoopPlan {
   selectedStep: GrowthOperatorLoopStep;
   targetCampaignId: string | null;
@@ -41,6 +65,7 @@ export interface GrowthOperatorLoopPlan {
   recommendedPayloadHint?: Record<string, unknown>;
   dashboardAnchor?: string;
   setupGap?: string | null;
+  approvalPack?: GrowthNextStepApprovalPack;
   safety: {
     internalMetadataOnly: boolean;
     externalStateChange: boolean;
@@ -59,9 +84,57 @@ function countFor(rows: any[], campaignId: string): number {
   return rows.filter((row) => row.campaign_id === campaignId).length;
 }
 
-function safePlan(partial: Omit<GrowthOperatorLoopPlan, "safety">): GrowthOperatorLoopPlan {
+function routeFromCommand(command: string): string {
+  const match = command.match(/(?:GET|POST)\s+([^\s]+)/i);
+  return match?.[1] || command;
+}
+
+function methodFromCommand(command: string): "GET" | "POST" {
+  return command.trim().toUpperCase().startsWith("POST ") ? "POST" : "GET";
+}
+
+function titleForStep(step: GrowthOperatorLoopStep): string {
+  return step.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
+function buildApprovalPack(partial: Omit<GrowthOperatorLoopPlan, "safety" | "approvalPack">): GrowthNextStepApprovalPack {
+  const method = methodFromCommand(partial.recommendedCommand);
+  const route = routeFromCommand(partial.recommendedCommand);
+  const requiresConfirm = route.includes("confirm=1") || method === "POST";
+  return {
+    title: titleForStep(partial.selectedStep),
+    route,
+    method,
+    requiresConfirm,
+    dashboardAnchor: partial.dashboardAnchor || null,
+    setupGap: partial.setupGap || null,
+    targetCampaignId: partial.targetCampaignId,
+    targetCampaignName: partial.targetCampaignName,
+    payloadHint: partial.recommendedPayloadHint || null,
+    reviewChecklist: [
+      "Confirm this is internal metadata only.",
+      "Confirm the payload uses current EVAVO strategy memory and blackboard facts.",
+      "Confirm no browser, email, social, CRM, payment, or third-party action will run.",
+      requiresConfirm ? "Confirm the Worker route includes confirm=1 before saving metadata." : "Confirm this is a read-only route before using it.",
+    ],
+    explicitBlocks: ["send_email", "post_social", "submit_form", "browser_execution", "paid_spend", "crm_write", "external_delivery", "ai_drafting"],
+    auditReason: partial.rationale,
+    safety: {
+      internalMetadataOnly: true,
+      externalStateChange: false,
+      callsAI: false,
+      callsNetwork: false,
+      canSendEmail: false,
+      canPostSocial: false,
+      canSubmitForms: false,
+    },
+  };
+}
+
+function safePlan(partial: Omit<GrowthOperatorLoopPlan, "safety" | "approvalPack">): GrowthOperatorLoopPlan {
   return {
     ...partial,
+    approvalPack: buildApprovalPack(partial),
     safety: { internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
   };
 }

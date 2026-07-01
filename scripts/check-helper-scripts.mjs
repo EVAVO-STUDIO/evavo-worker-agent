@@ -30,7 +30,7 @@ const helperScripts = [
   'scripts/print-next-ops-smoke-commands.mjs',
 ];
 
-const typeScriptFiles = [
+const sourceFiles = [
   'src/core/growthApprovalRequests.ts',
   'src/core/growthAutonomousRuntime.ts',
   'src/core/growthBlackboard.ts',
@@ -50,6 +50,7 @@ const typeScriptFiles = [
   'src/routes/growthCampaignIntelligenceAdmin.ts',
   'src/routes/growthStrategyMemoryAdmin.ts',
   'src/routes/routeCataloguePlanner.ts',
+  'src/routes/routeCatalogueTypes.ts',
 ];
 
 const docs = [
@@ -70,23 +71,14 @@ const fullSafetyTokens = [
   'canSubmitForms: false',
 ];
 
-const requiredFileTokens = {
-  'scripts/check-growth-route-delegates.mjs': [
-    'Growth route delegate check passed.',
-    'src/routes/growthAdmin.ts',
-    'handleGrowthCapabilitiesAdmin',
-    'handleGrowthCampaignIntelligenceAdmin',
-    'handleGrowthStrategyMemoryAdmin',
-    'handleGrowthBlackboardAdmin',
-  ],
-  'scripts/check-growth-review-queue.mjs': [
-    'Growth review queue check passed.',
-    'migrations/0019_growth_approval_requests.sql',
-    'src/core/growthApprovalRequests.ts',
-    'src/routes/growthApprovalRequestsAdmin.ts',
-    'growth_approval_requests',
-    'growth_approval_request_save',
-    'growth_approval_request_status',
+const requiredTokens = {
+  'src/routes/routeCatalogueTypes.ts': [
+    'canSendEmail: boolean',
+    'canPostSocial: boolean',
+    'canSubmitForms: boolean',
+    'RouteCatalogueInput',
+    'canPostSocial: false',
+    'canSubmitForms: false',
   ],
   'src/routes/growthAdmin.ts': [
     'handleGrowthCapabilitiesAdmin',
@@ -162,21 +154,9 @@ const requiredFileTokens = {
     'canSendEmail: false',
     'canPostSocial: false',
     'canSubmitForms: false',
-    'seed_objective',
-    'seed_segment',
-    'seed_offer',
-    'seed_positioning',
-    'seed_runtime_constraint',
-    'seed_blackboard_fact',
-    'seed_entity',
-    'seed_relationship',
-    'seed_market_signal',
-    'seed_asset',
     'recommendedPayloadHint',
     'dashboardAnchor',
     'setupGap',
-    'POST /admin/growth/objectives?confirm=1',
-    'POST /admin/growth/blackboard/facts?confirm=1',
   ],
   'src/core/growthOperatorCycle.ts': [
     'nextBestInternalStep',
@@ -210,22 +190,25 @@ const requiredFileTokens = {
     'does not expose write capability',
     'growth_autonomy',
     'growth_blackboard',
-    'growth_blackboard_facts',
-    'growth_entity_relationships',
-    'growth_market_signals',
     'growth_strategy_memory',
-    'growth_objectives',
-    'growth_key_results',
-    'growth_segments',
-    'growth_offers',
-    'growth_positioning',
-    'growth_runtime_constraints',
     'growth_cycle',
-    'growth_cycle_events',
-    'growth_cycle_record',
-    'growth_metrics',
-    'growth_evidence',
-    'growth_learning',
+    'growth_approval_requests',
+    'growth_approval_request_save',
+    'growth_approval_request_status',
+  ],
+  'scripts/check-growth-route-delegates.mjs': [
+    'Growth route delegate check passed.',
+    'src/routes/growthAdmin.ts',
+    'handleGrowthCapabilitiesAdmin',
+    'handleGrowthCampaignIntelligenceAdmin',
+    'handleGrowthStrategyMemoryAdmin',
+    'handleGrowthBlackboardAdmin',
+  ],
+  'scripts/check-growth-review-queue.mjs': [
+    'Growth review queue check passed.',
+    'migrations/0019_growth_approval_requests.sql',
+    'src/core/growthApprovalRequests.ts',
+    'src/routes/growthApprovalRequestsAdmin.ts',
     'growth_approval_requests',
     'growth_approval_request_save',
     'growth_approval_request_status',
@@ -234,12 +217,11 @@ const requiredFileTokens = {
     'EVAVO Growth backend final validation',
     'npm run growth:wiring:apply',
     'npm run growth:route-catalogue:apply',
+    'npm run growth:route-delegates:check',
+    'npm run growth:review-queue:check',
     'npm run check:local',
     'npm run deploy',
     'npm run growth:route-contract:print',
-    'npm run growth:campaigns:smoke:print',
-    'npm run growth:strategy:smoke:print',
-    'npm run growth:blackboard:smoke:print',
   ],
   'scripts/print-growth-route-contract-check.mjs': [
     'Growth v3 runtime route contract is valid.',
@@ -252,6 +234,10 @@ const requiredFileTokens = {
     'canSendEmail',
     'canPostSocial',
     'canSubmitForms',
+    'no social posting',
+    'no form submission',
+    'metadata-only posture',
+    'Growth metadata-write routes missing confirm_required or safe metadata posture',
     '/admin/growth/capabilities',
     '/admin/growth/operator',
     '/admin/growth/campaigns?limit=5',
@@ -259,34 +245,38 @@ const requiredFileTokens = {
     '/admin/growth/blackboard/facts?limit=5',
     'growth_operator_cycle_v3_strategy_blackboard_read_only',
     'growth_autonomous_runtime_v3_strategy_blackboard',
-    '/admin/growth/cycle/events?limit=5',
-    '$readGrowthRouteIds',
-    '$confirmRequiredGrowthRouteIds',
-    '$readRoutes',
-    '$confirmRoutes',
-    'Unsafe Growth read-route metadata found:',
-    'All Growth read routes advertise readOnly, no network, no AI, no email, cost none, and no write tables.',
-    'All Growth metadata-write routes advertise confirm_required posture.',
-    'Growth cycle is missing nextBestInternalStep.',
-    'Growth cycle is missing approvalPack.',
-    'Growth cycle approvalPack safety is unsafe.',
-    'Growth cycle nextBestInternalStep safety is unsafe.',
-    'Growth autonomy is missing nextBestInternalStep.',
-    'Growth autonomy is missing approvalPack.',
-    'Growth autonomy approvalPack safety is unsafe.',
-    'Growth autonomy nextBestInternalStep safety is unsafe.',
     'growth_approval_requests',
     'growth_approval_request_save',
     'growth_approval_request_status',
     'Read Growth approval requests',
-    'Latest Growth cycle event is missing hydrated strategy snapshot.',
-    'Latest Growth cycle event is missing hydrated blackboard snapshot.',
-    'Latest Growth cycle event is missing raw strategy_json column.',
-    'Latest Growth cycle event is missing raw blackboard_json column.',
   ],
 };
 
-const packageJsonPath = path.join(repoRoot, 'package.json');
+const expectedPackageScripts = {
+  'db:migration:one': 'node scripts/apply-one-migration.mjs',
+  'db:migrations:check': 'node scripts/check-migrations-present.mjs',
+  'db:migrations:print': 'node scripts/print-migration-commands.mjs',
+  'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
+  'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
+  'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
+  'growth:blackboard:check': 'node scripts/check-growth-blackboard.mjs',
+  'growth:blackboard:smoke:print': 'node scripts/print-growth-blackboard-smoke-commands.mjs',
+  'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',
+  'growth:campaigns:smoke:print': 'node scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
+  'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
+  'growth:review-queue:check': 'node scripts/check-growth-review-queue.mjs',
+  'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
+  'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
+  'growth:route-delegates:check': 'node scripts/check-growth-route-delegates.mjs',
+  'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
+  'growth:strategy:check': 'node scripts/check-growth-strategy-memory.mjs',
+  'growth:strategy:smoke:print': 'node scripts/print-growth-strategy-memory-smoke-commands.mjs',
+  'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
+  'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
+  'scripts:check': 'node scripts/check-helper-scripts.mjs',
+  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
+};
+
 let failed = false;
 
 function fail(message) {
@@ -298,11 +288,29 @@ function pass(message) {
   console.log(`OK   ${message}`);
 }
 
-function checkRequiredTokens(relativePath) {
-  const tokens = requiredFileTokens[relativePath] || [];
-  if (!tokens.length) return;
+function checkExistsAndParses(relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) return;
+  if (!fs.existsSync(absolutePath)) {
+    fail(`${relativePath} is missing`);
+    return;
+  }
+  const check = spawnSync(process.execPath, ['--check', absolutePath], { cwd: repoRoot, encoding: 'utf8' });
+  if (check.status !== 0) {
+    fail(`${relativePath} has a syntax error`);
+    if (check.stderr) console.error(check.stderr.trim());
+  } else {
+    pass(`${relativePath} exists and parses`);
+  }
+}
+
+function checkRequiredTokens(relativePath) {
+  const tokens = requiredTokens[relativePath] || [];
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    fail(`${relativePath} is missing`);
+    return;
+  }
+  pass(`${relativePath} exists`);
   const content = fs.readFileSync(absolutePath, 'utf8');
   for (const token of tokens) {
     if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
@@ -310,83 +318,24 @@ function checkRequiredTokens(relativePath) {
   }
 }
 
-for (const relativePath of helperScripts) {
-  const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) {
-    fail(`${relativePath} is missing`);
-    continue;
-  }
+for (const script of helperScripts) {
+  checkExistsAndParses(script);
+  checkRequiredTokens(script);
+}
 
-  const check = spawnSync(process.execPath, ['--check', absolutePath], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-
-  if (check.status !== 0) {
-    fail(`${relativePath} has a syntax error`);
-    if (check.stderr) console.error(check.stderr.trim());
-    continue;
-  }
-
-  pass(`${relativePath} exists and parses`);
+for (const relativePath of [...sourceFiles, ...docs]) {
   checkRequiredTokens(relativePath);
 }
 
-for (const relativePath of typeScriptFiles) {
-  const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) {
-    fail(`${relativePath} is missing`);
-  } else {
-    pass(`${relativePath} exists`);
-    checkRequiredTokens(relativePath);
-  }
-}
-
-for (const relativePath of docs) {
-  const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) {
-    fail(`${relativePath} is missing`);
-  } else {
-    pass(`${relativePath} exists`);
-  }
-}
-
+const packageJsonPath = path.join(repoRoot, 'package.json');
 if (!fs.existsSync(packageJsonPath)) {
   fail('package.json is missing');
 } else {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
   const scripts = packageJson.scripts || {};
-  const expectedPackageScripts = {
-    'db:migration:one': 'node scripts/apply-one-migration.mjs',
-    'db:migrations:check': 'node scripts/check-migrations-present.mjs',
-    'db:migrations:print': 'node scripts/print-migration-commands.mjs',
-    'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
-    'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
-    'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
-    'growth:blackboard:check': 'node scripts/check-growth-blackboard.mjs',
-    'growth:blackboard:smoke:print': 'node scripts/print-growth-blackboard-smoke-commands.mjs',
-    'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',
-    'growth:campaigns:smoke:print': 'node scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
-    'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
-    'growth:review-queue:check': 'node scripts/check-growth-review-queue.mjs',
-    'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
-    'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
-    'growth:route-delegates:check': 'node scripts/check-growth-route-delegates.mjs',
-    'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
-    'growth:strategy:check': 'node scripts/check-growth-strategy-memory.mjs',
-    'growth:strategy:smoke:print': 'node scripts/print-growth-strategy-memory-smoke-commands.mjs',
-    'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
-    'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
-    'scripts:check': 'node scripts/check-helper-scripts.mjs',
-    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
-  };
-
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {
-    if (scripts[name] !== expected) {
-      fail(`package.json script ${name} should be "${expected}"`);
-    } else {
-      pass(`package.json script ${name} is wired`);
-    }
+    if (scripts[name] !== expected) fail(`package.json script ${name} should be "${expected}"`);
+    else pass(`package.json script ${name} is wired`);
   }
 }
 

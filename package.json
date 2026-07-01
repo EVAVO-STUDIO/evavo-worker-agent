@@ -23,13 +23,14 @@
     "growth:route-catalogue:apply": "node scripts/apply-growth-campaign-analytics-route-catalogue.mjs",
     "growth:route-contract:print": "node scripts/print-growth-route-contract-check.mjs",
     "growth:route-delegates:check": "node scripts/check-growth-route-delegates.mjs",
+    "growth:route-safety-flags:check": "node scripts/check-growth-route-safety-flags.mjs",
     "growth:smoke:print": "node scripts/print-growth-smoke-commands.mjs",
     "growth:strategy:check": "node scripts/check-growth-strategy-memory.mjs",
     "growth:strategy:smoke:print": "node scripts/print-growth-strategy-memory-smoke-commands.mjs",
     "growth:wiring:apply": "node scripts/apply-growth-operator-route-wiring.mjs",
     "ops:smoke:print": "node scripts/print-next-ops-smoke-commands.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
-    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck",
+    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

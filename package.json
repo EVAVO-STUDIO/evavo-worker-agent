@@ -19,6 +19,7 @@
     "growth:campaigns:check": "node scripts/check-growth-campaign-intelligence.mjs",
     "growth:campaigns:smoke:print": "node scripts/print-growth-campaign-intelligence-smoke-commands.mjs",
     "growth:capabilities:check": "node scripts/check-growth-capability-registry.mjs",
+    "growth:review-queue:check": "node scripts/check-growth-review-queue.mjs",
     "growth:route-catalogue:apply": "node scripts/apply-growth-campaign-analytics-route-catalogue.mjs",
     "growth:route-contract:print": "node scripts/print-growth-route-contract-check.mjs",
     "growth:smoke:print": "node scripts/print-growth-smoke-commands.mjs",
@@ -27,7 +28,7 @@
     "growth:wiring:apply": "node scripts/apply-growth-operator-route-wiring.mjs",
     "ops:smoke:print": "node scripts/print-next-ops-smoke-commands.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
-    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run typecheck",
+    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

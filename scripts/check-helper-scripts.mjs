@@ -15,6 +15,7 @@ const helperScripts = [
   'scripts/check-growth-capability-registry.mjs',
   'scripts/check-growth-review-queue.mjs',
   'scripts/check-growth-route-delegates.mjs',
+  'scripts/check-growth-route-safety-flags.mjs',
   'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
@@ -204,6 +205,16 @@ const requiredTokens = {
     'handleGrowthStrategyMemoryAdmin',
     'handleGrowthBlackboardAdmin',
   ],
+  'scripts/check-growth-route-safety-flags.mjs': [
+    'Growth route safety flag check passed.',
+    'src/routes/routeCatalogueTypes.ts',
+    'src/routes/growthCampaignIntelligenceAdmin.ts',
+    'src/routes/growthStrategyMemoryAdmin.ts',
+    'src/routes/growthBlackboardAdmin.ts',
+    'canSendEmail: false',
+    'canPostSocial: false',
+    'canSubmitForms: false',
+  ],
   'scripts/check-growth-review-queue.mjs': [
     'Growth review queue check passed.',
     'migrations/0019_growth_approval_requests.sql',
@@ -268,13 +279,14 @@ const expectedPackageScripts = {
   'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
   'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
   'growth:route-delegates:check': 'node scripts/check-growth-route-delegates.mjs',
+  'growth:route-safety-flags:check': 'node scripts/check-growth-route-safety-flags.mjs',
   'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
   'growth:strategy:check': 'node scripts/check-growth-strategy-memory.mjs',
   'growth:strategy:smoke:print': 'node scripts/print-growth-strategy-memory-smoke-commands.mjs',
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
-  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
+  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
 };
 
 let failed = false;

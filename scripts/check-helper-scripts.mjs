@@ -44,6 +44,7 @@ const typeScriptFiles = [
   'src/routes/growthCapabilitiesAdmin.ts',
   'src/routes/growthCampaignIntelligenceAdmin.ts',
   'src/routes/growthStrategyMemoryAdmin.ts',
+  'src/routes/routeCataloguePlanner.ts',
 ];
 
 const docs = [
@@ -54,6 +55,13 @@ const docs = [
 ];
 
 const requiredFileTokens = {
+  'src/routes/routeCataloguePlanner.ts': [
+    'growth_brief',
+    'writesTables: []',
+    'growth_budget',
+    'does not advertise write side effects',
+    'does not expose write capability',
+  ],
   'scripts/print-growth-final-backend-validation.mjs': [
     'EVAVO Growth backend final validation',
     'npm run growth:wiring:apply',
@@ -66,10 +74,17 @@ const requiredFileTokens = {
     'npm run growth:blackboard:smoke:print',
   ],
   'scripts/print-growth-route-contract-check.mjs': [
-    'Growth v3 runtime contracts are valid.',
+    'Growth v3 runtime route contract is valid.',
     'growth_operator_cycle_v3_strategy_blackboard_read_only',
     'growth_autonomous_runtime_v3_strategy_blackboard',
     '/admin/growth/cycle/events?limit=5',
+    '$readGrowthRouteIds',
+    '$confirmRequiredGrowthRouteIds',
+    '$readRoutes',
+    '$confirmRoutes',
+    'Unsafe Growth read-route metadata found:',
+    'All Growth read routes advertise readOnly, no network, no AI, no email, cost none, and no write tables.',
+    'All Growth metadata-write routes advertise confirm_required posture.',
     'Latest Growth cycle event is missing hydrated strategy snapshot.',
     'Latest Growth cycle event is missing hydrated blackboard snapshot.',
     'Latest Growth cycle event is missing raw strategy_json column.',
@@ -129,6 +144,7 @@ for (const relativePath of typeScriptFiles) {
     fail(`${relativePath} is missing`);
   } else {
     pass(`${relativePath} exists`);
+    checkRequiredTokens(relativePath);
   }
 }
 

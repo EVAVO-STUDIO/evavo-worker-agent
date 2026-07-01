@@ -15,6 +15,9 @@ import {
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -39,7 +42,7 @@ function blockedWrite(json: JsonResponse) {
     ok: false,
     error: "confirm_required",
     reason: "Growth blackboard writes require confirmation and only save internal knowledge metadata.",
-    safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+    safety: writeSafety,
   }, { status: 400 });
 }
 
@@ -52,12 +55,9 @@ function migrationError(error: unknown) {
     error: missingBlackboardTable ? "growth_blackboard_schema_missing" : "growth_blackboard_failed",
     message,
     requiredMigration: missingBlackboardTable ? "0017_growth_blackboard.sql" : null,
-    safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+    safety: readSafety,
   };
 }
-
-const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
-const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
 
 export async function handleGrowthBlackboardAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });

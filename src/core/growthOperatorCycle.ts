@@ -98,6 +98,7 @@ function nextBestInternalStep(loopPlan: any, blocked: string[]) {
     recommendedPayloadHint: loopPlan.recommendedPayloadHint || null,
     dashboardAnchor: loopPlan.dashboardAnchor || null,
     setupGap: loopPlan.setupGap || null,
+    approvalPack: loopPlan.approvalPack || null,
     rationale: loopPlan.rationale || [],
     blockedBy: Array.from(new Set([...(loopPlan.blockedBy || []), ...blocked])),
     safety: loopPlan.safety,
@@ -144,6 +145,7 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
   if (loopPlan.selectedStep === "plan_decision") blocked.push("missing_reasoned_decision");
 
   const uniqueBlocked = Array.from(new Set(blocked));
+  const nextStep = nextBestInternalStep(loopPlan, uniqueBlocked);
 
   return {
     ok: true,
@@ -153,7 +155,8 @@ export function buildGrowthOperatorCycle(input: GrowthOperatorCycleInput) {
     strategy,
     blackboard,
     loopPlan,
-    nextBestInternalStep: nextBestInternalStep(loopPlan, uniqueBlocked),
+    nextBestInternalStep: nextStep,
+    approvalPack: nextStep.approvalPack,
     campaignBriefs,
     capabilitySummary: capabilityRegistry.summary,
     blocked: uniqueBlocked,

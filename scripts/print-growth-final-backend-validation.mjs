@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
 # Run from PowerShell after migrations 0014 through 0019 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks and the internal review queue persistence check.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, and the internal review queue persistence check.
 # It does not send, post, submit, browse, call AI, or execute external actions.
 
 cd C:\GitRepos\evavo-worker-agent
@@ -10,6 +10,7 @@ git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run growth:route-delegates:check
+npm run growth:route-safety-flags:check
 npm run growth:review-queue:check
 npm run check:local
 

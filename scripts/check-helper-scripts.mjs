@@ -13,6 +13,7 @@ const helperScripts = [
   'scripts/check-growth-blackboard.mjs',
   'scripts/check-growth-campaign-intelligence.mjs',
   'scripts/check-growth-capability-registry.mjs',
+  'scripts/check-growth-review-queue.mjs',
   'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
@@ -29,6 +30,7 @@ const helperScripts = [
 ];
 
 const typeScriptFiles = [
+  'src/core/growthApprovalRequests.ts',
   'src/core/growthAutonomousRuntime.ts',
   'src/core/growthBlackboard.ts',
   'src/core/growthCapabilities.ts',
@@ -40,6 +42,7 @@ const typeScriptFiles = [
   'src/core/growthOperatorCycleEvents.ts',
   'src/core/growthOperatorLoop.ts',
   'src/core/growthStrategyMemory.ts',
+  'src/routes/growthApprovalRequestsAdmin.ts',
   'src/routes/growthBlackboardAdmin.ts',
   'src/routes/growthCapabilitiesAdmin.ts',
   'src/routes/growthCampaignIntelligenceAdmin.ts',
@@ -55,6 +58,31 @@ const docs = [
 ];
 
 const requiredFileTokens = {
+  'scripts/check-growth-review-queue.mjs': [
+    'Growth review queue check passed.',
+    'migrations/0019_growth_approval_requests.sql',
+    'src/core/growthApprovalRequests.ts',
+    'src/routes/growthApprovalRequestsAdmin.ts',
+    'growth_approval_requests',
+    'growth_approval_request_save',
+    'growth_approval_request_status',
+  ],
+  'src/core/growthApprovalRequests.ts': [
+    'GrowthApprovalRequestInput',
+    'GrowthApprovalStatus',
+    'listGrowthApprovalRequests',
+    'saveGrowthApprovalRequest',
+    'updateGrowthApprovalRequestStatus',
+    'hydrateGrowthApprovalRequest',
+    'growth_approval_requests',
+  ],
+  'src/routes/growthApprovalRequestsAdmin.ts': [
+    'handleGrowthApprovalRequestsAdmin',
+    'listGrowthApprovalRequests',
+    'saveGrowthApprovalRequest',
+    'updateGrowthApprovalRequestStatus',
+    '0019_growth_approval_requests.sql',
+  ],
   'src/core/growthOperatorLoop.ts': [
     'GrowthNextStepApprovalPack',
     'approvalPack',
@@ -129,6 +157,9 @@ const requiredFileTokens = {
     'growth_metrics',
     'growth_evidence',
     'growth_learning',
+    'growth_approval_requests',
+    'growth_approval_request_save',
+    'growth_approval_request_status',
   ],
   'scripts/print-growth-final-backend-validation.mjs': [
     'EVAVO Growth backend final validation',
@@ -161,6 +192,10 @@ const requiredFileTokens = {
     'Growth autonomy is missing approvalPack.',
     'Growth autonomy approvalPack safety is unsafe.',
     'Growth autonomy nextBestInternalStep safety is unsafe.',
+    'growth_approval_requests',
+    'growth_approval_request_save',
+    'growth_approval_request_status',
+    'Read Growth approval requests',
     'Latest Growth cycle event is missing hydrated strategy snapshot.',
     'Latest Growth cycle event is missing hydrated blackboard snapshot.',
     'Latest Growth cycle event is missing raw strategy_json column.',
@@ -250,6 +285,7 @@ if (!fs.existsSync(packageJsonPath)) {
     'growth:campaigns:check': 'node scripts/check-growth-campaign-intelligence.mjs',
     'growth:campaigns:smoke:print': 'node scripts/print-growth-campaign-intelligence-smoke-commands.mjs',
     'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
+    'growth:review-queue:check': 'node scripts/check-growth-review-queue.mjs',
     'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
     'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
     'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
@@ -258,7 +294,7 @@ if (!fs.existsSync(packageJsonPath)) {
     'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
     'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
     'scripts:check': 'node scripts/check-helper-scripts.mjs',
-    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run typecheck',
+    'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
   };
 
   for (const [name, expected] of Object.entries(expectedPackageScripts)) {

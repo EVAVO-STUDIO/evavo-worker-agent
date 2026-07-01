@@ -114,8 +114,8 @@ $growthRoutes = $allRoutes | Where-Object { $expectedGrowthRouteIds -contains $_
 $readRoutes = $growthRoutes | Where-Object { $readGrowthRouteIds -contains $_.id }
 $confirmRoutes = $growthRoutes | Where-Object { $confirmRequiredGrowthRouteIds -contains $_.id }
 $missing = $expectedGrowthRouteIds | Where-Object { $id = $_; -not ($growthRoutes | Where-Object { $_.id -eq $id }) }
-$unsafeReads = $readRoutes | Where-Object { -not $_.readOnly -or $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.costRisk -ne "none" -or ($_.writesTables -and $_.writesTables.Count -gt 0) }
-$badConfirm = $confirmRoutes | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
+$unsafeReads = $readRoutes | Where-Object { -not $_.readOnly -or $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.costRisk -ne "none" -or ($_.writesTables -and $_.writesTables.Count -gt 0) }
+$badConfirm = $confirmRoutes | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.callsAI -or $_.callsNetwork }
 $contractFailed = $false
 
 if ($missing.Count -gt 0) {
@@ -129,17 +129,17 @@ if ($missing.Count -gt 0) {
 if ($unsafeReads.Count -gt 0) {
   $contractFailed = $true
   Write-Host "Unsafe Growth read-route metadata found:" -ForegroundColor Red
-  $unsafeReads | Select-Object id,readOnly,callsNetwork,callsAI,canSendEmail,costRisk,writesTables | Format-Table -AutoSize
+  $unsafeReads | Select-Object id,readOnly,callsNetwork,callsAI,canSendEmail,canPostSocial,canSubmitForms,costRisk,writesTables | Format-Table -AutoSize
 } else {
-  Write-Host "All Growth read routes advertise readOnly, no network, no AI, no email, cost none, and no write tables." -ForegroundColor Green
+  Write-Host "All Growth read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables." -ForegroundColor Green
 }
 
 if ($badConfirm.Count -gt 0) {
   $contractFailed = $true
-  Write-Host "Growth metadata-write routes missing confirm_required posture:" -ForegroundColor Red
-  $badConfirm | Select-Object id,safety,readOnly,requiresConfirm | Format-Table -AutoSize
+  Write-Host "Growth metadata-write routes missing confirm_required or safe metadata posture:" -ForegroundColor Red
+  $badConfirm | Select-Object id,safety,readOnly,requiresConfirm,callsNetwork,callsAI,canSendEmail,canPostSocial,canSubmitForms | Format-Table -AutoSize
 } else {
-  Write-Host "All Growth metadata-write routes advertise confirm_required posture." -ForegroundColor Green
+  Write-Host "All Growth metadata-write routes advertise confirm_required metadata-only posture." -ForegroundColor Green
 }
 
 Write-Host "Read and verify delegated Growth v3 route families" -ForegroundColor Cyan

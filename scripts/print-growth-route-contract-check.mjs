@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth route-contract smoke check
 # Run from PowerShell after setting ADMIN_TOKEN and WORKER_URL.
-# This validates the Worker route catalogue, read-only Growth runtime contracts, next-best internal step approval packs, and confirmation-gated Growth metadata routes. It does not write Growth metadata.
+# This validates the Worker route catalogue, read-only Growth runtime contracts, next-best internal step approval packs, approval request review routes, and confirmation-gated Growth metadata routes. It does not execute approval requests or write external state.
 
 cd C:\GitRepos\evavo-worker-agent
 
@@ -25,6 +25,7 @@ $readGrowthRouteIds = @(
   "growth_actions",
   "growth_audit",
   "growth_budget",
+  "growth_approval_requests",
   "growth_cycle",
   "growth_autonomy",
   "growth_blackboard",
@@ -73,7 +74,9 @@ $confirmRequiredGrowthRouteIds = @(
   "growth_decision_plan",
   "growth_metric_save",
   "growth_evidence_save",
-  "growth_learning_save"
+  "growth_learning_save",
+  "growth_approval_request_save",
+  "growth_approval_request_status"
 )
 $expectedGrowthRouteIds = @($readGrowthRouteIds + $confirmRequiredGrowthRouteIds | Select-Object -Unique)
 
@@ -192,6 +195,18 @@ if ($autonomy.nextBestInternalStep -and $autonomy.nextBestInternalStep.safety) {
 if (-not $autonomy.safety -or $autonomy.safety.callsNetwork -or $autonomy.safety.callsAI -or $autonomy.safety.externalStateChange) {
   $contractFailed = $true
   Write-Host "Growth autonomy safety contract is unsafe or missing." -ForegroundColor Red
+}
+
+Write-Host "Read Growth approval requests" -ForegroundColor Cyan
+$approvalRequests = Invoke-RestMethod "$base/admin/growth/approval-requests?limit=5" -Headers $headers
+$approvalRequests | ConvertTo-Json -Depth 100
+if (-not $approvalRequests.safety -or -not $approvalRequests.safety.readOnly) {
+  $contractFailed = $true
+  Write-Host "Growth approval request list route is missing read-only safety." -ForegroundColor Red
+}
+if ($approvalRequests.safety.externalStateChange -or $approvalRequests.safety.callsAI -or $approvalRequests.safety.callsNetwork -or $approvalRequests.safety.canSendEmail -or $approvalRequests.safety.canPostSocial -or $approvalRequests.safety.canSubmitForms) {
+  $contractFailed = $true
+  Write-Host "Growth approval request list route has unsafe safety flags." -ForegroundColor Red
 }
 
 Write-Host "Read Growth cycle events and verify snapshot hydration when events exist" -ForegroundColor Cyan

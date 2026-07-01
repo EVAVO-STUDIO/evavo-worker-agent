@@ -17,6 +17,9 @@ import {
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -41,7 +44,7 @@ function blockedWrite(json: JsonResponse) {
     ok: false,
     error: "confirm_required",
     reason: "Growth strategy memory writes require confirmation and only save internal strategic metadata.",
-    safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+    safety: writeSafety,
   }, { status: 400 });
 }
 
@@ -54,12 +57,9 @@ function migrationError(error: unknown) {
     error: missingStrategyTable ? "growth_strategy_memory_schema_missing" : "growth_strategy_memory_failed",
     message,
     requiredMigration: missingStrategyTable ? "0016_growth_strategy_memory.sql" : null,
-    safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+    safety: readSafety,
   };
 }
-
-const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
-const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
 
 export async function handleGrowthStrategyMemoryAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (request.method === "OPTIONS") return json({ ok: true });

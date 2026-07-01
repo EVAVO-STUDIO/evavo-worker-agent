@@ -150,9 +150,9 @@ foreach ($path in $delegatedReadPaths) {
       $contractFailed = $true
       Write-Host "Delegated Growth route failed: $path" -ForegroundColor Red
     }
-    if ($payload.safety -and (-not $payload.safety.readOnly -or $payload.safety.externalStateChange -or $payload.safety.callsAI -or $payload.safety.callsNetwork)) {
+    if (-not $payload.safety -or -not $payload.safety.readOnly -or -not $payload.safety.internalMetadataOnly -or $payload.safety.externalStateChange -or $payload.safety.callsAI -or $payload.safety.callsNetwork -or $payload.safety.canSendEmail -or $payload.safety.canPostSocial -or $payload.safety.canSubmitForms) {
       $contractFailed = $true
-      Write-Host "Delegated Growth route has unsafe read safety: $path" -ForegroundColor Red
+      Write-Host "Delegated Growth route has missing or unsafe read safety: $path" -ForegroundColor Red
     }
   } catch {
     $contractFailed = $true

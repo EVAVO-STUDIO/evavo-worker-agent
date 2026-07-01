@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth route-contract smoke check
 # Run from PowerShell after setting ADMIN_TOKEN and WORKER_URL.
-# This validates the Worker route catalogue, read-only Growth runtime contracts, next-best internal step payloads, and confirmation-gated Growth metadata routes. It does not write Growth metadata.
+# This validates the Worker route catalogue, read-only Growth runtime contracts, next-best internal step approval packs, and confirmation-gated Growth metadata routes. It does not write Growth metadata.
 
 cd C:\GitRepos\evavo-worker-agent
 
@@ -134,6 +134,16 @@ if (-not $cycle.nextBestInternalStep) {
   $contractFailed = $true
   Write-Host "Growth cycle is missing nextBestInternalStep." -ForegroundColor Red
 }
+if (-not $cycle.approvalPack) {
+  $contractFailed = $true
+  Write-Host "Growth cycle is missing approvalPack." -ForegroundColor Red
+}
+if ($cycle.approvalPack -and $cycle.approvalPack.safety) {
+  if ($cycle.approvalPack.safety.externalStateChange -or $cycle.approvalPack.safety.callsAI -or $cycle.approvalPack.safety.callsNetwork -or $cycle.approvalPack.safety.canSendEmail -or $cycle.approvalPack.safety.canPostSocial -or $cycle.approvalPack.safety.canSubmitForms) {
+    $contractFailed = $true
+    Write-Host "Growth cycle approvalPack safety is unsafe." -ForegroundColor Red
+  }
+}
 if ($cycle.nextBestInternalStep -and $cycle.nextBestInternalStep.safety) {
   if ($cycle.nextBestInternalStep.safety.externalStateChange -or $cycle.nextBestInternalStep.safety.callsAI -or $cycle.nextBestInternalStep.safety.callsNetwork) {
     $contractFailed = $true
@@ -162,6 +172,16 @@ if (-not $autonomy.knowledgeSubstrate) {
 if (-not $autonomy.nextBestInternalStep) {
   $contractFailed = $true
   Write-Host "Growth autonomy is missing nextBestInternalStep." -ForegroundColor Red
+}
+if (-not $autonomy.approvalPack) {
+  $contractFailed = $true
+  Write-Host "Growth autonomy is missing approvalPack." -ForegroundColor Red
+}
+if ($autonomy.approvalPack -and $autonomy.approvalPack.safety) {
+  if ($autonomy.approvalPack.safety.externalStateChange -or $autonomy.approvalPack.safety.callsAI -or $autonomy.approvalPack.safety.callsNetwork -or $autonomy.approvalPack.safety.canSendEmail -or $autonomy.approvalPack.safety.canPostSocial -or $autonomy.approvalPack.safety.canSubmitForms) {
+    $contractFailed = $true
+    Write-Host "Growth autonomy approvalPack safety is unsafe." -ForegroundColor Red
+  }
 }
 if ($autonomy.nextBestInternalStep -and $autonomy.nextBestInternalStep.safety) {
   if ($autonomy.nextBestInternalStep.safety.externalStateChange -or $autonomy.nextBestInternalStep.safety.callsAI -or $autonomy.nextBestInternalStep.safety.callsNetwork) {

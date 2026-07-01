@@ -262,6 +262,20 @@ const requiredTokens = {
     'growth_approval_request_status',
     'Read Growth approval requests',
   ],
+  'scripts/print-growth-smoke-commands.mjs': [
+    'growth:route-safety-flags:check',
+    '$readGrowthRouteIds',
+    '$confirmRequiredGrowthRouteIds',
+    'growth_approval_requests',
+    'growth_approval_request_save',
+    'growth_approval_request_status',
+    'canPostSocial',
+    'canSubmitForms',
+    'no social posting',
+    'no form submission',
+    'metadata-only posture',
+    'Growth metadata-write routes missing confirm_required or safe metadata posture',
+  ],
 };
 
 const expectedPackageScripts = {

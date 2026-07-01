@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth route-contract smoke check
 # Run from PowerShell after setting ADMIN_TOKEN and WORKER_URL.
-# This validates the route catalogue and read-only Growth runtime contracts. It does not write Growth metadata.
+# This validates the Worker route catalogue, read-only Growth runtime contracts, and confirmation-gated Growth metadata routes. It does not write Growth metadata.
 
 cd C:\GitRepos\evavo-worker-agent
 
@@ -14,65 +14,68 @@ if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
 $headers = @{ Authorization = "Bearer $env:ADMIN_TOKEN" }
 $base = $env:WORKER_URL.TrimEnd('/')
 $routePayload = Invoke-RestMethod "$base/admin/planner/routes" -Headers $headers
-$expectedGrowthRouteIds = @(
+$readGrowthRouteIds = @(
   "growth_overview",
   "growth_brief",
   "growth_capabilities",
   "growth_operator",
+  "growth_strategy",
+  "growth_channels",
+  "growth_signals",
+  "growth_actions",
+  "growth_audit",
+  "growth_budget",
+  "growth_cycle",
   "growth_autonomy",
   "growth_blackboard",
-  "growth_blackboard_facts",
-  "growth_blackboard_fact_save",
-  "growth_entities",
-  "growth_entity_save",
-  "growth_entity_relationships",
-  "growth_entity_relationship_save",
-  "growth_market_signals",
-  "growth_market_signal_save",
-  "growth_assets",
-  "growth_asset_save",
+  "growth_cycle_events",
+  "growth_campaigns",
+  "growth_experiments",
+  "growth_decisions",
+  "growth_metrics",
+  "growth_evidence",
+  "growth_learning",
   "growth_strategy_memory",
   "growth_objectives",
-  "growth_objective_save",
   "growth_key_results",
-  "growth_key_result_save",
   "growth_segments",
-  "growth_segment_save",
   "growth_offers",
-  "growth_offer_save",
   "growth_positioning",
-  "growth_positioning_save",
   "growth_runtime_constraints",
-  "growth_runtime_constraint_save",
-  "growth_cycle",
-  "growth_cycle_events",
-  "growth_cycle_record",
-  "growth_campaigns",
-  "growth_campaign_save",
-  "growth_experiments",
-  "growth_experiment_save",
-  "growth_decisions",
-  "growth_decision_plan",
-  "growth_metrics",
-  "growth_metric_save",
-  "growth_evidence",
-  "growth_evidence_save",
-  "growth_learning",
-  "growth_learning_save",
-  "growth_strategy",
+  "growth_blackboard_facts",
+  "growth_entities",
+  "growth_entity_relationships",
+  "growth_market_signals",
+  "growth_assets"
+)
+$confirmRequiredGrowthRouteIds = @(
   "growth_strategy_save",
-  "growth_channels",
   "growth_channels_save",
-  "growth_signals",
   "growth_signal_save",
   "growth_signal_status",
-  "growth_actions",
   "growth_action_save",
   "growth_action_plan",
   "growth_action_status",
-  "growth_audit",
-  "growth_budget"
+  "growth_blackboard_fact_save",
+  "growth_entity_save",
+  "growth_entity_relationship_save",
+  "growth_market_signal_save",
+  "growth_asset_save",
+  "growth_objective_save",
+  "growth_key_result_save",
+  "growth_segment_save",
+  "growth_offer_save",
+  "growth_positioning_save",
+  "growth_runtime_constraint_save",
+  "growth_cycle_record",
+  "growth_campaign_save",
+  "growth_experiment_save",
+  "growth_decision_plan",
+  "growth_metric_save",
+  "growth_evidence_save",
+  "growth_learning_save"
 )
+$expectedGrowthRouteIds = @($readGrowthRouteIds + $confirmRequiredGrowthRouteIds | Select-Object -Unique)
 
 $allRoutes = @()
 if ($routePayload.groups) {
@@ -81,10 +84,12 @@ if ($routePayload.groups) {
   $allRoutes = $routePayload.routes
 }
 
-$growthRoutes = $allRoutes | Where-Object { $_.section -eq "growth" }
+$growthRoutes = $allRoutes | Where-Object { $expectedGrowthRouteIds -contains $_.id }
+$readRoutes = $growthRoutes | Where-Object { $readGrowthRouteIds -contains $_.id }
+$confirmRoutes = $growthRoutes | Where-Object { $confirmRequiredGrowthRouteIds -contains $_.id }
 $missing = $expectedGrowthRouteIds | Where-Object { $id = $_; -not ($growthRoutes | Where-Object { $_.id -eq $id }) }
-$unsafe = $growthRoutes | Where-Object { $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.costRisk -ne "none" }
-$badConfirm = $growthRoutes | Where-Object { $_.id -like "*_save" -or $_.id -like "*_status" -or $_.id -eq "growth_action_plan" -or $_.id -eq "growth_decision_plan" -or $_.id -eq "growth_cycle_record" -or $_.id -eq "growth_key_result_save" -or $_.id -eq "growth_segment_save" -or $_.id -eq "growth_offer_save" -or $_.id -eq "growth_positioning_save" -or $_.id -eq "growth_runtime_constraint_save" -or $_.id -eq "growth_entity_relationship_save" -or $_.id -eq "growth_market_signal_save" -or $_.id -eq "growth_asset_save" } | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
+$unsafeReads = $readRoutes | Where-Object { -not $_.readOnly -or $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.costRisk -ne "none" -or ($_.writesTables -and $_.writesTables.Count -gt 0) }
+$badConfirm = $confirmRoutes | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" }
 $contractFailed = $false
 
 if ($missing.Count -gt 0) {
@@ -92,15 +97,15 @@ if ($missing.Count -gt 0) {
   Write-Host "Missing Growth route ids:" -ForegroundColor Yellow
   $missing
 } else {
-  Write-Host "All expected Growth route ids are advertised by the Worker." -ForegroundColor Green
+  Write-Host "All expected Growth route ids are advertised by the Worker route catalogue." -ForegroundColor Green
 }
 
-if ($unsafe.Count -gt 0) {
+if ($unsafeReads.Count -gt 0) {
   $contractFailed = $true
-  Write-Host "Unsafe Growth route metadata found:" -ForegroundColor Red
-  $unsafe | Select-Object id,callsNetwork,callsAI,canSendEmail,costRisk | Format-Table -AutoSize
+  Write-Host "Unsafe Growth read-route metadata found:" -ForegroundColor Red
+  $unsafeReads | Select-Object id,readOnly,callsNetwork,callsAI,canSendEmail,costRisk,writesTables | Format-Table -AutoSize
 } else {
-  Write-Host "All Growth routes advertise no network, no AI, no email, and cost none." -ForegroundColor Green
+  Write-Host "All Growth read routes advertise readOnly, no network, no AI, no email, cost none, and no write tables." -ForegroundColor Green
 }
 
 if ($badConfirm.Count -gt 0) {
@@ -178,7 +183,7 @@ if ($contractFailed) {
   exit 1
 }
 
-Write-Host "Growth v3 runtime contracts are valid." -ForegroundColor Green
+Write-Host "Growth v3 runtime route contract is valid." -ForegroundColor Green
 `;
 
 console.log(commands.trim());

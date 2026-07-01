@@ -25,6 +25,9 @@ import {
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -49,7 +52,7 @@ function blockedWrite(json: JsonResponse) {
     ok: false,
     error: "confirm_required",
     reason: "Campaign intelligence writes require confirmation and only write internal planning or analytics metadata.",
-    safety: { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+    safety: writeSafety,
   }, { status: 400 });
 }
 
@@ -62,12 +65,9 @@ function migrationError(error: unknown) {
     error: missingGrowthTable ? "growth_schema_missing" : "growth_campaign_intelligence_failed",
     message,
     requiredMigration: missingGrowthTable ? "0014_growth_campaign_intelligence.sql, 0015_growth_operator_cycle_events.sql, 0016_growth_strategy_memory.sql, or 0017_growth_blackboard.sql" : null,
-    safety: { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false },
+    safety: readSafety,
   };
 }
-
-const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
-const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false };
 
 async function loadGrowthOperatorState(env: Env, url: URL) {
   const campaigns = await listGrowthCampaigns(env, intParam(url, "limit", 10, 1, 50), url.searchParams.get("status") || undefined);
@@ -231,6 +231,6 @@ export async function handleGrowthCampaignIntelligenceAdmin(request: Request, en
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });
   } catch (error) {
     const normalized = migrationError(error);
-    return json(normalized, { status: normalized.error === "growth_schema_missing" ? 500 : 500 });
+    return json(normalized, { status: 500 });
   }
 }

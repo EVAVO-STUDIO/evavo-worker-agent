@@ -107,6 +107,10 @@ const requiredTokens = {
     '/admin/growth/operator',
     '/admin/growth/strategy-memory',
     '/admin/growth/blackboard',
+    'function safetyBase()',
+    'mode: "growth_brief"',
+    '...brief, safety: safety()',
+    ...fullSafetyTokens,
   ],
   'src/routes/growthCapabilitiesAdmin.ts': [
     'handleGrowthCapabilitiesAdmin',
@@ -217,9 +221,12 @@ const requiredTokens = {
   'scripts/check-growth-route-safety-flags.mjs': [
     'Growth route safety flag check passed.',
     'src/routes/routeCatalogueTypes.ts',
+    'src/routes/growthAdmin.ts',
     'src/routes/growthCampaignIntelligenceAdmin.ts',
     'src/routes/growthStrategyMemoryAdmin.ts',
     'src/routes/growthBlackboardAdmin.ts',
+    'mode: "growth_brief"',
+    '...brief, safety: safety()',
     'canSendEmail: false',
     'canPostSocial: false',
     'canSubmitForms: false',

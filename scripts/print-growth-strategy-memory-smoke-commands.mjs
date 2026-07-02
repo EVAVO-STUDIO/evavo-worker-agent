@@ -2,6 +2,13 @@ const commands = String.raw`
 # Growth Strategy Memory smoke checks
 # Run from PowerShell after deploy and after applying migrations 0016 and 0017.
 
+cd C:\GitRepos\evavo-worker-agent
+
+git pull
+npm run typecheck
+npm run db:migrations:check
+npm run growth:route-safety-flags:check
+
 if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
 
@@ -9,7 +16,9 @@ $headers = @{ Authorization = "Bearer $env:ADMIN_TOKEN" }
 $base = $env:WORKER_URL.TrimEnd('/')
 
 Write-Host "Read strategy memory before seed" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/strategy-memory" -Headers $headers | ConvertTo-Json -Depth 100
+$strategyBefore = Invoke-RestMethod "$base/admin/growth/strategy-memory" -Headers $headers
+$strategyBefore | ConvertTo-Json -Depth 100
+if (-not $strategyBefore.safety -or -not $strategyBefore.safety.readOnly -or $strategyBefore.safety.callsAI -or $strategyBefore.safety.callsNetwork -or $strategyBefore.safety.canSendEmail -or $strategyBefore.safety.canPostSocial -or $strategyBefore.safety.canSubmitForms) { throw "Strategy memory read has missing or unsafe safety flags." }
 
 Write-Host "Read strategy-aware cycle before seed" -ForegroundColor Cyan
 Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers | ConvertTo-Json -Depth 100
@@ -25,6 +34,7 @@ $objectiveBody = @{
 } | ConvertTo-Json -Depth 20
 $objectiveResult = Invoke-RestMethod "$base/admin/growth/objectives?confirm=1" -Headers $headers -Method POST -Body $objectiveBody -ContentType "application/json"
 $objectiveResult | ConvertTo-Json -Depth 100
+if ($objectiveResult.safety.canSendEmail -or $objectiveResult.safety.canPostSocial -or $objectiveResult.safety.canSubmitForms -or $objectiveResult.safety.callsAI -or $objectiveResult.safety.callsNetwork) { throw "Objective save returned unsafe safety flags." }
 $objectiveId = $objectiveResult.objective.id
 
 Write-Host "Seed key result" -ForegroundColor Cyan
@@ -87,7 +97,7 @@ $constraintBody = @{
   confirm = $true
   name = "No external action without explicit approval"
   constraintType = "safety_policy"
-  description = "The Worker may analyse, store metadata, prepare drafts, and request approval, but must not send, post, submit, browse, spend, or modify external systems without explicit approved execution controls."
+  description = "The Worker may analyse and store metadata, but execution-style actions require separate approved controls."
   severity = "hard"
   rule = @{ externalStateChangeAllowed = $false; requiresApproval = $true; maxAutonomyLevel = 1 }
   status = "active"

@@ -79,9 +79,15 @@ function optionalEntityType(url: URL): string | undefined {
 function safetyBase() {
   return {
     readOnly: true,
+    internalMetadataOnly: true,
+    externalStateChange: false,
     writesGrowthStrategyOnly: false,
     writesGrowthQueueOnly: false,
     callsAI: false,
+    callsNetwork: false,
+    canSendEmail: false,
+    canPostSocial: false,
+    canSubmitForms: false,
     sendsEmail: false,
     postsPublicly: false,
     submitsForms: false,
@@ -145,7 +151,7 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       if (pathname === "/admin/growth/brief") {
         const profileId = url.searchParams.get("profile") || "free_safe";
         const brief = await getGrowthBrief(env, profileId);
-        return json({ ok: true, mode: "growth_brief", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", ...brief });
+        return json({ ok: true, mode: "growth_brief", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", ...brief, safety: safety() });
       }
       if (pathname === "/admin/growth/strategy") {
         const goals = await listGrowthGoals(env, intParam(url, "limit", 25, 1, 100));
@@ -227,24 +233,21 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
     if (request.method === "POST" && pathname === "/admin/growth/signals/status") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return writeBlocked(json);
-      const saved = await updateGrowthSignalStatus(env, body.id || body.signalId, body.status);
       const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
-      const audit = await logGrowthAuditEvent(env, { eventType: "growth_signal_status_updated", entityType: "growth_signal", entityId: saved.id, actor: "admin", automationMode: "observe", reason: body.reason || "Confirmed Growth signal status metadata update.", inputSnapshot: { id: body.id || body.signalId, status: body.status, reason: body.reason || null }, outputSnapshot: { signal: saved }, safetyResult: routeSafety });
-      return json({ ok: true, mode: "growth_signal_status_updated", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", signal: saved, audit, safety: routeSafety });
+      const updated = await updateGrowthSignalStatus(env, String(body.id || body.signalId || ""), String(body.status || "reviewed"), routeSafety);
+      return json({ ok: true, mode: "growth_signal_status_updated", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", signal: updated, safety: routeSafety });
     }
 
     if (request.method === "POST" && pathname === "/admin/growth/actions/status") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return writeBlocked(json);
-      const saved = await updateGrowthActionStatus(env, body.id || body.actionId, body.status, body.blockedReason);
       const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
-      const audit = await logGrowthAuditEvent(env, { eventType: "growth_action_status_updated", entityType: "growth_action", entityId: saved.id, actor: "admin", automationMode: saved.recommended_mode, reason: body.reason || "Confirmed Growth action status metadata update.", inputSnapshot: { id: body.id || body.actionId, status: body.status, reason: body.reason || null, blockedReason: body.blockedReason || null }, outputSnapshot: { action: saved }, safetyResult: routeSafety });
-      return json({ ok: true, mode: "growth_action_status_updated", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", action: saved, audit, safety: routeSafety });
+      const updated = await updateGrowthActionStatus(env, String(body.id || body.actionId || ""), String(body.status || "reviewed"), routeSafety);
+      return json({ ok: true, mode: "growth_action_status_updated", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", action: updated, safety: routeSafety });
     }
 
-    return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    return json({ ok: false, error: "not_found", path: pathname }, { status: 404 });
   } catch (error) {
-    const payload = migrationError(error);
-    return json(payload, { status: payload.error === "growth_schema_missing" || payload.error === "growth_signal_duplicate" ? 200 : 500 });
+    return json(migrationError(error), { status: 500 });
   }
 }

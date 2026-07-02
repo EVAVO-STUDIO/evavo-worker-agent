@@ -3,6 +3,13 @@ const commands = String.raw`
 # Run from PowerShell after deploy and after applying migration 0017.
 # This writes internal metadata only.
 
+cd C:\GitRepos\evavo-worker-agent
+
+git pull
+npm run typecheck
+npm run db:migrations:check
+npm run growth:route-safety-flags:check
+
 if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
 
@@ -10,7 +17,9 @@ $headers = @{ Authorization = "Bearer $env:ADMIN_TOKEN" }
 $base = $env:WORKER_URL.TrimEnd('/')
 
 Write-Host "Read blackboard before seed" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/blackboard" -Headers $headers | ConvertTo-Json -Depth 100
+$blackboardBefore = Invoke-RestMethod "$base/admin/growth/blackboard" -Headers $headers
+$blackboardBefore | ConvertTo-Json -Depth 100
+if (-not $blackboardBefore.safety -or -not $blackboardBefore.safety.readOnly -or $blackboardBefore.safety.callsAI -or $blackboardBefore.safety.callsNetwork -or $blackboardBefore.safety.canSendEmail -or $blackboardBefore.safety.canPostSocial -or $blackboardBefore.safety.canSubmitForms) { throw "Blackboard read has missing or unsafe safety flags." }
 
 Write-Host "Create studio entity" -ForegroundColor Cyan
 $studioBody = @{
@@ -23,6 +32,7 @@ $studioBody = @{
 } | ConvertTo-Json -Depth 20
 $studio = Invoke-RestMethod "$base/admin/growth/blackboard/entities?confirm=1" -Headers $headers -Method POST -Body $studioBody -ContentType "application/json"
 $studio | ConvertTo-Json -Depth 100
+if ($studio.safety.canSendEmail -or $studio.safety.canPostSocial -or $studio.safety.canSubmitForms -or $studio.safety.callsAI -or $studio.safety.callsNetwork) { throw "Entity save returned unsafe safety flags." }
 $studioId = $studio.entity.id
 
 Write-Host "Create segment entity" -ForegroundColor Cyan
@@ -36,6 +46,7 @@ $segmentBody = @{
 } | ConvertTo-Json -Depth 20
 $segment = Invoke-RestMethod "$base/admin/growth/blackboard/entities?confirm=1" -Headers $headers -Method POST -Body $segmentBody -ContentType "application/json"
 $segment | ConvertTo-Json -Depth 100
+if ($segment.safety.canSendEmail -or $segment.safety.canPostSocial -or $segment.safety.canSubmitForms -or $segment.safety.callsAI -or $segment.safety.callsNetwork) { throw "Entity save returned unsafe safety flags." }
 $segmentId = $segment.entity.id
 
 Write-Host "Create relationship" -ForegroundColor Cyan

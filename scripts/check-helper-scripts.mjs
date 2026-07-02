@@ -72,6 +72,15 @@ const fullSafetyTokens = [
   'canSubmitForms: false',
 ];
 
+const smokeSafetyTokens = [
+  'growth:route-safety-flags:check',
+  'canSendEmail',
+  'canPostSocial',
+  'canSubmitForms',
+  'callsAI',
+  'callsNetwork',
+];
+
 const requiredTokens = {
   'src/routes/routeCatalogueTypes.ts': [
     'canSendEmail: boolean',
@@ -263,18 +272,32 @@ const requiredTokens = {
     'Read Growth approval requests',
   ],
   'scripts/print-growth-smoke-commands.mjs': [
-    'growth:route-safety-flags:check',
+    ...smokeSafetyTokens,
     '$readGrowthRouteIds',
     '$confirmRequiredGrowthRouteIds',
     'growth_approval_requests',
     'growth_approval_request_save',
     'growth_approval_request_status',
-    'canPostSocial',
-    'canSubmitForms',
     'no social posting',
     'no form submission',
     'metadata-only posture',
     'Growth metadata-write routes missing confirm_required or safe metadata posture',
+  ],
+  'scripts/print-growth-campaign-intelligence-smoke-commands.mjs': [
+    ...smokeSafetyTokens,
+    'Growth operator overview has missing or unsafe safety flags.',
+    'Campaign save returned unsafe safety flags.',
+    'Experiment save returned unsafe safety flags.',
+  ],
+  'scripts/print-growth-strategy-memory-smoke-commands.mjs': [
+    ...smokeSafetyTokens,
+    'Strategy memory read has missing or unsafe safety flags.',
+    'Objective save returned unsafe safety flags.',
+  ],
+  'scripts/print-growth-blackboard-smoke-commands.mjs': [
+    ...smokeSafetyTokens,
+    'Blackboard read has missing or unsafe safety flags.',
+    'Entity save returned unsafe safety flags.',
   ],
 };
 

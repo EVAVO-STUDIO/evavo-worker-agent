@@ -2,6 +2,13 @@ const commands = String.raw`
 # Growth Campaign Intelligence smoke checks
 # Run from PowerShell after deploy and after applying migrations 0014 through 0018.
 
+cd C:\GitRepos\evavo-worker-agent
+
+git pull
+npm run typecheck
+npm run db:migrations:check
+npm run growth:route-safety-flags:check
+
 if (-not $env:WORKER_URL) { throw "Set WORKER_URL first." }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }
 
@@ -9,7 +16,9 @@ $headers = @{ Authorization = "Bearer $env:ADMIN_TOKEN" }
 $base = $env:WORKER_URL.TrimEnd('/')
 
 Write-Host "Read Growth operator overview" -ForegroundColor Cyan
-Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers | ConvertTo-Json -Depth 100
+$operatorOverview = Invoke-RestMethod "$base/admin/growth/operator" -Headers $headers
+$operatorOverview | ConvertTo-Json -Depth 100
+if (-not $operatorOverview.safety -or -not $operatorOverview.safety.readOnly -or $operatorOverview.safety.callsAI -or $operatorOverview.safety.callsNetwork -or $operatorOverview.safety.canSendEmail -or $operatorOverview.safety.canPostSocial -or $operatorOverview.safety.canSubmitForms) { throw "Growth operator overview has missing or unsafe safety flags." }
 
 Write-Host "Read Growth operator cycle" -ForegroundColor Cyan
 $cycleBefore = Invoke-RestMethod "$base/admin/growth/cycle" -Headers $headers
@@ -32,6 +41,7 @@ $campaignBody = @{
 } | ConvertTo-Json -Depth 20
 $campaignResult = Invoke-RestMethod "$base/admin/growth/campaigns?confirm=1" -Headers $headers -Method POST -Body $campaignBody -ContentType "application/json"
 $campaignResult | ConvertTo-Json -Depth 100
+if ($campaignResult.safety.canSendEmail -or $campaignResult.safety.canPostSocial -or $campaignResult.safety.canSubmitForms -or $campaignResult.safety.callsAI -or $campaignResult.safety.callsNetwork) { throw "Campaign save returned unsafe safety flags." }
 $campaignId = $campaignResult.campaign.id
 
 Write-Host "Create metadata-only experiment" -ForegroundColor Cyan
@@ -48,6 +58,7 @@ $experimentBody = @{
 } | ConvertTo-Json -Depth 20
 $experimentResult = Invoke-RestMethod "$base/admin/growth/experiments?confirm=1" -Headers $headers -Method POST -Body $experimentBody -ContentType "application/json"
 $experimentResult | ConvertTo-Json -Depth 100
+if ($experimentResult.safety.canSendEmail -or $experimentResult.safety.canPostSocial -or $experimentResult.safety.canSubmitForms -or $experimentResult.safety.callsAI -or $experimentResult.safety.callsNetwork) { throw "Experiment save returned unsafe safety flags." }
 $experimentId = $experimentResult.experiment.id
 
 Write-Host "Save campaign metric snapshot" -ForegroundColor Cyan

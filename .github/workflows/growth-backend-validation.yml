@@ -1,0 +1,35 @@
+name: Growth backend validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  growth-backend-check:
+    name: Growth backend local contract check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Growth backend aggregate wiring
+        run: npm run growth:backend:aggregate:check
+
+      - name: Run Growth backend aggregate check
+        run: npm run growth:backend:check:local
+
+      - name: Print Growth backend validation runbook
+        run: npm run growth:backend:final:print

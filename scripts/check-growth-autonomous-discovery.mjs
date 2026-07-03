@@ -11,6 +11,7 @@ const recordsPath = 'src/core/growthAutonomousDiscoveryRecords.ts';
 const adminPath = 'src/routes/growthAutonomousDiscoveryAdmin.ts';
 const routeCataloguePath = 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts';
 const routeTypesPath = 'src/routes/routeCatalogueTypes.ts';
+const routeContractPrinterPath = 'scripts/print-growth-route-contract-check.mjs';
 
 const readRouteIds = [
   'growth_research_runs',
@@ -190,6 +191,20 @@ const requiredTokens = {
     'Partial<Pick<RouteCatalogueItem, "canPostSocial" | "canSubmitForms">>',
     'canPostSocial: false',
     'canSubmitForms: false',
+  ],
+  [routeContractPrinterPath]: [
+    'delegated Growth v3 read routes, autonomous discovery read routes',
+    'Read and verify delegated Growth v3 route families, including autonomous discovery',
+    '/admin/growth/discovery/research-runs?limit=5',
+    '/admin/growth/discovery/source-candidates?limit=5',
+    '/admin/growth/discovery/signals?limit=5',
+    '/admin/growth/discovery/opportunity-scores?limit=5',
+    '/admin/growth/discovery/agent-decisions?limit=5',
+    '/admin/growth/discovery/feedback?limit=5',
+    ...readRouteIds,
+    ...confirmRouteIds,
+    'canPostSocial',
+    'canSubmitForms',
   ],
   [migrationPath]: [
     'CREATE TABLE IF NOT EXISTS growth_research_runs',

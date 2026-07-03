@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth route-contract smoke check
 # Run from PowerShell after setting ADMIN_TOKEN and WORKER_URL.
-# This validates the Worker route catalogue, delegated Growth v3 read routes, read-only runtime contracts, next-best internal step approval packs, approval request review routes, and confirmation-gated Growth metadata routes. It does not execute approval requests or write external state.
+# This validates the Worker route catalogue, delegated Growth v3 read routes, autonomous discovery read routes, read-only runtime contracts, next-best internal step approval packs, approval request review routes, and confirmation-gated Growth metadata routes. It does not execute approval requests or write external state.
 
 cd C:\GitRepos\evavo-worker-agent
 
@@ -26,6 +26,12 @@ $readGrowthRouteIds = @(
   "growth_audit",
   "growth_budget",
   "growth_approval_requests",
+  "growth_research_runs",
+  "growth_source_candidates",
+  "growth_extracted_signals",
+  "growth_opportunity_scores",
+  "growth_agent_decisions",
+  "growth_discovery_feedback",
   "growth_cycle",
   "growth_autonomy",
   "growth_blackboard",
@@ -76,11 +82,22 @@ $confirmRequiredGrowthRouteIds = @(
   "growth_evidence_save",
   "growth_learning_save",
   "growth_approval_request_save",
-  "growth_approval_request_status"
+  "growth_approval_request_status",
+  "growth_research_run_plan",
+  "growth_source_candidate_save",
+  "growth_fetch_queue_enqueue",
+  "growth_agent_decision_record",
+  "growth_discovery_feedback_save"
 )
 $delegatedReadPaths = @(
   "/admin/growth/capabilities",
   "/admin/growth/operator",
+  "/admin/growth/discovery/research-runs?limit=5",
+  "/admin/growth/discovery/source-candidates?limit=5",
+  "/admin/growth/discovery/signals?limit=5",
+  "/admin/growth/discovery/opportunity-scores?limit=5",
+  "/admin/growth/discovery/agent-decisions?limit=5",
+  "/admin/growth/discovery/feedback?limit=5",
   "/admin/growth/campaigns?limit=5",
   "/admin/growth/experiments?limit=5",
   "/admin/growth/decisions?limit=5",
@@ -142,7 +159,7 @@ if ($badConfirm.Count -gt 0) {
   Write-Host "All Growth metadata-write routes advertise confirm_required metadata-only posture." -ForegroundColor Green
 }
 
-Write-Host "Read and verify delegated Growth v3 route families" -ForegroundColor Cyan
+Write-Host "Read and verify delegated Growth v3 route families, including autonomous discovery" -ForegroundColor Cyan
 foreach ($path in $delegatedReadPaths) {
   try {
     $payload = Invoke-RestMethod "$base$path" -Headers $headers

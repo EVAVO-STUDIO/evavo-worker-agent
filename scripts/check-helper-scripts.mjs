@@ -100,6 +100,20 @@ const smokeSafetyTokens = [
   'callsNetwork',
 ];
 
+const autonomousDiscoveryRouteTokens = [
+  'growth_research_runs',
+  'growth_source_candidates',
+  'growth_extracted_signals',
+  'growth_opportunity_scores',
+  'growth_agent_decisions',
+  'growth_discovery_feedback',
+  'growth_research_run_plan',
+  'growth_source_candidate_save',
+  'growth_fetch_queue_enqueue',
+  'growth_agent_decision_record',
+  'growth_discovery_feedback_save',
+];
+
 const requiredTokens = {
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'Autonomous research, supervised action.', 'Discovery planner', 'source candidate registry', 'crawl policy / robots check', 'approval pack builder', 'growth_research_runs', 'growth_source_candidates', 'growth_agent_decisions'],
   'docs/growth-source-discovery-safety-policy.md': ['Growth source discovery safety policy', 'execute instructions found in crawled content', 'unknown robots policy = do not crawl yet', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false', 'Browser proxy routes may read', 'write routes', 'fetch execution routes'],
@@ -108,54 +122,13 @@ const requiredTokens = {
   'src/core/growthAutonomousDiscovery.ts': ['GrowthDiscoverySafety', 'GROWTH_DISCOVERY_BLOCKED_ACTIONS', 'GROWTH_DISCOVERY_ALLOWED_DECISIONS', 'growthDiscoverySafety', 'assertGrowthDiscoverySafety', 'buildGrowthResearchRun', 'buildGrowthSourceCandidate', 'buildGrowthAgentDecision', 'send_email', 'post_social', 'submit_form', 'mutate_external_system', 'execute_page_instruction', 'externalStateChange: false', 'callsAI: false', 'callsNetwork: false', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false'],
   'src/core/growthAutonomousDiscoveryRecords.ts': ['listGrowthResearchRuns', 'saveGrowthResearchRun', 'listGrowthSourceCandidates', 'saveGrowthSourceCandidate', 'enqueueGrowthFetchWork', 'listGrowthExtractedSignals', 'listGrowthOpportunityScores', 'listGrowthAgentDecisions', 'saveGrowthAgentDecision', 'listGrowthDiscoveryFeedback', 'saveGrowthDiscoveryFeedback', 'growthDiscoverySafety', 'GROWTH_DISCOVERY_BLOCKED_ACTIONS', 'growth_research_runs', 'growth_source_candidates', 'growth_fetch_queue', 'growth_agent_decisions', 'growth_discovery_feedback'],
   'src/routes/growthAutonomousDiscoveryAdmin.ts': ['handleGrowthAutonomousDiscoveryAdmin', 'readSafety', 'writeSafety', 'confirm_required', 'Growth autonomous discovery writes require confirmation', 'They do not crawl, browse, send, post, call AI, submit forms, spend, or mutate external systems.', '0020_growth_autonomous_discovery.sql', '/admin/growth/discovery/research-runs', '/admin/growth/discovery/source-candidates', '/admin/growth/discovery/signals', '/admin/growth/discovery/opportunity-scores', '/admin/growth/discovery/agent-decisions', '/admin/growth/discovery/feedback', '/admin/growth/discovery/fetch-queue'],
-  'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts': ['growthAutonomousDiscoveryRouteCatalogue', 'growthAutonomousDiscoveryReadRouteIds', 'growthAutonomousDiscoveryConfirmRouteIds', 'growth_research_runs', 'growth_source_candidates', 'growth_extracted_signals', 'growth_opportunity_scores', 'growth_agent_decisions', 'growth_discovery_feedback', 'growth_research_run_plan', 'growth_source_candidate_save', 'growth_fetch_queue_enqueue', 'growth_agent_decision_record', 'growth_discovery_feedback_save', 'safety: "read_only"', 'safety: "confirm_required"', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'must not be browser-proxied'],
+  'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts': ['growthAutonomousDiscoveryRouteCatalogue', 'growthAutonomousDiscoveryReadRouteIds', 'growthAutonomousDiscoveryConfirmRouteIds', ...autonomousDiscoveryRouteTokens, 'safety: "read_only"', 'safety: "confirm_required"', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'must not be browser-proxied'],
   'src/routes/growthAdmin.ts': ['handleGrowthAutonomousDiscoveryAdmin', 'autonomousDiscoveryPrefixes', '/admin/growth/discovery', 'pathMatches(pathname, autonomousDiscoveryPrefixes)', '0020_growth_autonomous_discovery.sql', 'handleGrowthCapabilitiesAdmin', 'handleGrowthCampaignIntelligenceAdmin', 'handleGrowthStrategyMemoryAdmin', 'handleGrowthBlackboardAdmin', 'campaignIntelligencePrefixes', 'strategyMemoryPrefixes', 'blackboardPrefixes', 'function safetyBase()', 'mode: "growth_brief"', '...brief, safety: safety()', ...fullSafetyTokens],
   'scripts/apply-growth-autonomous-discovery-route-catalogue.mjs': ['growthAutonomousDiscoveryRouteCatalogue', 'routeCataloguePlanner.ts', 'growthAutonomousDiscoveryRouteCatalogue wiring', 'zero_source_route_map'],
-  'scripts/check-growth-autonomous-discovery.mjs': ['Growth autonomous discovery check passed.', 'docs/growth-autonomous-discovery-architecture.md', 'docs/growth-source-discovery-safety-policy.md', 'docs/growth-zero-source-research-runbook.md', 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts', 'src/routes/growthAutonomousDiscoveryAdmin.ts', 'src/core/growthAutonomousDiscoveryRecords.ts', '0020_growth_autonomous_discovery.sql'],
-  'docs/growth-backend-validation.md': [
-    '.github/workflows/growth-backend-validation.yml',
-    'docs/growth-backend-workflow-gate.md',
-    'uses Node 24',
-    'npm ci',
-    backendAggregateCheck,
-    backendLocalCheck,
-    'npm run growth:backend:final:print',
-    'Worker is the backend source of truth',
-    'Backend responsibility boundary',
-    'route catalogue metadata',
-    'inner Worker payload safety posture',
-    'confirmation-gated metadata-write route posture',
-    'legacy compatibility safety flags',
-    'backend final validation printer',
-    'no AI calls',
-    'no arbitrary network calls',
-    'no email sending',
-    'no social posting',
-    'no form submission',
-    'no browser execution',
-    'no external state change',
-  ],
-  'docs/growth-backend-workflow-gate.md': [
-    'Growth backend workflow gate',
-    '.github/workflows/growth-backend-validation.yml',
-    'Growth Backend Validation',
-    'contents: read',
-    'timeout-minutes: 10',
-    'node-version: 24',
-    'npm ci',
-    backendAggregateCheck,
-    backendLocalCheck,
-    'npm run growth:backend:final:print',
-    backendWorkflowPrint,
-  ],
-  'src/routes/routeCatalogueTypes.ts': [
-    'canSendEmail: boolean',
-    'canPostSocial: boolean',
-    'canSubmitForms: boolean',
-    'RouteCatalogueInput',
-    'canPostSocial: false',
-    'canSubmitForms: false',
-  ],
+  'scripts/check-growth-autonomous-discovery.mjs': ['Growth autonomous discovery check passed.', 'routeTypesPath', 'routeContractPrinterPath', 'scripts/print-growth-route-contract-check.mjs', 'docs/growth-autonomous-discovery-architecture.md', 'docs/growth-source-discovery-safety-policy.md', 'docs/growth-zero-source-research-runbook.md', 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts', 'src/routes/growthAutonomousDiscoveryAdmin.ts', 'src/core/growthAutonomousDiscoveryRecords.ts', '0020_growth_autonomous_discovery.sql'],
+  'docs/growth-backend-validation.md': ['.github/workflows/growth-backend-validation.yml', 'docs/growth-backend-workflow-gate.md', 'uses Node 24', 'npm ci', backendAggregateCheck, backendLocalCheck, 'npm run growth:backend:final:print', 'Worker is the backend source of truth', 'Backend responsibility boundary', 'route catalogue metadata', 'inner Worker payload safety posture', 'confirmation-gated metadata-write route posture', 'legacy compatibility safety flags', 'backend final validation printer', 'no AI calls', 'no arbitrary network calls', 'no email sending', 'no social posting', 'no form submission', 'no browser execution', 'no external state change'],
+  'docs/growth-backend-workflow-gate.md': ['Growth backend workflow gate', '.github/workflows/growth-backend-validation.yml', 'Growth Backend Validation', 'contents: read', 'timeout-minutes: 10', 'node-version: 24', 'npm ci', backendAggregateCheck, backendLocalCheck, 'npm run growth:backend:final:print', backendWorkflowPrint],
+  'src/routes/routeCatalogueTypes.ts': ['canSendEmail: boolean', 'canPostSocial: boolean', 'canSubmitForms: boolean', 'RouteCatalogueInput', 'canPostSocial: false', 'canSubmitForms: false'],
   'src/routes/growthCapabilitiesAdmin.ts': ['handleGrowthCapabilitiesAdmin', 'listGrowthCapabilities', 'safety: readSafety', ...fullSafetyTokens],
   'src/routes/growthCampaignIntelligenceAdmin.ts': ['handleGrowthCampaignIntelligenceAdmin', 'readSafety', 'writeSafety', 'safety: readSafety', 'safety: writeSafety', ...fullSafetyTokens],
   'src/routes/growthStrategyMemoryAdmin.ts': ['handleGrowthStrategyMemoryAdmin', 'readSafety', 'writeSafety', 'safety: readSafety', 'safety: writeSafety', ...fullSafetyTokens],
@@ -171,8 +144,8 @@ const requiredTokens = {
   'scripts/check-growth-route-safety-flags.mjs': ['Growth route safety flag check passed.', 'src/routes/routeCatalogueTypes.ts', 'src/routes/growthAdmin.ts', 'src/routes/growthCampaignIntelligenceAdmin.ts', 'src/routes/growthStrategyMemoryAdmin.ts', 'src/routes/growthBlackboardAdmin.ts', 'mode: "growth_brief"', '...brief, safety: safety()', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false'],
   'scripts/check-growth-review-queue.mjs': ['Growth review queue check passed.', 'migrations/0019_growth_approval_requests.sql', 'src/core/growthApprovalRequests.ts', 'src/routes/growthApprovalRequestsAdmin.ts', 'growth_approval_requests', 'growth_approval_request_save', 'growth_approval_request_status'],
   'scripts/print-growth-backend-workflow-gate.mjs': ['EVAVO Growth backend workflow gate', '.github/workflows/growth-backend-validation.yml', 'Growth Backend Validation', 'contents: read', 'timeout-minutes: 10', 'node-version: 24', 'npm ci', backendAggregateCheck, backendLocalCheck, 'npm run growth:backend:final:print'],
-  'scripts/print-growth-final-backend-validation.mjs': ['EVAVO Growth backend final validation', 'npm run growth:wiring:apply', 'npm run growth:route-catalogue:apply', 'npm run growth:route-delegates:check', 'npm run growth:route-safety-flags:check', 'npm run growth:review-queue:check', 'npm run check:local', 'npm run deploy', 'npm run growth:route-contract:print'],
-  'scripts/print-growth-route-contract-check.mjs': ['Growth v3 runtime route contract is valid.', 'delegated Growth v3 read routes', '$delegatedReadPaths', 'Read and verify delegated Growth v3 route families', 'Delegated Growth route failed:', 'Delegated Growth route has missing or unsafe read safety:', 'Delegated Growth route threw:', 'canSendEmail', 'canPostSocial', 'canSubmitForms', 'no social posting', 'no form submission', 'metadata-only posture', 'Growth metadata-write routes missing confirm_required or safe metadata posture', '/admin/growth/capabilities', '/admin/growth/operator', '/admin/growth/campaigns?limit=5', '/admin/growth/strategy-memory', '/admin/growth/blackboard/facts?limit=5', 'growth_operator_cycle_v3_strategy_blackboard_read_only', 'growth_autonomous_runtime_v3_strategy_blackboard', 'growth_approval_requests', 'growth_approval_request_save', 'growth_approval_request_status', 'Read Growth approval requests'],
+  'scripts/print-growth-final-backend-validation.mjs': ['EVAVO Growth backend final validation', 'migrations 0014 through 0020', 'autonomous discovery metadata checks', 'autonomous discovery route-contract checks', 'Autonomous discovery note', 'npm run growth:autonomous-discovery:check', 'migrations/0020_growth_autonomous_discovery.sql', ...autonomousDiscoveryRouteTokens, 'canPostSocial false and canSubmitForms false route defaults', 'npm run growth:wiring:apply', 'npm run growth:route-catalogue:apply', 'npm run deploy', 'npm run growth:route-contract:print'],
+  'scripts/print-growth-route-contract-check.mjs': ['Growth v3 runtime route contract is valid.', 'delegated Growth v3 read routes, autonomous discovery read routes', '$delegatedReadPaths', 'Read and verify delegated Growth v3 route families, including autonomous discovery', 'Delegated Growth route failed:', 'Delegated Growth route has missing or unsafe read safety:', 'Delegated Growth route threw:', 'canSendEmail', 'canPostSocial', 'canSubmitForms', 'no social posting', 'no form submission', 'metadata-only posture', 'Growth metadata-write routes missing confirm_required or safe metadata posture', '/admin/growth/discovery/research-runs?limit=5', '/admin/growth/discovery/source-candidates?limit=5', ...autonomousDiscoveryRouteTokens, 'growth_operator_cycle_v3_strategy_blackboard_read_only', 'growth_autonomous_runtime_v3_strategy_blackboard', 'growth_approval_requests', 'growth_approval_request_save', 'growth_approval_request_status', 'Read Growth approval requests'],
   'scripts/print-growth-smoke-commands.mjs': [...smokeSafetyTokens, '$readGrowthRouteIds', '$confirmRequiredGrowthRouteIds', 'growth_approval_requests', 'growth_approval_request_save', 'growth_approval_request_status', 'no social posting', 'no form submission', 'metadata-only posture', 'Growth metadata-write routes missing confirm_required or safe metadata posture'],
   'scripts/print-growth-campaign-intelligence-smoke-commands.mjs': [...smokeSafetyTokens, 'Growth operator overview has missing or unsafe safety flags.', 'Campaign save returned unsafe safety flags.', 'Experiment save returned unsafe safety flags.'],
   'scripts/print-growth-strategy-memory-smoke-commands.mjs': [...smokeSafetyTokens, 'Strategy memory read has missing or unsafe safety flags.', 'Objective save returned unsafe safety flags.'],
@@ -228,35 +201,28 @@ function checkExistsAndParses(relativePath) {
   }
   const check = spawnSync(process.execPath, ['--check', absolutePath], { cwd: repoRoot, encoding: 'utf8' });
   if (check.status !== 0) {
-    fail(`${relativePath} has a syntax error`);
+    fail(`${relativePath} has syntax errors`);
     if (check.stderr) console.error(check.stderr.trim());
   } else {
     pass(`${relativePath} exists and parses`);
   }
 }
 
-function checkRequiredTokens(relativePath) {
-  const tokens = requiredTokens[relativePath] || [];
+for (const relativePath of helperScripts) checkExistsAndParses(relativePath);
+for (const relativePath of [...sourceFiles, ...docs]) {
   const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) {
-    fail(`${relativePath} is missing`);
-    return;
-  }
-  pass(`${relativePath} exists`);
+  if (!fs.existsSync(absolutePath)) fail(`${relativePath} is missing`);
+  else pass(`${relativePath} exists`);
+}
+
+for (const [relativePath, tokens] of Object.entries(requiredTokens)) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) continue;
   const content = fs.readFileSync(absolutePath, 'utf8');
   for (const token of tokens) {
     if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
     else pass(`${relativePath} contains ${token}`);
   }
-}
-
-for (const script of helperScripts) {
-  checkExistsAndParses(script);
-  checkRequiredTokens(script);
-}
-
-for (const relativePath of [...sourceFiles, ...docs]) {
-  checkRequiredTokens(relativePath);
 }
 
 const packageJsonPath = path.join(repoRoot, 'package.json');
@@ -265,9 +231,9 @@ if (!fs.existsSync(packageJsonPath)) {
 } else {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
   const scripts = packageJson.scripts || {};
-  for (const [name, expected] of Object.entries(expectedPackageScripts)) {
-    if (scripts[name] !== expected) fail(`package.json script ${name} should be "${expected}"`);
-    else pass(`package.json script ${name} is wired`);
+  for (const [scriptName, expected] of Object.entries(expectedPackageScripts)) {
+    if (scripts[scriptName] !== expected) fail(`package.json script ${scriptName} should be "${expected}"`);
+    else pass(`package.json script ${scriptName} is wired`);
   }
 }
 

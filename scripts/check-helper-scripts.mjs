@@ -38,6 +38,7 @@ const helperScripts = [
 const sourceFiles = [
   'src/core/growthApprovalRequests.ts',
   'src/core/growthAutonomousDiscovery.ts',
+  'src/core/growthAutonomousDiscoveryRecords.ts',
   'src/core/growthAutonomousRuntime.ts',
   'src/core/growthBlackboard.ts',
   'src/core/growthCapabilities.ts',
@@ -51,6 +52,7 @@ const sourceFiles = [
   'src/core/growthStrategyMemory.ts',
   'src/routes/growthAdmin.ts',
   'src/routes/growthApprovalRequestsAdmin.ts',
+  'src/routes/growthAutonomousDiscoveryAdmin.ts',
   'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts',
   'src/routes/growthBlackboardAdmin.ts',
   'src/routes/growthCapabilitiesAdmin.ts',
@@ -76,7 +78,6 @@ const docs = [
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowPrint = 'npm run growth:backend:workflow:print';
-const autonomousDiscoveryCheck = 'npm run growth:autonomous-discovery:check';
 const routeCatalogueApply = 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs';
 
 const fullSafetyTokens = [
@@ -105,9 +106,12 @@ const requiredTokens = {
   'docs/growth-zero-source-research-runbook.md': ['Growth zero-source research runbook', 'without the operator supplying a source list', 'Register source candidates', 'Check crawl policy', 'Score opportunity', 'Prepare approval pack', 'no crawler execution yet'],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates', 'CREATE TABLE IF NOT EXISTS growth_robots_cache', 'CREATE TABLE IF NOT EXISTS growth_fetch_queue', 'CREATE TABLE IF NOT EXISTS growth_discovered_pages', 'CREATE TABLE IF NOT EXISTS growth_extracted_signals', 'CREATE TABLE IF NOT EXISTS growth_opportunity_scores', 'CREATE TABLE IF NOT EXISTS growth_agent_decisions', 'CREATE TABLE IF NOT EXISTS growth_discovery_feedback', 'blocked_actions_json', 'safety_json', 'crawl_allowed INTEGER NOT NULL DEFAULT 0'],
   'src/core/growthAutonomousDiscovery.ts': ['GrowthDiscoverySafety', 'GROWTH_DISCOVERY_BLOCKED_ACTIONS', 'GROWTH_DISCOVERY_ALLOWED_DECISIONS', 'growthDiscoverySafety', 'assertGrowthDiscoverySafety', 'buildGrowthResearchRun', 'buildGrowthSourceCandidate', 'buildGrowthAgentDecision', 'send_email', 'post_social', 'submit_form', 'mutate_external_system', 'execute_page_instruction', 'externalStateChange: false', 'callsAI: false', 'callsNetwork: false', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false'],
+  'src/core/growthAutonomousDiscoveryRecords.ts': ['listGrowthResearchRuns', 'saveGrowthResearchRun', 'listGrowthSourceCandidates', 'saveGrowthSourceCandidate', 'enqueueGrowthFetchWork', 'listGrowthExtractedSignals', 'listGrowthOpportunityScores', 'listGrowthAgentDecisions', 'saveGrowthAgentDecision', 'listGrowthDiscoveryFeedback', 'saveGrowthDiscoveryFeedback', 'growthDiscoverySafety', 'GROWTH_DISCOVERY_BLOCKED_ACTIONS', 'growth_research_runs', 'growth_source_candidates', 'growth_fetch_queue', 'growth_agent_decisions', 'growth_discovery_feedback'],
+  'src/routes/growthAutonomousDiscoveryAdmin.ts': ['handleGrowthAutonomousDiscoveryAdmin', 'readSafety', 'writeSafety', 'confirm_required', 'Growth autonomous discovery writes require confirmation', 'They do not crawl, browse, send, post, call AI, submit forms, spend, or mutate external systems.', '0020_growth_autonomous_discovery.sql', '/admin/growth/discovery/research-runs', '/admin/growth/discovery/source-candidates', '/admin/growth/discovery/signals', '/admin/growth/discovery/opportunity-scores', '/admin/growth/discovery/agent-decisions', '/admin/growth/discovery/feedback', '/admin/growth/discovery/fetch-queue'],
   'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts': ['growthAutonomousDiscoveryRouteCatalogue', 'growthAutonomousDiscoveryReadRouteIds', 'growthAutonomousDiscoveryConfirmRouteIds', 'growth_research_runs', 'growth_source_candidates', 'growth_extracted_signals', 'growth_opportunity_scores', 'growth_agent_decisions', 'growth_discovery_feedback', 'growth_research_run_plan', 'growth_source_candidate_save', 'growth_fetch_queue_enqueue', 'growth_agent_decision_record', 'growth_discovery_feedback_save', 'safety: "read_only"', 'safety: "confirm_required"', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'must not be browser-proxied'],
+  'src/routes/growthAdmin.ts': ['handleGrowthAutonomousDiscoveryAdmin', 'autonomousDiscoveryPrefixes', '/admin/growth/discovery', 'pathMatches(pathname, autonomousDiscoveryPrefixes)', '0020_growth_autonomous_discovery.sql', 'handleGrowthCapabilitiesAdmin', 'handleGrowthCampaignIntelligenceAdmin', 'handleGrowthStrategyMemoryAdmin', 'handleGrowthBlackboardAdmin', 'campaignIntelligencePrefixes', 'strategyMemoryPrefixes', 'blackboardPrefixes', 'function safetyBase()', 'mode: "growth_brief"', '...brief, safety: safety()', ...fullSafetyTokens],
   'scripts/apply-growth-autonomous-discovery-route-catalogue.mjs': ['growthAutonomousDiscoveryRouteCatalogue', 'routeCataloguePlanner.ts', 'growthAutonomousDiscoveryRouteCatalogue wiring', 'zero_source_route_map'],
-  'scripts/check-growth-autonomous-discovery.mjs': ['Growth autonomous discovery check passed.', 'docs/growth-autonomous-discovery-architecture.md', 'docs/growth-source-discovery-safety-policy.md', 'docs/growth-zero-source-research-runbook.md', 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts', '0020_growth_autonomous_discovery.sql'],
+  'scripts/check-growth-autonomous-discovery.mjs': ['Growth autonomous discovery check passed.', 'docs/growth-autonomous-discovery-architecture.md', 'docs/growth-source-discovery-safety-policy.md', 'docs/growth-zero-source-research-runbook.md', 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts', 'src/routes/growthAutonomousDiscoveryAdmin.ts', 'src/core/growthAutonomousDiscoveryRecords.ts', '0020_growth_autonomous_discovery.sql'],
   'docs/growth-backend-validation.md': [
     '.github/workflows/growth-backend-validation.yml',
     'docs/growth-backend-workflow-gate.md',
@@ -151,28 +155,6 @@ const requiredTokens = {
     'RouteCatalogueInput',
     'canPostSocial: false',
     'canSubmitForms: false',
-  ],
-  'src/routes/growthAdmin.ts': [
-    'handleGrowthCapabilitiesAdmin',
-    'handleGrowthCampaignIntelligenceAdmin',
-    'handleGrowthStrategyMemoryAdmin',
-    'handleGrowthBlackboardAdmin',
-    'campaignIntelligencePrefixes',
-    'strategyMemoryPrefixes',
-    'blackboardPrefixes',
-    'pathMatches(pathname, campaignIntelligencePrefixes)',
-    'pathMatches(pathname, strategyMemoryPrefixes)',
-    'pathMatches(pathname, blackboardPrefixes)',
-    '/admin/growth/capabilities',
-    '/admin/growth/autonomy',
-    '/admin/growth/cycle',
-    '/admin/growth/operator',
-    '/admin/growth/strategy-memory',
-    '/admin/growth/blackboard',
-    'function safetyBase()',
-    'mode: "growth_brief"',
-    '...brief, safety: safety()',
-    ...fullSafetyTokens,
   ],
   'src/routes/growthCapabilitiesAdmin.ts': ['handleGrowthCapabilitiesAdmin', 'listGrowthCapabilities', 'safety: readSafety', ...fullSafetyTokens],
   'src/routes/growthCampaignIntelligenceAdmin.ts': ['handleGrowthCampaignIntelligenceAdmin', 'readSafety', 'writeSafety', 'safety: readSafety', 'safety: writeSafety', ...fullSafetyTokens],

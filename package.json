@@ -14,7 +14,7 @@
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
     "growth:backend:aggregate:check": "node scripts/check-growth-backend-aggregate-command.mjs",
-    "growth:backend:check:local": "npm run check:local",
+    "growth:backend:check:local": "npm run growth:backend:aggregate:check && npm run check:local",
     "growth:backend:final:print": "node scripts/print-growth-final-backend-validation.mjs",
     "growth:blackboard:check": "node scripts/check-growth-blackboard.mjs",
     "growth:blackboard:smoke:print": "node scripts/print-growth-blackboard-smoke-commands.mjs",

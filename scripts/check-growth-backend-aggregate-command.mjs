@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
+const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
 
 const expectedPackageScripts = {
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
@@ -31,6 +32,7 @@ const requiredFileTokens = {
     'npm run check:local',
   ],
   'docs/growth-backend-validation.md': [
+    backendWorkflowGateDoc,
     backendAggregateCheck,
     backendLocalCheck,
     'Worker is the backend source of truth',

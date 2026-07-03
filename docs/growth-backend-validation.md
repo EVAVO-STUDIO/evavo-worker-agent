@@ -41,11 +41,14 @@ npm run growth:route-catalogue:apply
 npm run growth:backend:check:local
 ```
 
-`growth:backend:check:local` wraps the existing full backend local check:
+`growth:backend:check:local` first runs the aggregate command contract checker, then runs the existing full backend local check:
 
 ```powershell
+npm run growth:backend:aggregate:check
 npm run check:local
 ```
+
+The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, and the expected package script wiring.
 
 The existing backend local check expands to helper-script parsing, migration presence, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, and TypeScript validation.
 

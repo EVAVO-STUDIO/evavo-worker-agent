@@ -23,6 +23,7 @@ Start here for the modern opportunity/source-expansion workflow:
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
 - [`docs/growth-cost-governor.md`](docs/growth-cost-governor.md) — budget ledger, rest triggers, cost caps, and fail-closed rules.
 - [`docs/growth-route-contract-verification.md`](docs/growth-route-contract-verification.md) — verifies the full Growth route catalogue, expected IDs, safety flags, and confirmed metadata-write routes.
+- [`docs/growth-backend-validation.md`](docs/growth-backend-validation.md) — preferred guarded Worker backend aggregate validation flow and cross-repo pairing with Next Growth Ops validation.
 - [`docs/growth-capability-registry.md`](docs/growth-capability-registry.md) — capability registry for the EVAVO Growth Operator, including autonomy levels and blocked future execution placeholders.
 - [`docs/growth-campaign-intelligence.md`](docs/growth-campaign-intelligence.md) — current v3 campaign, strategy, blackboard, cycle, autonomy, and decision-brain contract.
 - [`docs/growth-strategy-memory.md`](docs/growth-strategy-memory.md) — objectives, key results, target segments, offers, positioning, and runtime constraints.
@@ -56,7 +57,7 @@ npm i
 2) Run local checks
 
 ```powershell
-npm run check:local
+npm run growth:backend:check:local
 ```
 
 3) Deploy
@@ -175,15 +176,17 @@ npm run growth:wiring:apply
 
 ## Growth smoke verification
 
-Run the core Worker checks:
+Run the guarded core Worker checks:
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
-npm run check:local
+npm run growth:backend:check:local
 ```
+
+`growth:backend:check:local` runs the backend aggregate command contract checker before the full local backend check.
 
 Print the route-contract-only Growth check when you only need to validate the Worker route catalogue and do not want to run optional metadata-write smoke steps:
 
@@ -339,7 +342,7 @@ cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
-npm run check:local
+npm run growth:backend:check:local
 npm run growth:route-contract:print
 npm run growth:campaigns:smoke:print
 npm run growth:strategy:smoke:print

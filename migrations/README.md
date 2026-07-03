@@ -18,6 +18,8 @@ npm run db:migration:one -- 0015 --execute
 npm run db:migration:one -- 0016 --execute
 npm run db:migration:one -- 0017 --execute
 npm run db:migration:one -- 0018 --execute
+npm run db:migration:one -- 0019 --execute
+npm run db:migration:one -- 0020 --execute
 ```
 
 At the time of writing, the full remote order is:
@@ -44,6 +46,8 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0015_gro
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0016_growth_strategy_memory.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0017_growth_blackboard.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0018_growth_cycle_memory_snapshots.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0019_growth_approval_requests.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0020_growth_autonomous_discovery.sql
 ```
 
 ## Notes
@@ -61,3 +65,5 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0018_gro
 - `0016_growth_strategy_memory.sql` creates objectives, key results, target segments, offer profiles, positioning profiles, and runtime constraints.
 - `0017_growth_blackboard.sql` creates facts, entities, relationships, market signals, and asset inventory for the internal knowledge substrate.
 - `0018_growth_cycle_memory_snapshots.sql` adds `strategy_json` and `blackboard_json` to cycle events so recorded history preserves the strategy and knowledge state used by each snapshot.
+- `0019_growth_approval_requests.sql` creates the internal approval request queue for reviewable, confirmation-gated Growth operator packs.
+- `0020_growth_autonomous_discovery.sql` creates the zero-source autonomous discovery data model: research runs, source candidates, robots cache, fetch queue, discovered pages, extracted signals, opportunity scores, agent decisions, and discovery feedback. It is schema-only and does not enable crawling, sending, posting, form submission, AI calls, or external execution.

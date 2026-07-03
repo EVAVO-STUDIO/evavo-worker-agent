@@ -63,6 +63,12 @@ The Worker repository has an automated GitHub Actions gate for Growth backend ch
 .github/workflows/growth-backend-validation.yml
 ```
 
+Detailed workflow requirements live in:
+
+```text
+docs/growth-backend-workflow-gate.md
+```
+
 That workflow runs on pull requests and main-branch pushes, uses Node 24, installs with `npm ci`, runs `npm run growth:backend:aggregate:check`, runs `npm run growth:backend:check:local`, and prints `npm run growth:backend:final:print`.
 
 ## Preferred local aggregate check

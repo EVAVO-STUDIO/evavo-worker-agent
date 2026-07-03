@@ -29,6 +29,32 @@ submitsForms: false
 
 Confirmed metadata-write routes must remain server-side only, require explicit confirmation, and advertise metadata-only posture. They must not send email, post socially, submit forms, browse, call AI, call arbitrary network actions, execute browser actions, or perform external state changes.
 
+## Backend responsibility boundary
+
+The Worker owns the backend contract for:
+
+```text
+route catalogue metadata
+inner Worker payload safety posture
+confirmation-gated metadata-write route posture
+legacy compatibility safety flags
+backend final validation printer
+```
+
+The Worker must keep these safety guarantees true for every Growth route catalogue entry and metadata-write route:
+
+```text
+no AI calls
+no arbitrary network calls
+no email sending
+no social posting
+no form submission
+no browser execution
+no external state change
+```
+
+The Next repo may display and verify this backend posture, but the Worker remains the source of truth for route catalogue metadata and inner Worker payload safety.
+
 ## Preferred local aggregate check
 
 Run this from PowerShell after pulling the latest repo:
@@ -48,7 +74,7 @@ npm run growth:backend:aggregate:check
 npm run check:local
 ```
 
-The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, and the expected package script wiring.
+The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, the README runbook, and the expected package script wiring.
 
 The existing backend local check expands to helper-script parsing, migration presence, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, and TypeScript validation.
 

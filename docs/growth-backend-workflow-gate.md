@@ -19,6 +19,12 @@ npm run growth:backend:check:local
 npm run growth:backend:final:print
 ```
 
+Print this workflow-gate summary locally with:
+
+```powershell
+npm run growth:backend:workflow:print
+```
+
 The workflow complements the local PowerShell runbook. It does not deploy the Worker and does not require production secrets.
 
 Local validation remains:

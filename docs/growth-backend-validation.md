@@ -55,6 +55,16 @@ no external state change
 
 The Next repo may display and verify this backend posture, but the Worker remains the source of truth for route catalogue metadata and inner Worker payload safety.
 
+## Automated workflow gate
+
+The Worker repository has an automated GitHub Actions gate for Growth backend changes:
+
+```text
+.github/workflows/growth-backend-validation.yml
+```
+
+That workflow runs on pull requests and main-branch pushes, uses Node 24, installs with `npm ci`, runs `npm run growth:backend:aggregate:check`, runs `npm run growth:backend:check:local`, and prints `npm run growth:backend:final:print`.
+
 ## Preferred local aggregate check
 
 Run this from PowerShell after pulling the latest repo:

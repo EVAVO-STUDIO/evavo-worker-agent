@@ -13,6 +13,7 @@
     "db:migrations:print": "node scripts/print-migration-commands.mjs",
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
+    "growth:backend:aggregate:check": "node scripts/check-growth-backend-aggregate-command.mjs",
     "growth:backend:check:local": "npm run check:local",
     "growth:backend:final:print": "node scripts/print-growth-final-backend-validation.mjs",
     "growth:blackboard:check": "node scripts/check-growth-blackboard.mjs",

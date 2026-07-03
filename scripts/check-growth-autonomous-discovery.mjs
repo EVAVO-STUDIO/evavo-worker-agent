@@ -7,6 +7,8 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const migrationPath = 'migrations/0020_growth_autonomous_discovery.sql';
 const corePath = 'src/core/growthAutonomousDiscovery.ts';
+const recordsPath = 'src/core/growthAutonomousDiscoveryRecords.ts';
+const adminPath = 'src/routes/growthAutonomousDiscoveryAdmin.ts';
 const routeCataloguePath = 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts';
 
 const readRouteIds = [
@@ -114,6 +116,51 @@ const requiredTokens = {
     'canSubmitForms: false',
     'canExecuteBrowserActions: false',
     'canSubmitThirdPartyForms: false',
+  ],
+  [recordsPath]: [
+    'listGrowthResearchRuns',
+    'saveGrowthResearchRun',
+    'listGrowthSourceCandidates',
+    'saveGrowthSourceCandidate',
+    'enqueueGrowthFetchWork',
+    'listGrowthExtractedSignals',
+    'listGrowthOpportunityScores',
+    'listGrowthAgentDecisions',
+    'saveGrowthAgentDecision',
+    'listGrowthDiscoveryFeedback',
+    'saveGrowthDiscoveryFeedback',
+    'growthDiscoverySafety',
+    'GROWTH_DISCOVERY_BLOCKED_ACTIONS',
+    'growth_research_runs',
+    'growth_source_candidates',
+    'growth_fetch_queue',
+    'growth_agent_decisions',
+    'growth_discovery_feedback',
+  ],
+  [adminPath]: [
+    'handleGrowthAutonomousDiscoveryAdmin',
+    'readSafety',
+    'writeSafety',
+    'confirm_required',
+    'Growth autonomous discovery writes require confirmation',
+    'They do not crawl, browse, send, post, call AI, submit forms, spend, or mutate external systems.',
+    '0020_growth_autonomous_discovery.sql',
+    '/admin/growth/discovery/research-runs',
+    '/admin/growth/discovery/source-candidates',
+    '/admin/growth/discovery/signals',
+    '/admin/growth/discovery/opportunity-scores',
+    '/admin/growth/discovery/agent-decisions',
+    '/admin/growth/discovery/feedback',
+    '/admin/growth/discovery/fetch-queue',
+    ...readRouteIds,
+    ...confirmRouteIds,
+  ],
+  'src/routes/growthAdmin.ts': [
+    'handleGrowthAutonomousDiscoveryAdmin',
+    'autonomousDiscoveryPrefixes',
+    '/admin/growth/discovery',
+    'pathMatches(pathname, autonomousDiscoveryPrefixes)',
+    '0020_growth_autonomous_discovery.sql',
   ],
   [routeCataloguePath]: [
     'growthAutonomousDiscoveryRouteCatalogue',

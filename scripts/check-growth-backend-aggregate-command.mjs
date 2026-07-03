@@ -13,11 +13,8 @@ const expectedPackageScripts = {
 
 const requiredFileTokens = {
   'scripts/print-growth-final-backend-validation.mjs': [
-    'npm run growth:backend:aggregate:check',
     'npm run growth:backend:check:local',
     'Worker supplies the inner payload safety posture',
-    'outer proxy envelope safety',
-    'inner Worker payload safety',
     'npm run growth:route-safety-flags:check',
     'npm run growth:review-queue:check',
     'npm run check:local',

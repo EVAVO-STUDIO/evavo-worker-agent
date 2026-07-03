@@ -14,6 +14,15 @@ const expectedPackageScripts = {
 };
 
 const requiredFileTokens = {
+  'README.md': [
+    'docs/growth-backend-validation.md',
+    backendLocalCheck,
+    'Run the guarded core Worker checks:',
+    'npm run growth:route-contract:print',
+    'npm run growth:campaigns:smoke:print',
+    'npm run growth:strategy:smoke:print',
+    'npm run growth:blackboard:smoke:print',
+  ],
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,
     'Worker supplies the inner payload safety posture',

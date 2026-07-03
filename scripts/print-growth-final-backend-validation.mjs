@@ -4,6 +4,12 @@ const commands = String.raw`
 # This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, and the internal review queue persistence check.
 # Two-layer safety note: the Worker supplies the inner payload safety posture consumed by the Next read-only proxy UI and smoke checks.
 # It does not send, post, submit, browse, call AI, execute browser actions, or perform external state changes.
+# Aggregate expansion note: npm run growth:backend:check:local wraps the existing full local backend check.
+# Existing full local backend check includes:
+# npm run growth:route-delegates:check
+# npm run growth:route-safety-flags:check
+# npm run growth:review-queue:check
+# npm run check:local
 
 cd C:\GitRepos\evavo-worker-agent
 

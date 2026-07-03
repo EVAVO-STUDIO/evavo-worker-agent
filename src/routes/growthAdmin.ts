@@ -16,6 +16,7 @@ import { getGrowthBrief } from "../core/growthBrief";
 import { listGrowthActions, listGrowthSignals } from "../core/growthEngagementReadModels";
 import { updateGrowthActionStatus, updateGrowthSignalStatus } from "../core/growthQueueReview";
 import { upsertGrowthSignal } from "../core/growthSignals";
+import { handleGrowthAutonomousDiscoveryAdmin } from "./growthAutonomousDiscoveryAdmin";
 import { handleGrowthBlackboardAdmin } from "./growthBlackboardAdmin";
 import { handleGrowthCapabilitiesAdmin } from "./growthCapabilitiesAdmin";
 import { handleGrowthCampaignIntelligenceAdmin } from "./growthCampaignIntelligenceAdmin";
@@ -49,6 +50,10 @@ const strategyMemoryPrefixes = [
 
 const blackboardPrefixes = [
   "/admin/growth/blackboard",
+];
+
+const autonomousDiscoveryPrefixes = [
+  "/admin/growth/discovery",
 ];
 
 function pathMatches(pathname: string, prefixes: string[]) {
@@ -109,7 +114,7 @@ function migrationError(error: unknown) {
     mode: "growth_admin_error",
     error: missingGrowthTable ? "growth_schema_missing" : duplicateSignal ? "growth_signal_duplicate" : "growth_admin_failed",
     message,
-    requiredMigration: missingGrowthTable ? "latest Growth migration, including 0012_growth_autonomy_core.sql through 0019_growth_approval_requests.sql" : null,
+    requiredMigration: missingGrowthTable ? "latest Growth migration, including 0012_growth_autonomy_core.sql through 0020_growth_autonomous_discovery.sql" : null,
     safety: safety({ readOnly: true }),
   };
 }
@@ -139,6 +144,7 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
 
   try {
     if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(request, env, pathname, json);
+    if (pathMatches(pathname, autonomousDiscoveryPrefixes)) return await handleGrowthAutonomousDiscoveryAdmin(request, env, pathname, json);
     if (pathMatches(pathname, campaignIntelligencePrefixes)) return await handleGrowthCampaignIntelligenceAdmin(request, env, pathname, json);
     if (pathMatches(pathname, strategyMemoryPrefixes)) return await handleGrowthStrategyMemoryAdmin(request, env, pathname, json);
     if (pathMatches(pathname, blackboardPrefixes)) return await handleGrowthBlackboardAdmin(request, env, pathname, json);

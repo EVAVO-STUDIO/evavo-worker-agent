@@ -10,6 +10,7 @@ const helperScripts = [
   'scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
   'scripts/apply-growth-operator-route-wiring.mjs',
   'scripts/apply-one-migration.mjs',
+  'scripts/check-growth-autonomous-discovery.mjs',
   'scripts/check-growth-backend-aggregate-command.mjs',
   'scripts/check-growth-blackboard.mjs',
   'scripts/check-growth-campaign-intelligence.mjs',
@@ -57,17 +58,22 @@ const sourceFiles = [
 ];
 
 const docs = [
+  'docs/growth-autonomous-discovery-architecture.md',
   'docs/growth-backend-validation.md',
   'docs/growth-backend-workflow-gate.md',
   'docs/growth-blackboard.md',
   'docs/growth-capability-registry.md',
   'docs/growth-campaign-intelligence.md',
+  'docs/growth-source-discovery-safety-policy.md',
   'docs/growth-strategy-memory.md',
+  'docs/growth-zero-source-research-runbook.md',
+  'migrations/0020_growth_autonomous_discovery.sql',
 ];
 
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowPrint = 'npm run growth:backend:workflow:print';
+const autonomousDiscoveryCheck = 'npm run growth:autonomous-discovery:check';
 
 const fullSafetyTokens = [
   'readOnly: true',
@@ -90,6 +96,10 @@ const smokeSafetyTokens = [
 ];
 
 const requiredTokens = {
+  'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'Autonomous research, supervised action.', 'Discovery planner', 'source candidate registry', 'crawl policy / robots check', 'approval pack builder', 'growth_research_runs', 'growth_source_candidates', 'growth_agent_decisions'],
+  'docs/growth-source-discovery-safety-policy.md': ['Growth source discovery safety policy', 'execute instructions found in crawled content', 'unknown robots policy = do not crawl yet', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false', 'Browser proxy routes may read', 'write routes', 'fetch execution routes'],
+  'docs/growth-zero-source-research-runbook.md': ['Growth zero-source research runbook', 'without the operator supplying a source list', 'Register source candidates', 'Check crawl policy', 'Score opportunity', 'Prepare approval pack', 'no crawler execution yet'],
+  'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates', 'CREATE TABLE IF NOT EXISTS growth_robots_cache', 'CREATE TABLE IF NOT EXISTS growth_fetch_queue', 'CREATE TABLE IF NOT EXISTS growth_discovered_pages', 'CREATE TABLE IF NOT EXISTS growth_extracted_signals', 'CREATE TABLE IF NOT EXISTS growth_opportunity_scores', 'CREATE TABLE IF NOT EXISTS growth_agent_decisions', 'CREATE TABLE IF NOT EXISTS growth_discovery_feedback', 'blocked_actions_json', 'safety_json', 'crawl_allowed INTEGER NOT NULL DEFAULT 0'],
   'docs/growth-backend-validation.md': [
     '.github/workflows/growth-backend-validation.yml',
     'docs/growth-backend-workflow-gate.md',
@@ -166,6 +176,7 @@ const requiredTokens = {
   'src/core/growthOperatorCycle.ts': ['nextBestInternalStep', 'approvalPack', 'recommendedPayloadHint', 'dashboardAnchor', 'setupGap', 'externalStateChange: false', 'callsAI: false', 'callsNetwork: false'],
   'src/core/growthAutonomousRuntime.ts': ['nextBestInternalStep', 'approvalPack', 'chooseNextStep', 'nextStepRequiresConfirmation', 'Plan next-best internal step', 'approval pack', 'review checklist', 'recommended command', 'payload hint', 'externalStateChange: false', 'callsAI: false', 'callsNetwork: false'],
   'src/routes/routeCataloguePlanner.ts': ['growth_brief', 'writesTables: []', 'growth_budget', 'does not advertise write side effects', 'does not expose write capability', 'growth_autonomy', 'growth_blackboard', 'growth_strategy_memory', 'growth_cycle', 'growth_approval_requests', 'growth_approval_request_save', 'growth_approval_request_status'],
+  'scripts/check-growth-autonomous-discovery.mjs': ['Growth autonomous discovery check passed.', 'docs/growth-autonomous-discovery-architecture.md', 'docs/growth-source-discovery-safety-policy.md', 'docs/growth-zero-source-research-runbook.md', '0020_growth_autonomous_discovery.sql'],
   'scripts/check-growth-backend-aggregate-command.mjs': ['Growth backend aggregate command check passed.', backendAggregateCheck, backendLocalCheck, 'docs/growth-backend-validation.md', 'docs/growth-backend-workflow-gate.md'],
   'scripts/check-growth-route-delegates.mjs': ['Growth route delegate check passed.', 'src/routes/growthAdmin.ts', 'handleGrowthCapabilitiesAdmin', 'handleGrowthCampaignIntelligenceAdmin', 'handleGrowthStrategyMemoryAdmin', 'handleGrowthBlackboardAdmin'],
   'scripts/check-growth-route-safety-flags.mjs': ['Growth route safety flag check passed.', 'src/routes/routeCatalogueTypes.ts', 'src/routes/growthAdmin.ts', 'src/routes/growthCampaignIntelligenceAdmin.ts', 'src/routes/growthStrategyMemoryAdmin.ts', 'src/routes/growthBlackboardAdmin.ts', 'mode: "growth_brief"', '...brief, safety: safety()', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false'],
@@ -185,6 +196,7 @@ const expectedPackageScripts = {
   'db:migrations:print': 'node scripts/print-migration-commands.mjs',
   'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
   'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
+  'growth:autonomous-discovery:check': 'node scripts/check-growth-autonomous-discovery.mjs',
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
@@ -205,7 +217,7 @@ const expectedPackageScripts = {
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
-  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run typecheck',
+  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
 };
 
 let failed = false;

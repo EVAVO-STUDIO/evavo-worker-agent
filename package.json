@@ -16,6 +16,7 @@
     "growth:backend:aggregate:check": "node scripts/check-growth-backend-aggregate-command.mjs",
     "growth:backend:check:local": "npm run growth:backend:aggregate:check && npm run check:local",
     "growth:backend:final:print": "node scripts/print-growth-final-backend-validation.mjs",
+    "growth:backend:workflow:print": "node scripts/print-growth-backend-workflow-gate.mjs",
     "growth:blackboard:check": "node scripts/check-growth-blackboard.mjs",
     "growth:blackboard:smoke:print": "node scripts/print-growth-blackboard-smoke-commands.mjs",
     "growth:campaigns:check": "node scripts/check-growth-campaign-intelligence.mjs",

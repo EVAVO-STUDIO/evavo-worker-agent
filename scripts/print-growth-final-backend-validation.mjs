@@ -14,6 +14,7 @@ const commands = String.raw`
 cd C:\GitRepos\evavo-worker-agent
 
 git pull
+npm run growth:backend:workflow:print
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run growth:backend:check:local

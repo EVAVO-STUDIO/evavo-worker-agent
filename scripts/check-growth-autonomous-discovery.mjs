@@ -7,6 +7,24 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const migrationPath = 'migrations/0020_growth_autonomous_discovery.sql';
 const corePath = 'src/core/growthAutonomousDiscovery.ts';
+const routeCataloguePath = 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts';
+
+const readRouteIds = [
+  'growth_research_runs',
+  'growth_source_candidates',
+  'growth_extracted_signals',
+  'growth_opportunity_scores',
+  'growth_agent_decisions',
+  'growth_discovery_feedback',
+];
+
+const confirmRouteIds = [
+  'growth_research_run_plan',
+  'growth_source_candidate_save',
+  'growth_fetch_queue_enqueue',
+  'growth_agent_decision_record',
+  'growth_discovery_feedback_save',
+];
 
 const requiredTokens = {
   'docs/growth-autonomous-discovery-architecture.md': [
@@ -96,6 +114,26 @@ const requiredTokens = {
     'canSubmitForms: false',
     'canExecuteBrowserActions: false',
     'canSubmitThirdPartyForms: false',
+  ],
+  [routeCataloguePath]: [
+    'growthAutonomousDiscoveryRouteCatalogue',
+    'growthAutonomousDiscoveryReadRouteIds',
+    'growthAutonomousDiscoveryConfirmRouteIds',
+    ...readRouteIds,
+    ...confirmRouteIds,
+    'method: "GET"',
+    'method: "POST"',
+    'safety: "read_only"',
+    'safety: "confirm_required"',
+    'readOnly: true',
+    'readOnly: false',
+    'requiresConfirm: true',
+    'writesTables: []',
+    'callsNetwork: false',
+    'callsAI: false',
+    'canSendEmail: false',
+    'does not crawl',
+    'must not be browser-proxied',
   ],
   [migrationPath]: [
     'CREATE TABLE IF NOT EXISTS growth_research_runs',

@@ -10,6 +10,7 @@ const corePath = 'src/core/growthAutonomousDiscovery.ts';
 const recordsPath = 'src/core/growthAutonomousDiscoveryRecords.ts';
 const adminPath = 'src/routes/growthAutonomousDiscoveryAdmin.ts';
 const routeCataloguePath = 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts';
+const routeTypesPath = 'src/routes/routeCatalogueTypes.ts';
 
 const readRouteIds = [
   'growth_research_runs',
@@ -181,6 +182,14 @@ const requiredTokens = {
     'canSendEmail: false',
     'does not crawl',
     'must not be browser-proxied',
+  ],
+  [routeTypesPath]: [
+    'canPostSocial: boolean',
+    'canSubmitForms: boolean',
+    'type RouteCatalogueInput',
+    'Partial<Pick<RouteCatalogueItem, "canPostSocial" | "canSubmitForms">>',
+    'canPostSocial: false',
+    'canSubmitForms: false',
   ],
   [migrationPath]: [
     'CREATE TABLE IF NOT EXISTS growth_research_runs',

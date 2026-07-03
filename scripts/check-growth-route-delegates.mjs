@@ -8,16 +8,20 @@ const root = path.resolve(__dirname, '..');
 const required = {
   'src/routes/growthAdmin.ts': [
     'handleGrowthCapabilitiesAdmin',
+    'handleGrowthAutonomousDiscoveryAdmin',
     'handleGrowthCampaignIntelligenceAdmin',
     'handleGrowthStrategyMemoryAdmin',
     'handleGrowthBlackboardAdmin',
+    'autonomousDiscoveryPrefixes',
     'campaignIntelligencePrefixes',
     'strategyMemoryPrefixes',
     'blackboardPrefixes',
+    'pathMatches(pathname, autonomousDiscoveryPrefixes)',
     'pathMatches(pathname, campaignIntelligencePrefixes)',
     'pathMatches(pathname, strategyMemoryPrefixes)',
     'pathMatches(pathname, blackboardPrefixes)',
     '/admin/growth/capabilities',
+    '/admin/growth/discovery',
     '/admin/growth/autonomy',
     '/admin/growth/cycle',
     '/admin/growth/operator',
@@ -33,6 +37,16 @@ const required = {
   'src/routes/growthCapabilitiesAdmin.ts': [
     'handleGrowthCapabilitiesAdmin',
     'listGrowthCapabilities',
+  ],
+  'src/routes/growthAutonomousDiscoveryAdmin.ts': [
+    'handleGrowthAutonomousDiscoveryAdmin',
+    '/admin/growth/discovery/research-runs',
+    '/admin/growth/discovery/source-candidates',
+    '/admin/growth/discovery/signals',
+    '/admin/growth/discovery/opportunity-scores',
+    '/admin/growth/discovery/agent-decisions',
+    '/admin/growth/discovery/feedback',
+    '/admin/growth/discovery/fetch-queue',
   ],
   'src/routes/growthCampaignIntelligenceAdmin.ts': [
     'handleGrowthCampaignIntelligenceAdmin',

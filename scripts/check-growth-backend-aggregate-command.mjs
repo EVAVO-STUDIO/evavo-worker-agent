@@ -4,23 +4,26 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
+const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
+const backendLocalCheck = 'npm run growth:backend:check:local';
 
 const expectedPackageScripts = {
-  'growth:backend:check:local': 'npm run check:local',
+  'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
 };
 
 const requiredFileTokens = {
   'scripts/print-growth-final-backend-validation.mjs': [
-    'npm run growth:backend:check:local',
+    backendLocalCheck,
     'Worker supplies the inner payload safety posture',
     'npm run growth:route-safety-flags:check',
     'npm run growth:review-queue:check',
     'npm run check:local',
   ],
   'docs/growth-backend-validation.md': [
-    'npm run growth:backend:check:local',
+    backendAggregateCheck,
+    backendLocalCheck,
     'Worker is the backend source of truth',
     'inner payload safety posture',
     'Confirmed metadata-write routes',

@@ -1,14 +1,16 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
-# Run from PowerShell after migrations 0014 through 0019 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, and the internal review queue persistence check.
+# Run from PowerShell after migrations 0014 through 0020 are applied.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, and the internal review queue persistence check.
 # Two-layer safety note: the Worker supplies the inner payload safety posture consumed by the Next read-only proxy UI and smoke checks.
+# Autonomous discovery note: Worker owns zero-source discovery storage, read routes, confirm-required metadata routes, and route catalogue metadata. The Worker route-contract smoke now verifies autonomous discovery read IDs, confirm IDs, delegated read paths, and safe no-network / no-AI / no-email / no-social / no-form posture.
 # It does not send, post, submit, browse, call AI, execute browser actions, or perform external state changes.
 # Aggregate expansion note: npm run growth:backend:check:local wraps the existing full local backend check.
 # Existing full local backend check includes:
 # npm run growth:route-delegates:check
 # npm run growth:route-safety-flags:check
 # npm run growth:review-queue:check
+# npm run growth:autonomous-discovery:check
 # npm run check:local
 
 cd C:\GitRepos\evavo-worker-agent
@@ -18,6 +20,22 @@ npm run growth:backend:workflow:print
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run growth:backend:check:local
+
+Write-Host "Confirm autonomous discovery backend checks are included:" -ForegroundColor Cyan
+Write-Host "- migrations/0020_growth_autonomous_discovery.sql" -ForegroundColor Gray
+Write-Host "- npm run growth:autonomous-discovery:check" -ForegroundColor Gray
+Write-Host "- growth_research_runs" -ForegroundColor Gray
+Write-Host "- growth_source_candidates" -ForegroundColor Gray
+Write-Host "- growth_extracted_signals" -ForegroundColor Gray
+Write-Host "- growth_opportunity_scores" -ForegroundColor Gray
+Write-Host "- growth_agent_decisions" -ForegroundColor Gray
+Write-Host "- growth_discovery_feedback" -ForegroundColor Gray
+Write-Host "- growth_research_run_plan" -ForegroundColor Gray
+Write-Host "- growth_source_candidate_save" -ForegroundColor Gray
+Write-Host "- growth_fetch_queue_enqueue" -ForegroundColor Gray
+Write-Host "- growth_agent_decision_record" -ForegroundColor Gray
+Write-Host "- growth_discovery_feedback_save" -ForegroundColor Gray
+Write-Host "- canPostSocial false and canSubmitForms false route defaults" -ForegroundColor Gray
 
 if (-not $env:WORKER_URL) { $env:WORKER_URL = "https://evavo-outbound-agent.evavo-studio.workers.dev" }
 if (-not $env:ADMIN_TOKEN) { throw "Set ADMIN_TOKEN first." }

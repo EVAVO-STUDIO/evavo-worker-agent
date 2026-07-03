@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
 const migrationPath = 'migrations/0020_growth_autonomous_discovery.sql';
+const corePath = 'src/core/growthAutonomousDiscovery.ts';
 
 const requiredTokens = {
   'docs/growth-autonomous-discovery-architecture.md': [
@@ -69,6 +70,32 @@ const requiredTokens = {
     'Prepare approval pack',
     'source discovery safety policy exists',
     'no crawler execution yet',
+  ],
+  [corePath]: [
+    'GrowthDiscoverySafety',
+    'GrowthResearchRunInput',
+    'GrowthSourceCandidateInput',
+    'GrowthAgentDecisionInput',
+    'GROWTH_DISCOVERY_BLOCKED_ACTIONS',
+    'GROWTH_DISCOVERY_ALLOWED_DECISIONS',
+    'growthDiscoverySafety',
+    'assertGrowthDiscoverySafety',
+    'buildGrowthResearchRun',
+    'buildGrowthSourceCandidate',
+    'buildGrowthAgentDecision',
+    'send_email',
+    'post_social',
+    'submit_form',
+    'mutate_external_system',
+    'execute_page_instruction',
+    'externalStateChange: false',
+    'callsAI: false',
+    'callsNetwork: false',
+    'canSendEmail: false',
+    'canPostSocial: false',
+    'canSubmitForms: false',
+    'canExecuteBrowserActions: false',
+    'canSubmitThirdPartyForms: false',
   ],
   [migrationPath]: [
     'CREATE TABLE IF NOT EXISTS growth_research_runs',

@@ -47,6 +47,8 @@ function writeRoute(id: string, path: string, label: string, writesTables: strin
 
 export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_organizations", "/admin/business/organizations?limit=25", "Business organizations"),
+  readRoute("business_websites", "/admin/business/websites?limit=25", "Business websites"),
+  readRoute("business_pages", "/admin/business/pages?limit=25", "Business pages"),
   readRoute("business_signals", "/admin/business/signals?limit=25", "Business signals"),
   readRoute("business_opportunities", "/admin/business/opportunities?limit=25", "Business opportunities"),
   readRoute("business_service_matches", "/admin/business/service-matches?limit=25", "Business service matches"),
@@ -58,6 +60,8 @@ export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_followups", "/admin/business/followups?limit=25", "Business followups"),
   readRoute("business_learning_events", "/admin/business/learning?limit=25", "Business learning events"),
   writeRoute("business_organization_save", "/admin/business/organizations?confirm=1", "Save business organization", ["business_organizations"]),
+  writeRoute("business_website_save", "/admin/business/websites?confirm=1", "Save business website", ["business_websites"]),
+  writeRoute("business_page_save", "/admin/business/pages?confirm=1", "Save business page", ["business_pages"]),
   writeRoute("business_signal_save", "/admin/business/signals?confirm=1", "Save business signal", ["business_signals"]),
   writeRoute("business_opportunity_save", "/admin/business/opportunities?confirm=1", "Save business opportunity", ["business_opportunities"]),
   writeRoute("business_service_match_save", "/admin/business/service-matches?confirm=1", "Save business service match", ["business_service_matches"]),

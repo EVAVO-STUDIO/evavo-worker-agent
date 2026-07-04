@@ -9,6 +9,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const helperScripts = [
   'scripts/apply-growth-autonomous-discovery-route-catalogue.mjs',
   'scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
+  'scripts/apply-business-autopilot-route-catalogue.mjs',
   'scripts/apply-growth-operator-route-wiring.mjs',
   'scripts/apply-one-migration.mjs',
   'scripts/check-business-autopilot.mjs',
@@ -85,7 +86,7 @@ const docs = [
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowPrint = 'npm run growth:backend:workflow:print';
-const routeCatalogueApply = 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs';
+const routeCatalogueApply = 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs && node scripts/apply-business-autopilot-route-catalogue.mjs';
 const businessAutopilotCheck = 'npm run business:autopilot:check';
 
 const fullSafetyTokens = [
@@ -177,6 +178,7 @@ const requiredTokens = {
   'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts': ['growthAutonomousDiscoveryRouteCatalogue', 'growthAutonomousDiscoveryReadRouteIds', 'growthAutonomousDiscoveryConfirmRouteIds', ...autonomousDiscoveryRouteTokens, 'safety: "read_only"', 'safety: "confirm_required"', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'must not be browser-proxied'],
   'src/routes/growthAdmin.ts': ['handleGrowthAutonomousDiscoveryAdmin', 'autonomousDiscoveryPrefixes', '/admin/growth/discovery', 'pathMatches(pathname, autonomousDiscoveryPrefixes)', '0020_growth_autonomous_discovery.sql', 'handleGrowthCapabilitiesAdmin', 'handleGrowthCampaignIntelligenceAdmin', 'handleGrowthStrategyMemoryAdmin', 'handleGrowthBlackboardAdmin', 'campaignIntelligencePrefixes', 'strategyMemoryPrefixes', 'blackboardPrefixes', 'function safetyBase()', 'mode: "growth_brief"', '...brief, safety: safety()', ...fullSafetyTokens],
   'scripts/apply-growth-autonomous-discovery-route-catalogue.mjs': ['growthAutonomousDiscoveryRouteCatalogue', 'routeCataloguePlanner.ts', 'growthAutonomousDiscoveryRouteCatalogue wiring', 'zero_source_route_map'],
+  'scripts/apply-business-autopilot-route-catalogue.mjs': ['businessAutopilotRouteCatalogue', 'routeCataloguePlanner.ts', 'Applied Business Autopilot route catalogue wiring.', 'zero_source_route_map'],
   'scripts/check-growth-autonomous-discovery.mjs': ['Growth autonomous discovery check passed.', 'routeTypesPath', 'routeContractPrinterPath', 'scripts/print-growth-route-contract-check.mjs', 'docs/growth-autonomous-discovery-architecture.md', 'docs/growth-source-discovery-safety-policy.md', 'docs/growth-zero-source-research-runbook.md', 'src/routes/growthAutonomousDiscoveryRouteCatalogue.ts', 'src/routes/growthAutonomousDiscoveryAdmin.ts', 'src/core/growthAutonomousDiscoveryRecords.ts', '0020_growth_autonomous_discovery.sql'],
   'docs/growth-backend-validation.md': ['.github/workflows/growth-backend-validation.yml', 'docs/growth-backend-workflow-gate.md', 'uses Node 24', 'npm ci', backendAggregateCheck, backendLocalCheck, 'npm run growth:backend:final:print', 'Worker is the backend source of truth', 'Backend responsibility boundary', 'route catalogue metadata', 'inner Worker payload safety posture', 'confirmation-gated metadata-write route posture', 'legacy compatibility safety flags', 'backend final validation printer', 'autonomous discovery metadata-only routes', 'autonomous discovery route-contract checks', 'migrations/0020_growth_autonomous_discovery.sql', 'npm run growth:autonomous-discovery:check', 'autonomous discovery records helpers', 'autonomous discovery route-contract printer coverage', 'canPostSocial false and canSubmitForms false route defaults', ...autonomousDiscoveryRouteTokens, 'no AI calls', 'no arbitrary network calls', 'no email sending', 'no social posting', 'no form submission', 'no browser execution', 'no external state change'],
   'docs/growth-backend-workflow-gate.md': ['Growth backend workflow gate', '.github/workflows/growth-backend-validation.yml', 'Growth Backend Validation', 'contents: read', 'timeout-minutes: 10', 'node-version: 24', 'npm ci', backendAggregateCheck, backendLocalCheck, 'npm run growth:backend:final:print', backendWorkflowPrint],

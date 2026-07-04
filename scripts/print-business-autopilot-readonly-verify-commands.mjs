@@ -28,6 +28,8 @@ function Assert-BusinessRead($path) {
 
 $paths = @(
   "/admin/business/organizations?limit=5",
+  "/admin/business/websites?limit=5",
+  "/admin/business/pages?limit=5",
   "/admin/business/signals?limit=5",
   "/admin/business/opportunities?limit=5",
   "/admin/business/service-matches?limit=5",

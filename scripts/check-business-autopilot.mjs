@@ -220,6 +220,16 @@ const required = {
     'Applied Business Autopilot route catalogue wiring.',
     'zero_source_route_map',
   ],
+  'scripts/print-business-autopilot-route-contract-check.mjs': [
+    'EVAVO Business Autopilot route-contract smoke check',
+    'Business Autopilot route contract is valid.',
+    ...readRouteIds,
+    ...confirmRouteIds,
+    '/admin/business/organizations?limit=5',
+    '/admin/business/learning?limit=5',
+    'Business Autopilot route has missing or unsafe read safety',
+    'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems',
+  ],
   'scripts/check-business-autopilot.mjs': [
     'Business Autopilot foundation check passed.',
     'src/core/businessAutopilotSafety.ts',
@@ -227,6 +237,7 @@ const required = {
     'src/core/businessAutopilotRecords.ts',
     'src/routes/businessAutopilotAdmin.ts',
     'src/routes/businessAutopilotRouteCatalogue.ts',
+    'scripts/print-business-autopilot-route-contract-check.mjs',
     '0021_business_autopilot_foundation.sql',
   ],
   'scripts/check-migrations-present.mjs': [

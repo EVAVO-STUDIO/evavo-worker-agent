@@ -25,7 +25,7 @@
     "growth:campaigns:smoke:print": "node scripts/print-growth-campaign-intelligence-smoke-commands.mjs",
     "growth:capabilities:check": "node scripts/check-growth-capability-registry.mjs",
     "growth:review-queue:check": "node scripts/check-growth-review-queue.mjs",
-    "growth:route-catalogue:apply": "node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs",
+    "growth:route-catalogue:apply": "node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs && node scripts/apply-business-autopilot-route-catalogue.mjs",
     "growth:route-contract:print": "node scripts/print-growth-route-contract-check.mjs",
     "growth:route-delegates:check": "node scripts/check-growth-route-delegates.mjs",
     "growth:route-safety-flags:check": "node scripts/check-growth-route-safety-flags.mjs",

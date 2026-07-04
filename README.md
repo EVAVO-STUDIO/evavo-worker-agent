@@ -1,6 +1,6 @@
 # EVAVO Outbound Agent (Cloudflare Worker)
 
-This is the Worker-side runtime for the EVAVO Outbound Agent: a governed opportunity intelligence system for safe source discovery, opportunity review, controlled outbound preparation, and the EVAVO Growth Operator.
+This is the Worker-side runtime for the EVAVO Outbound Agent: a governed opportunity intelligence system for safe source discovery, opportunity review, controlled outbound preparation, the EVAVO Growth Operator, and the broader EVAVO Business Autopilot.
 
 The current operating model is **free-safe first**:
 
@@ -9,8 +9,9 @@ The current operating model is **free-safe first**:
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Autonomous discovery is research-memory-first and supervised-action only.
+- Business Autopilot is metadata, scoring, audit-pack, draft-only and approval-governance first.
 - Live sources are promoted only through explicit review and confirmation gates.
-- Growth Operator read routes and confirmed metadata-write routes do not send, post, submit forms, execute browser actions, browse, spend, or call AI.
+- Growth Operator and Business Autopilot read routes and confirmed metadata-write routes do not send, post, comment, submit forms, execute browser actions, browse, spend, mutate external systems, or call AI.
 - The browser must never receive the Worker admin token.
 
 ## Current operating docs
@@ -22,6 +23,12 @@ Start here for the modern opportunity/source-expansion workflow:
 - [`docs/growth-autonomous-discovery-architecture.md`](docs/growth-autonomous-discovery-architecture.md) — autonomous research, supervised action, source registry, crawl-policy and approval-pack architecture.
 - [`docs/growth-source-discovery-safety-policy.md`](docs/growth-source-discovery-safety-policy.md) — source-discovery safety policy, robots/crawl posture, blocked actions, and Worker/Next read boundary.
 - [`docs/growth-zero-source-research-runbook.md`](docs/growth-zero-source-research-runbook.md) — zero-source autonomous research runbook and phase-one done criteria.
+- [`docs/business-autopilot-architecture.md`](docs/business-autopilot-architecture.md) — broader agency intelligence, memory, scoring, audit-pack, draft-only action and governed-execution architecture.
+- [`docs/business-autopilot-governance-policy.md`](docs/business-autopilot-governance-policy.md) — approval, suppression, channel, kill-switch and external-action governance policy.
+- [`docs/business-autopilot-compliance-policy.md`](docs/business-autopilot-compliance-policy.md) — compliance gates for email, social, contact-form, suppression, audit and future execution.
+- [`docs/business-autopilot-data-model.md`](docs/business-autopilot-data-model.md) — Business Autopilot tables, relationships and metadata model.
+- [`docs/business-autopilot-draft-review-route-plan.md`](docs/business-autopilot-draft-review-route-plan.md) — safe future route glue for draft-only action builds and matching approval requests.
+- [`docs/business-autopilot-validation.md`](docs/business-autopilot-validation.md) — Business Autopilot local checks, route-contract smoke, read-only verification and dashboard follow-up.
 - [`docs/growth-autonomy-agent.md`](docs/growth-autonomy-agent.md) — contract for the Growth Autonomy Agent above the opportunity/source layer.
 - [`docs/growth-channel-policy.md`](docs/growth-channel-policy.md) — channel classes, link policy, disclosure policy, execution policy, and cooldown rules.
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
@@ -49,9 +56,10 @@ npm run db:migration:one -- 0017 --execute
 npm run db:migration:one -- 0018 --execute
 npm run db:migration:one -- 0019 --execute
 npm run db:migration:one -- 0020 --execute
+npm run db:migration:one -- 0021 --execute
 ```
 
-For current source-expansion, approval-queue and autonomous-discovery installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
+For current source-expansion, approval-queue, autonomous-discovery and Business Autopilot installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
 
 ## Quick start
 
@@ -93,8 +101,8 @@ The Worker defaults toward conservative, low-cost behaviour:
 - Settings and policy gates decide whether scheduled work can run
 - Source expansion stores candidates before live source saves
 - Candidate-source promotion requires explicit confirmation
-- Growth goals, strategy, channels, signals, actions, campaigns, metrics, evidence, learning, strategy memory, blackboard writes, approval records, and autonomous discovery metadata writes require explicit confirmation and are metadata-only
-- Budget counters, run history, approval requests, and autonomous discovery research memory are tracked in D1 once migrations are applied
+- Growth goals, strategy, channels, signals, actions, campaigns, metrics, evidence, learning, strategy memory, blackboard writes, approval records, autonomous discovery metadata writes, and Business Autopilot metadata writes require explicit confirmation and are metadata-only
+- Budget counters, run history, approval requests, autonomous discovery research memory, and Business Autopilot agency memory are tracked in D1 once migrations are applied
 
 ## Zero-source startup summary
 
@@ -144,6 +152,83 @@ no external state change
 confirm-required metadata writes only
 ```
 
+## Business Autopilot summary
+
+Business Autopilot extends Growth Ops into broader agency intelligence and operating memory. It is currently internal metadata only: it stores organizations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events.
+
+Core Business Autopilot modules:
+
+```text
+businessAutopilotSafety
+businessAutopilotTypes
+businessAutopilotServiceMatcher
+businessAutopilotOpportunityScoring
+businessAutopilotAuditPacks
+businessAutopilotAuditPackRecords
+businessAutopilotActionDraftBuilder
+businessAutopilotApprovalBuilder
+businessAutopilotDraftReviewBundle
+businessAutopilotRecords
+businessAutopilotAdmin
+businessAutopilotRouteCatalogue
+```
+
+Current Business Autopilot route IDs:
+
+```text
+business_organizations
+business_signals
+business_opportunities
+business_service_matches
+business_audit_packs
+business_action_drafts
+business_approval_requests
+business_suppression_list
+business_content_ideas
+business_followups
+business_learning_events
+business_organization_save
+business_signal_save
+business_opportunity_save
+business_service_match_save
+business_audit_pack_save
+business_action_draft_build
+business_action_draft_save
+business_approval_request_save
+business_suppression_save
+business_content_idea_save
+business_followup_save
+business_learning_event_save
+```
+
+Current Business Autopilot guarantees:
+
+```text
+internal metadata only
+read-only routes advertise readOnly and internalMetadataOnly
+metadata-write routes require confirm=1
+draft builder is draft-only
+approval records are review records only
+suppression remains higher priority than approval
+no email sending
+no social posting
+no third-party commenting
+no contact-form submission
+no browser execution
+no ad buying
+no external mutation
+no AI calls from metadata routes
+no network calls from metadata routes
+```
+
+Business Autopilot validation commands:
+
+```powershell
+npm run business:autopilot:check
+npm run business:route-contract:print
+npm run business:autopilot:readonly:print
+```
+
 ## Growth Operator v3 summary
 
 The current Growth Operator brain combines:
@@ -155,6 +240,7 @@ blackboard knowledge
 capability registry
 route safety catalogue
 autonomous discovery research memory
+Business Autopilot agency memory
 ```
 
 Current read-only brain contracts:
@@ -171,12 +257,16 @@ Current Worker support:
 3. Read Growth operator overview, cycle, autonomy contract, and cycle history.
 4. Read autonomous discovery research runs, source candidates, extracted signals, opportunity scores, agent decisions, and feedback.
 5. Confirm-save autonomous discovery metadata: research plans, source candidates, fetch-queue records, agent decisions, and feedback.
-6. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
-7. Confirm-record cycle snapshots into cycle memory.
-8. Read and write strategy memory as confirmed internal metadata: objectives, key results, segments, offers, positioning, and runtime constraints.
-9. Read and write blackboard knowledge as confirmed internal metadata: facts, entities, relationships, market signals, and proof assets.
-10. Confirm-plan deterministic campaign decisions without AI, browsing, sending, posting, form submission, or external state changes.
-11. Return route-catalogue safety metadata proving no AI, email, posting, form submission, browser execution, or action execution occurs.
+6. Read Business Autopilot agency memory: organizations, evidence signals, opportunities, service matches, audit packs, action drafts, approval requests, suppression records, content ideas, follow-ups and learning events.
+7. Confirm-save Business Autopilot metadata: organizations, signals, opportunities, service matches, audit packs, draft-only action records, approval records, suppression records, content ideas, follow-ups and learning events.
+8. Build draft-only Business actions from evidence with explicit external-action blocks.
+9. Build approval-review bundles for draft-only actions without external execution.
+10. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
+11. Confirm-record cycle snapshots into cycle memory.
+12. Read and write strategy memory as confirmed internal metadata: objectives, key results, segments, offers, positioning, and runtime constraints.
+13. Read and write blackboard knowledge as confirmed internal metadata: facts, entities, relationships, market signals, and proof assets.
+14. Confirm-plan deterministic campaign decisions without AI, browsing, sending, posting, form submission, or external state changes.
+15. Return route-catalogue safety metadata proving no AI, email, posting, commenting, form submission, browser execution, or action execution occurs.
 
 Execution routes for external delivery, publishing, browser submission, live crawling, and AI drafting should only be added after evidence packs, approval records, suppression checks, caps, identity controls, audit events, crawl governance, and channel-specific governance are in place.
 
@@ -235,6 +325,7 @@ The full backend local check includes:
 ```powershell
 npm run scripts:check
 npm run db:migrations:check
+npm run business:autopilot:check
 npm run growth:route-delegates:check
 npm run growth:route-safety-flags:check
 npm run growth:capabilities:check
@@ -250,6 +341,7 @@ Print the route-contract-only Growth check when you only need to validate the Wo
 
 ```powershell
 npm run growth:route-contract:print
+npm run business:route-contract:print
 ```
 
 Print the broader smoke-test commands:
@@ -259,6 +351,7 @@ npm run growth:smoke:print
 npm run growth:campaigns:smoke:print
 npm run growth:strategy:smoke:print
 npm run growth:blackboard:smoke:print
+npm run business:autopilot:readonly:print
 ```
 
 Then run the printed commands after setting:
@@ -275,17 +368,12 @@ All expected Growth route ids are advertised by the Worker route catalogue.
 All Growth read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables.
 All Growth metadata-write routes advertise confirm_required metadata-only posture.
 Read and verify delegated Growth v3 route families, including autonomous discovery
+All expected Business Autopilot route ids are advertised by the Worker route catalogue.
+All Business Autopilot read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables.
+All Business Autopilot metadata-write routes advertise confirm_required metadata-only posture.
 ```
 
-If a stale or unsafe catalogue is deployed, the route-contract checks exit with code `1` and print one of these visible failure labels plus the final failure line:
-
-```text
-Missing Growth route ids:
-Unsafe Growth read-route metadata found:
-Growth metadata-write routes missing confirm_required or safe metadata posture:
-Delegated Growth route has missing or unsafe read safety:
-Growth route contract smoke check failed.
-```
+If a stale or unsafe catalogue is deployed, the route-contract checks exit with code `1` and print visible failure labels.
 
 ## Endpoints
 
@@ -330,6 +418,32 @@ Autonomous discovery:
 - `GET /admin/growth/discovery/feedback?limit=25`
 - `POST /admin/growth/discovery/feedback?confirm=1`
 - `POST /admin/growth/discovery/fetch-queue?confirm=1`
+
+Business Autopilot:
+
+- `GET /admin/business/organizations?limit=25`
+- `POST /admin/business/organizations?confirm=1`
+- `GET /admin/business/signals?limit=25`
+- `POST /admin/business/signals?confirm=1`
+- `GET /admin/business/opportunities?limit=25`
+- `POST /admin/business/opportunities?confirm=1`
+- `GET /admin/business/service-matches?limit=25`
+- `POST /admin/business/service-matches?confirm=1`
+- `GET /admin/business/audit-packs?limit=25`
+- `POST /admin/business/audit-packs?confirm=1`
+- `GET /admin/business/action-drafts?limit=25`
+- `POST /admin/business/action-drafts/build?confirm=1`
+- `POST /admin/business/action-drafts?confirm=1`
+- `GET /admin/business/approval-requests?limit=25`
+- `POST /admin/business/approval-requests?confirm=1`
+- `GET /admin/business/suppression?limit=25`
+- `POST /admin/business/suppression?confirm=1`
+- `GET /admin/business/content-ideas?limit=25`
+- `POST /admin/business/content-ideas?confirm=1`
+- `GET /admin/business/followups?limit=25`
+- `POST /admin/business/followups?confirm=1`
+- `GET /admin/business/learning?limit=25`
+- `POST /admin/business/learning?confirm=1`
 
 Campaign intelligence:
 
@@ -414,9 +528,13 @@ Supported review decisions:
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
 git pull
+npm run db:migration:one -- 0021 --execute
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
+npm run business:autopilot:check
 npm run growth:backend:check:local
+npm run business:route-contract:print
+npm run business:autopilot:readonly:print
 npm run growth:backend:final:print
 npm run growth:route-contract:print
 npm run growth:campaigns:smoke:print

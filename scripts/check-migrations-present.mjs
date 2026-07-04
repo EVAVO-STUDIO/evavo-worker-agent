@@ -28,6 +28,7 @@ const expected = [
   '0018_growth_cycle_memory_snapshots.sql',
   '0019_growth_approval_requests.sql',
   '0020_growth_autonomous_discovery.sql',
+  '0021_business_autopilot_foundation.sql',
 ];
 
 const missing = [];

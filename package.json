@@ -14,6 +14,8 @@
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
     "business:autopilot:check": "node scripts/check-business-autopilot.mjs",
+    "business:autopilot:readonly:print": "node scripts/print-business-autopilot-readonly-verify-commands.mjs",
+    "business:route-contract:print": "node scripts/print-business-autopilot-route-contract-check.mjs",
     "growth:autonomous-discovery:check": "node scripts/check-growth-autonomous-discovery.mjs",
     "growth:backend:aggregate:check": "node scripts/check-growth-backend-aggregate-command.mjs",
     "growth:backend:check:local": "npm run growth:backend:aggregate:check && npm run check:local",

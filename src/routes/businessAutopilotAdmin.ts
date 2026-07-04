@@ -1,4 +1,5 @@
 import { Env, getAdminToken } from "../db";
+import { buildBusinessDraftOnlyAction } from "../core/businessAutopilotActionDraftBuilder";
 import {
   businessReadPayload,
   businessWritePayload,
@@ -163,6 +164,22 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       if (!confirmed(url, body)) return blockedWrite(json);
       const auditPack = await saveBusinessAuditPack(env, body.auditPack || body);
       return json({ mode: "business_audit_pack_saved", ...businessWritePayload(auditPack, "auditPack") });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/business/action-drafts/build") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const built = buildBusinessDraftOnlyAction(body.draftRequest || body);
+      const draft = await saveBusinessActionDraft(env, built.draft);
+      return json({
+        ok: true,
+        mode: "business_action_draft_built",
+        draft,
+        reviewChecklist: built.reviewChecklist,
+        explicitBlocks: built.explicitBlocks,
+        riskFlags: built.riskFlags,
+        safety: built.safety,
+      });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/action-drafts") {

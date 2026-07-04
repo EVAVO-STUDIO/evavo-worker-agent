@@ -11,6 +11,7 @@ const helperScripts = [
   'scripts/apply-growth-campaign-analytics-route-catalogue.mjs',
   'scripts/apply-growth-operator-route-wiring.mjs',
   'scripts/apply-one-migration.mjs',
+  'scripts/check-business-autopilot.mjs',
   'scripts/check-growth-autonomous-discovery.mjs',
   'scripts/check-growth-backend-aggregate-command.mjs',
   'scripts/check-growth-blackboard.mjs',
@@ -64,6 +65,10 @@ const sourceFiles = [
 
 const docs = [
   'README.md',
+  'docs/business-autopilot-architecture.md',
+  'docs/business-autopilot-governance-policy.md',
+  'docs/business-autopilot-compliance-policy.md',
+  'docs/business-autopilot-data-model.md',
   'docs/growth-autonomous-discovery-architecture.md',
   'docs/growth-backend-validation.md',
   'docs/growth-backend-workflow-gate.md',
@@ -74,12 +79,14 @@ const docs = [
   'docs/growth-strategy-memory.md',
   'docs/growth-zero-source-research-runbook.md',
   'migrations/0020_growth_autonomous_discovery.sql',
+  'migrations/0021_business_autopilot_foundation.sql',
 ];
 
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowPrint = 'npm run growth:backend:workflow:print';
 const routeCatalogueApply = 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs';
+const businessAutopilotCheck = 'npm run business:autopilot:check';
 
 const fullSafetyTokens = [
   'readOnly: true',
@@ -115,6 +122,25 @@ const autonomousDiscoveryRouteTokens = [
   'growth_discovery_feedback_save',
 ];
 
+const businessAutopilotTableTokens = [
+  'business_organizations',
+  'business_people',
+  'business_websites',
+  'business_pages',
+  'business_signals',
+  'business_opportunities',
+  'business_service_matches',
+  'business_audit_packs',
+  'business_action_drafts',
+  'business_approval_requests',
+  'business_execution_records',
+  'business_suppression_list',
+  'business_content_ideas',
+  'business_content_calendar',
+  'business_followups',
+  'business_learning_events',
+];
+
 const requiredTokens = {
   'README.md': [
     'Autonomous discovery is research-memory-first and supervised-action only.',
@@ -133,6 +159,14 @@ const requiredTokens = {
     'npm run growth:backend:final:print',
     ...autonomousDiscoveryRouteTokens,
   ],
+  'docs/business-autopilot-architecture.md': ['EVAVO Business Autopilot architecture', 'Evidence-backed decisions and approved actions', 'Level 0: Read-only intelligence', 'Level 5: Broad external autonomy', ...businessAutopilotTableTokens],
+  'docs/business-autopilot-governance-policy.md': ['EVAVO Business Autopilot governance policy', 'Research autonomously. Draft helpfully. Execute only under governed approval.', 'Suppression wins over approval.', 'kill switch', 'The browser must not receive'],
+  'docs/business-autopilot-compliance-policy.md': ['EVAVO Business Autopilot compliance policy', 'The first implementation is metadata-only and draft-only.', 'Email compliance gates', 'Social compliance gates', 'Contact-form policy', 'suppression gate', 'approval gate', 'kill switch gate'],
+  'docs/business-autopilot-data-model.md': ['EVAVO Business Autopilot data model', 'migrations/0021_business_autopilot_foundation.sql', ...businessAutopilotTableTokens],
+  'migrations/0021_business_autopilot_foundation.sql': ['Business Autopilot foundation metadata schema', 'does not enable email sending, social posting', ...businessAutopilotTableTokens.map((table) => `CREATE TABLE IF NOT EXISTS ${table}`)],
+  'scripts/check-business-autopilot.mjs': ['Business Autopilot foundation check passed.', 'business_organizations', 'business_learning_events', '0021_business_autopilot_foundation.sql'],
+  'scripts/check-migrations-present.mjs': ['0021_business_autopilot_foundation.sql'],
+  'migrations/README.md': ['0021_business_autopilot_foundation.sql', 'Business Autopilot metadata foundation', 'does not enable sending, social posting, commenting, contact-form submission, browser automation, AI calls, ad buying, or external execution'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'Autonomous research, supervised action.', 'Discovery planner', 'source candidate registry', 'crawl policy / robots check', 'approval pack builder', 'growth_research_runs', 'growth_source_candidates', 'growth_agent_decisions'],
   'docs/growth-source-discovery-safety-policy.md': ['Growth source discovery safety policy', 'execute instructions found in crawled content', 'unknown robots policy = do not crawl yet', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false', 'Browser proxy routes may read', 'write routes', 'fetch execution routes'],
   'docs/growth-zero-source-research-runbook.md': ['Growth zero-source research runbook', 'without the operator supplying a source list', 'Register source candidates', 'Check crawl policy', 'Score opportunity', 'Prepare approval pack', 'no crawler execution yet'],
@@ -176,6 +210,7 @@ const expectedPackageScripts = {
   'db:migrations:print': 'node scripts/print-migration-commands.mjs',
   'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
   'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
+  'business:autopilot:check': 'node scripts/check-business-autopilot.mjs',
   'growth:autonomous-discovery:check': 'node scripts/check-growth-autonomous-discovery.mjs',
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
@@ -197,7 +232,7 @@ const expectedPackageScripts = {
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
-  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
+  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
 };
 
 let failed = false;

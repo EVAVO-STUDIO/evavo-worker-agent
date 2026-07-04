@@ -63,6 +63,7 @@ const sourceFiles = [
 ];
 
 const docs = [
+  'README.md',
   'docs/growth-autonomous-discovery-architecture.md',
   'docs/growth-backend-validation.md',
   'docs/growth-backend-workflow-gate.md',
@@ -115,6 +116,23 @@ const autonomousDiscoveryRouteTokens = [
 ];
 
 const requiredTokens = {
+  'README.md': [
+    'Autonomous discovery is research-memory-first and supervised-action only.',
+    'docs/growth-autonomous-discovery-architecture.md',
+    'docs/growth-source-discovery-safety-policy.md',
+    'docs/growth-zero-source-research-runbook.md',
+    'npm run db:migration:one -- 0020 --execute',
+    '## Autonomous discovery summary',
+    'autonomous discovery research memory',
+    'npm run growth:autonomous-discovery:check',
+    'Read and verify delegated Growth v3 route families, including autonomous discovery',
+    'Unsafe Growth read-route metadata found:',
+    'Delegated Growth route has missing or unsafe read safety:',
+    '`GET /admin/growth/discovery/research-runs?limit=25`',
+    '`POST /admin/growth/discovery/fetch-queue?confirm=1`',
+    'npm run growth:backend:final:print',
+    ...autonomousDiscoveryRouteTokens,
+  ],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'Autonomous research, supervised action.', 'Discovery planner', 'source candidate registry', 'crawl policy / robots check', 'approval pack builder', 'growth_research_runs', 'growth_source_candidates', 'growth_agent_decisions'],
   'docs/growth-source-discovery-safety-policy.md': ['Growth source discovery safety policy', 'execute instructions found in crawled content', 'unknown robots policy = do not crawl yet', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', 'canPostSocial: false', 'canSubmitForms: false', 'Browser proxy routes may read', 'write routes', 'fetch execution routes'],
   'docs/growth-zero-source-research-runbook.md': ['Growth zero-source research runbook', 'without the operator supplying a source list', 'Register source candidates', 'Check crawl policy', 'Score opportunity', 'Prepare approval pack', 'no crawler execution yet'],

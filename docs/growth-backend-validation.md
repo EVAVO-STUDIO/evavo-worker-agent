@@ -39,6 +39,25 @@ inner Worker payload safety posture
 confirmation-gated metadata-write route posture
 legacy compatibility safety flags
 backend final validation printer
+autonomous discovery metadata-only routes
+autonomous discovery route-contract checks
+```
+
+The autonomous discovery backend contract includes:
+
+```text
+migrations/0020_growth_autonomous_discovery.sql
+growth_research_runs
+growth_source_candidates
+growth_extracted_signals
+growth_opportunity_scores
+growth_agent_decisions
+growth_discovery_feedback
+growth_research_run_plan
+growth_source_candidate_save
+growth_fetch_queue_enqueue
+growth_agent_decision_record
+growth_discovery_feedback_save
 ```
 
 The Worker must keep these safety guarantees true for every Growth route catalogue entry and metadata-write route:
@@ -92,7 +111,35 @@ npm run check:local
 
 The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, the README runbook, and the expected package script wiring.
 
-The existing backend local check expands to helper-script parsing, migration presence, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, and TypeScript validation.
+The existing backend local check expands to helper-script parsing, migration presence, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, autonomous discovery, and TypeScript validation.
+
+```powershell
+npm run scripts:check
+npm run db:migrations:check
+npm run growth:route-delegates:check
+npm run growth:route-safety-flags:check
+npm run growth:capabilities:check
+npm run growth:campaigns:check
+npm run growth:strategy:check
+npm run growth:blackboard:check
+npm run growth:review-queue:check
+npm run growth:autonomous-discovery:check
+npm run typecheck
+```
+
+The autonomous discovery check guards:
+
+```text
+growth autonomous discovery architecture docs
+growth source discovery safety policy
+growth zero-source research runbook
+migrations/0020_growth_autonomous_discovery.sql
+autonomous discovery records helpers
+autonomous discovery admin routes
+autonomous discovery route catalogue entries
+autonomous discovery route-contract printer coverage
+canPostSocial false and canSubmitForms false route defaults
+```
 
 ## Final backend validation printer
 
@@ -108,7 +155,7 @@ The final printer now prefers the aggregate backend check before deploy:
 npm run growth:backend:check:local
 ```
 
-After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
+After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, autonomous discovery read routes, autonomous discovery confirm-required metadata routes, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
 
 ## Cross-repo pairing
 
@@ -126,6 +173,7 @@ The intended chain is:
 
 ```text
 Worker supplies route catalogue and inner payload safety.
+Worker owns autonomous discovery source-of-truth storage and confirm-required metadata routes.
 Next keeps the admin token server-side and exposes only read-only proxy wrappers.
 Next smoke checks validate both outer proxy envelope safety and inner Worker payload safety.
 ```

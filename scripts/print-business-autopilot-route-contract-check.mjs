@@ -35,6 +35,7 @@ $businessConfirmRouteIds = @(
   "business_opportunity_save",
   "business_service_match_save",
   "business_audit_pack_save",
+  "business_action_draft_build",
   "business_action_draft_save",
   "business_approval_request_save",
   "business_suppression_save",
@@ -114,6 +115,15 @@ foreach ($path in $businessReadPaths) {
     $contractFailed = $true
     Write-Host "Business Autopilot route threw: $path :: $($_.Exception.Message)" -ForegroundColor Red
   }
+}
+
+Write-Host "Check draft-only action builder confirm route is blocked without confirm" -ForegroundColor Cyan
+try {
+  Invoke-RestMethod "$base/admin/business/action-drafts/build" -Method POST -Headers $headers -ContentType "application/json" -Body '{"organizationName":"Demo","recommendedService":"website_rebuild","evidenceSummary":"Demo evidence"}' | Out-Null
+  $contractFailed = $true
+  Write-Host "Draft builder unexpectedly allowed unconfirmed write." -ForegroundColor Red
+} catch {
+  Write-Host "Draft builder blocks unconfirmed writes as expected." -ForegroundColor Green
 }
 
 if ($contractFailed) {

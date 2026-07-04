@@ -10,6 +10,7 @@ import { handlePlannerAdmin } from "./routes/plannerAdmin";
 import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
 import { handleGrowthAdmin } from "./routes/growthAdmin";
 import { handleGrowthApprovalRequestsAdmin } from "./routes/growthApprovalRequestsAdmin";
+import { handleBusinessAutopilotAdmin } from "./routes/businessAutopilotAdmin";
 import { handleOpportunitiesAdmin } from "./routes/opportunitiesAdmin";
 import { handleOpportunityDiscoveryAdmin } from "./routes/opportunityDiscoveryAdmin";
 import { handleOpportunityReviewAdmin } from "./routes/opportunityReviewAdmin";
@@ -87,6 +88,7 @@ export default {
       if (pathname === "/admin/planner" || pathname.startsWith("/admin/planner/")) return await handlePlannerAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/growth/approval-requests" || pathname === "/admin/growth/approval-requests/status") return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/growth" || pathname.startsWith("/admin/growth/")) return await handleGrowthAdmin(req, env, pathname, jsonResponse);
+      if (pathname === "/admin/business" || pathname.startsWith("/admin/business/")) return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/sources/run-tiny") return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/sources") || pathname === "/admin/seeds") return await handleSourcesAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/draft-review") || pathname.startsWith("/admin/strategy-scores")) return await handleDraftReviewAdmin(req, env, pathname, jsonResponse);

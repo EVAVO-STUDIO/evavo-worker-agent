@@ -23,6 +23,7 @@ import {
   saveBusinessSignal,
   saveBusinessSuppression,
 } from "../core/businessAutopilotRecords";
+import { businessAuditPackReadPayload, listBusinessAuditPacks, saveBusinessAuditPack } from "../core/businessAutopilotAuditPackRecords";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -94,6 +95,11 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       return json({ mode: "business_service_matches", ...businessReadPayload(matches, "serviceMatches") });
     }
 
+    if (request.method === "GET" && pathname === "/admin/business/audit-packs") {
+      const packs = await listBusinessAuditPacks(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
+      return json({ mode: "business_audit_packs", ...businessAuditPackReadPayload(packs) });
+    }
+
     if (request.method === "GET" && pathname === "/admin/business/action-drafts") {
       const drafts = await listBusinessActionDrafts(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       return json({ mode: "business_action_drafts", ...businessReadPayload(drafts, "drafts") });
@@ -150,6 +156,13 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       if (!confirmed(url, body)) return blockedWrite(json);
       const serviceMatch = await saveBusinessServiceMatch(env, body.serviceMatch || body);
       return json({ mode: "business_service_match_saved", ...businessWritePayload(serviceMatch, "serviceMatch") });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/business/audit-packs") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const auditPack = await saveBusinessAuditPack(env, body.auditPack || body);
+      return json({ mode: "business_audit_pack_saved", ...businessWritePayload(auditPack, "auditPack") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/action-drafts") {

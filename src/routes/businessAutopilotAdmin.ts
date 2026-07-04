@@ -127,42 +127,42 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     if (request.method === "POST" && pathname === "/admin/business/organizations") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const organization = await saveBusinessOrganization(env, body.organization || body, body.id);
+      const organization = await saveBusinessOrganization(env, body.organization || body);
       return json({ mode: "business_organization_saved", ...businessWritePayload(organization, "organization") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/signals") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const signal = await saveBusinessSignal(env, body.signal || body, body.id);
+      const signal = await saveBusinessSignal(env, body.signal || body);
       return json({ mode: "business_signal_saved", ...businessWritePayload(signal, "signal") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/opportunities") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const opportunity = await saveBusinessOpportunity(env, body.opportunity || body, body.id);
+      const opportunity = await saveBusinessOpportunity(env, body.opportunity || body);
       return json({ mode: "business_opportunity_saved", ...businessWritePayload(opportunity, "opportunity") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/service-matches") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const serviceMatch = await saveBusinessServiceMatch(env, body.serviceMatch || body, body.id);
+      const serviceMatch = await saveBusinessServiceMatch(env, body.serviceMatch || body);
       return json({ mode: "business_service_match_saved", ...businessWritePayload(serviceMatch, "serviceMatch") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/action-drafts") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const draft = await saveBusinessActionDraft(env, body.draft || body, body.id);
+      const draft = await saveBusinessActionDraft(env, body.draft || body);
       return json({ mode: "business_action_draft_saved", ...businessWritePayload(draft, "draft") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/approval-requests") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const approvalRequest = await saveBusinessApprovalRequest(env, body.approvalRequest || body, body.id);
+      const approvalRequest = await saveBusinessApprovalRequest(env, body.approvalRequest || body);
       return json({ mode: "business_approval_request_saved", ...businessWritePayload(approvalRequest, "approvalRequest") });
     }
 

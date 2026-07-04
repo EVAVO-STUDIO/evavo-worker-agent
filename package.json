@@ -13,6 +13,7 @@
     "db:migrations:print": "node scripts/print-migration-commands.mjs",
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
+    "business:autopilot:check": "node scripts/check-business-autopilot.mjs",
     "growth:autonomous-discovery:check": "node scripts/check-growth-autonomous-discovery.mjs",
     "growth:backend:aggregate:check": "node scripts/check-growth-backend-aggregate-command.mjs",
     "growth:backend:check:local": "npm run growth:backend:aggregate:check && npm run check:local",
@@ -34,7 +35,7 @@
     "growth:wiring:apply": "node scripts/apply-growth-operator-route-wiring.mjs",
     "ops:smoke:print": "node scripts/print-next-ops-smoke-commands.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
-    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck",
+    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

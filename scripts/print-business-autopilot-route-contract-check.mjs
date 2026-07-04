@@ -17,6 +17,8 @@ $routePayload = Invoke-RestMethod "$base/admin/planner/routes" -Headers $headers
 
 $businessReadRouteIds = @(
   "business_organizations",
+  "business_websites",
+  "business_pages",
   "business_signals",
   "business_opportunities",
   "business_service_matches",
@@ -31,6 +33,8 @@ $businessReadRouteIds = @(
 
 $businessConfirmRouteIds = @(
   "business_organization_save",
+  "business_website_save",
+  "business_page_save",
   "business_signal_save",
   "business_opportunity_save",
   "business_service_match_save",
@@ -46,6 +50,8 @@ $businessConfirmRouteIds = @(
 
 $businessReadPaths = @(
   "/admin/business/organizations?limit=5",
+  "/admin/business/websites?limit=5",
+  "/admin/business/pages?limit=5",
   "/admin/business/signals?limit=5",
   "/admin/business/opportunities?limit=5",
   "/admin/business/service-matches?limit=5",

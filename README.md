@@ -8,6 +8,7 @@ The current operating model is **free-safe first**:
 - Sending is off by default.
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
+- Autonomous discovery is research-memory-first and supervised-action only.
 - Live sources are promoted only through explicit review and confirmation gates.
 - Growth Operator read routes and confirmed metadata-write routes do not send, post, submit forms, execute browser actions, browse, spend, or call AI.
 - The browser must never receive the Worker admin token.
@@ -18,6 +19,9 @@ Start here for the modern opportunity/source-expansion workflow:
 
 - [`docs/zero-source-startup.md`](docs/zero-source-startup.md) — contract for starting safely when no manual source list exists.
 - [`docs/zero-source-route-catalogue.md`](docs/zero-source-route-catalogue.md) — backend route sequence for zero-source startup, fallback guidance, query hints, candidate review, source health, and opportunity discovery.
+- [`docs/growth-autonomous-discovery-architecture.md`](docs/growth-autonomous-discovery-architecture.md) — autonomous research, supervised action, source registry, crawl-policy and approval-pack architecture.
+- [`docs/growth-source-discovery-safety-policy.md`](docs/growth-source-discovery-safety-policy.md) — source-discovery safety policy, robots/crawl posture, blocked actions, and Worker/Next read boundary.
+- [`docs/growth-zero-source-research-runbook.md`](docs/growth-zero-source-research-runbook.md) — zero-source autonomous research runbook and phase-one done criteria.
 - [`docs/growth-autonomy-agent.md`](docs/growth-autonomy-agent.md) — contract for the Growth Autonomy Agent above the opportunity/source layer.
 - [`docs/growth-channel-policy.md`](docs/growth-channel-policy.md) — channel classes, link policy, disclosure policy, execution policy, and cooldown rules.
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
@@ -42,9 +46,12 @@ npm run db:migration:one -- 0014 --execute
 npm run db:migration:one -- 0015 --execute
 npm run db:migration:one -- 0016 --execute
 npm run db:migration:one -- 0017 --execute
+npm run db:migration:one -- 0018 --execute
+npm run db:migration:one -- 0019 --execute
+npm run db:migration:one -- 0020 --execute
 ```
 
-For current source-expansion/origin-learning installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
+For current source-expansion, approval-queue and autonomous-discovery installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
 
 ## Quick start
 
@@ -86,8 +93,8 @@ The Worker defaults toward conservative, low-cost behaviour:
 - Settings and policy gates decide whether scheduled work can run
 - Source expansion stores candidates before live source saves
 - Candidate-source promotion requires explicit confirmation
-- Growth goals, strategy, channels, signals, actions, campaigns, metrics, evidence, learning, strategy memory, and blackboard writes require explicit confirmation and are metadata-only
-- Budget counters and run history are tracked in D1 once migrations are applied
+- Growth goals, strategy, channels, signals, actions, campaigns, metrics, evidence, learning, strategy memory, blackboard writes, approval records, and autonomous discovery metadata writes require explicit confirmation and are metadata-only
+- Budget counters, run history, approval requests, and autonomous discovery research memory are tracked in D1 once migrations are applied
 
 ## Zero-source startup summary
 
@@ -105,6 +112,38 @@ When no manual source list exists, the safe path is:
 
 Zero-source startup must remain public-source-only, capped, origin-preserving, candidate-memory-first, and free-safe by default.
 
+## Autonomous discovery summary
+
+Autonomous discovery is now part of the Growth backend contract, but it is still metadata-only and supervised-action only.
+
+Worker-owned autonomous discovery storage and route IDs:
+
+```text
+growth_research_runs
+growth_source_candidates
+growth_extracted_signals
+growth_opportunity_scores
+growth_agent_decisions
+growth_discovery_feedback
+growth_research_run_plan
+growth_source_candidate_save
+growth_fetch_queue_enqueue
+growth_agent_decision_record
+growth_discovery_feedback_save
+```
+
+Current autonomous discovery guarantees:
+
+```text
+no live crawling from browser
+no email sending
+no social posting
+no form submission
+no AI calls from the proxy layer
+no external state change
+confirm-required metadata writes only
+```
+
 ## Growth Operator v3 summary
 
 The current Growth Operator brain combines:
@@ -115,6 +154,7 @@ strategy memory
 blackboard knowledge
 capability registry
 route safety catalogue
+autonomous discovery research memory
 ```
 
 Current read-only brain contracts:
@@ -129,14 +169,16 @@ Current Worker support:
 1. Read Growth overview and free-safe brief.
 2. Read the Growth capability registry and route safety catalogue.
 3. Read Growth operator overview, cycle, autonomy contract, and cycle history.
-4. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
-5. Confirm-record cycle snapshots into cycle memory.
-6. Read and write strategy memory as confirmed internal metadata: objectives, key results, segments, offers, positioning, and runtime constraints.
-7. Read and write blackboard knowledge as confirmed internal metadata: facts, entities, relationships, market signals, and proof assets.
-8. Confirm-plan deterministic campaign decisions without AI, browsing, sending, posting, form submission, or external state changes.
-9. Return route-catalogue safety metadata proving no AI, email, posting, form submission, browser execution, or action execution occurs.
+4. Read autonomous discovery research runs, source candidates, extracted signals, opportunity scores, agent decisions, and feedback.
+5. Confirm-save autonomous discovery metadata: research plans, source candidates, fetch-queue records, agent decisions, and feedback.
+6. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
+7. Confirm-record cycle snapshots into cycle memory.
+8. Read and write strategy memory as confirmed internal metadata: objectives, key results, segments, offers, positioning, and runtime constraints.
+9. Read and write blackboard knowledge as confirmed internal metadata: facts, entities, relationships, market signals, and proof assets.
+10. Confirm-plan deterministic campaign decisions without AI, browsing, sending, posting, form submission, or external state changes.
+11. Return route-catalogue safety metadata proving no AI, email, posting, form submission, browser execution, or action execution occurs.
 
-Execution routes for external delivery, publishing, browser submission, and AI drafting should only be added after evidence packs, approval records, suppression checks, caps, identity controls, audit events, and channel-specific governance are in place.
+Execution routes for external delivery, publishing, browser submission, live crawling, and AI drafting should only be added after evidence packs, approval records, suppression checks, caps, identity controls, audit events, crawl governance, and channel-specific governance are in place.
 
 ## Growth capability registry
 
@@ -188,6 +230,22 @@ npm run growth:backend:check:local
 
 `growth:backend:check:local` runs the backend aggregate command contract checker before the full local backend check.
 
+The full backend local check includes:
+
+```powershell
+npm run scripts:check
+npm run db:migrations:check
+npm run growth:route-delegates:check
+npm run growth:route-safety-flags:check
+npm run growth:capabilities:check
+npm run growth:campaigns:check
+npm run growth:strategy:check
+npm run growth:blackboard:check
+npm run growth:review-queue:check
+npm run growth:autonomous-discovery:check
+npm run typecheck
+```
+
 Print the route-contract-only Growth check when you only need to validate the Worker route catalogue and do not want to run optional metadata-write smoke steps:
 
 ```powershell
@@ -213,17 +271,19 @@ $env:WORKER_URL="https://evavo-outbound-agent.evavo-studio.workers.dev"
 The route-contract checks should print:
 
 ```text
-All expected Growth route ids are advertised by the Worker.
-All Growth routes advertise no network, no AI, no email, and cost none.
-All Growth metadata-write routes advertise confirm_required posture.
+All expected Growth route ids are advertised by the Worker route catalogue.
+All Growth read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables.
+All Growth metadata-write routes advertise confirm_required metadata-only posture.
+Read and verify delegated Growth v3 route families, including autonomous discovery
 ```
 
 If a stale or unsafe catalogue is deployed, the route-contract checks exit with code `1` and print one of these visible failure labels plus the final failure line:
 
 ```text
 Missing Growth route ids:
-Unsafe Growth route metadata found:
-Growth metadata-write routes missing confirm_required posture:
+Unsafe Growth read-route metadata found:
+Growth metadata-write routes missing confirm_required or safe metadata posture:
+Delegated Growth route has missing or unsafe read safety:
 Growth route contract smoke check failed.
 ```
 
@@ -256,6 +316,20 @@ Core Growth:
 - `GET /admin/growth/cycle`
 - `GET /admin/growth/cycle/events?limit=25`
 - `POST /admin/growth/cycle/record?confirm=1`
+
+Autonomous discovery:
+
+- `GET /admin/growth/discovery/research-runs?limit=25`
+- `POST /admin/growth/discovery/research-runs/plan?confirm=1`
+- `GET /admin/growth/discovery/source-candidates?limit=25`
+- `POST /admin/growth/discovery/source-candidates?confirm=1`
+- `GET /admin/growth/discovery/signals?limit=25`
+- `GET /admin/growth/discovery/opportunity-scores?limit=25`
+- `GET /admin/growth/discovery/agent-decisions?limit=25`
+- `POST /admin/growth/discovery/agent-decisions?confirm=1`
+- `GET /admin/growth/discovery/feedback?limit=25`
+- `POST /admin/growth/discovery/feedback?confirm=1`
+- `POST /admin/growth/discovery/fetch-queue?confirm=1`
 
 Campaign intelligence:
 
@@ -343,6 +417,7 @@ git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run growth:backend:check:local
+npm run growth:backend:final:print
 npm run growth:route-contract:print
 npm run growth:campaigns:smoke:print
 npm run growth:strategy:smoke:print

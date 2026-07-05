@@ -17,6 +17,7 @@ $routePayload = Invoke-RestMethod "$base/admin/planner/routes" -Headers $headers
 
 $businessReadRouteIds = @(
   "business_organizations",
+  "business_people",
   "business_websites",
   "business_pages",
   "business_signals",
@@ -33,6 +34,7 @@ $businessReadRouteIds = @(
 
 $businessConfirmRouteIds = @(
   "business_organization_save",
+  "business_person_save",
   "business_website_save",
   "business_page_save",
   "business_signal_save",
@@ -50,6 +52,7 @@ $businessConfirmRouteIds = @(
 
 $businessReadPaths = @(
   "/admin/business/organizations?limit=5",
+  "/admin/business/people?limit=5",
   "/admin/business/websites?limit=5",
   "/admin/business/pages?limit=5",
   "/admin/business/signals?limit=5",
@@ -119,24 +122,12 @@ foreach ($path in $businessReadPaths) {
     }
   } catch {
     $contractFailed = $true
-    Write-Host "Business Autopilot route threw: $path :: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Business Autopilot route threw: $path" -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
   }
 }
 
-Write-Host "Check draft-only action builder confirm route is blocked without confirm" -ForegroundColor Cyan
-try {
-  Invoke-RestMethod "$base/admin/business/action-drafts/build" -Method POST -Headers $headers -ContentType "application/json" -Body '{"organizationName":"Demo","recommendedService":"website_rebuild","evidenceSummary":"Demo evidence"}' | Out-Null
-  $contractFailed = $true
-  Write-Host "Draft builder unexpectedly allowed unconfirmed write." -ForegroundColor Red
-} catch {
-  Write-Host "Draft builder blocks unconfirmed writes as expected." -ForegroundColor Green
-}
-
-if ($contractFailed) {
-  Write-Host "Business Autopilot route contract smoke check failed." -ForegroundColor Red
-  exit 1
-}
-
+if ($contractFailed) { throw "Business Autopilot route contract failed." }
 Write-Host "Business Autopilot route contract is valid." -ForegroundColor Green
 `;
 

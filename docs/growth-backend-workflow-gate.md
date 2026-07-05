@@ -15,14 +15,16 @@ timeout-minutes: 10
 node-version: 24
 npm ci
 npm run growth:backend:aggregate:check
+npm run business:people:docs:check
 npm run business:website-pages:docs:check
 npm run growth:backend:check:local
 npm run growth:backend:final:print
 ```
 
-The workflow includes an explicit CI step:
+The workflow includes explicit CI steps:
 
 ```text
+Check Business people docs
 Check Business website page docs
 ```
 
@@ -33,11 +35,23 @@ npm run growth:backend:aggregate:check
 npm run check:local
 ```
 
-`check:local` must include the Business website/page docs check:
+`check:local` must include the Business docs checks:
 
 ```text
 npm run business:autopilot:check
+npm run business:people:docs:check
 npm run business:website-pages:docs:check
+```
+
+The people docs check guards:
+
+```text
+docs/business-autopilot-people-routes.md
+docs/business-autopilot-data-model.md
+docs/business-autopilot-validation.md
+business_people
+business_person_save
+/admin/business/people
 ```
 
 The website/page docs check guards:
@@ -69,6 +83,7 @@ cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
+npm run business:people:docs:check
 npm run business:website-pages:docs:check
 npm run growth:backend:check:local
 npm run growth:backend:final:print

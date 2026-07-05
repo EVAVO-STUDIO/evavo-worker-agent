@@ -65,6 +65,22 @@ confidence_score
 metadata_json
 ```
 
+Business people records are contact-context metadata only. `allowed_use` and `contact_status` describe what the operator currently knows about lawful/appropriate use and contactability. They do not grant permission to send, post, comment, submit forms, enrich contacts, scrape profiles, or execute browser actions.
+
+People route layer:
+
+```text
+GET  /admin/business/people?limit=25
+POST /admin/business/people?confirm=1
+```
+
+People route catalogue IDs:
+
+```text
+business_people
+business_person_save
+```
+
 ### business_websites
 
 Represents a website associated with an organization.
@@ -117,6 +133,17 @@ business_organizations
 → business_audit_packs
 → business_action_drafts
 → business_approval_requests
+```
+
+People/contact-context relationship:
+
+```text
+business_organizations
+→ business_people
+→ allowed-use review
+→ contactability check
+→ draft-only action
+→ approval request
 ```
 
 Route layer:

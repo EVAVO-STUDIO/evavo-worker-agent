@@ -102,6 +102,60 @@ content_hash
 metadata_json
 ```
 
+## Website/page relationship layer
+
+Website and page records provide the evidence spine between an organization and later Business Autopilot signals.
+
+Canonical relationship:
+
+```text
+business_organizations
+→ business_websites
+→ business_pages
+→ business_signals
+→ business_opportunities
+→ business_audit_packs
+→ business_action_drafts
+→ business_approval_requests
+```
+
+Route layer:
+
+```text
+GET  /admin/business/websites?limit=25
+POST /admin/business/websites?confirm=1
+GET  /admin/business/pages?limit=25
+POST /admin/business/pages?confirm=1
+```
+
+Route catalogue IDs:
+
+```text
+business_websites
+business_pages
+business_website_save
+business_page_save
+```
+
+Safety requirements:
+
+```text
+metadata-only
+read routes advertise readOnly and internalMetadataOnly
+write routes require confirm=1
+no crawling
+no fetching
+no email sending
+no social posting
+no third-party commenting
+no contact-form submission
+no browser execution
+no ad buying
+no external mutation
+no AI calls from metadata routes
+no network calls from metadata routes
+```
+
 ## Intelligence family
 
 ### business_signals
@@ -239,196 +293,3 @@ crm_note
 calendar_task
 internal_report
 ```
-
-Important fields:
-
-```text
-organization_id
-person_id
-opportunity_id
-audit_pack_id
-draft_type
-channel
-subject
-body
-payload_json
-risk_flags_json
-compliance_status
-approval_status
-status
-metadata_json
-```
-
-### business_approval_requests
-
-Represents approval metadata for a draft or action.
-
-Important fields:
-
-```text
-action_draft_id
-request_type
-status
-review_checklist_json
-risk_flags_json
-approval_reason
-approved_by
-approved_at
-expires_at
-metadata_json
-```
-
-### business_execution_records
-
-Represents attempted or completed execution.
-
-Execution is metadata-only until governed execution endpoints exist.
-
-Important fields:
-
-```text
-action_draft_id
-approval_request_id
-execution_type
-provider
-status
-attempt_count
-external_reference
-failure_reason
-executed_at
-metadata_json
-```
-
-### business_suppression_list
-
-Represents entities that must not be contacted or acted upon.
-
-Important fields:
-
-```text
-scope_type
-scope_value
-reason
-source
-active
-expires_at
-metadata_json
-```
-
-## Content and follow-up family
-
-### business_content_ideas
-
-Content ideas derived from research and market patterns.
-
-Important fields:
-
-```text
-title
-content_type
-summary
-source_signal_ids_json
-target_segment
-recommended_channel
-priority_score
-status
-metadata_json
-```
-
-### business_content_calendar
-
-Planned content calendar entries.
-
-Important fields:
-
-```text
-content_idea_id
-scheduled_for
-channel
-status
-caption
-asset_notes
-approval_status
-metadata_json
-```
-
-### business_followups
-
-Follow-up tasks or reminders.
-
-Important fields:
-
-```text
-organization_id
-person_id
-opportunity_id
-action_draft_id
-followup_type
-due_at
-status
-notes
-metadata_json
-```
-
-### business_learning_events
-
-Stores feedback and outcome learning.
-
-Important fields:
-
-```text
-entity_type
-entity_id
-event_type
-outcome
-score_delta
-notes
-metadata_json
-```
-
-## Safety fields
-
-Most tables use one or more of these fields:
-
-```text
-status
-risk_flags_json
-confidence_score
-metadata_json
-created_at
-updated_at
-```
-
-Action-related tables also use:
-
-```text
-approval_status
-compliance_status
-execution_status
-```
-
-## Status guidance
-
-Common statuses:
-
-```text
-new
-active
-needs_review
-approved
-rejected
-queued
-blocked
-suppressed
-archived
-```
-
-## First migration
-
-The foundation migration is:
-
-```text
-migrations/0021_business_autopilot_foundation.sql
-```
-
-It creates the metadata tables only. It must not enable external execution.

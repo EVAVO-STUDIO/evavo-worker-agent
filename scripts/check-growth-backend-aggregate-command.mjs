@@ -27,7 +27,21 @@ const businessWebsitePageTokens = [
   '/admin/business/pages',
 ];
 
+const workflowTokens = [
+  'Growth Backend Validation',
+  'contents: read',
+  'timeout-minutes: 10',
+  'node-version: 24',
+  'npm ci',
+  backendAggregateCheck,
+  businessWebsitePageDocsCheck,
+  backendLocalCheck,
+  'npm run growth:backend:final:print',
+  'Check Business website page docs',
+];
+
 const requiredFileTokens = {
+  '.github/workflows/growth-backend-validation.yml': workflowTokens,
   'README.md': [
     'docs/growth-backend-validation.md',
     backendLocalCheck,
@@ -44,6 +58,8 @@ const requiredFileTokens = {
   ],
   'scripts/print-growth-backend-workflow-gate.mjs': [
     'EVAVO Growth backend workflow gate',
+    'Expected explicit workflow step',
+    'Check Business website page docs',
     backendLocalCheck,
     'npm run check:local',
     'npm run business:autopilot:check',
@@ -51,6 +67,8 @@ const requiredFileTokens = {
   ],
   'docs/growth-backend-workflow-gate.md': [
     'Growth backend workflow gate',
+    'The workflow includes an explicit CI step',
+    'Check Business website page docs',
     backendAggregateCheck,
     backendLocalCheck,
     'npm run check:local',

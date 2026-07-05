@@ -12,8 +12,12 @@ Expected workflow safeguards:
 - node-version: 24
 - npm ci
 - npm run growth:backend:aggregate:check
+- npm run business:website-pages:docs:check
 - npm run growth:backend:check:local
 - npm run growth:backend:final:print
+
+Expected explicit workflow step:
+- Check Business website page docs
 
 Backend local check must include:
 - npm run growth:backend:aggregate:check

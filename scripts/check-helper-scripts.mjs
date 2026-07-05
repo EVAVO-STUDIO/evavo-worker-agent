@@ -13,6 +13,7 @@ const helperScripts = [
   'scripts/apply-growth-operator-route-wiring.mjs',
   'scripts/apply-one-migration.mjs',
   'scripts/check-business-autopilot.mjs',
+  'scripts/check-business-people-docs.mjs',
   'scripts/check-business-website-page-docs.mjs',
   'scripts/check-growth-autonomous-discovery.mjs',
   'scripts/check-growth-backend-aggregate-command.mjs',
@@ -41,7 +42,9 @@ const helperScripts = [
 ];
 
 const sourceFiles = [
+  'src/core/businessAutopilotPeopleRecords.ts',
   'src/core/businessAutopilotWebsiteRecords.ts',
+  'src/routes/businessAutopilotPeopleAdmin.ts',
   'src/routes/businessAutopilotWebsiteAdmin.ts',
   'src/routes/businessAutopilotRouteCatalogue.ts',
   'src/core/growthApprovalRequests.ts',
@@ -77,6 +80,7 @@ const docs = [
   'docs/business-autopilot-compliance-policy.md',
   'docs/business-autopilot-data-model.md',
   'docs/business-autopilot-validation.md',
+  'docs/business-autopilot-people-routes.md',
   'docs/business-autopilot-website-page-routes.md',
   'docs/growth-autonomous-discovery-architecture.md',
   'docs/growth-backend-validation.md',
@@ -132,6 +136,7 @@ const expectedPackageScripts = {
   'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
   'business:autopilot:check': 'node scripts/check-business-autopilot.mjs',
   'business:autopilot:readonly:print': 'node scripts/print-business-autopilot-readonly-verify-commands.mjs',
+  'business:people:docs:check': 'node scripts/check-business-people-docs.mjs',
   'business:route-contract:print': 'node scripts/print-business-autopilot-route-contract-check.mjs',
   'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
   'growth:autonomous-discovery:check': 'node scripts/check-growth-autonomous-discovery.mjs',
@@ -155,7 +160,7 @@ const expectedPackageScripts = {
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
-  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run business:website-pages:docs:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
+  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
 };
 
 const requiredTokens = {
@@ -168,6 +173,12 @@ const requiredTokens = {
   'docs/business-autopilot-data-model.md': [
     'EVAVO Business Autopilot data model',
     'Website/page relationship layer',
+    'People route layer',
+    'business_people',
+    'business_person_save',
+    'allowed_use',
+    'contact_status',
+    'People/contact-context relationship',
     'business_websites',
     'business_pages',
     'business_website_save',
@@ -176,13 +187,15 @@ const requiredTokens = {
     'no fetching',
     ...businessAutopilotTableTokens,
   ],
-  'docs/business-autopilot-validation.md': ['Business Autopilot validation workflow', 'business:website-pages:docs:check', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save'],
+  'docs/business-autopilot-validation.md': ['Business Autopilot validation workflow', 'business_people', 'business_person_save', '/admin/business/people?limit=5', 'business:website-pages:docs:check', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save'],
+  'docs/business-autopilot-people-routes.md': ['Business Autopilot people routes', 'business_people', 'business_person_save', 'GET /admin/business/people?limit=25', 'POST /admin/business/people?confirm=1', 'allowed_use', 'contact_status'],
   'docs/business-autopilot-website-page-routes.md': ['Business Autopilot website and page routes', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save', 'GET /admin/business/websites?limit=25', 'GET /admin/business/pages?limit=25'],
   'docs/growth-backend-validation.md': ['Business website/page docs checks', 'npm run business:website-pages:docs:check', 'Business website/page metadata route docs'],
   'docs/business-autopilot-architecture.md': ['EVAVO Business Autopilot architecture', ...businessAutopilotTableTokens],
   'migrations/0021_business_autopilot_foundation.sql': ['Business Autopilot foundation metadata schema', ...businessAutopilotTableTokens.map((table) => `CREATE TABLE IF NOT EXISTS ${table}`)],
+  'scripts/check-business-people-docs.mjs': ['Business people docs check passed.', 'docs/business-autopilot-people-routes.md', 'docs/business-autopilot-data-model.md', 'docs/business-autopilot-validation.md'],
   'scripts/check-business-website-page-docs.mjs': ['Business website/page docs check passed.', 'docs/business-autopilot-data-model.md', 'docs/business-autopilot-website-page-routes.md', 'docs/business-autopilot-validation.md'],
-  'scripts/check-business-autopilot.mjs': ['Business Autopilot foundation check passed.', 'business_websites', 'business_pages', 'docs/business-autopilot-website-page-routes.md'],
+  'scripts/check-business-autopilot.mjs': ['Business Autopilot foundation check passed.', 'business_people', 'business_person_save', 'src/core/businessAutopilotPeopleRecords.ts', 'src/routes/businessAutopilotPeopleAdmin.ts', 'business_websites', 'business_pages', 'docs/business-autopilot-website-page-routes.md'],
   'scripts/check-migrations-present.mjs': ['0021_business_autopilot_foundation.sql'],
   'migrations/README.md': ['0021_business_autopilot_foundation.sql', 'Business Autopilot metadata foundation'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', ...autonomousDiscoveryRouteTokens.slice(0, 2)],

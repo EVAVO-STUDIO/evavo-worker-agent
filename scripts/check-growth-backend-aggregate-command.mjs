@@ -14,7 +14,18 @@ const expectedPackageScripts = {
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
+  'growth:backend:workflow:print': 'node scripts/print-growth-backend-workflow-gate.mjs',
 };
+
+const businessWebsitePageTokens = [
+  businessWebsitePageDocsCheck,
+  'business_websites',
+  'business_pages',
+  'business_website_save',
+  'business_page_save',
+  '/admin/business/websites',
+  '/admin/business/pages',
+];
 
 const requiredFileTokens = {
   'README.md': [
@@ -30,6 +41,21 @@ const requiredFileTokens = {
     businessWebsitePageDocsCheck,
     'node scripts/check-business-website-page-docs.mjs',
     'npm run business:autopilot:check && npm run business:website-pages:docs:check',
+  ],
+  'scripts/print-growth-backend-workflow-gate.mjs': [
+    'EVAVO Growth backend workflow gate',
+    backendLocalCheck,
+    'npm run check:local',
+    'npm run business:autopilot:check',
+    ...businessWebsitePageTokens,
+  ],
+  'docs/growth-backend-workflow-gate.md': [
+    'Growth backend workflow gate',
+    backendAggregateCheck,
+    backendLocalCheck,
+    'npm run check:local',
+    'npm run business:autopilot:check',
+    ...businessWebsitePageTokens,
   ],
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,

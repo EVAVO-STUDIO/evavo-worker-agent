@@ -42,6 +42,7 @@ backend final validation printer
 autonomous discovery metadata-only routes
 autonomous discovery route-contract checks
 Business Autopilot metadata-only routes
+Business people metadata route docs
 Business website/page metadata route docs
 Business Autopilot route-contract checks
 ```
@@ -68,6 +69,7 @@ The Business Autopilot backend contract includes:
 ```text
 migrations/0021_business_autopilot_foundation.sql
 business_organizations
+business_people
 business_websites
 business_pages
 business_signals
@@ -81,6 +83,7 @@ business_content_ideas
 business_followups
 business_learning_events
 business_organization_save
+business_person_save
 business_website_save
 business_page_save
 business_signal_save
@@ -125,7 +128,7 @@ Detailed workflow requirements live in:
 docs/growth-backend-workflow-gate.md
 ```
 
-That workflow runs on pull requests and main-branch pushes, uses Node 24, installs with `npm ci`, runs `npm run growth:backend:aggregate:check`, runs `npm run growth:backend:check:local`, and prints `npm run growth:backend:final:print`.
+That workflow runs on pull requests and main-branch pushes, uses Node 24, installs with `npm ci`, runs `npm run growth:backend:aggregate:check`, runs `npm run business:people:docs:check`, runs `npm run business:website-pages:docs:check`, runs `npm run growth:backend:check:local`, and prints `npm run growth:backend:final:print`.
 
 ## Preferred local aggregate check
 
@@ -148,12 +151,13 @@ npm run check:local
 
 The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, the README runbook, and the expected package script wiring.
 
-The backend local check expands to helper-script parsing, migration presence, Business Autopilot foundation checks, Business website/page docs checks, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, autonomous discovery, and TypeScript validation.
+The backend local check expands to helper-script parsing, migration presence, Business Autopilot foundation checks, Business people docs checks, Business website/page docs checks, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, autonomous discovery, and TypeScript validation.
 
 ```powershell
 npm run scripts:check
 npm run db:migrations:check
 npm run business:autopilot:check
+npm run business:people:docs:check
 npm run business:website-pages:docs:check
 npm run growth:route-delegates:check
 npm run growth:route-safety-flags:check
@@ -178,6 +182,17 @@ autonomous discovery admin routes
 autonomous discovery route catalogue entries
 autonomous discovery route-contract printer coverage
 canPostSocial false and canSubmitForms false route defaults
+```
+
+The Business people docs check guards:
+
+```text
+docs/business-autopilot-people-routes.md
+docs/business-autopilot-data-model.md
+docs/business-autopilot-validation.md
+business_people
+business_person_save
+/admin/business/people
 ```
 
 The Business website/page docs check guards:
@@ -208,7 +223,7 @@ The final printer now prefers the aggregate backend check before deploy:
 npm run growth:backend:check:local
 ```
 
-After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, autonomous discovery read routes, Business Autopilot read routes, Business website/page metadata reads, autonomous discovery confirm-required metadata routes, Business confirm-required metadata routes, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
+After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, autonomous discovery read routes, Business Autopilot read routes, Business people metadata reads, Business website/page metadata reads, autonomous discovery confirm-required metadata routes, Business confirm-required metadata routes, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
 
 ## Cross-repo pairing
 
@@ -229,7 +244,7 @@ The intended chain is:
 ```text
 Worker supplies route catalogue and inner payload safety.
 Worker owns autonomous discovery source-of-truth storage and confirm-required metadata routes.
-Worker owns Business Autopilot metadata, website/page memory, and confirm-required metadata routes.
+Worker owns Business Autopilot metadata, people memory, website/page memory, and confirm-required metadata routes.
 Next keeps the admin token server-side and exposes only read-only proxy wrappers.
 Next smoke checks validate both outer proxy envelope safety and inner Worker payload safety.
 ```

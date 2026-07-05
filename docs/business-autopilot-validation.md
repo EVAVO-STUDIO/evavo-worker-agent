@@ -2,7 +2,7 @@
 
 This document records the safe validation flow for the EVAVO Business Autopilot Worker layer.
 
-Business Autopilot is currently an internal metadata, website/page memory, scoring, audit-pack and draft-only governance layer. It does not perform external execution.
+Business Autopilot is currently an internal metadata, people memory, website/page memory, scoring, audit-pack and draft-only governance layer. It does not perform external execution.
 
 ## Hard safety posture
 
@@ -41,6 +41,7 @@ business docs
 0021 migration
 Business safety helpers
 Business core types
+Business people records
 Business website/page records
 service matcher
 opportunity scoring
@@ -50,6 +51,7 @@ draft-only action builder
 approval request builder
 draft-review bundle builder
 Business admin routes
+Business people admin routes
 Business website/page admin routes
 Business route catalogue entries
 route-contract printer
@@ -71,6 +73,12 @@ business_page_save
 /admin/business/pages
 ```
 
+People route docs live in:
+
+```text
+docs/business-autopilot-people-routes.md
+```
+
 ## Route catalogue wiring
 
 Run:
@@ -85,6 +93,7 @@ Expected Business read route IDs:
 
 ```text
 business_organizations
+business_people
 business_websites
 business_pages
 business_signals
@@ -103,6 +112,7 @@ Expected Business confirm-required route IDs:
 
 ```text
 business_organization_save
+business_person_save
 business_website_save
 business_page_save
 business_signal_save
@@ -137,6 +147,7 @@ The route-contract smoke verifies:
 
 ```text
 all Business route IDs are advertised
+people read routes return safe metadata payloads
 read routes are read-only
 confirm routes require confirm
 confirm routes are metadata-only
@@ -159,6 +170,7 @@ This reads all Business Autopilot read routes:
 
 ```text
 /admin/business/organizations?limit=5
+/admin/business/people?limit=5
 /admin/business/websites?limit=5
 /admin/business/pages?limit=5
 /admin/business/signals?limit=5
@@ -215,6 +227,7 @@ Confirm the panel shows:
 
 ```text
 organizations
+people
 websites
 pages
 signals

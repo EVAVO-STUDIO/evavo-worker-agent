@@ -12,18 +12,29 @@ Expected workflow safeguards:
 - node-version: 24
 - npm ci
 - npm run growth:backend:aggregate:check
+- npm run business:people:docs:check
 - npm run business:website-pages:docs:check
 - npm run growth:backend:check:local
 - npm run growth:backend:final:print
 
-Expected explicit workflow step:
+Expected explicit workflow steps:
+- Check Business people docs
 - Check Business website page docs
 
 Backend local check must include:
 - npm run growth:backend:aggregate:check
 - npm run check:local
 - npm run business:autopilot:check
+- npm run business:people:docs:check
 - npm run business:website-pages:docs:check
+
+Business people docs checker must guard:
+- docs/business-autopilot-people-routes.md
+- docs/business-autopilot-data-model.md
+- docs/business-autopilot-validation.md
+- business_people
+- business_person_save
+- /admin/business/people
 
 Business website/page docs checker must guard:
 - docs/business-autopilot-data-model.md
@@ -41,6 +52,7 @@ cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
+npm run business:people:docs:check
 npm run business:website-pages:docs:check
 npm run growth:backend:check:local
 npm run growth:backend:final:print

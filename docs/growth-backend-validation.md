@@ -1,12 +1,12 @@
 # Growth backend validation
 
-This document records the preferred local validation flow for the Worker side of EVAVO Growth Ops.
+This document records the preferred local validation flow for the Worker side of EVAVO Growth Ops and Business Autopilot.
 
 ## Safety posture
 
-The Worker is the backend source of truth for Growth route metadata and the inner payload safety posture consumed by the Next read-only proxy console.
+The Worker is the backend source of truth for Growth route metadata, Business Autopilot route metadata, and the inner payload safety posture consumed by the Next read-only proxy console.
 
-Current Worker Growth safety requirements:
+Current Worker read safety requirements:
 
 ```text
 readOnly: true
@@ -41,6 +41,9 @@ legacy compatibility safety flags
 backend final validation printer
 autonomous discovery metadata-only routes
 autonomous discovery route-contract checks
+Business Autopilot metadata-only routes
+Business website/page metadata route docs
+Business Autopilot route-contract checks
 ```
 
 The autonomous discovery backend contract includes:
@@ -60,13 +63,47 @@ growth_agent_decision_record
 growth_discovery_feedback_save
 ```
 
-The Worker must keep these safety guarantees true for every Growth route catalogue entry and metadata-write route:
+The Business Autopilot backend contract includes:
+
+```text
+migrations/0021_business_autopilot_foundation.sql
+business_organizations
+business_websites
+business_pages
+business_signals
+business_opportunities
+business_service_matches
+business_audit_packs
+business_action_drafts
+business_approval_requests
+business_suppression_list
+business_content_ideas
+business_followups
+business_learning_events
+business_organization_save
+business_website_save
+business_page_save
+business_signal_save
+business_opportunity_save
+business_service_match_save
+business_audit_pack_save
+business_action_draft_build
+business_action_draft_save
+business_approval_request_save
+business_suppression_save
+business_content_idea_save
+business_followup_save
+business_learning_event_save
+```
+
+The Worker must keep these safety guarantees true for every Growth and Business route catalogue entry and metadata-write route:
 
 ```text
 no AI calls
 no arbitrary network calls
 no email sending
 no social posting
+no third-party commenting
 no form submission
 no browser execution
 no external state change
@@ -111,11 +148,13 @@ npm run check:local
 
 The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, the README runbook, and the expected package script wiring.
 
-The existing backend local check expands to helper-script parsing, migration presence, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, autonomous discovery, and TypeScript validation.
+The backend local check expands to helper-script parsing, migration presence, Business Autopilot foundation checks, Business website/page docs checks, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, autonomous discovery, and TypeScript validation.
 
 ```powershell
 npm run scripts:check
 npm run db:migrations:check
+npm run business:autopilot:check
+npm run business:website-pages:docs:check
 npm run growth:route-delegates:check
 npm run growth:route-safety-flags:check
 npm run growth:capabilities:check
@@ -141,6 +180,20 @@ autonomous discovery route-contract printer coverage
 canPostSocial false and canSubmitForms false route defaults
 ```
 
+The Business website/page docs check guards:
+
+```text
+docs/business-autopilot-data-model.md
+docs/business-autopilot-website-page-routes.md
+docs/business-autopilot-validation.md
+business_websites
+business_pages
+business_website_save
+business_page_save
+/admin/business/websites
+/admin/business/pages
+```
+
 ## Final backend validation printer
 
 Use this when you want the deploy-and-smoke command set printed for the Worker:
@@ -155,7 +208,7 @@ The final printer now prefers the aggregate backend check before deploy:
 npm run growth:backend:check:local
 ```
 
-After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, autonomous discovery read routes, autonomous discovery confirm-required metadata routes, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
+After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, autonomous discovery read routes, Business Autopilot read routes, Business website/page metadata reads, autonomous discovery confirm-required metadata routes, Business confirm-required metadata routes, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
 
 ## Cross-repo pairing
 
@@ -165,6 +218,8 @@ After Worker validation, run the Next read-only proxy validation:
 cd C:\GitRepos\next-website
 git pull
 npm run growth:ops:check:local
+npm run business:ops:route-contract:check
+npm run business:ops:websites-pages:print
 npm run growth:ops:final:print
 npm run growth:ops:smoke:print
 ```
@@ -174,6 +229,7 @@ The intended chain is:
 ```text
 Worker supplies route catalogue and inner payload safety.
 Worker owns autonomous discovery source-of-truth storage and confirm-required metadata routes.
+Worker owns Business Autopilot metadata, website/page memory, and confirm-required metadata routes.
 Next keeps the admin token server-side and exposes only read-only proxy wrappers.
 Next smoke checks validate both outer proxy envelope safety and inner Worker payload safety.
 ```

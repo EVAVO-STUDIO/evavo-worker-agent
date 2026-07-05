@@ -7,8 +7,10 @@ const repoRoot = path.resolve(__dirname, '..');
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
+const businessWebsitePageDocsCheck = 'npm run business:website-pages:docs:check';
 
 const expectedPackageScripts = {
+  'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
@@ -24,6 +26,11 @@ const requiredFileTokens = {
     'npm run growth:strategy:smoke:print',
     'npm run growth:blackboard:smoke:print',
   ],
+  'package.json': [
+    businessWebsitePageDocsCheck,
+    'node scripts/check-business-website-page-docs.mjs',
+    'npm run business:autopilot:check && npm run business:website-pages:docs:check',
+  ],
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,
     'Worker supplies the inner payload safety posture',
@@ -35,6 +42,7 @@ const requiredFileTokens = {
     backendWorkflowGateDoc,
     backendAggregateCheck,
     backendLocalCheck,
+    businessWebsitePageDocsCheck,
     'Worker is the backend source of truth',
     'Backend responsibility boundary',
     'route catalogue metadata',
@@ -42,10 +50,17 @@ const requiredFileTokens = {
     'confirmation-gated metadata-write route posture',
     'legacy compatibility safety flags',
     'backend final validation printer',
+    'Business website/page metadata route docs',
+    'Business website/page docs checks',
+    'business_websites',
+    'business_pages',
+    'business_website_save',
+    'business_page_save',
     'no AI calls',
     'no arbitrary network calls',
     'no email sending',
     'no social posting',
+    'no third-party commenting',
     'no form submission',
     'no browser execution',
     'no external state change',
@@ -53,6 +68,7 @@ const requiredFileTokens = {
     'Confirmed metadata-write routes',
     'metadata-only posture',
     'npm run growth:ops:check:local',
+    'npm run business:ops:websites-pages:print',
   ],
 };
 

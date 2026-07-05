@@ -15,8 +15,15 @@ timeout-minutes: 10
 node-version: 24
 npm ci
 npm run growth:backend:aggregate:check
+npm run business:website-pages:docs:check
 npm run growth:backend:check:local
 npm run growth:backend:final:print
+```
+
+The workflow includes an explicit CI step:
+
+```text
+Check Business website page docs
 ```
 
 `growth:backend:check:local` must include:
@@ -62,6 +69,7 @@ cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
+npm run business:website-pages:docs:check
 npm run growth:backend:check:local
 npm run growth:backend:final:print
 ```

@@ -2,7 +2,7 @@
 
 This document records the safe validation flow for the EVAVO Business Autopilot Worker layer.
 
-Business Autopilot is currently an internal metadata, scoring, audit-pack and draft-only governance layer. It does not perform external execution.
+Business Autopilot is currently an internal metadata, website/page memory, scoring, audit-pack and draft-only governance layer. It does not perform external execution.
 
 ## Hard safety posture
 
@@ -40,6 +40,7 @@ business docs
 0021 migration
 Business safety helpers
 Business core types
+Business website/page records
 service matcher
 opportunity scoring
 audit-pack builder
@@ -48,6 +49,7 @@ draft-only action builder
 approval request builder
 draft-review bundle builder
 Business admin routes
+Business website/page admin routes
 Business route catalogue entries
 route-contract printer
 read-only verification printer
@@ -68,6 +70,8 @@ Expected Business read route IDs:
 
 ```text
 business_organizations
+business_websites
+business_pages
 business_signals
 business_opportunities
 business_service_matches
@@ -84,6 +88,8 @@ Expected Business confirm-required route IDs:
 
 ```text
 business_organization_save
+business_website_save
+business_page_save
 business_signal_save
 business_opportunity_save
 business_service_match_save
@@ -119,6 +125,7 @@ all Business route IDs are advertised
 read routes are read-only
 confirm routes require confirm
 confirm routes are metadata-only
+website/page read routes return safe metadata payloads
 unconfirmed draft-builder writes are blocked
 read route safety is safe
 ```
@@ -137,6 +144,8 @@ This reads all Business Autopilot read routes:
 
 ```text
 /admin/business/organizations?limit=5
+/admin/business/websites?limit=5
+/admin/business/pages?limit=5
 /admin/business/signals?limit=5
 /admin/business/opportunities?limit=5
 /admin/business/service-matches?limit=5
@@ -190,6 +199,8 @@ Confirm the panel shows:
 
 ```text
 organizations
+websites
+pages
 signals
 opportunities
 service matches

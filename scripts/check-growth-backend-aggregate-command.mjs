@@ -7,15 +7,24 @@ const repoRoot = path.resolve(__dirname, '..');
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
+const businessPeopleDocsCheck = 'npm run business:people:docs:check';
 const businessWebsitePageDocsCheck = 'npm run business:website-pages:docs:check';
 
 const expectedPackageScripts = {
+  'business:people:docs:check': 'node scripts/check-business-people-docs.mjs',
   'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
   'growth:backend:workflow:print': 'node scripts/print-growth-backend-workflow-gate.mjs',
 };
+
+const businessPeopleTokens = [
+  businessPeopleDocsCheck,
+  'business_people',
+  'business_person_save',
+  '/admin/business/people',
+];
 
 const businessWebsitePageTokens = [
   businessWebsitePageDocsCheck,
@@ -34,9 +43,11 @@ const workflowTokens = [
   'node-version: 24',
   'npm ci',
   backendAggregateCheck,
+  businessPeopleDocsCheck,
   businessWebsitePageDocsCheck,
   backendLocalCheck,
   'npm run growth:backend:final:print',
+  'Check Business people docs',
   'Check Business website page docs',
 ];
 
@@ -52,40 +63,51 @@ const requiredFileTokens = {
     'npm run growth:blackboard:smoke:print',
   ],
   'package.json': [
+    businessPeopleDocsCheck,
+    'node scripts/check-business-people-docs.mjs',
     businessWebsitePageDocsCheck,
     'node scripts/check-business-website-page-docs.mjs',
-    'npm run business:autopilot:check && npm run business:website-pages:docs:check',
+    'npm run business:autopilot:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
   ],
   'scripts/print-growth-backend-workflow-gate.mjs': [
     'EVAVO Growth backend workflow gate',
     'Expected explicit workflow step',
+    'Check Business people docs',
     'Check Business website page docs',
     backendLocalCheck,
     'npm run check:local',
     'npm run business:autopilot:check',
+    ...businessPeopleTokens,
     ...businessWebsitePageTokens,
   ],
   'docs/growth-backend-workflow-gate.md': [
     'Growth backend workflow gate',
-    'The workflow includes an explicit CI step',
+    'The workflow includes explicit CI steps',
+    'Check Business people docs',
     'Check Business website page docs',
     backendAggregateCheck,
     backendLocalCheck,
     'npm run check:local',
     'npm run business:autopilot:check',
+    ...businessPeopleTokens,
     ...businessWebsitePageTokens,
   ],
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,
     'Worker supplies the inner payload safety posture',
     'npm run business:autopilot:check',
+    businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Business Autopilot note',
+    'Business people docs checks',
     'Business website/page docs checks',
+    'business_people',
+    'business_person_save',
     'business_websites',
     'business_pages',
     'business_website_save',
     'business_page_save',
+    '/admin/business/people?limit=5',
     '/admin/business/websites?limit=5',
     '/admin/business/pages?limit=5',
     'npm run business:route-contract:print',
@@ -98,6 +120,7 @@ const requiredFileTokens = {
     backendWorkflowGateDoc,
     backendAggregateCheck,
     backendLocalCheck,
+    businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Worker is the backend source of truth',
     'Backend responsibility boundary',
@@ -106,8 +129,12 @@ const requiredFileTokens = {
     'confirmation-gated metadata-write route posture',
     'legacy compatibility safety flags',
     'backend final validation printer',
+    'Business people metadata route docs',
+    'Business people docs checks',
     'Business website/page metadata route docs',
     'Business website/page docs checks',
+    'business_people',
+    'business_person_save',
     'business_websites',
     'business_pages',
     'business_website_save',

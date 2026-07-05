@@ -30,6 +30,7 @@ Run from the Worker repo:
 cd C:\GitRepos\evavo-worker-agent
 git pull
 npm run business:autopilot:check
+npm run business:website-pages:docs:check
 npm run typecheck
 ```
 
@@ -54,6 +55,20 @@ Business route catalogue entries
 route-contract printer
 read-only verification printer
 package scripts
+```
+
+The focused website/page docs checker guards:
+
+```text
+docs/business-autopilot-data-model.md
+docs/business-autopilot-website-page-routes.md
+docs/business-autopilot-validation.md
+business_websites
+business_pages
+business_website_save
+business_page_save
+/admin/business/websites
+/admin/business/pages
 ```
 
 ## Route catalogue wiring
@@ -181,6 +196,7 @@ npm run db:migration:one -- 0021 --execute
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run business:autopilot:check
+npm run business:website-pages:docs:check
 npm run growth:backend:check:local
 npm run business:route-contract:print
 npm run business:autopilot:readonly:print

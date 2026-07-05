@@ -32,6 +32,9 @@ jobs:
       - name: Check Growth backend aggregate wiring
         run: npm run growth:backend:aggregate:check
 
+      - name: Check Business people docs
+        run: npm run business:people:docs:check
+
       - name: Check Business website page docs
         run: npm run business:website-pages:docs:check
 

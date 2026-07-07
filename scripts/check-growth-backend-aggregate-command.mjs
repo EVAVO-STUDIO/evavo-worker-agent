@@ -38,13 +38,22 @@ const businessWebsitePageTokens = [
   '/admin/business/pages',
 ];
 
-const rawErrorSafetyTokens = [
-  businessAutopilotRawErrorSafetyCheck,
-  'check-business-autopilot-raw-error-safety.mjs',
+const rawErrorSafetyScriptTokens = [
+  'Business Autopilot raw-error safety check',
+  'checkedFiles',
+  'forbiddenPublicLeakTokens',
   'worker_unexpected_error',
   'Business Autopilot schema is missing or unavailable.',
   'Business people schema is missing or unavailable.',
   'Business website/page schema is missing or unavailable.',
+  'error: String(err)',
+  'message: String(error)',
+];
+
+const rawErrorSafetyPrinterTokens = [
+  businessAutopilotRawErrorSafetyCheck,
+  'Worker error-safety note',
+  'Business Autopilot raw-error safety checks',
   'generic Worker root and Business Autopilot route errors',
   'no raw String(error), String(err), error.message or err.message public error payloads',
 ];
@@ -84,7 +93,7 @@ const requiredFileTokens = {
     'node scripts/check-business-website-page-docs.mjs',
     'npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
   ],
-  'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyTokens,
+  'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyScriptTokens,
   'scripts/print-growth-backend-workflow-gate.mjs': [
     'EVAVO Growth backend workflow gate',
     'Expected explicit workflow step',
@@ -111,13 +120,11 @@ const requiredFileTokens = {
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,
     'Worker supplies the inner payload safety posture',
-    'Worker error-safety note',
     'npm run business:autopilot:check',
     businessAutopilotRawErrorSafetyCheck,
     businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Business Autopilot note',
-    'Business Autopilot raw-error safety checks',
     'Business people docs checks',
     'Business website/page docs checks',
     'business_people',
@@ -134,7 +141,7 @@ const requiredFileTokens = {
     'npm run growth:route-safety-flags:check',
     'npm run growth:review-queue:check',
     'npm run check:local',
-    ...rawErrorSafetyTokens,
+    ...rawErrorSafetyPrinterTokens,
   ],
   'docs/growth-backend-validation.md': [
     backendWorkflowGateDoc,

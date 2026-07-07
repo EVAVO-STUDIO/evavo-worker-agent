@@ -9,6 +9,9 @@ import {
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const schemaMissingMessage = "Business people schema is missing or unavailable.";
+const routeFailedMessage = "Business people route failed before a safe response could be returned.";
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -37,14 +40,17 @@ function blockedWrite(json: JsonResponse) {
   }, { status: 400 });
 }
 
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function migrationError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  const missingTable = /no such table: business_people/i.test(message);
+  const missingTable = /no such table: business_people/i.test(errorText(error));
   return {
     ok: false,
     mode: "business_people_error",
     error: missingTable ? "business_autopilot_schema_missing" : "business_people_failed",
-    message,
+    message: missingTable ? schemaMissingMessage : routeFailedMessage,
     requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql" : null,
     safety: businessAutopilotReadSafety(),
   };

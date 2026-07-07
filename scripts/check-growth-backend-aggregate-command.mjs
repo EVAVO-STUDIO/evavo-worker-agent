@@ -7,10 +7,12 @@ const repoRoot = path.resolve(__dirname, '..');
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
+const businessAutopilotRawErrorSafetyCheck = 'npm run business:autopilot:raw-error-safety:check';
 const businessPeopleDocsCheck = 'npm run business:people:docs:check';
 const businessWebsitePageDocsCheck = 'npm run business:website-pages:docs:check';
 
 const expectedPackageScripts = {
+  'business:autopilot:raw-error-safety:check': 'node scripts/check-business-autopilot-raw-error-safety.mjs',
   'business:people:docs:check': 'node scripts/check-business-people-docs.mjs',
   'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
   'growth:backend:check:local': 'npm run growth:backend:aggregate:check && npm run check:local',
@@ -34,6 +36,17 @@ const businessWebsitePageTokens = [
   'business_page_save',
   '/admin/business/websites',
   '/admin/business/pages',
+];
+
+const rawErrorSafetyTokens = [
+  businessAutopilotRawErrorSafetyCheck,
+  'check-business-autopilot-raw-error-safety.mjs',
+  'worker_unexpected_error',
+  'Business Autopilot schema is missing or unavailable.',
+  'Business people schema is missing or unavailable.',
+  'Business website/page schema is missing or unavailable.',
+  'generic Worker root and Business Autopilot route errors',
+  'no raw String(error), String(err), error.message or err.message public error payloads',
 ];
 
 const workflowTokens = [
@@ -63,12 +76,15 @@ const requiredFileTokens = {
     'npm run growth:blackboard:smoke:print',
   ],
   'package.json': [
+    businessAutopilotRawErrorSafetyCheck,
+    'node scripts/check-business-autopilot-raw-error-safety.mjs',
     businessPeopleDocsCheck,
     'node scripts/check-business-people-docs.mjs',
     businessWebsitePageDocsCheck,
     'node scripts/check-business-website-page-docs.mjs',
-    'npm run business:autopilot:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
+    'npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
   ],
+  'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyTokens,
   'scripts/print-growth-backend-workflow-gate.mjs': [
     'EVAVO Growth backend workflow gate',
     'Expected explicit workflow step',
@@ -95,10 +111,13 @@ const requiredFileTokens = {
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,
     'Worker supplies the inner payload safety posture',
+    'Worker error-safety note',
     'npm run business:autopilot:check',
+    businessAutopilotRawErrorSafetyCheck,
     businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Business Autopilot note',
+    'Business Autopilot raw-error safety checks',
     'Business people docs checks',
     'Business website/page docs checks',
     'business_people',
@@ -115,6 +134,7 @@ const requiredFileTokens = {
     'npm run growth:route-safety-flags:check',
     'npm run growth:review-queue:check',
     'npm run check:local',
+    ...rawErrorSafetyTokens,
   ],
   'docs/growth-backend-validation.md': [
     backendWorkflowGateDoc,

@@ -41,10 +41,15 @@ const checkedFiles = {
 const forbiddenPublicLeakTokens = [
   'error: String(err)',
   'error: String(error)',
+  'error: err.message',
+  'error: error.message',
   'message,',
-  'message:',
-  'error.message : String(error)',
-  'error.message : String(err)',
+  'message: error.message',
+  'message: err.message',
+  'message: String(error)',
+  'message: String(err)',
+  'const message = error instanceof Error ? error.message : String(error);',
+  'const message = err instanceof Error ? err.message : String(err);',
 ];
 
 let failed = false;

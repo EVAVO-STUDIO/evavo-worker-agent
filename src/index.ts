@@ -30,6 +30,8 @@ import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/source
 import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceExpansionPublicDirectoryScanAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
+const unexpectedWorkerErrorMessage = "The Worker hit an unexpected internal error before a safe response could be returned.";
+
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
@@ -101,8 +103,8 @@ export default {
       if (pathname.startsWith("/public")) return await handlePublic(req, env, pathname, ctx, jsonResponse);
       if (pathname === "/" || pathname === "") return jsonResponse({ ok: true, message: "evavo-worker-agent" });
       return jsonResponse({ ok: false, error: "not_found" }, { status: 404 });
-    } catch (err: any) {
-      return jsonResponse({ ok: false, error: String(err) }, { status: 500 });
+    } catch {
+      return jsonResponse({ ok: false, error: "worker_unexpected_error", message: unexpectedWorkerErrorMessage }, { status: 500 });
     }
   },
 };

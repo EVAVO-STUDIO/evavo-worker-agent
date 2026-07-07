@@ -1,14 +1,16 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
 # Run from PowerShell after migrations 0014 through 0021 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business people docs checks, Business website/page docs checks, and the internal review queue persistence check.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page docs checks, and the internal review queue persistence check.
 # Two-layer safety note: the Worker supplies the inner payload safety posture consumed by the Next read-only proxy UI and smoke checks.
+# Worker error-safety note: Business Autopilot Worker routes must return generic browser/API-safe errors, not raw thrown database/runtime error messages.
 # Autonomous discovery note: Worker owns zero-source discovery storage, read routes, confirm-required metadata routes, and route catalogue metadata. The Worker route-contract smoke now verifies autonomous discovery read IDs, confirm IDs, delegated read paths, and safe no-network / no-AI / no-email / no-social / no-form posture.
 # Business Autopilot note: Worker owns Business agency memory, people metadata, website/page metadata, read routes, confirm-required metadata routes, and route catalogue metadata. People routes are contact-context metadata only. Website/page routes are metadata-only and do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.
 # It does not send, post, submit, browse, call AI, execute browser actions, or perform external state changes.
 # Aggregate expansion note: npm run growth:backend:check:local wraps the existing full local backend check.
 # Existing full local backend check includes:
 # npm run business:autopilot:check
+# npm run business:autopilot:raw-error-safety:check
 # npm run business:people:docs:check
 # npm run business:website-pages:docs:check
 # npm run growth:route-delegates:check
@@ -24,6 +26,7 @@ npm run growth:backend:workflow:print
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run business:autopilot:check
+npm run business:autopilot:raw-error-safety:check
 npm run business:people:docs:check
 npm run business:website-pages:docs:check
 npm run growth:backend:check:local
@@ -31,6 +34,9 @@ npm run growth:backend:check:local
 Write-Host "Confirm Business Autopilot backend checks are included:" -ForegroundColor Cyan
 Write-Host "- migrations/0021_business_autopilot_foundation.sql" -ForegroundColor Gray
 Write-Host "- npm run business:autopilot:check" -ForegroundColor Gray
+Write-Host "- npm run business:autopilot:raw-error-safety:check" -ForegroundColor Gray
+Write-Host "- generic Worker root and Business Autopilot route errors" -ForegroundColor Gray
+Write-Host "- no raw String(error), String(err), error.message or err.message public error payloads" -ForegroundColor Gray
 Write-Host "- npm run business:people:docs:check" -ForegroundColor Gray
 Write-Host "- npm run business:website-pages:docs:check" -ForegroundColor Gray
 Write-Host "- business_people" -ForegroundColor Gray

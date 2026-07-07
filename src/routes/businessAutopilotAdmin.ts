@@ -29,6 +29,9 @@ import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } fro
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
+const schemaMissingMessage = "Business Autopilot schema is missing or unavailable.";
+const routeFailedMessage = "Business Autopilot route failed before a safe response could be returned.";
+
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
@@ -57,14 +60,17 @@ function blockedWrite(json: JsonResponse) {
   }, { status: 400 });
 }
 
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function migrationError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  const missingTable = /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|action_drafts|approval_requests|execution_records|suppression_list|content_ideas|content_calendar|followups|learning_events)/i.test(message);
+  const missingTable = /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|action_drafts|approval_requests|execution_records|suppression_list|content_ideas|content_calendar|followups|learning_events)/i.test(errorText(error));
   return {
     ok: false,
     mode: "business_autopilot_error",
     error: missingTable ? "business_autopilot_schema_missing" : "business_autopilot_failed",
-    message,
+    message: missingTable ? schemaMissingMessage : routeFailedMessage,
     requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql" : null,
     safety: businessAutopilotReadSafety(),
   };

@@ -252,6 +252,7 @@ export async function saveBusinessPage(env: Env, input: BusinessPageInput) {
     record.status,
     record.lastFetchedAt,
     record.httpStatus,
+    record.contentHash,
     stringify(record.metadata),
     now,
     now,

@@ -21,6 +21,7 @@ npm run db:migration:one -- 0018 --execute
 npm run db:migration:one -- 0019 --execute
 npm run db:migration:one -- 0020 --execute
 npm run db:migration:one -- 0021 --execute
+npm run db:migration:one -- 0022 --execute
 ```
 
 At the time of writing, the full remote order is:
@@ -50,6 +51,7 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0018_gro
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0019_growth_approval_requests.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0020_growth_autonomous_discovery.sql
 npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0021_business_autopilot_foundation.sql
+npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0022_business_website_audit_records.sql
 ```
 
 ## Notes
@@ -70,3 +72,4 @@ npx wrangler d1 execute evavo_outbound_agent --remote --file migrations/0021_bus
 - `0019_growth_approval_requests.sql` creates the internal approval request queue for reviewable, confirmation-gated Growth operator packs.
 - `0020_growth_autonomous_discovery.sql` creates the zero-source autonomous discovery data model: research runs, source candidates, robots cache, fetch queue, discovered pages, extracted signals, opportunity scores, agent decisions, and discovery feedback. It is schema-only and does not enable crawling, sending, posting, form submission, AI calls, or external execution.
 - `0021_business_autopilot_foundation.sql` creates the broader Business Autopilot metadata foundation: organizations, people, websites, pages, signals, opportunities, service matches, audit packs, action drafts, approval requests, execution records, suppression records, content ideas, content calendar entries, follow-ups, and learning events. It is schema-only and does not enable sending, social posting, commenting, contact-form submission, browser automation, AI calls, ad buying, or external execution.
+- `0022_business_website_audit_records.sql` creates website audit run and audit observation metadata tables. It is schema-only and does not enable crawling, fetching, sending, posting, contact-form submission, browser automation, AI calls, ad buying, or external execution.

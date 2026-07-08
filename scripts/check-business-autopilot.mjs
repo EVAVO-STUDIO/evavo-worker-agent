@@ -24,62 +24,28 @@ const tables = [
   'business_learning_events',
 ];
 
-const websiteAuditTables = [
-  'business_website_audit_runs',
-  'business_audit_observations',
-];
+const websiteAuditTables = ['business_website_audit_runs', 'business_audit_observations'];
 
 const readRouteIds = [
-  'business_organizations',
-  'business_people',
-  'business_websites',
-  'business_pages',
-  'business_website_audit_runs',
-  'business_audit_observations',
-  'business_audit_observation_candidates',
-  'business_signals',
-  'business_opportunities',
-  'business_service_matches',
-  'business_audit_packs',
-  'business_action_drafts',
-  'business_approval_requests',
-  'business_suppression_list',
-  'business_content_ideas',
-  'business_followups',
-  'business_learning_events',
+  'business_organizations', 'business_people', 'business_websites', 'business_pages',
+  'business_website_audit_runs', 'business_audit_observations', 'business_audit_observation_candidates',
+  'business_signals', 'business_opportunities', 'business_service_matches', 'business_audit_packs',
+  'business_action_drafts', 'business_approval_requests', 'business_suppression_list', 'business_content_ideas',
+  'business_followups', 'business_learning_events',
 ];
 
 const confirmRouteIds = [
-  'business_organization_save',
-  'business_person_save',
-  'business_website_save',
-  'business_page_save',
-  'business_website_audit_run_save',
-  'business_audit_observation_save',
-  'business_signal_save',
-  'business_opportunity_save',
-  'business_service_match_save',
-  'business_audit_pack_save',
-  'business_action_draft_build',
-  'business_action_draft_save',
-  'business_approval_request_save',
-  'business_suppression_save',
-  'business_content_idea_save',
-  'business_followup_save',
-  'business_learning_event_save',
+  'business_organization_save', 'business_person_save', 'business_website_save', 'business_page_save',
+  'business_website_audit_run_save', 'business_audit_observation_save', 'business_signal_save',
+  'business_opportunity_save', 'business_service_match_save', 'business_audit_pack_save', 'business_action_draft_build',
+  'business_action_draft_save', 'business_approval_request_save', 'business_suppression_save', 'business_content_idea_save',
+  'business_followup_save', 'business_learning_event_save',
 ];
 
 const safetyTokens = [
-  'externalStateChange: false',
-  'callsAI: false',
-  'callsNetwork: false',
-  'canSendEmail: false',
-  'canPostSocial: false',
-  'canCommentSocial: false',
-  'canSubmitForms: false',
-  'canExecuteBrowserActions: false',
-  'canBuyAds: false',
-  'canMutateExternalSystems: false',
+  'externalStateChange: false', 'callsAI: false', 'callsNetwork: false', 'canSendEmail: false',
+  'canPostSocial: false', 'canCommentSocial: false', 'canSubmitForms: false', 'canExecuteBrowserActions: false',
+  'canBuyAds: false', 'canMutateExternalSystems: false',
 ];
 
 const safeRouteText = 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems';
@@ -104,7 +70,7 @@ const required = {
   'src/core/businessAutopilotApprovalBuilder.ts': ['BusinessApprovalBuildInput', 'BusinessApprovalBuildResult', 'buildBusinessActionDraftApproval', 'business_action_draft_review', 'external_use_not_allowed_by_this_record', 'This approval request does not send email.', 'This approval request does not post on social platforms.', 'This approval request does not submit forms.', 'This approval request does not execute browser actions.'],
   'src/core/businessAutopilotDraftReviewBundle.ts': ['BusinessDraftReviewBundleInput', 'BusinessDraftReviewBundle', 'buildBusinessDraftReviewBundle', 'buildBusinessDraftOnlyAction', 'buildBusinessActionDraftApproval', 'externalExecutionAllowed: false', 'send_email', 'post_social', 'submit_form', 'execute_browser_action'],
   'src/core/businessAutopilotPeopleRecords.ts': ['BusinessPersonInput', 'businessPeopleReadPayload', 'businessPersonWritePayload', 'listBusinessPeople', 'saveBusinessPerson', 'business_people', 'allowedUse', 'contactStatus', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
-  'src/core/businessAutopilotWebsiteRecords.ts': ['BusinessWebsiteInput', 'BusinessPageInput', 'BusinessWebsiteAuditRunInput', 'BusinessAuditObservationInput', 'listBusinessWebsites', 'saveBusinessWebsite', 'listBusinessPages', 'saveBusinessPage', 'listBusinessWebsiteAuditRuns', 'saveBusinessWebsiteAuditRun', 'listBusinessAuditObservations', 'saveBusinessAuditObservation', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
+  'src/core/businessAutopilotWebsiteRecords.ts': ['BusinessWebsiteInput', 'BusinessPageInput', 'BusinessWebsiteAuditRunInput', 'BusinessAuditObservationInput', 'listBusinessWebsites', 'saveBusinessWebsite', 'listBusinessPages', 'saveBusinessPage', 'record.contentHash', 'listBusinessWebsiteAuditRuns', 'saveBusinessWebsiteAuditRun', 'listBusinessAuditObservations', 'saveBusinessAuditObservation', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
   'src/core/businessAutopilotAuditObservationCandidates.ts': ['BusinessAuditObservationCandidate', 'buildBusinessAuditObservationCandidates', 'businessAuditObservationCandidatePayload', 'internal_metadata', 'reviewOnly: true', 'businessAutopilotReadSafety', 'no fetch, crawl, AI call, send, post, form submission, browser automation or external mutation is performed'],
   'src/core/businessAutopilotAuditPackRecords.ts': ['listBusinessAuditPacks', 'saveBusinessAuditPack', 'businessAuditPackReadPayload', 'business_audit_packs', 'buildBusinessAuditPack', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
   'src/core/businessAutopilotRecords.ts': ['listBusinessOrganizations', 'saveBusinessOrganization', 'listBusinessSignals', 'saveBusinessSignal', 'listBusinessOpportunities', 'saveBusinessOpportunity', 'listBusinessServiceMatches', 'saveBusinessServiceMatch', 'listBusinessActionDrafts', 'saveBusinessActionDraft', 'listBusinessApprovalRequests', 'saveBusinessApprovalRequest', 'listBusinessSuppression', 'saveBusinessSuppression', 'listBusinessContentIdeas', 'saveBusinessContentIdea', 'listBusinessFollowups', 'saveBusinessFollowup', 'listBusinessLearningEvents', 'saveBusinessLearningEvent', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],

@@ -1,4 +1,8 @@
 import { Env, getAdminToken } from "../db";
+import {
+  buildBusinessAuditObservationCandidates,
+  businessAuditObservationCandidatePayload,
+} from "../core/businessAutopilotAuditObservationCandidates";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 import {
   businessWebsiteReadPayload,
@@ -51,13 +55,13 @@ function errorText(error: unknown) {
 }
 
 function migrationError(error: unknown) {
-  const missingTable = /no such table: business_(websites|pages|website_audit_runs|audit_observations)/i.test(errorText(error));
+  const missingTable = /no such table: business_(websites|pages|website_audit_runs|audit_observations|signals)/i.test(errorText(error));
   return {
     ok: false,
     mode: "business_website_error",
     error: missingTable ? "business_autopilot_schema_missing" : "business_website_failed",
     message: missingTable ? schemaMissingMessage : routeFailedMessage,
-    requiredMigration: missingTable ? "0022_business_website_audit_records.sql" : null,
+    requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql + 0022_business_website_audit_records.sql" : null,
     safety: businessAutopilotReadSafety(),
   };
 }
@@ -114,6 +118,11 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
       if (!confirmed(url, body)) return blockedWrite(json);
       const observation = await saveBusinessAuditObservation(env, body.observation || body);
       return json({ mode: "business_audit_observation_saved", ...businessWebsiteWritePayload(observation, "auditObservation") });
+    }
+
+    if (request.method === "GET" && pathname === "/admin/business/audit-observation-candidates") {
+      const candidates = await buildBusinessAuditObservationCandidates(env, intParam(url, "limit", 25, 1, 50));
+      return json(businessAuditObservationCandidatePayload(candidates));
     }
 
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });

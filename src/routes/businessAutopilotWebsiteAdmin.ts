@@ -3,16 +3,20 @@ import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } fro
 import {
   businessWebsiteReadPayload,
   businessWebsiteWritePayload,
+  listBusinessAuditObservations,
   listBusinessPages,
+  listBusinessWebsiteAuditRuns,
   listBusinessWebsites,
+  saveBusinessAuditObservation,
   saveBusinessPage,
   saveBusinessWebsite,
+  saveBusinessWebsiteAuditRun,
 } from "../core/businessAutopilotWebsiteRecords";
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
-const schemaMissingMessage = "Business website/page schema is missing or unavailable.";
-const routeFailedMessage = "Business website/page route failed before a safe response could be returned.";
+const schemaMissingMessage = "Business website/page/audit schema is missing or unavailable.";
+const routeFailedMessage = "Business website/page/audit route failed before a safe response could be returned.";
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);
@@ -37,7 +41,7 @@ function blockedWrite(json: JsonResponse) {
   return json({
     ok: false,
     error: "confirm_required",
-    reason: "Business website/page writes require confirmation and only save internal metadata. They do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.",
+    reason: "Business website/page/audit writes require confirmation and only save internal metadata. They do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.",
     safety: businessAutopilotMetadataWriteSafety(),
   }, { status: 400 });
 }
@@ -47,13 +51,13 @@ function errorText(error: unknown) {
 }
 
 function migrationError(error: unknown) {
-  const missingTable = /no such table: business_(websites|pages)/i.test(errorText(error));
+  const missingTable = /no such table: business_(websites|pages|website_audit_runs|audit_observations)/i.test(errorText(error));
   return {
     ok: false,
     mode: "business_website_error",
     error: missingTable ? "business_autopilot_schema_missing" : "business_website_failed",
     message: missingTable ? schemaMissingMessage : routeFailedMessage,
-    requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql" : null,
+    requiredMigration: missingTable ? "0022_business_website_audit_records.sql" : null,
     safety: businessAutopilotReadSafety(),
   };
 }
@@ -86,6 +90,30 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
       if (!confirmed(url, body)) return blockedWrite(json);
       const page = await saveBusinessPage(env, body.page || body);
       return json({ mode: "business_page_saved", ...businessWebsiteWritePayload(page, "page") });
+    }
+
+    if (request.method === "GET" && pathname === "/admin/business/website-audit-runs") {
+      const auditRuns = await listBusinessWebsiteAuditRuns(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
+      return json({ mode: "business_website_audit_runs", ...businessWebsiteReadPayload(auditRuns, "websiteAuditRuns") });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/business/website-audit-runs") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const auditRun = await saveBusinessWebsiteAuditRun(env, body.auditRun || body);
+      return json({ mode: "business_website_audit_run_saved", ...businessWebsiteWritePayload(auditRun, "websiteAuditRun") });
+    }
+
+    if (request.method === "GET" && pathname === "/admin/business/audit-observations") {
+      const observations = await listBusinessAuditObservations(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("category") || undefined);
+      return json({ mode: "business_audit_observations", ...businessWebsiteReadPayload(observations, "auditObservations") });
+    }
+
+    if (request.method === "POST" && pathname === "/admin/business/audit-observations") {
+      const body = await parseBody(request);
+      if (!confirmed(url, body)) return blockedWrite(json);
+      const observation = await saveBusinessAuditObservation(env, body.observation || body);
+      return json({ mode: "business_audit_observation_saved", ...businessWebsiteWritePayload(observation, "auditObservation") });
     }
 
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });

@@ -63,7 +63,11 @@ function isSourceExpansionPath(pathname: string): boolean {
 }
 
 function isBusinessWebsitePath(pathname: string): boolean {
-  return pathname === "/admin/business/websites" || pathname === "/admin/business/pages" || pathname === "/admin/business/website-audit-runs" || pathname === "/admin/business/audit-observations";
+  return pathname === "/admin/business/websites"
+    || pathname === "/admin/business/pages"
+    || pathname === "/admin/business/website-audit-runs"
+    || pathname === "/admin/business/audit-observations"
+    || pathname === "/admin/business/audit-observation-candidates";
 }
 
 export default {

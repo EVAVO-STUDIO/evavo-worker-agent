@@ -60,6 +60,39 @@ export type BusinessPageInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type BusinessWebsiteAuditRunInput = {
+  id?: string;
+  websiteId?: string | null;
+  organizationId?: string | null;
+  status?: string | null;
+  auditType?: string | null;
+  source?: string | null;
+  requestedBy?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  readinessScore?: number | null;
+  riskScore?: number | null;
+  confidenceScore?: number | null;
+  summary?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type BusinessAuditObservationInput = {
+  id?: string;
+  auditRunId?: string | null;
+  websiteId?: string | null;
+  organizationId?: string | null;
+  pageId?: string | null;
+  signalId?: string | null;
+  category?: string | null;
+  severity?: string | null;
+  title: string;
+  evidenceSummary?: string | null;
+  recommendation?: string | null;
+  confidenceScore?: number | null;
+  metadata?: Record<string, unknown>;
+};
+
 export function businessWebsiteReadPayload<T>(items: T[], key: string) {
   return {
     ok: true,
@@ -219,7 +252,180 @@ export async function saveBusinessPage(env: Env, input: BusinessPageInput) {
     record.status,
     record.lastFetchedAt,
     record.httpStatus,
-    record.contentHash,
+    stringify(record.metadata),
+    now,
+    now,
+  ).run();
+  return { ...record, createdAt: now, updatedAt: now };
+}
+
+export async function listBusinessWebsiteAuditRuns(env: Env, limit = 25, status?: string) {
+  const params: unknown[] = [];
+  let where = "";
+  if (status) {
+    where = "WHERE status = ?";
+    params.push(sanitizeString(status, "queued", 64));
+  }
+  params.push(safeLimit(limit));
+  const rows = await env.DB.prepare(`SELECT * FROM business_website_audit_runs ${where} ORDER BY updated_at DESC, created_at DESC LIMIT ?`).bind(...params).all<any>();
+  return (rows.results || []).map((row) => ({
+    id: row.id,
+    websiteId: row.website_id,
+    organizationId: row.organization_id,
+    status: row.status,
+    auditType: row.audit_type,
+    source: row.source,
+    requestedBy: row.requested_by,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    readinessScore: numberValue(row.readiness_score),
+    riskScore: numberValue(row.risk_score),
+    confidenceScore: numberValue(row.confidence_score),
+    summary: row.summary,
+    metadata: parse(row.metadata_json, {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function saveBusinessWebsiteAuditRun(env: Env, input: BusinessWebsiteAuditRunInput) {
+  const now = nowISO();
+  const id = sanitizeString(input.id || uuid(), uuid(), 128);
+  const record = {
+    id,
+    websiteId: nullable(input.websiteId, 128),
+    organizationId: nullable(input.organizationId, 128),
+    status: sanitizeString(input.status, "queued", 64),
+    auditType: sanitizeString(input.auditType, "website_funnel_audit", 128),
+    source: sanitizeString(input.source, "operator", 128),
+    requestedBy: nullable(input.requestedBy, 256),
+    startedAt: nullable(input.startedAt, 64),
+    completedAt: nullable(input.completedAt, 64),
+    readinessScore: numberValue(input.readinessScore),
+    riskScore: numberValue(input.riskScore),
+    confidenceScore: numberValue(input.confidenceScore),
+    summary: nullable(input.summary, 2048),
+    metadata: input.metadata || {},
+  };
+  await env.DB.prepare(`
+    INSERT INTO business_website_audit_runs (
+      id, website_id, organization_id, status, audit_type, source, requested_by, started_at,
+      completed_at, readiness_score, risk_score, confidence_score, summary, metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      website_id = excluded.website_id,
+      organization_id = excluded.organization_id,
+      status = excluded.status,
+      audit_type = excluded.audit_type,
+      source = excluded.source,
+      requested_by = excluded.requested_by,
+      started_at = excluded.started_at,
+      completed_at = excluded.completed_at,
+      readiness_score = excluded.readiness_score,
+      risk_score = excluded.risk_score,
+      confidence_score = excluded.confidence_score,
+      summary = excluded.summary,
+      metadata_json = excluded.metadata_json,
+      updated_at = excluded.updated_at
+  `).bind(
+    id,
+    record.websiteId,
+    record.organizationId,
+    record.status,
+    record.auditType,
+    record.source,
+    record.requestedBy,
+    record.startedAt,
+    record.completedAt,
+    record.readinessScore,
+    record.riskScore,
+    record.confidenceScore,
+    record.summary,
+    stringify(record.metadata),
+    now,
+    now,
+  ).run();
+  return { ...record, createdAt: now, updatedAt: now };
+}
+
+export async function listBusinessAuditObservations(env: Env, limit = 25, category?: string) {
+  const params: unknown[] = [];
+  let where = "";
+  if (category) {
+    where = "WHERE category = ?";
+    params.push(sanitizeString(category, "general", 128));
+  }
+  params.push(safeLimit(limit));
+  const rows = await env.DB.prepare(`SELECT * FROM business_audit_observations ${where} ORDER BY updated_at DESC, created_at DESC LIMIT ?`).bind(...params).all<any>();
+  return (rows.results || []).map((row) => ({
+    id: row.id,
+    auditRunId: row.audit_run_id,
+    websiteId: row.website_id,
+    organizationId: row.organization_id,
+    pageId: row.page_id,
+    signalId: row.signal_id,
+    category: row.category,
+    severity: row.severity,
+    title: row.title,
+    evidenceSummary: row.evidence_summary,
+    recommendation: row.recommendation,
+    confidenceScore: numberValue(row.confidence_score),
+    metadata: parse(row.metadata_json, {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function saveBusinessAuditObservation(env: Env, input: BusinessAuditObservationInput) {
+  const now = nowISO();
+  const id = sanitizeString(input.id || uuid(), uuid(), 128);
+  const record = {
+    id,
+    auditRunId: nullable(input.auditRunId, 128),
+    websiteId: nullable(input.websiteId, 128),
+    organizationId: nullable(input.organizationId, 128),
+    pageId: nullable(input.pageId, 128),
+    signalId: nullable(input.signalId, 128),
+    category: sanitizeString(input.category, "general", 128),
+    severity: sanitizeString(input.severity, "info", 64),
+    title: sanitizeString(input.title, "Untitled observation", 512),
+    evidenceSummary: nullable(input.evidenceSummary, 2048),
+    recommendation: nullable(input.recommendation, 2048),
+    confidenceScore: numberValue(input.confidenceScore),
+    metadata: input.metadata || {},
+  };
+  await env.DB.prepare(`
+    INSERT INTO business_audit_observations (
+      id, audit_run_id, website_id, organization_id, page_id, signal_id, category, severity,
+      title, evidence_summary, recommendation, confidence_score, metadata_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      audit_run_id = excluded.audit_run_id,
+      website_id = excluded.website_id,
+      organization_id = excluded.organization_id,
+      page_id = excluded.page_id,
+      signal_id = excluded.signal_id,
+      category = excluded.category,
+      severity = excluded.severity,
+      title = excluded.title,
+      evidence_summary = excluded.evidence_summary,
+      recommendation = excluded.recommendation,
+      confidence_score = excluded.confidence_score,
+      metadata_json = excluded.metadata_json,
+      updated_at = excluded.updated_at
+  `).bind(
+    id,
+    record.auditRunId,
+    record.websiteId,
+    record.organizationId,
+    record.pageId,
+    record.signalId,
+    record.category,
+    record.severity,
+    record.title,
+    record.evidenceSummary,
+    record.recommendation,
+    record.confidenceScore,
     stringify(record.metadata),
     now,
     now,

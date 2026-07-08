@@ -9,7 +9,7 @@ The current operating model is **free-safe first**:
 - Source expansion is bounded, auditable, and candidate-memory-first.
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Autonomous discovery is research-memory-first and supervised-action only.
-- Business Autopilot is metadata, scoring, audit-pack, draft-only and approval-governance first.
+- Business Autopilot is metadata, scoring, website/funnel audit, audit-observation, audit-pack, draft-only and approval-governance first.
 - Live sources are promoted only through explicit review and confirmation gates.
 - Growth Operator and Business Autopilot read routes and confirmed metadata-write routes do not send, post, comment, submit forms, execute browser actions, browse, spend, mutate external systems, or call AI.
 - The browser must never receive the Worker admin token.
@@ -29,6 +29,8 @@ Start here for the modern opportunity/source-expansion workflow:
 - [`docs/business-autopilot-data-model.md`](docs/business-autopilot-data-model.md) — Business Autopilot tables, relationships and metadata model.
 - [`docs/business-autopilot-draft-review-route-plan.md`](docs/business-autopilot-draft-review-route-plan.md) — safe future route glue for draft-only action builds and matching approval requests.
 - [`docs/business-autopilot-validation.md`](docs/business-autopilot-validation.md) — Business Autopilot local checks, route-contract smoke, read-only verification and dashboard follow-up.
+- [`docs/business-autopilot-people-routes.md`](docs/business-autopilot-people-routes.md) — people/contact-context route layer and allowed-use posture.
+- [`docs/business-autopilot-website-page-routes.md`](docs/business-autopilot-website-page-routes.md) — website, page, website/funnel audit, audit observation and audit observation candidate routes.
 - [`docs/growth-autonomy-agent.md`](docs/growth-autonomy-agent.md) — contract for the Growth Autonomy Agent above the opportunity/source layer.
 - [`docs/growth-channel-policy.md`](docs/growth-channel-policy.md) — channel classes, link policy, disclosure policy, execution policy, and cooldown rules.
 - [`docs/growth-engagement-action-model.md`](docs/growth-engagement-action-model.md) — typed action lifecycle for signals, drafts, approvals, execution, and outcomes.
@@ -57,6 +59,7 @@ npm run db:migration:one -- 0018 --execute
 npm run db:migration:one -- 0019 --execute
 npm run db:migration:one -- 0020 --execute
 npm run db:migration:one -- 0021 --execute
+npm run db:migration:one -- 0022 --execute
 ```
 
 For current source-expansion, approval-queue, autonomous-discovery and Business Autopilot installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
@@ -154,7 +157,7 @@ confirm-required metadata writes only
 
 ## Business Autopilot summary
 
-Business Autopilot extends Growth Ops into broader agency intelligence and operating memory. It is currently internal metadata only: it stores organizations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events.
+Business Autopilot extends Growth Ops into broader agency intelligence and operating memory. It is currently internal metadata only: it stores organizations, people/contact context, websites, pages, website/funnel audit runs, audit observations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events. It also exposes computed audit observation candidates from stored internal metadata only.
 
 Core Business Autopilot modules:
 
@@ -168,8 +171,13 @@ businessAutopilotAuditPackRecords
 businessAutopilotActionDraftBuilder
 businessAutopilotApprovalBuilder
 businessAutopilotDraftReviewBundle
+businessAutopilotPeopleRecords
+businessAutopilotWebsiteRecords
+businessAutopilotAuditObservationCandidates
 businessAutopilotRecords
 businessAutopilotAdmin
+businessAutopilotPeopleAdmin
+businessAutopilotWebsiteAdmin
 businessAutopilotRouteCatalogue
 ```
 
@@ -177,6 +185,12 @@ Current Business Autopilot route IDs:
 
 ```text
 business_organizations
+business_people
+business_websites
+business_pages
+business_website_audit_runs
+business_audit_observations
+business_audit_observation_candidates
 business_signals
 business_opportunities
 business_service_matches
@@ -188,6 +202,11 @@ business_content_ideas
 business_followups
 business_learning_events
 business_organization_save
+business_person_save
+business_website_save
+business_page_save
+business_website_audit_run_save
+business_audit_observation_save
 business_signal_save
 business_opportunity_save
 business_service_match_save
@@ -210,6 +229,7 @@ metadata-write routes require confirm=1
 draft builder is draft-only
 approval records are review records only
 suppression remains higher priority than approval
+computed audit observation candidates are review-only and unsaved
 no email sending
 no social posting
 no third-party commenting
@@ -225,6 +245,7 @@ Business Autopilot validation commands:
 
 ```powershell
 npm run business:autopilot:check
+npm run business:autopilot:raw-error-safety:check
 npm run business:route-contract:print
 npm run business:autopilot:readonly:print
 ```
@@ -257,8 +278,8 @@ Current Worker support:
 3. Read Growth operator overview, cycle, autonomy contract, and cycle history.
 4. Read autonomous discovery research runs, source candidates, extracted signals, opportunity scores, agent decisions, and feedback.
 5. Confirm-save autonomous discovery metadata: research plans, source candidates, fetch-queue records, agent decisions, and feedback.
-6. Read Business Autopilot agency memory: organizations, evidence signals, opportunities, service matches, audit packs, action drafts, approval requests, suppression records, content ideas, follow-ups and learning events.
-7. Confirm-save Business Autopilot metadata: organizations, signals, opportunities, service matches, audit packs, draft-only action records, approval records, suppression records, content ideas, follow-ups and learning events.
+6. Read Business Autopilot agency memory: organizations, people, websites, pages, website/funnel audit runs, audit observations, observation candidates, evidence signals, opportunities, service matches, audit packs, action drafts, approval requests, suppression records, content ideas, follow-ups and learning events.
+7. Confirm-save Business Autopilot metadata: organizations, people, websites, pages, website/funnel audit runs, audit observations, signals, opportunities, service matches, audit packs, draft-only action records, approval records, suppression records, content ideas, follow-ups and learning events.
 8. Build draft-only Business actions from evidence with explicit external-action blocks.
 9. Build approval-review bundles for draft-only actions without external execution.
 10. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
@@ -326,6 +347,9 @@ The full backend local check includes:
 npm run scripts:check
 npm run db:migrations:check
 npm run business:autopilot:check
+npm run business:autopilot:raw-error-safety:check
+npm run business:people:docs:check
+npm run business:website-pages:docs:check
 npm run growth:route-delegates:check
 npm run growth:route-safety-flags:check
 npm run growth:capabilities:check
@@ -358,197 +382,5 @@ Then run the printed commands after setting:
 
 ```powershell
 $env:ADMIN_TOKEN="..."
-$env:WORKER_URL="https://evavo-outbound-agent.evavo-studio.workers.dev"
+$env:WORKER_URL="https://<your-worker-host>"
 ```
-
-The route-contract checks should print:
-
-```text
-All expected Growth route ids are advertised by the Worker route catalogue.
-All Growth read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables.
-All Growth metadata-write routes advertise confirm_required metadata-only posture.
-Read and verify delegated Growth v3 route families, including autonomous discovery
-All expected Business Autopilot route ids are advertised by the Worker route catalogue.
-All Business Autopilot read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables.
-All Business Autopilot metadata-write routes advertise confirm_required metadata-only posture.
-```
-
-If a stale or unsafe catalogue is deployed, the route-contract checks exit with code `1` and print visible failure labels.
-
-## Endpoints
-
-Public:
-
-- `GET /public/status`
-- `GET /public/events?limit=18`
-
-Admin, Bearer token required:
-
-- `GET /admin/health`
-- `GET /admin/diagnostics`
-- `GET /admin/diagnostics?deep=1&confirm=1`
-- `GET /admin/schema`
-- `GET /admin/overview`
-- `GET /admin/settings/autonomy`
-- `POST /admin/settings/autonomy`
-- `GET /admin/planner/routes`
-
-Core Growth:
-
-- `GET /admin/growth`
-- `GET /admin/growth/overview`
-- `GET /admin/growth/brief?profile=free_safe`
-- `GET /admin/growth/capabilities`
-- `GET /admin/growth/operator`
-- `GET /admin/growth/autonomy`
-- `GET /admin/growth/cycle`
-- `GET /admin/growth/cycle/events?limit=25`
-- `POST /admin/growth/cycle/record?confirm=1`
-
-Autonomous discovery:
-
-- `GET /admin/growth/discovery/research-runs?limit=25`
-- `POST /admin/growth/discovery/research-runs/plan?confirm=1`
-- `GET /admin/growth/discovery/source-candidates?limit=25`
-- `POST /admin/growth/discovery/source-candidates?confirm=1`
-- `GET /admin/growth/discovery/signals?limit=25`
-- `GET /admin/growth/discovery/opportunity-scores?limit=25`
-- `GET /admin/growth/discovery/agent-decisions?limit=25`
-- `POST /admin/growth/discovery/agent-decisions?confirm=1`
-- `GET /admin/growth/discovery/feedback?limit=25`
-- `POST /admin/growth/discovery/feedback?confirm=1`
-- `POST /admin/growth/discovery/fetch-queue?confirm=1`
-
-Business Autopilot:
-
-- `GET /admin/business/organizations?limit=25`
-- `POST /admin/business/organizations?confirm=1`
-- `GET /admin/business/signals?limit=25`
-- `POST /admin/business/signals?confirm=1`
-- `GET /admin/business/opportunities?limit=25`
-- `POST /admin/business/opportunities?confirm=1`
-- `GET /admin/business/service-matches?limit=25`
-- `POST /admin/business/service-matches?confirm=1`
-- `GET /admin/business/audit-packs?limit=25`
-- `POST /admin/business/audit-packs?confirm=1`
-- `GET /admin/business/action-drafts?limit=25`
-- `POST /admin/business/action-drafts/build?confirm=1`
-- `POST /admin/business/action-drafts?confirm=1`
-- `GET /admin/business/approval-requests?limit=25`
-- `POST /admin/business/approval-requests?confirm=1`
-- `GET /admin/business/suppression?limit=25`
-- `POST /admin/business/suppression?confirm=1`
-- `GET /admin/business/content-ideas?limit=25`
-- `POST /admin/business/content-ideas?confirm=1`
-- `GET /admin/business/followups?limit=25`
-- `POST /admin/business/followups?confirm=1`
-- `GET /admin/business/learning?limit=25`
-- `POST /admin/business/learning?confirm=1`
-
-Campaign intelligence:
-
-- `GET /admin/growth/campaigns?limit=25`
-- `POST /admin/growth/campaigns?confirm=1`
-- `GET /admin/growth/experiments?limit=25`
-- `POST /admin/growth/experiments?confirm=1`
-- `GET /admin/growth/decisions?limit=25`
-- `POST /admin/growth/decisions/plan?confirm=1`
-- `GET /admin/growth/metrics?limit=25`
-- `POST /admin/growth/metrics?confirm=1`
-- `GET /admin/growth/evidence?limit=25`
-- `POST /admin/growth/evidence?confirm=1`
-- `GET /admin/growth/learning?limit=25`
-- `POST /admin/growth/learning?confirm=1`
-
-Strategy memory:
-
-- `GET /admin/growth/strategy-memory`
-- `GET /admin/growth/objectives?limit=25`
-- `POST /admin/growth/objectives?confirm=1`
-- `GET /admin/growth/key-results?limit=50`
-- `POST /admin/growth/key-results?confirm=1`
-- `GET /admin/growth/segments?limit=25`
-- `POST /admin/growth/segments?confirm=1`
-- `GET /admin/growth/offers?limit=25`
-- `POST /admin/growth/offers?confirm=1`
-- `GET /admin/growth/positioning?limit=25`
-- `POST /admin/growth/positioning?confirm=1`
-- `GET /admin/growth/runtime-constraints?limit=50`
-- `POST /admin/growth/runtime-constraints?confirm=1`
-
-Blackboard:
-
-- `GET /admin/growth/blackboard`
-- `GET /admin/growth/blackboard/facts?limit=50`
-- `POST /admin/growth/blackboard/facts?confirm=1`
-- `GET /admin/growth/blackboard/entities?limit=50`
-- `POST /admin/growth/blackboard/entities?confirm=1`
-- `GET /admin/growth/blackboard/relationships?limit=50`
-- `POST /admin/growth/blackboard/relationships?confirm=1`
-- `GET /admin/growth/blackboard/signals?limit=50`
-- `POST /admin/growth/blackboard/signals?confirm=1`
-- `GET /admin/growth/blackboard/assets?limit=50`
-- `POST /admin/growth/blackboard/assets?confirm=1`
-
-Legacy Growth metadata routes:
-
-- `GET /admin/growth/strategy?limit=25`
-- `POST /admin/growth/strategy?confirm=1`
-- `GET /admin/growth/channels?limit=50`
-- `POST /admin/growth/channels?confirm=1`
-- `GET /admin/growth/signals?limit=50`
-- `POST /admin/growth/signals?confirm=1`
-- `POST /admin/growth/signals/status?confirm=1`
-- `GET /admin/growth/actions?limit=50`
-- `POST /admin/growth/actions?confirm=1`
-- `POST /admin/growth/actions/plan?confirm=1`
-- `POST /admin/growth/actions/status?confirm=1`
-- `GET /admin/growth/audit?limit=50`
-- `GET /admin/growth/budget?profile=free_safe`
-
-See the route catalogue for the full endpoint list and safety metadata.
-
-## Draft review decisions
-
-Supported review decisions:
-
-- `approved`
-- `rejected`
-- `needs_rewrite`
-- `too_generic`
-- `wrong_angle`
-- `bad_fit`
-- `bad_contact`
-- `good_angle`
-- `good_fit`
-- `do_not_contact`
-
-## Local verification
-
-```powershell
-cd C:\GitRepos\evavo-worker-agent
-git pull
-npm run db:migration:one -- 0021 --execute
-npm run growth:wiring:apply
-npm run growth:route-catalogue:apply
-npm run business:autopilot:check
-npm run growth:backend:check:local
-npm run business:route-contract:print
-npm run business:autopilot:readonly:print
-npm run growth:backend:final:print
-npm run growth:route-contract:print
-npm run growth:campaigns:smoke:print
-npm run growth:strategy:smoke:print
-npm run growth:blackboard:smoke:print
-npm run git:main-audit:print
-```
-
-## Common gotchas
-
-### D1 schema executed locally instead of remote
-
-If you see output mentioning `.wrangler/state/...` and `local database`, you initialized the local dev DB. Use the migration helper with `--execute` for intentional remote migration runs.
-
-### Wrangler auth during D1 imports
-
-If a migration import fails with Cloudflare `Authentication error [code: 10000]` but earlier runs succeeded, confirm your Wrangler login/session before retrying. Do not repeatedly rerun already-applied migrations unless an endpoint reports a missing table.

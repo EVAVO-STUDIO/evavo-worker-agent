@@ -118,6 +118,74 @@ content_hash
 metadata_json
 ```
 
+### business_website_audit_runs
+
+Represents metadata for a website or funnel audit run. This is a record of internal review state, not a crawler or browser-automation instruction.
+
+Important fields:
+
+```text
+website_id
+organization_id
+status
+audit_type
+source
+requested_by
+started_at
+completed_at
+readiness_score
+risk_score
+confidence_score
+summary
+metadata_json
+```
+
+### business_audit_observations
+
+Represents a structured website, UX, funnel, analytics or conversion observation that can support an audit pack, opportunity, service match or draft-only review.
+
+Important fields:
+
+```text
+audit_run_id
+website_id
+organization_id
+page_id
+signal_id
+category
+severity
+title
+evidence_summary
+recommendation
+confidence_score
+metadata_json
+```
+
+### business_audit_observation_candidates
+
+This is a read-only computed route, not a durable table. `GET /admin/business/audit-observation-candidates?limit=25` derives unsaved review candidates from stored internal metadata only.
+
+Candidate inputs:
+
+```text
+business_websites
+business_pages
+business_signals
+business_website_audit_runs
+business_audit_observations
+```
+
+Candidate outputs use:
+
+```text
+observationCandidates
+reviewOnly: true
+source: internal_metadata
+safety.readOnly: true
+```
+
+The candidate route does not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.
+
 ## Website/page relationship layer
 
 Website and page records provide the evidence spine between an organization and later Business Autopilot signals.
@@ -129,6 +197,9 @@ business_organizations
 → business_websites
 → business_pages
 → business_signals
+→ business_website_audit_runs
+→ business_audit_observations
+→ business_audit_observation_candidates
 → business_opportunities
 → business_audit_packs
 → business_action_drafts
@@ -153,6 +224,11 @@ GET  /admin/business/websites?limit=25
 POST /admin/business/websites?confirm=1
 GET  /admin/business/pages?limit=25
 POST /admin/business/pages?confirm=1
+GET  /admin/business/website-audit-runs?limit=25
+POST /admin/business/website-audit-runs?confirm=1
+GET  /admin/business/audit-observations?limit=25
+POST /admin/business/audit-observations?confirm=1
+GET  /admin/business/audit-observation-candidates?limit=25
 ```
 
 Route catalogue IDs:
@@ -160,8 +236,13 @@ Route catalogue IDs:
 ```text
 business_websites
 business_pages
+business_website_audit_runs
+business_audit_observations
+business_audit_observation_candidates
 business_website_save
 business_page_save
+business_website_audit_run_save
+business_audit_observation_save
 ```
 
 Safety requirements:
@@ -170,6 +251,7 @@ Safety requirements:
 metadata-only
 read routes advertise readOnly and internalMetadataOnly
 write routes require confirm=1
+observation candidates are read-only and unsaved
 no crawling
 no fetching
 no email sending
@@ -260,63 +342,78 @@ ai_chatbot
 automation
 three_d_interactive
 gamification
-funnels_hotspots_customer_journeys
+funnels
+hotspot
 ecommerce
 performance_maintenance
 content_strategy
 ```
 
-Important fields:
-
-```text
-organization_id
-opportunity_id
-signal_id
-service_key
-match_score
-reason
-evidence_json
-metadata_json
-```
-
 ### business_audit_packs
 
-A reusable evidence-backed audit/teardown pack.
+Evidence-backed teardown package for review and draft preparation.
 
 Important fields:
 
 ```text
 organization_id
 opportunity_id
-title
+status
 summary
-audit_type
-findings_json
+evidence_json
 recommendations_json
 risk_flags_json
-confidence_score
-status
+score_json
 metadata_json
 ```
-
-## Action family
 
 ### business_action_drafts
 
-Represents a prepared but unexecuted action.
+Draft-only action metadata. Drafts do not send or execute.
 
-Draft types:
+Important fields:
 
 ```text
-email
-linkedin_post
-linkedin_comment
-linkedin_dm
-contact_form_message
-proposal_intro
-audit_summary
-follow_up
-crm_note
-calendar_task
-internal_report
+organization_id
+opportunity_id
+audit_pack_id
+draft_type
+status
+subject
+body
+review_checklist_json
+risk_flags_json
+metadata_json
 ```
+
+### business_approval_requests
+
+Internal approval records for future operator review.
+
+Important fields:
+
+```text
+draft_id
+status
+approval_type
+request_summary
+review_checklist_json
+risk_flags_json
+metadata_json
+```
+
+### business_suppression_list
+
+Do-not-contact, block, suppression and safety memory. Suppression wins over enthusiasm and must be visible in review.
+
+### business_content_ideas
+
+Internal content and campaign idea memory.
+
+### business_followups
+
+Internal follow-up/task metadata.
+
+### business_learning_events
+
+Operator feedback, outcomes and learning notes.

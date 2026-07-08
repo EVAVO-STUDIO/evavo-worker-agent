@@ -29,6 +29,7 @@ const expected = [
   '0019_growth_approval_requests.sql',
   '0020_growth_autonomous_discovery.sql',
   '0021_business_autopilot_foundation.sql',
+  '0022_business_website_audit_records.sql',
 ];
 
 const missing = [];

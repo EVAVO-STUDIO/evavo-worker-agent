@@ -20,6 +20,22 @@ learning loops
 
 The first implementation is metadata-only. It does not send, post, comment, submit forms, buy ads, call AI, execute browser actions, or mutate external systems.
 
+## Schema sources
+
+Durable foundation tables are created by:
+
+```text
+migrations/0021_business_autopilot_foundation.sql
+```
+
+Website and funnel audit metadata tables are created by:
+
+```text
+migrations/0022_business_website_audit_records.sql
+```
+
+`business_audit_observation_candidates` is intentionally not a migration table. It is a computed read-only route over stored internal metadata.
+
 ## Entity family
 
 ### business_organizations

@@ -62,6 +62,10 @@ function isSourceExpansionPath(pathname: string): boolean {
   return pathname.startsWith("/admin/opportunities/sources/expansion/");
 }
 
+function isBusinessWebsitePath(pathname: string): boolean {
+  return pathname === "/admin/business/websites" || pathname === "/admin/business/pages" || pathname === "/admin/business/website-audit-runs" || pathname === "/admin/business/audit-observations";
+}
+
 export default {
   async scheduled(_controller: any, env: Env, ctx: any) {
     ctx.waitUntil(dailyTickWithAutonomy(env));
@@ -93,7 +97,7 @@ export default {
       if (pathname === "/admin/growth/approval-requests" || pathname === "/admin/growth/approval-requests/status") return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/growth" || pathname.startsWith("/admin/growth/")) return await handleGrowthAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/business/people") return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/business/websites" || pathname === "/admin/business/pages") return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
+      if (isBusinessWebsitePath(pathname)) return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/business" || pathname.startsWith("/admin/business/")) return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/sources/run-tiny") return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/sources") || pathname === "/admin/seeds") return await handleSourcesAdmin(req, env, pathname, jsonResponse);

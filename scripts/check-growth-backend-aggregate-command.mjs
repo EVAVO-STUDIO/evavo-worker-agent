@@ -8,6 +8,7 @@ const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const workerFinalGatePrint = 'npm run worker:final-gate:print';
 const workerPowerShellCheck = 'npm run worker:powershell:check';
+const generatedRoutesCheck = 'npm run growth:generated-routes:check';
 const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
 const businessAutopilotRawErrorSafetyCheck = 'npm run business:autopilot:raw-error-safety:check';
 const businessPeopleDocsCheck = 'npm run business:people:docs:check';
@@ -21,6 +22,7 @@ const expectedPackageScripts = {
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
   'growth:backend:workflow:print': 'node scripts/print-growth-backend-workflow-gate.mjs',
+  'growth:generated-routes:check': 'node scripts/check-generated-route-wiring-clean.mjs',
   'worker:final-gate:print': 'node scripts/print-worker-final-local-gate.mjs',
   'worker:powershell:check': 'node scripts/check-worker-powershell-runners.mjs',
 };
@@ -59,6 +61,8 @@ const workflowTokens = [
   businessWebsitePageDocsCheck,
   'Check Worker PowerShell runners',
   workerPowerShellCheck,
+  'Check generated route wiring clean',
+  generatedRoutesCheck,
   'Print Worker final local gate',
   workerFinalGatePrint,
   backendLocalCheck,
@@ -80,6 +84,12 @@ const requiredFileTokens = {
     'npm run growth:blackboard:smoke:print',
   ],
   'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyScriptTokens,
+  'scripts/check-generated-route-wiring-clean.mjs': [
+    'Generated route wiring clean check passed.',
+    'src/index.ts',
+    'src/routes/routeCataloguePlanner.ts',
+    'generated route wiring files are clean',
+  ],
   'scripts/check-worker-powershell-runners.mjs': [
     'Worker PowerShell runner check passed.',
     'Run-BusinessOperatorWorkerRunbook.ps1',

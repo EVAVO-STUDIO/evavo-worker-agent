@@ -20,7 +20,7 @@ function Invoke-Checked {
 }
 
 Write-Host "EVAVO Worker final local gate" -ForegroundColor Cyan
-Write-Host "This runs final local checks, confirms generated route files are clean, prints D1 verification commands, and stops before deploy." -ForegroundColor Gray
+Write-Host "This runs final local checks, confirms this checkout matches origin, confirms generated route files are clean, prints D1 verification commands, and stops before deploy." -ForegroundColor Gray
 Write-Host "It does not rerun migrations." -ForegroundColor Gray
 Write-Host ""
 
@@ -36,6 +36,7 @@ Write-Host ""
 
 Write-Host "Sync latest code" -ForegroundColor Cyan
 Invoke-Checked git pull
+Invoke-Checked npm run git:sync:check
 Write-Host ""
 
 Write-Host "Final local checks" -ForegroundColor Cyan

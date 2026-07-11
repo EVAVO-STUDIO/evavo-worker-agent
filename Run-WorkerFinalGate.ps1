@@ -4,6 +4,21 @@
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-Checked {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Command,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$Arguments
+  )
+
+  & $Command @Arguments
+  $exitCode = $LASTEXITCODE
+  if ($null -ne $exitCode -and $exitCode -ne 0) {
+    throw "Command failed with exit code ${exitCode}: $Command $($Arguments -join ' ')"
+  }
+}
+
 Write-Host "EVAVO Worker final local gate" -ForegroundColor Cyan
 Write-Host "This runs final local checks, confirms generated route files are clean, prints D1 verification commands, and stops before deploy." -ForegroundColor Gray
 Write-Host "It does not rerun migrations." -ForegroundColor Gray
@@ -14,33 +29,33 @@ if (-not (Test-Path "package.json")) {
 }
 
 Write-Host "Repository state" -ForegroundColor Cyan
-git status --short
-git branch --show-current
-git log -1 --oneline
+Invoke-Checked git status --short
+Invoke-Checked git branch --show-current
+Invoke-Checked git log -1 --oneline
 Write-Host ""
 
 Write-Host "Sync latest code" -ForegroundColor Cyan
-git pull
+Invoke-Checked git pull
 Write-Host ""
 
 Write-Host "Final local checks" -ForegroundColor Cyan
-npm run scripts:check
-npm run db:migrations:check
-npm run business:autopilot:check
-npm run business:autopilot:raw-error-safety:check
-npm run business:people:docs:check
-npm run business:website-pages:docs:check
-npm run growth:backend:aggregate:check
-npm run check:local
-npm run growth:backend:check:local
+Invoke-Checked npm run scripts:check
+Invoke-Checked npm run db:migrations:check
+Invoke-Checked npm run business:autopilot:check
+Invoke-Checked npm run business:autopilot:raw-error-safety:check
+Invoke-Checked npm run business:people:docs:check
+Invoke-Checked npm run business:website-pages:docs:check
+Invoke-Checked npm run growth:backend:aggregate:check
+Invoke-Checked npm run check:local
+Invoke-Checked npm run growth:backend:check:local
 Write-Host ""
 
 Write-Host "Confirm generated route wiring files are clean" -ForegroundColor Cyan
-npm run growth:generated-routes:check
+Invoke-Checked npm run growth:generated-routes:check
 Write-Host ""
 
 Write-Host "Print D1 verification commands" -ForegroundColor Cyan
-npm run db:verify:print
+Invoke-Checked npm run db:verify:print
 Write-Host ""
 
 Write-Host "Final gate passed. Review any D1 verification commands above, then deploy the Cloudflare Worker through the guarded npm wrapper:" -ForegroundColor Green

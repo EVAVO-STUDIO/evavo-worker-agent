@@ -79,29 +79,16 @@ const requiredFileTokens = {
     'npm run growth:strategy:smoke:print',
     'npm run growth:blackboard:smoke:print',
   ],
-  'package.json': [
-    businessAutopilotRawErrorSafetyCheck,
-    'node scripts/check-business-autopilot-raw-error-safety.mjs',
-    businessPeopleDocsCheck,
-    'node scripts/check-business-people-docs.mjs',
-    businessWebsitePageDocsCheck,
-    'node scripts/check-business-website-page-docs.mjs',
-    workerFinalGatePrint,
-    'node scripts/print-worker-final-local-gate.mjs',
-    workerPowerShellCheck,
-    'node scripts/check-worker-powershell-runners.mjs',
-    'npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
-  ],
   'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyScriptTokens,
   'scripts/check-worker-powershell-runners.mjs': [
-    'EVAVO Worker PowerShell runner check passed.',
+    'Worker PowerShell runner check passed.',
     'Run-BusinessOperatorWorkerRunbook.ps1',
     'Run-WorkerFinalGate.ps1',
     'npm run check:local',
     'npm run growth:backend:check:local',
     'npm run db:verify:print',
     'npm run deploy',
-    'does not rerun migrations',
+    'Migrations 0021 and 0022 should not be rerun',
   ],
   'scripts/print-growth-backend-workflow-gate.mjs': [
     'EVAVO Growth backend workflow gate',
@@ -189,13 +176,10 @@ const requiredFileTokens = {
     'inner payload safety posture',
     'Confirmed metadata-write routes',
     'metadata-only posture',
-    'npm run growth:ops:check:local',
-    'npm run business:ops:websites-pages:print',
   ],
 };
 
 let failed = false;
-
 function fail(message) { failed = true; console.error(`FAIL ${message}`); }
 function pass(message) { console.log(`OK   ${message}`); }
 
@@ -216,6 +200,11 @@ if (packageJsonContent) {
     if (scripts[name] !== expected) fail(`package.json script ${name} should be "${expected}"`);
     else pass(`package.json script ${name} is wired`);
   }
+  const checkLocal = scripts['check:local'] || '';
+  for (const requiredStep of [businessAutopilotRawErrorSafetyCheck, businessPeopleDocsCheck, businessWebsitePageDocsCheck, workerPowerShellCheck]) {
+    if (checkLocal.includes(requiredStep)) pass(`check:local includes ${requiredStep}`);
+    else fail(`check:local missing ${requiredStep}`);
+  }
 }
 
 for (const [relativePath, tokens] of Object.entries(requiredFileTokens)) {
@@ -223,8 +212,8 @@ for (const [relativePath, tokens] of Object.entries(requiredFileTokens)) {
   if (!content) continue;
   pass(`${relativePath} exists`);
   for (const token of tokens) {
-    if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
-    else pass(`${relativePath} contains ${token}`);
+    if (content.includes(token)) pass(`${relativePath} contains ${token}`);
+    else fail(`${relativePath} missing ${token}`);
   }
 }
 

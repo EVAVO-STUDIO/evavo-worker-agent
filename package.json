@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "predeploy": "npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local",
     "deploy": "wrangler deploy",
     "db:init:local": "wrangler d1 execute evavo_outbound_agent --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute evavo_outbound_agent --file=./schema.sql --remote",

@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
+const workerFinalGatePrint = 'npm run worker:final-gate:print';
 const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
 const businessAutopilotRawErrorSafetyCheck = 'npm run business:autopilot:raw-error-safety:check';
 const businessPeopleDocsCheck = 'npm run business:people:docs:check';
@@ -19,6 +20,7 @@ const expectedPackageScripts = {
   'growth:backend:aggregate:check': 'node scripts/check-growth-backend-aggregate-command.mjs',
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
   'growth:backend:workflow:print': 'node scripts/print-growth-backend-workflow-gate.mjs',
+  'worker:final-gate:print': 'node scripts/print-worker-final-local-gate.mjs',
 };
 
 const businessPeopleTokens = [
@@ -67,6 +69,8 @@ const workflowTokens = [
   backendAggregateCheck,
   businessPeopleDocsCheck,
   businessWebsitePageDocsCheck,
+  'Print Worker final local gate',
+  workerFinalGatePrint,
   backendLocalCheck,
   'npm run growth:backend:final:print',
   'Check Business people docs',
@@ -78,6 +82,7 @@ const requiredFileTokens = {
   'README.md': [
     'docs/growth-backend-validation.md',
     backendLocalCheck,
+    workerFinalGatePrint,
     'Run the guarded core Worker checks:',
     'npm run growth:route-contract:print',
     'npm run growth:campaigns:smoke:print',
@@ -91,6 +96,8 @@ const requiredFileTokens = {
     'node scripts/check-business-people-docs.mjs',
     businessWebsitePageDocsCheck,
     'node scripts/check-business-website-page-docs.mjs',
+    workerFinalGatePrint,
+    'node scripts/print-worker-final-local-gate.mjs',
     'npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
   ],
   'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyScriptTokens,
@@ -119,6 +126,7 @@ const requiredFileTokens = {
   ],
   'scripts/print-growth-final-backend-validation.mjs': [
     backendLocalCheck,
+    workerFinalGatePrint,
     'Worker supplies the inner payload safety posture',
     'npm run business:autopilot:check',
     businessAutopilotRawErrorSafetyCheck,
@@ -147,6 +155,7 @@ const requiredFileTokens = {
     backendWorkflowGateDoc,
     backendAggregateCheck,
     backendLocalCheck,
+    workerFinalGatePrint,
     businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Worker is the backend source of truth',

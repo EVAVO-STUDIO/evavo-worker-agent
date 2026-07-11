@@ -38,6 +38,9 @@ jobs:
       - name: Check Business website page docs
         run: npm run business:website-pages:docs:check
 
+      - name: Print Worker final local gate
+        run: npm run worker:final-gate:print
+
       - name: Run Growth backend aggregate check
         run: npm run growth:backend:check:local
 

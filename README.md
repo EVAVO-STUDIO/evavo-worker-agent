@@ -10,6 +10,7 @@ The current operating model is **free-safe first**:
 - Zero-source startup is supported as a first-class safe path when no manual source list exists.
 - Autonomous discovery is research-memory-first and supervised-action only.
 - Business Autopilot is metadata, scoring, website/funnel audit, audit-observation, audit-pack, draft-only and approval-governance first.
+- Business Autopilot is intended to act as a business analyst / sales strategist / BDM / growth manager / operator brain while keeping external execution disabled until explicitly governed.
 - Live sources are promoted only through explicit review and confirmation gates.
 - Growth Operator and Business Autopilot read routes and confirmed metadata-write routes do not send, post, comment, submit forms, execute browser actions, browse, spend, mutate external systems, or call AI.
 - The browser must never receive the Worker admin token.
@@ -63,6 +64,24 @@ npm run db:migration:one -- 0022 --execute
 ```
 
 For current source-expansion, approval-queue, autonomous-discovery and Business Autopilot installs, follow the migration ordering in [`migrations/README.md`](migrations/README.md).
+
+## Business operator runbook
+
+When local npm aliases seem stale or you need one safe recovery path for the Worker, print the Business operator runbook first:
+
+```powershell
+cd C:\GitRepos\evavo-worker-agent
+git pull
+npm run business:operator:runbook:print
+```
+
+If the alias is not available locally yet, pull again or run the printer directly:
+
+```powershell
+node scripts/print-business-operator-worker-runbook.mjs
+```
+
+The runbook prints the migration, route wiring, validation, direct node-script fallback and deploy sequence for the Business analyst / sales strategist / BDM / growth manager / operator brain model. Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.
 
 ## Quick start
 
@@ -244,6 +263,7 @@ no network calls from metadata routes
 Business Autopilot validation commands:
 
 ```powershell
+npm run business:operator:runbook:print
 npm run business:autopilot:check
 npm run business:autopilot:raw-error-safety:check
 npm run business:route-contract:print

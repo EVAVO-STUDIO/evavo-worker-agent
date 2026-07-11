@@ -83,6 +83,23 @@ node scripts/print-business-operator-worker-runbook.mjs
 
 The runbook prints the migration, route wiring, validation, direct node-script fallback and deploy sequence for the Business analyst / sales strategist / BDM / growth manager / operator brain model. Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.
 
+## Final local gate
+
+After migrations have already been applied, do not rerun them. Use the final gate printer or PowerShell runner to validate the Worker before deploy:
+
+```powershell
+cd C:\GitRepos\evavo-worker-agent
+git pull
+npm run worker:final-gate:print
+.\Run-WorkerFinalGate.ps1
+```
+
+The final gate runs local helper, migration-presence, Business Autopilot, raw-error safety, people docs, website/page docs, aggregate backend and TypeScript checks, then prints D1 verification commands. It stops before deployment. Deploy manually only after the gate passes:
+
+```powershell
+npm run deploy
+```
+
 ## Quick start
 
 1) Install deps
@@ -176,9 +193,11 @@ confirm-required metadata writes only
 
 ## Business Autopilot summary
 
+Business Autopilot extends Growth Ops into broader agency intelligence and operating memory.
+
 Business Autopilot: metadata-only agency intelligence, website/funnel audit memory, draft preparation, approval governance, and learning support for EVAVO.
 
-Business Autopilot extends Growth Ops into broader agency intelligence and operating memory. It is currently internal metadata only: it stores organizations, people/contact context, websites, pages, website/funnel audit runs, audit observations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events. It also exposes computed audit observation candidates from stored internal metadata only.
+It is currently internal metadata only: it stores organizations, people/contact context, websites, pages, website/funnel audit runs, audit observations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events. It also exposes computed audit observation candidates from stored internal metadata only.
 
 Core Business Autopilot modules:
 
@@ -304,105 +323,24 @@ Current Worker support:
 7. Confirm-save Business Autopilot metadata: organizations, people, websites, pages, website/funnel audit runs, audit observations, signals, opportunities, service matches, audit packs, draft-only action records, approval records, suppression records, content ideas, follow-ups and learning events.
 8. Build draft-only Business actions from evidence with explicit external-action blocks.
 9. Build approval-review bundles for draft-only actions without external execution.
-10. Confirm-save campaign, experiment, metric, evidence, learning, and decision metadata.
-11. Confirm-record cycle snapshots into cycle memory.
-12. Read and write strategy memory as confirmed internal metadata: objectives, key results, segments, offers, positioning, and runtime constraints.
-13. Read and write blackboard knowledge as confirmed internal metadata: facts, entities, relationships, market signals, and proof assets.
-14. Confirm-plan deterministic campaign decisions without AI, browsing, sending, posting, form submission, or external state changes.
-15. Return route-catalogue safety metadata proving no AI, email, posting, commenting, form submission, browser execution, or action execution occurs.
-
-Execution routes for external delivery, publishing, browser submission, live crawling, and AI drafting should only be added after evidence packs, approval records, suppression checks, caps, identity controls, audit events, crawl governance, and channel-specific governance are in place.
-
-## Growth capability registry
-
-The Growth Operator capability model lives in:
-
-```text
-src/core/growthCapabilities.ts
-src/routes/growthCapabilitiesAdmin.ts
-docs/growth-capability-registry.md
-```
-
-Current capability classes include:
-
-```text
-research
-analysis
-drafting
-browser
-external_delivery
-internal_ops
-reporting
-```
-
-The registry defines autonomy levels from read-only through autonomous campaign mode. It is a control-plane model only and does not execute capabilities by itself.
-
-The route is:
-
-```text
-GET /admin/growth/capabilities
-```
-
-Wire route additions locally in `src/index.ts` before the generic `/admin/growth/` branch by running:
-
-```powershell
-npm run growth:wiring:apply
-```
-
-## Growth smoke verification
+10. Confirm-save campaign, experiment, decision, metric, evidence, feedback, learning, strategy, blackboard, autonomous-discovery and Business Autopilot metadata.
+11. Continue to block email sending, social posting, contact-form submission, arbitrary browser automation, ad buying, external mutation, AI calls and arbitrary network calls unless a later governed execution layer explicitly enables them.
 
 Run the guarded core Worker checks:
 
 ```powershell
-cd C:\GitRepos\evavo-worker-agent
-git pull
-npm run growth:wiring:apply
-npm run growth:route-catalogue:apply
 npm run growth:backend:check:local
 ```
 
-`growth:backend:check:local` runs the backend aggregate command contract checker before the full local backend check.
-
-The full backend local check includes:
+Print useful backend verification commands:
 
 ```powershell
-npm run scripts:check
-npm run db:migrations:check
-npm run business:autopilot:check
-npm run business:autopilot:raw-error-safety:check
-npm run business:people:docs:check
-npm run business:website-pages:docs:check
-npm run growth:route-delegates:check
-npm run growth:route-safety-flags:check
-npm run growth:capabilities:check
-npm run growth:campaigns:check
-npm run growth:strategy:check
-npm run growth:blackboard:check
-npm run growth:review-queue:check
-npm run growth:autonomous-discovery:check
-npm run typecheck
-```
-
-Print the route-contract-only Growth check when you only need to validate the Worker route catalogue and do not want to run optional metadata-write smoke steps:
-
-```powershell
+npm run growth:backend:workflow:print
+npm run growth:backend:final:print
 npm run growth:route-contract:print
 npm run business:route-contract:print
-```
-
-Print the broader smoke-test commands:
-
-```powershell
-npm run growth:smoke:print
+npm run business:autopilot:readonly:print
 npm run growth:campaigns:smoke:print
 npm run growth:strategy:smoke:print
 npm run growth:blackboard:smoke:print
-npm run business:autopilot:readonly:print
-```
-
-Then run the printed commands after setting:
-
-```powershell
-$env:ADMIN_TOKEN="..."
-$env:WORKER_URL="https://<your-worker-host>"
 ```

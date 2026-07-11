@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
 # Run from PowerShell after migrations 0014 through 0022 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page/audit docs checks, and the internal review queue persistence check.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page docs checks, Business website/page/audit docs checks, and the internal review queue persistence check.
 # Business operator model: the Worker is the metadata and reasoning foundation for a combined business analyst, sales strategist, BDM, growth manager and operator brain.
 # Safe automation boundary: the Worker may automate internal discovery planning, scoring, prioritisation, audit observations, draft preparation, next-move reasoning and learning, but external execution remains confirm-gated and disabled by default.
 # Two-layer safety note: the Worker supplies the inner payload safety posture consumed by the Next read-only proxy UI and smoke checks.
@@ -46,6 +46,7 @@ Write-Host "- generic Worker root and Business Autopilot route errors" -Foregrou
 Write-Host "- no raw String(error), String(err), error.message or err.message public error payloads" -ForegroundColor Gray
 Write-Host "- npm run business:people:docs:check" -ForegroundColor Gray
 Write-Host "- npm run business:website-pages:docs:check" -ForegroundColor Gray
+Write-Host "- Business website/page docs checks" -ForegroundColor Gray
 Write-Host "- business_people" -ForegroundColor Gray
 Write-Host "- business_person_save" -ForegroundColor Gray
 Write-Host "- business_websites" -ForegroundColor Gray

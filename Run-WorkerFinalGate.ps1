@@ -43,5 +43,7 @@ Write-Host "Print D1 verification commands" -ForegroundColor Cyan
 npm run db:verify:print
 Write-Host ""
 
-Write-Host "Final gate passed. Review any D1 verification commands above, then deploy manually:" -ForegroundColor Green
+Write-Host "Final gate passed. Review any D1 verification commands above, then deploy the Cloudflare Worker through the guarded npm wrapper:" -ForegroundColor Green
 Write-Host "npm run deploy" -ForegroundColor Cyan
+Write-Host "That command runs npm predeploy first, then executes the real Worker command: wrangler deploy." -ForegroundColor Gray
+Write-Host "Direct wrangler deploy also deploys the Worker, but bypasses npm predeploy safety checks, so only use it intentionally." -ForegroundColor Yellow

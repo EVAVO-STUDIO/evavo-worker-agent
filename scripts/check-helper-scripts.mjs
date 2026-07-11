@@ -44,6 +44,11 @@ const helperScripts = [
   'scripts/print-worker-final-local-gate.mjs',
 ];
 
+const powerShellRunners = [
+  'Run-BusinessOperatorWorkerRunbook.ps1',
+  'Run-WorkerFinalGate.ps1',
+];
+
 const sourceFiles = [
   'src/core/businessAutopilotPeopleRecords.ts',
   'src/core/businessAutopilotWebsiteRecords.ts',
@@ -217,6 +222,8 @@ const requiredTokens = {
   'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'business_audit_observation_candidates', '/admin/business/audit-observation-candidates?limit=5', 'All Business Autopilot read routes advertise readOnly'],
   'scripts/print-business-operator-worker-runbook.mjs': ['EVAVO Business Operator Worker runbook', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'npm run business:autopilot:readonly:print', 'external execution remains confirm-gated and disabled by default'],
   'scripts/print-worker-final-local-gate.mjs': ['EVAVO Worker final local gate', 'Do not rerun 0021 or 0022', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
+  'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'npm run check:local', 'npm run deploy'],
+  'Run-WorkerFinalGate.ps1': ['EVAVO Worker final local gate', 'does not rerun migrations', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', 'growth_research_runs', 'growth_source_candidates'],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };
@@ -225,7 +232,7 @@ let failed = false;
 const fail = (message) => { failed = true; console.error(`FAIL ${message}`); };
 const pass = (message) => console.log(`OK   ${message}`);
 
-for (const relativePath of [...helperScripts, ...sourceFiles, ...docs]) {
+for (const relativePath of [...helperScripts, ...powerShellRunners, ...sourceFiles, ...docs]) {
   const absolutePath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(absolutePath)) fail(`${relativePath} is missing`);
   else pass(`${relativePath} exists`);

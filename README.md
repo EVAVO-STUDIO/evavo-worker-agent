@@ -357,6 +357,7 @@ git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run growth:backend:check:local
+npm run growth:backend:final:print
 ```
 
 `growth:backend:check:local` runs the backend aggregate command contract checker before the full local backend check.

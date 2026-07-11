@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "predeploy": "npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local",
+    "predeploy": "npm run git:sync:check && npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local",
     "deploy": "wrangler deploy",
     "db:init:local": "wrangler d1 execute evavo_outbound_agent --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute evavo_outbound_agent --file=./schema.sql --remote",
@@ -14,6 +14,7 @@
     "db:migrations:print": "node scripts/print-migration-commands.mjs",
     "db:verify:print": "node scripts/print-d1-verification-commands.mjs",
     "git:main-audit:print": "node scripts/print-main-branch-audit.mjs",
+    "git:sync:check": "node scripts/check-repo-sync-status.mjs",
     "business:autopilot:check": "node scripts/check-business-autopilot.mjs",
     "business:autopilot:raw-error-safety:check": "node scripts/check-business-autopilot-raw-error-safety.mjs",
     "business:autopilot:readonly:print": "node scripts/print-business-autopilot-readonly-verify-commands.mjs",

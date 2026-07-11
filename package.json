@@ -16,6 +16,7 @@
     "business:autopilot:check": "node scripts/check-business-autopilot.mjs",
     "business:autopilot:raw-error-safety:check": "node scripts/check-business-autopilot-raw-error-safety.mjs",
     "business:autopilot:readonly:print": "node scripts/print-business-autopilot-readonly-verify-commands.mjs",
+    "business:operator:runbook:print": "node scripts/print-business-operator-worker-runbook.mjs",
     "business:people:docs:check": "node scripts/check-business-people-docs.mjs",
     "business:route-contract:print": "node scripts/print-business-autopilot-route-contract-check.mjs",
     "business:website-pages:docs:check": "node scripts/check-business-website-page-docs.mjs",

@@ -1,11 +1,13 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
-# Run from PowerShell after migrations 0014 through 0021 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page docs checks, and the internal review queue persistence check.
+# Run from PowerShell after migrations 0014 through 0022 are applied.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page/audit docs checks, and the internal review queue persistence check.
+# Business operator model: the Worker is the metadata and reasoning foundation for a combined business analyst, sales strategist, BDM, growth manager and operator brain.
+# Safe automation boundary: the Worker may automate internal discovery planning, scoring, prioritisation, audit observations, draft preparation, next-move reasoning and learning, but external execution remains confirm-gated and disabled by default.
 # Two-layer safety note: the Worker supplies the inner payload safety posture consumed by the Next read-only proxy UI and smoke checks.
 # Worker error-safety note: Business Autopilot Worker routes must return generic browser/API-safe errors, not raw thrown database/runtime error messages.
 # Autonomous discovery note: Worker owns zero-source discovery storage, read routes, confirm-required metadata routes, and route catalogue metadata. The Worker route-contract smoke now verifies autonomous discovery read IDs, confirm IDs, delegated read paths, and safe no-network / no-AI / no-email / no-social / no-form posture.
-# Business Autopilot note: Worker owns Business agency memory, people metadata, website/page metadata, read routes, confirm-required metadata routes, and route catalogue metadata. People routes are contact-context metadata only. Website/page routes are metadata-only and do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.
+# Business Autopilot note: Worker owns Business agency memory, people metadata, website/page metadata, website/funnel audit metadata, audit observation metadata, read routes, confirm-required metadata routes, computed observation candidates, and route catalogue metadata. People routes are contact-context metadata only. Website/page/audit routes are metadata-only and do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.
 # It does not send, post, submit, browse, call AI, execute browser actions, or perform external state changes.
 # Aggregate expansion note: npm run growth:backend:check:local wraps the existing full local backend check.
 # Existing full local backend check includes:
@@ -23,6 +25,8 @@ cd C:\GitRepos\evavo-worker-agent
 
 git pull
 npm run growth:backend:workflow:print
+npm run db:migrations:check
+npm run db:migrations:print
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run business:autopilot:check
@@ -33,6 +37,9 @@ npm run growth:backend:check:local
 
 Write-Host "Confirm Business Autopilot backend checks are included:" -ForegroundColor Cyan
 Write-Host "- migrations/0021_business_autopilot_foundation.sql" -ForegroundColor Gray
+Write-Host "- migrations/0022_business_website_audit_records.sql" -ForegroundColor Gray
+Write-Host "- npm run db:migrations:check" -ForegroundColor Gray
+Write-Host "- npm run db:migrations:print" -ForegroundColor Gray
 Write-Host "- npm run business:autopilot:check" -ForegroundColor Gray
 Write-Host "- npm run business:autopilot:raw-error-safety:check" -ForegroundColor Gray
 Write-Host "- generic Worker root and Business Autopilot route errors" -ForegroundColor Gray
@@ -43,12 +50,23 @@ Write-Host "- business_people" -ForegroundColor Gray
 Write-Host "- business_person_save" -ForegroundColor Gray
 Write-Host "- business_websites" -ForegroundColor Gray
 Write-Host "- business_pages" -ForegroundColor Gray
+Write-Host "- business_website_audit_runs" -ForegroundColor Gray
+Write-Host "- business_audit_observations" -ForegroundColor Gray
+Write-Host "- business_audit_observation_candidates" -ForegroundColor Gray
 Write-Host "- business_website_save" -ForegroundColor Gray
 Write-Host "- business_page_save" -ForegroundColor Gray
+Write-Host "- business_website_audit_run_save" -ForegroundColor Gray
+Write-Host "- business_audit_observation_save" -ForegroundColor Gray
 Write-Host "- /admin/business/people?limit=5" -ForegroundColor Gray
 Write-Host "- /admin/business/websites?limit=5" -ForegroundColor Gray
 Write-Host "- /admin/business/pages?limit=5" -ForegroundColor Gray
-Write-Host "- metadata-only people and website/page routes" -ForegroundColor Gray
+Write-Host "- /admin/business/website-audit-runs?limit=5" -ForegroundColor Gray
+Write-Host "- /admin/business/audit-observations?limit=5" -ForegroundColor Gray
+Write-Host "- /admin/business/audit-observation-candidates?limit=5" -ForegroundColor Gray
+Write-Host "- metadata-only people, website/page, website/funnel audit, audit observation and observation candidate routes" -ForegroundColor Gray
+Write-Host "- business analyst / sales strategist / BDM / growth manager / operator brain role" -ForegroundColor Gray
+Write-Host "- internal automation can reason, score, prioritise, draft and learn" -ForegroundColor Gray
+Write-Host "- external execution remains confirm-gated and disabled by default" -ForegroundColor Gray
 
 Write-Host "Confirm autonomous discovery backend checks are included:" -ForegroundColor Cyan
 Write-Host "- migrations/0020_growth_autonomous_discovery.sql" -ForegroundColor Gray

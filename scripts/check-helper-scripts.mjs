@@ -172,6 +172,10 @@ const requiredTokens = {
   'README.md': [
     'Autonomous discovery is research-memory-first and supervised-action only.',
     'Business Autopilot agency memory',
+    'business:operator:runbook:print',
+    'node scripts/print-business-operator-worker-runbook.mjs',
+    'business analyst / sales strategist / BDM / growth manager / operator brain',
+    'Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.',
     'npm run growth:backend:final:print',
     ...autonomousDiscoveryRouteTokens,
   ],

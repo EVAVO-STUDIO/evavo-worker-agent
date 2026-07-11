@@ -27,6 +27,7 @@ const helperScripts = [
   'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
+  'scripts/check-worker-powershell-runners.mjs',
   'scripts/print-business-autopilot-readonly-verify-commands.mjs',
   'scripts/print-business-autopilot-route-contract-check.mjs',
   'scripts/print-business-operator-worker-runbook.mjs',
@@ -171,8 +172,9 @@ const expectedPackageScripts = {
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
   'worker:final-gate:print': 'node scripts/print-worker-final-local-gate.mjs',
+  'worker:powershell:check': 'node scripts/check-worker-powershell-runners.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
-  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
+  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run worker:powershell:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
 };
 
 const requiredTokens = {
@@ -183,6 +185,7 @@ const requiredTokens = {
     'node scripts/print-business-operator-worker-runbook.mjs',
     'business analyst / sales strategist / BDM / growth manager / operator brain',
     'Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.',
+    'Run-WorkerFinalGate.ps1',
     ...autonomousDiscoveryRouteTokens,
   ],
   'docs/business-autopilot-data-model.md': [
@@ -208,7 +211,7 @@ const requiredTokens = {
   'docs/business-autopilot-validation.md': ['Business Autopilot validation workflow', 'business_people', 'business_person_save', '/admin/business/people?limit=5', 'business:website-pages:docs:check', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save'],
   'docs/business-autopilot-people-routes.md': ['Business Autopilot people routes', 'business_people', 'business_person_save', 'GET /admin/business/people?limit=25', 'POST /admin/business/people?confirm=1', 'allowed_use', 'contact_status'],
   'docs/business-autopilot-website-page-routes.md': ['Business Autopilot website and page routes', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save', 'GET /admin/business/websites?limit=25', 'GET /admin/business/pages?limit=25', 'GET /admin/business/audit-observation-candidates?limit=25'],
-  'docs/growth-backend-validation.md': ['Business website/page docs checks', 'npm run business:website-pages:docs:check', 'Business website/page metadata route docs'],
+  'docs/growth-backend-validation.md': ['Business website/page docs checks', 'npm run business:website-pages:docs:check', 'Business website/page metadata route docs', 'worker:final-gate:print', 'Run-WorkerFinalGate.ps1'],
   'docs/business-autopilot-architecture.md': ['EVAVO Business Autopilot architecture', ...businessAutopilotTableTokens],
   'migrations/0021_business_autopilot_foundation.sql': ['Business Autopilot foundation metadata schema', ...businessAutopilotTableTokens.map((table) => `CREATE TABLE IF NOT EXISTS ${table}`)],
   'migrations/0022_business_website_audit_records.sql': ['Business website/funnel audit metadata schema', 'CREATE TABLE IF NOT EXISTS business_website_audit_runs', 'CREATE TABLE IF NOT EXISTS business_audit_observations'],
@@ -216,14 +219,15 @@ const requiredTokens = {
   'scripts/check-business-website-page-docs.mjs': ['Business website/page docs check passed.', 'docs/business-autopilot-data-model.md', 'docs/business-autopilot-website-page-routes.md', 'docs/business-autopilot-validation.md', 'audit-observation-candidates'],
   'scripts/check-business-autopilot.mjs': ['Business Autopilot foundation check passed.', 'business_people', 'business_person_save', 'src/core/businessAutopilotPeopleRecords.ts', 'src/routes/businessAutopilotPeopleAdmin.ts', 'business_websites', 'business_pages', 'docs/business-autopilot-website-page-routes.md', 'record.contentHash'],
   'scripts/check-business-autopilot-raw-error-safety.mjs': ['Business Autopilot raw-error safety check passed.', 'Business website/page route failed before a safe response could be returned.', 'business_website_failed'],
+  'scripts/check-worker-powershell-runners.mjs': ['Worker PowerShell runner check passed.', 'Run-BusinessOperatorWorkerRunbook.ps1', 'Run-WorkerFinalGate.ps1', 'Migrations 0021 and 0022 should not be rerun'],
   'scripts/check-migrations-present.mjs': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql'],
   'migrations/README.md': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql', 'Business Autopilot metadata foundation', 'Business website/funnel audit metadata'],
   'scripts/print-business-autopilot-readonly-verify-commands.mjs': ['EVAVO Business Autopilot read-only verification', 'Assert-BusinessRead', '/admin/business/audit-observation-candidates?limit=5', 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
   'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'business_audit_observation_candidates', '/admin/business/audit-observation-candidates?limit=5', 'All Business Autopilot read routes advertise readOnly'],
   'scripts/print-business-operator-worker-runbook.mjs': ['EVAVO Business Operator Worker runbook', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'npm run business:autopilot:readonly:print', 'external execution remains confirm-gated and disabled by default'],
   'scripts/print-worker-final-local-gate.mjs': ['EVAVO Worker final local gate', 'Do not rerun 0021 or 0022', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
-  'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'npm run check:local', 'npm run deploy'],
-  'Run-WorkerFinalGate.ps1': ['EVAVO Worker final local gate', 'does not rerun migrations', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
+  'Run-WorkerFinalGate.ps1': ['EVAVO Worker final local gate', 'does not run migrations', 'npm run scripts:check', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
+  'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', 'growth_research_runs', 'growth_source_candidates'],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };

@@ -26,6 +26,8 @@ const requiredRunners = {
     'throw "Command failed with exit code',
     'does not run migrations',
     'Migrations 0021 and 0022 should not be rerun',
+    'Invoke-Checked git pull',
+    'Invoke-Checked npm run git:sync:check',
     'Invoke-Checked npm run scripts:check',
     'Invoke-Checked npm run db:migrations:check',
     'Invoke-Checked npm run business:autopilot:check',

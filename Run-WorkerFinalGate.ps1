@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "EVAVO Worker final local gate" -ForegroundColor Cyan
-Write-Host "This runs final local checks, prints D1 verification commands, and stops before deploy." -ForegroundColor Gray
+Write-Host "This runs final local checks, confirms generated route files are clean, prints D1 verification commands, and stops before deploy." -ForegroundColor Gray
 Write-Host "It does not rerun migrations." -ForegroundColor Gray
 Write-Host ""
 
@@ -33,6 +33,10 @@ npm run business:website-pages:docs:check
 npm run growth:backend:aggregate:check
 npm run check:local
 npm run growth:backend:check:local
+Write-Host ""
+
+Write-Host "Confirm generated route wiring files are clean" -ForegroundColor Cyan
+npm run growth:generated-routes:check
 Write-Host ""
 
 Write-Host "Print D1 verification commands" -ForegroundColor Cyan

@@ -29,6 +29,7 @@ const helperScripts = [
   'scripts/check-migrations-present.mjs',
   'scripts/print-business-autopilot-readonly-verify-commands.mjs',
   'scripts/print-business-autopilot-route-contract-check.mjs',
+  'scripts/print-business-operator-worker-runbook.mjs',
   'scripts/print-d1-verification-commands.mjs',
   'scripts/print-growth-backend-workflow-gate.mjs',
   'scripts/print-growth-blackboard-smoke-commands.mjs',
@@ -139,6 +140,7 @@ const expectedPackageScripts = {
   'business:autopilot:check': 'node scripts/check-business-autopilot.mjs',
   'business:autopilot:raw-error-safety:check': 'node scripts/check-business-autopilot-raw-error-safety.mjs',
   'business:autopilot:readonly:print': 'node scripts/print-business-autopilot-readonly-verify-commands.mjs',
+  'business:operator:runbook:print': 'node scripts/print-business-operator-worker-runbook.mjs',
   'business:people:docs:check': 'node scripts/check-business-people-docs.mjs',
   'business:route-contract:print': 'node scripts/print-business-autopilot-route-contract-check.mjs',
   'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
@@ -208,6 +210,7 @@ const requiredTokens = {
   'migrations/README.md': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql', 'Business Autopilot metadata foundation', 'Business website/funnel audit metadata'],
   'scripts/print-business-autopilot-readonly-verify-commands.mjs': ['EVAVO Business Autopilot read-only verification', 'Assert-BusinessRead', '/admin/business/audit-observation-candidates?limit=5', 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
   'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'business_audit_observation_candidates', '/admin/business/audit-observation-candidates?limit=5', 'All Business Autopilot read routes advertise readOnly'],
+  'scripts/print-business-operator-worker-runbook.mjs': ['EVAVO Business Operator Worker runbook', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'npm run business:autopilot:readonly:print', 'external execution remains confirm-gated and disabled by default'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', ...autonomousDiscoveryRouteTokens.slice(0, 2)],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };

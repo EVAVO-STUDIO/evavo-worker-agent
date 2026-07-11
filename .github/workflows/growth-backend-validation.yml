@@ -41,6 +41,9 @@ jobs:
       - name: Check Worker PowerShell runners
         run: npm run worker:powershell:check
 
+      - name: Check generated route wiring clean
+        run: npm run growth:generated-routes:check
+
       - name: Print Worker final local gate
         run: npm run worker:final-gate:print
 

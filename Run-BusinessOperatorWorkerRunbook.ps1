@@ -19,7 +19,7 @@ git log -1 --oneline
 Write-Host ""
 
 Write-Host "Available Business/Growth npm scripts" -ForegroundColor Cyan
-npm run | Select-String "business:|growth:backend|growth:route|scripts:check|check:local|db:migration|db:migrations|db:verify" | ForEach-Object { $_.Line }
+npm run | Select-String "business:|growth:backend|growth:route|scripts:check|check:local|db:migration|db:migrations|db:verify|worker:" | ForEach-Object { $_.Line }
 Write-Host ""
 
 Write-Host "Migration checks" -ForegroundColor Cyan
@@ -46,6 +46,7 @@ Write-Host ""
 Write-Host "Run guarded local checks" -ForegroundColor Cyan
 npm run scripts:check
 npm run check:local
+npm run growth:backend:check:local
 Write-Host ""
 
 Write-Host "Print verification commands with npm aliases if available" -ForegroundColor Cyan
@@ -59,6 +60,9 @@ else { node scripts/print-business-autopilot-readonly-verify-commands.mjs }
 
 if ($scriptNames -match "business:route-contract:print") { npm run business:route-contract:print }
 else { node scripts/print-business-autopilot-route-contract-check.mjs }
+
+if ($scriptNames -match "worker:final-gate:print") { npm run worker:final-gate:print }
+else { node scripts/print-worker-final-local-gate.mjs }
 
 if ($scriptNames -match "growth:backend:final:print") { npm run growth:backend:final:print }
 else { node scripts/print-growth-final-backend-validation.mjs }

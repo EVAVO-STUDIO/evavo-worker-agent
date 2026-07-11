@@ -39,6 +39,7 @@ inner Worker payload safety posture
 confirmation-gated metadata-write route posture
 legacy compatibility safety flags
 backend final validation printer
+Worker final local gate
 autonomous discovery metadata-only routes
 autonomous discovery route-contract checks
 Business Autopilot metadata-only routes
@@ -128,7 +129,7 @@ Detailed workflow requirements live in:
 docs/growth-backend-workflow-gate.md
 ```
 
-That workflow runs on pull requests and main-branch pushes, uses Node 24, installs with `npm ci`, runs `npm run growth:backend:aggregate:check`, runs `npm run business:people:docs:check`, runs `npm run business:website-pages:docs:check`, runs `npm run growth:backend:check:local`, and prints `npm run growth:backend:final:print`.
+That workflow runs on pull requests and main-branch pushes, uses Node 24, installs with `npm ci`, runs `npm run growth:backend:aggregate:check`, runs `npm run business:people:docs:check`, runs `npm run business:website-pages:docs:check`, prints `npm run worker:final-gate:print`, runs `npm run growth:backend:check:local`, and prints `npm run growth:backend:final:print`.
 
 ## Preferred local aggregate check
 
@@ -149,7 +150,7 @@ npm run growth:backend:aggregate:check
 npm run check:local
 ```
 
-The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, the README runbook, and the expected package script wiring.
+The aggregate command contract checker validates the Worker backend validation docs, the backend final printer tokens, the Worker final local gate printer, the README runbook, and the expected package script wiring.
 
 The backend local check expands to helper-script parsing, migration presence, Business Autopilot foundation checks, Business people docs checks, Business website/page docs checks, route delegates, route safety flags, capability registry, campaign intelligence, strategy memory, blackboard, review queue, autonomous discovery, and TypeScript validation.
 
@@ -169,6 +170,26 @@ npm run growth:review-queue:check
 npm run growth:autonomous-discovery:check
 npm run typecheck
 ```
+
+## Worker final local gate
+
+Use this when you want the final non-migration local gate printed before deploy:
+
+```powershell
+npm run worker:final-gate:print
+```
+
+The final local gate does not rerun migrations 0021 or 0022. It prints the sequence that checks local contracts, runs `npm run check:local`, runs `npm run growth:backend:check:local`, prints `npm run db:verify:print`, and leaves `npm run deploy` as a manual step.
+
+## Guarded PowerShell runner
+
+On Windows, the equivalent runnable gate is:
+
+```powershell
+.\Run-WorkerFinalGate.ps1
+```
+
+That script also avoids rerunning migrations. It runs the same checks, prints D1 verification commands, and stops before deploy.
 
 The autonomous discovery check guards:
 
@@ -217,34 +238,4 @@ Use this when you want the deploy-and-smoke command set printed for the Worker:
 npm run growth:backend:final:print
 ```
 
-The final printer now prefers the aggregate backend check before deploy:
-
-```powershell
-npm run growth:backend:check:local
-```
-
-After setting `ADMIN_TOKEN` and `WORKER_URL`, the printed smoke command blocks verify the deployed route catalogue, delegated Growth reads, autonomous discovery read routes, Business Autopilot read routes, Business people metadata reads, Business website/page metadata reads, autonomous discovery confirm-required metadata routes, Business confirm-required metadata routes, metadata-write confirmation posture, and no email/social/form/AI/network execution flags.
-
-## Cross-repo pairing
-
-After Worker validation, run the Next read-only proxy validation:
-
-```powershell
-cd C:\GitRepos\next-website
-git pull
-npm run growth:ops:check:local
-npm run business:ops:route-contract:check
-npm run business:ops:websites-pages:print
-npm run growth:ops:final:print
-npm run growth:ops:smoke:print
-```
-
-The intended chain is:
-
-```text
-Worker supplies route catalogue and inner payload safety.
-Worker owns autonomous discovery source-of-truth storage and confirm-required metadata routes.
-Worker owns Business Autopilot metadata, people memory, website/page memory, and confirm-required metadata routes.
-Next keeps the admin token server-side and exposes only read-only proxy wrappers.
-Next smoke checks validate both outer proxy envelope safety and inner Worker payload safety.
-```
+The final printer now prefers the aggregate backend check before deploy and references the Worker final local gate before the deploy-and-smoke path.

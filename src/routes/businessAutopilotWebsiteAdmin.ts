@@ -19,8 +19,8 @@ import {
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
-const schemaMissingMessage = "Business website/page/audit schema is missing or unavailable.";
-const routeFailedMessage = "Business website/page/audit route failed before a safe response could be returned.";
+const schemaMissingMessage = "Business website/page schema is missing or unavailable.";
+const routeFailedMessage = "Business website/page route failed before a safe response could be returned.";
 
 function authorized(request: Request, env: Env): boolean {
   const token = getAdminToken(env);

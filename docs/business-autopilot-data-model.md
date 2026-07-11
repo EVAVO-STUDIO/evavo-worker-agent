@@ -418,6 +418,24 @@ risk_flags_json
 metadata_json
 ```
 
+### business_execution_records
+
+Durable execution-attempt records for future governed external actions. These records are part of the schema, but current routes remain metadata-only and do not execute external delivery.
+
+Important fields:
+
+```text
+approval_request_id
+draft_id
+status
+execution_type
+attempted_at
+completed_at
+result_summary
+risk_flags_json
+metadata_json
+```
+
 ### business_suppression_list
 
 Do-not-contact, block, suppression and safety memory. Suppression wins over enthusiasm and must be visible in review.
@@ -425,6 +443,10 @@ Do-not-contact, block, suppression and safety memory. Suppression wins over enth
 ### business_content_ideas
 
 Internal content and campaign idea memory.
+
+### business_content_calendar
+
+Internal editorial calendar metadata for planned owned-content ideas. It does not publish or schedule content externally.
 
 ### business_followups
 

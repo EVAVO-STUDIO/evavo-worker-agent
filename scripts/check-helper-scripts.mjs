@@ -139,7 +139,11 @@ const autonomousDiscoveryRouteTokens = [
   'growth_discovery_feedback_save',
 ];
 
+const predeployCommand = 'npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local';
+
 const expectedPackageScripts = {
+  'predeploy': predeployCommand,
+  'deploy': 'wrangler deploy',
   'db:migration:one': 'node scripts/apply-one-migration.mjs',
   'db:migrations:check': 'node scripts/check-migrations-present.mjs',
   'db:migrations:print': 'node scripts/print-migration-commands.mjs',
@@ -238,9 +242,14 @@ for (const [relativePath, tokens] of Object.entries(requiredTokens)) {
 const packageJsonPath = path.join(repoRoot, 'package.json');
 if (fs.existsSync(packageJsonPath)) {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const scripts = packageJson.scripts || {};
   for (const [scriptName, expectedCommand] of Object.entries(expectedPackageScripts)) {
-    if (packageJson.scripts?.[scriptName] === expectedCommand) pass(`package.json script ${scriptName} is wired`);
+    if (scripts[scriptName] === expectedCommand) pass(`package.json script ${scriptName} is wired`);
     else fail(`package.json script ${scriptName} is not wired to ${expectedCommand}`);
+  }
+  for (const step of ['npm run growth:generated-routes:check', 'npm run worker:powershell:check', 'npm run growth:backend:aggregate:check', 'npm run check:local']) {
+    if (scripts.predeploy?.includes(step)) pass(`predeploy includes ${step}`);
+    else fail(`predeploy missing ${step}`);
   }
 }
 

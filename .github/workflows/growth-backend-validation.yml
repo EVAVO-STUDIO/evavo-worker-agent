@@ -38,6 +38,9 @@ jobs:
       - name: Check Business website page docs
         run: npm run business:website-pages:docs:check
 
+      - name: Check Worker PowerShell runners
+        run: npm run worker:powershell:check
+
       - name: Print Worker final local gate
         run: npm run worker:final-gate:print
 

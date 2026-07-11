@@ -13,8 +13,11 @@ const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
 const businessAutopilotRawErrorSafetyCheck = 'npm run business:autopilot:raw-error-safety:check';
 const businessPeopleDocsCheck = 'npm run business:people:docs:check';
 const businessWebsitePageDocsCheck = 'npm run business:website-pages:docs:check';
+const predeployCommand = `${generatedRoutesCheck} && ${workerPowerShellCheck} && ${backendAggregateCheck} && npm run check:local`;
 
 const expectedPackageScripts = {
+  'predeploy': predeployCommand,
+  'deploy': 'wrangler deploy',
   'business:autopilot:raw-error-safety:check': 'node scripts/check-business-autopilot-raw-error-safety.mjs',
   'business:people:docs:check': 'node scripts/check-business-people-docs.mjs',
   'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
@@ -156,6 +159,7 @@ const requiredFileTokens = {
     backendLocalCheck,
     workerFinalGatePrint,
     workerPowerShellCheck,
+    generatedRoutesCheck,
     businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Worker is the backend source of truth',
@@ -214,6 +218,11 @@ if (packageJsonContent) {
   for (const requiredStep of [businessAutopilotRawErrorSafetyCheck, businessPeopleDocsCheck, businessWebsitePageDocsCheck, workerPowerShellCheck]) {
     if (checkLocal.includes(requiredStep)) pass(`check:local includes ${requiredStep}`);
     else fail(`check:local missing ${requiredStep}`);
+  }
+  const predeploy = scripts.predeploy || '';
+  for (const requiredStep of [generatedRoutesCheck, workerPowerShellCheck, backendAggregateCheck, 'npm run check:local']) {
+    if (predeploy.includes(requiredStep)) pass(`predeploy includes ${requiredStep}`);
+    else fail(`predeploy missing ${requiredStep}`);
   }
 }
 

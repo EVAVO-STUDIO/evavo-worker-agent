@@ -19,7 +19,7 @@ git log -1 --oneline
 Write-Host ""
 
 Write-Host "Available Business/Growth npm scripts" -ForegroundColor Cyan
-npm run | Select-String "business:|growth:backend|growth:route|scripts:check|check:local|db:migration|db:migrations" | ForEach-Object { $_.Line }
+npm run | Select-String "business:|growth:backend|growth:route|scripts:check|check:local|db:migration|db:migrations|db:verify" | ForEach-Object { $_.Line }
 Write-Host ""
 
 Write-Host "Migration checks" -ForegroundColor Cyan
@@ -31,6 +31,11 @@ Write-Host "Apply latest Business Autopilot migrations if needed" -ForegroundCol
 Write-Host "If either migration reports already applied or duplicate columns/tables, stop and inspect before retrying." -ForegroundColor Yellow
 npm run db:migration:one -- 0021 --execute
 npm run db:migration:one -- 0022 --execute
+Write-Host ""
+
+Write-Host "Print post-migration D1 verification commands" -ForegroundColor Cyan
+Write-Host "Copy and run the Business table checks if you need to confirm remote D1 schema state." -ForegroundColor Yellow
+npm run db:verify:print
 Write-Host ""
 
 Write-Host "Refresh Worker route wiring and route catalogue" -ForegroundColor Cyan

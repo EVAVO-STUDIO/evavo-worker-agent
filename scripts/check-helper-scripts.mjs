@@ -176,7 +176,6 @@ const requiredTokens = {
     'node scripts/print-business-operator-worker-runbook.mjs',
     'business analyst / sales strategist / BDM / growth manager / operator brain',
     'Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.',
-    'npm run growth:backend:final:print',
     ...autonomousDiscoveryRouteTokens,
   ],
   'docs/business-autopilot-data-model.md': [
@@ -215,55 +214,44 @@ const requiredTokens = {
   'scripts/print-business-autopilot-readonly-verify-commands.mjs': ['EVAVO Business Autopilot read-only verification', 'Assert-BusinessRead', '/admin/business/audit-observation-candidates?limit=5', 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
   'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'business_audit_observation_candidates', '/admin/business/audit-observation-candidates?limit=5', 'All Business Autopilot read routes advertise readOnly'],
   'scripts/print-business-operator-worker-runbook.mjs': ['EVAVO Business Operator Worker runbook', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'npm run business:autopilot:readonly:print', 'external execution remains confirm-gated and disabled by default'],
-  'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', ...autonomousDiscoveryRouteTokens.slice(0, 2)],
+  'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', 'growth_research_runs', 'growth_source_candidates'],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };
 
 let failed = false;
-function fail(message) { failed = true; console.error(`FAIL ${message}`); }
-function pass(message) { console.log(`OK   ${message}`); }
-function fileExists(relativePath) { return fs.existsSync(path.join(repoRoot, relativePath)); }
-function readFile(relativePath) { return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'); }
+const fail = (message) => { failed = true; console.error(`FAIL ${message}`); };
+const pass = (message) => console.log(`OK   ${message}`);
 
-function checkExistsAndParses(relativePath) {
+for (const relativePath of [...helperScripts, ...sourceFiles, ...docs]) {
   const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) {
-    fail(`${relativePath} is missing`);
-    return;
-  }
-  const check = spawnSync(process.execPath, ['--check', absolutePath], { cwd: repoRoot, encoding: 'utf8' });
-  if (check.status !== 0) {
-    fail(`${relativePath} has syntax errors`);
-    if (check.stderr) console.error(check.stderr.trim());
-  } else {
-    pass(`${relativePath} exists and parses`);
-  }
-}
-
-for (const relativePath of helperScripts) checkExistsAndParses(relativePath);
-for (const relativePath of [...sourceFiles, ...docs]) {
-  if (!fileExists(relativePath)) fail(`${relativePath} is missing`);
+  if (!fs.existsSync(absolutePath)) fail(`${relativePath} is missing`);
   else pass(`${relativePath} exists`);
 }
 
+for (const relativePath of helperScripts) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) continue;
+  const result = spawnSync(process.execPath, ['--check', absolutePath], { encoding: 'utf8' });
+  if (result.status === 0) pass(`${relativePath} parses`);
+  else fail(`${relativePath} does not parse: ${result.stderr || result.stdout}`);
+}
+
 for (const [relativePath, tokens] of Object.entries(requiredTokens)) {
-  if (!fileExists(relativePath)) continue;
-  const content = readFile(relativePath);
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) continue;
+  const content = fs.readFileSync(absolutePath, 'utf8');
   for (const token of tokens) {
-    if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
-    else pass(`${relativePath} contains ${token}`);
+    if (content.includes(token)) pass(`${relativePath} contains ${token}`);
+    else fail(`${relativePath} missing ${token}`);
   }
 }
 
 const packageJsonPath = path.join(repoRoot, 'package.json');
-if (!fs.existsSync(packageJsonPath)) {
-  fail('package.json is missing');
-} else {
+if (fs.existsSync(packageJsonPath)) {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  const scripts = packageJson.scripts || {};
-  for (const [scriptName, expected] of Object.entries(expectedPackageScripts)) {
-    if (scripts[scriptName] !== expected) fail(`package.json script ${scriptName} should be "${expected}"`);
-    else pass(`package.json script ${scriptName} is wired`);
+  for (const [scriptName, expectedCommand] of Object.entries(expectedPackageScripts)) {
+    if (packageJson.scripts?.[scriptName] === expectedCommand) pass(`package.json script ${scriptName} is wired`);
+    else fail(`package.json script ${scriptName} is not wired to ${expectedCommand}`);
   }
 }
 

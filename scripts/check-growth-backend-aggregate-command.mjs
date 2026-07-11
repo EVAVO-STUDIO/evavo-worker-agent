@@ -7,6 +7,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const workerFinalGatePrint = 'npm run worker:final-gate:print';
+const workerPowerShellCheck = 'npm run worker:powershell:check';
 const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
 const businessAutopilotRawErrorSafetyCheck = 'npm run business:autopilot:raw-error-safety:check';
 const businessPeopleDocsCheck = 'npm run business:people:docs:check';
@@ -21,24 +22,11 @@ const expectedPackageScripts = {
   'growth:backend:final:print': 'node scripts/print-growth-final-backend-validation.mjs',
   'growth:backend:workflow:print': 'node scripts/print-growth-backend-workflow-gate.mjs',
   'worker:final-gate:print': 'node scripts/print-worker-final-local-gate.mjs',
+  'worker:powershell:check': 'node scripts/check-worker-powershell-runners.mjs',
 };
 
-const businessPeopleTokens = [
-  businessPeopleDocsCheck,
-  'business_people',
-  'business_person_save',
-  '/admin/business/people',
-];
-
-const businessWebsitePageTokens = [
-  businessWebsitePageDocsCheck,
-  'business_websites',
-  'business_pages',
-  'business_website_save',
-  'business_page_save',
-  '/admin/business/websites',
-  '/admin/business/pages',
-];
+const businessPeopleTokens = [businessPeopleDocsCheck, 'business_people', 'business_person_save', '/admin/business/people'];
+const businessWebsitePageTokens = [businessWebsitePageDocsCheck, 'business_websites', 'business_pages', 'business_website_save', 'business_page_save', '/admin/business/websites', '/admin/business/pages'];
 
 const rawErrorSafetyScriptTokens = [
   'Business Autopilot raw-error safety check',
@@ -69,6 +57,8 @@ const workflowTokens = [
   backendAggregateCheck,
   businessPeopleDocsCheck,
   businessWebsitePageDocsCheck,
+  'Check Worker PowerShell runners',
+  workerPowerShellCheck,
   'Print Worker final local gate',
   workerFinalGatePrint,
   backendLocalCheck,
@@ -98,9 +88,21 @@ const requiredFileTokens = {
     'node scripts/check-business-website-page-docs.mjs',
     workerFinalGatePrint,
     'node scripts/print-worker-final-local-gate.mjs',
+    workerPowerShellCheck,
+    'node scripts/check-worker-powershell-runners.mjs',
     'npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check',
   ],
   'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyScriptTokens,
+  'scripts/check-worker-powershell-runners.mjs': [
+    'EVAVO Worker PowerShell runner check passed.',
+    'Run-BusinessOperatorWorkerRunbook.ps1',
+    'Run-WorkerFinalGate.ps1',
+    'npm run check:local',
+    'npm run growth:backend:check:local',
+    'npm run db:verify:print',
+    'npm run deploy',
+    'does not rerun migrations',
+  ],
   'scripts/print-growth-backend-workflow-gate.mjs': [
     'EVAVO Growth backend workflow gate',
     'Expected explicit workflow step',
@@ -156,6 +158,7 @@ const requiredFileTokens = {
     backendAggregateCheck,
     backendLocalCheck,
     workerFinalGatePrint,
+    workerPowerShellCheck,
     businessPeopleDocsCheck,
     businessWebsitePageDocsCheck,
     'Worker is the backend source of truth',
@@ -193,14 +196,8 @@ const requiredFileTokens = {
 
 let failed = false;
 
-function fail(message) {
-  failed = true;
-  console.error(`FAIL ${message}`);
-}
-
-function pass(message) {
-  console.log(`OK   ${message}`);
-}
+function fail(message) { failed = true; console.error(`FAIL ${message}`); }
+function pass(message) { console.log(`OK   ${message}`); }
 
 function readFile(relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);

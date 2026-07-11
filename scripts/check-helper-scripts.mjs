@@ -41,6 +41,7 @@ const helperScripts = [
   'scripts/print-main-branch-audit.mjs',
   'scripts/print-migration-commands.mjs',
   'scripts/print-next-ops-smoke-commands.mjs',
+  'scripts/print-worker-final-local-gate.mjs',
 ];
 
 const sourceFiles = [
@@ -164,6 +165,7 @@ const expectedPackageScripts = {
   'growth:strategy:smoke:print': 'node scripts/print-growth-strategy-memory-smoke-commands.mjs',
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
+  'worker:final-gate:print': 'node scripts/print-worker-final-local-gate.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
   'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
 };
@@ -214,6 +216,7 @@ const requiredTokens = {
   'scripts/print-business-autopilot-readonly-verify-commands.mjs': ['EVAVO Business Autopilot read-only verification', 'Assert-BusinessRead', '/admin/business/audit-observation-candidates?limit=5', 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
   'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'business_audit_observation_candidates', '/admin/business/audit-observation-candidates?limit=5', 'All Business Autopilot read routes advertise readOnly'],
   'scripts/print-business-operator-worker-runbook.mjs': ['EVAVO Business Operator Worker runbook', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'npm run business:autopilot:readonly:print', 'external execution remains confirm-gated and disabled by default'],
+  'scripts/print-worker-final-local-gate.mjs': ['EVAVO Worker final local gate', 'Do not rerun 0021 or 0022', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', 'growth_research_runs', 'growth_source_candidates'],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };

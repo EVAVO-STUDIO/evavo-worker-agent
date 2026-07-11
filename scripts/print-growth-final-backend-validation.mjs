@@ -1,7 +1,7 @@
 const commands = String.raw`
 # EVAVO Growth backend final validation
 # Run from PowerShell after migrations 0014 through 0022 are applied.
-# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page docs checks, Business website/page/audit docs checks, and the internal review queue persistence check.
+# This prints read-only contract checks plus optional metadata-only smoke flows, including route delegate checks, route safety flag checks, autonomous discovery metadata checks, autonomous discovery route-contract checks, Business Autopilot checks, Business Autopilot raw-error safety checks, Business people docs checks, Business website/page docs checks, Business website/page/audit docs checks, Worker final local gate checks, and the internal review queue persistence check.
 # Business operator model: the Worker is the metadata and reasoning foundation for a combined business analyst, sales strategist, BDM, growth manager and operator brain.
 # Safe automation boundary: the Worker may automate internal discovery planning, scoring, prioritisation, audit observations, draft preparation, next-move reasoning and learning, but external execution remains confirm-gated and disabled by default.
 # Two-layer safety note: the Worker supplies the inner payload safety posture consumed by the Next read-only proxy UI and smoke checks.
@@ -10,6 +10,7 @@ const commands = String.raw`
 # Business Autopilot note: Worker owns Business agency memory, people metadata, website/page metadata, website/funnel audit metadata, audit observation metadata, read routes, confirm-required metadata routes, computed observation candidates, and route catalogue metadata. People routes are contact-context metadata only. Website/page/audit routes are metadata-only and do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.
 # It does not send, post, submit, browse, call AI, execute browser actions, or perform external state changes.
 # Aggregate expansion note: npm run growth:backend:check:local wraps the existing full local backend check.
+# Worker final gate note: npm run worker:final-gate:print prints the non-migration final gate. It does not rerun 0021 or 0022; it checks locally, prints D1 verification commands, and leaves deploy as a manual step.
 # Existing full local backend check includes:
 # npm run business:autopilot:check
 # npm run business:autopilot:raw-error-safety:check
@@ -25,6 +26,7 @@ cd C:\GitRepos\evavo-worker-agent
 
 git pull
 npm run growth:backend:workflow:print
+npm run worker:final-gate:print
 npm run db:migrations:check
 npm run db:migrations:print
 npm run growth:wiring:apply
@@ -40,6 +42,7 @@ Write-Host "- migrations/0021_business_autopilot_foundation.sql" -ForegroundColo
 Write-Host "- migrations/0022_business_website_audit_records.sql" -ForegroundColor Gray
 Write-Host "- npm run db:migrations:check" -ForegroundColor Gray
 Write-Host "- npm run db:migrations:print" -ForegroundColor Gray
+Write-Host "- npm run worker:final-gate:print" -ForegroundColor Gray
 Write-Host "- npm run business:autopilot:check" -ForegroundColor Gray
 Write-Host "- npm run business:autopilot:raw-error-safety:check" -ForegroundColor Gray
 Write-Host "- generic Worker root and Business Autopilot route errors" -ForegroundColor Gray

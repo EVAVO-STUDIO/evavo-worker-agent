@@ -83,9 +83,9 @@ node scripts/print-business-operator-worker-runbook.mjs
 
 The runbook prints the migration, route wiring, validation, direct node-script fallback and deploy sequence for the Business analyst / sales strategist / BDM / growth manager / operator brain model. Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.
 
-## Final local gate
+## Final Worker gate and deploy
 
-After migrations have already been applied, do not rerun them. Use the final gate printer or PowerShell runner to validate the Worker before deploy:
+Run the final gate before production deploy:
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
@@ -94,11 +94,15 @@ npm run worker:final-gate:print
 .\Run-WorkerFinalGate.ps1
 ```
 
-The final gate runs local helper, migration-presence, Business Autopilot, raw-error safety, people docs, website/page docs, aggregate backend and TypeScript checks, then prints D1 verification commands. It stops before deployment. Deploy manually only after the gate passes:
+The final gate runs local helper, migration-presence, Business Autopilot, raw-error safety, people docs, website/page docs, aggregate backend, generated-route cleanliness and TypeScript checks, then prints D1 verification commands. It stops before deployment.
+
+This is a Cloudflare Worker repo. The real Worker deploy command is `wrangler deploy`. The npm deploy alias is intentionally a guarded wrapper:
 
 ```powershell
 npm run deploy
 ```
+
+In `package.json`, `deploy` is `wrangler deploy`, and `predeploy` runs the safety checks first. So `npm run deploy` runs the guard and then runs Wrangler. Direct `wrangler deploy` also deploys the Worker, but it bypasses npm `predeploy`; use direct Wrangler only when you intentionally want to bypass the local guard.
 
 ## Quick start
 
@@ -114,7 +118,7 @@ npm i
 npm run growth:backend:check:local
 ```
 
-3) Deploy
+3) Deploy through the guarded Worker deploy wrapper
 
 ```bash
 npm run deploy
@@ -148,199 +152,9 @@ The Worker defaults toward conservative, low-cost behaviour:
 When no manual source list exists, the safe path is:
 
 1. Read autonomy settings and policy.
-2. Bootstrap durable seed memory.
-3. Run tiny bounded source expansion.
-4. Follow fallback guidance before increasing depth.
-5. Try sitemap/robots or public-link graph discovery when seed pages are thin.
-6. Use query hints only as operator-guided recovery.
-7. Resolve human-reviewed public URLs into candidate memory.
-8. Promote candidates only after review and confirmation.
-9. Run opportunity discovery only after live source memory exists.
+2. Create a zero-source research plan.
+3. Save source candidates instead of directly crawling/sending.
+4. Review and promote candidates through confirmation gates.
+5. Run opportunity review and draft-only preparation from approved internal metadata.
 
-Zero-source startup must remain public-source-only, capped, origin-preserving, candidate-memory-first, and free-safe by default.
-
-## Autonomous discovery summary
-
-Autonomous discovery is now part of the Growth backend contract, but it is still metadata-only and supervised-action only.
-
-Worker-owned autonomous discovery storage and route IDs:
-
-```text
-growth_research_runs
-growth_source_candidates
-growth_extracted_signals
-growth_opportunity_scores
-growth_agent_decisions
-growth_discovery_feedback
-growth_research_run_plan
-growth_source_candidate_save
-growth_fetch_queue_enqueue
-growth_agent_decision_record
-growth_discovery_feedback_save
-```
-
-Current autonomous discovery guarantees:
-
-```text
-no live crawling from browser
-no email sending
-no social posting
-no form submission
-no AI calls from the proxy layer
-no external state change
-confirm-required metadata writes only
-```
-
-## Business Autopilot summary
-
-Business Autopilot extends Growth Ops into broader agency intelligence and operating memory.
-
-Business Autopilot: metadata-only agency intelligence, website/funnel audit memory, draft preparation, approval governance, and learning support for EVAVO.
-
-It is currently internal metadata only: it stores organizations, people/contact context, websites, pages, website/funnel audit runs, audit observations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events. It also exposes computed audit observation candidates from stored internal metadata only.
-
-Core Business Autopilot modules:
-
-```text
-businessAutopilotSafety
-businessAutopilotTypes
-businessAutopilotServiceMatcher
-businessAutopilotOpportunityScoring
-businessAutopilotAuditPacks
-businessAutopilotAuditPackRecords
-businessAutopilotActionDraftBuilder
-businessAutopilotApprovalBuilder
-businessAutopilotDraftReviewBundle
-businessAutopilotPeopleRecords
-businessAutopilotWebsiteRecords
-businessAutopilotAuditObservationCandidates
-businessAutopilotRecords
-businessAutopilotAdmin
-businessAutopilotPeopleAdmin
-businessAutopilotWebsiteAdmin
-businessAutopilotRouteCatalogue
-```
-
-Current Business Autopilot route IDs:
-
-```text
-business_organizations
-business_people
-business_websites
-business_pages
-business_website_audit_runs
-business_audit_observations
-business_audit_observation_candidates
-business_signals
-business_opportunities
-business_service_matches
-business_audit_packs
-business_action_drafts
-business_approval_requests
-business_suppression_list
-business_content_ideas
-business_followups
-business_learning_events
-business_organization_save
-business_person_save
-business_website_save
-business_page_save
-business_website_audit_run_save
-business_audit_observation_save
-business_signal_save
-business_opportunity_save
-business_service_match_save
-business_audit_pack_save
-business_action_draft_build
-business_action_draft_save
-business_approval_request_save
-business_suppression_save
-business_content_idea_save
-business_followup_save
-business_learning_event_save
-```
-
-Current Business Autopilot guarantees:
-
-```text
-internal metadata only
-read-only routes advertise readOnly and internalMetadataOnly
-metadata-write routes require confirm=1
-draft builder is draft-only
-approval records are review records only
-suppression remains higher priority than approval
-computed audit observation candidates are review-only and unsaved
-no email sending
-no social posting
-no third-party commenting
-no contact-form submission
-no browser execution
-no ad buying
-no external mutation
-no AI calls from metadata routes
-no network calls from metadata routes
-```
-
-Business Autopilot validation commands:
-
-```powershell
-npm run business:operator:runbook:print
-npm run business:autopilot:check
-npm run business:autopilot:raw-error-safety:check
-npm run business:route-contract:print
-npm run business:autopilot:readonly:print
-```
-
-## Growth Operator v3 summary
-
-The current Growth Operator brain combines:
-
-```text
-campaign intelligence
-strategy memory
-blackboard knowledge
-capability registry
-route safety catalogue
-autonomous discovery research memory
-Business Autopilot agency memory
-```
-
-Current read-only brain contracts:
-
-```text
-growth_operator_cycle_v3_strategy_blackboard_read_only
-growth_autonomous_runtime_v3_strategy_blackboard
-```
-
-Current Worker support:
-
-1. Read Growth overview and free-safe brief.
-2. Read the Growth capability registry and route safety catalogue.
-3. Read Growth operator overview, cycle, autonomy contract, and cycle history.
-4. Read autonomous discovery research runs, source candidates, extracted signals, opportunity scores, agent decisions, and feedback.
-5. Confirm-save autonomous discovery metadata: research plans, source candidates, fetch-queue records, agent decisions, and feedback.
-6. Read Business Autopilot agency memory: organizations, people, websites, pages, website/funnel audit runs, audit observations, observation candidates, evidence signals, opportunities, service matches, audit packs, action drafts, approval requests, suppression records, content ideas, follow-ups and learning events.
-7. Confirm-save Business Autopilot metadata: organizations, people, websites, pages, website/funnel audit runs, audit observations, signals, opportunities, service matches, audit packs, draft-only action records, approval records, suppression records, content ideas, follow-ups and learning events.
-8. Build draft-only Business actions from evidence with explicit external-action blocks.
-9. Build approval-review bundles for draft-only actions without external execution.
-10. Confirm-save campaign, experiment, decision, metric, evidence, feedback, learning, strategy, blackboard, autonomous-discovery and Business Autopilot metadata.
-11. Continue to block email sending, social posting, contact-form submission, arbitrary browser automation, ad buying, external mutation, AI calls and arbitrary network calls unless a later governed execution layer explicitly enables them.
-
-Run the guarded core Worker checks:
-
-```powershell
-npm run growth:backend:check:local
-```
-
-Print useful backend verification commands:
-
-```powershell
-npm run growth:backend:workflow:print
-npm run growth:backend:final:print
-npm run growth:route-contract:print
-npm run business:route-contract:print
-npm run business:autopilot:readonly:print
-npm run growth:campaigns:smoke:print
-npm run growth:strategy:smoke:print
-npm run growth:blackboard:smoke:print
-```
+The Growth Operator and Business Autopilot should remain metadata-first and approval-gated unless a later governance layer explicitly enables execution.

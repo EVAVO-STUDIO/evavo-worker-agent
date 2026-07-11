@@ -176,6 +176,8 @@ confirm-required metadata writes only
 
 ## Business Autopilot summary
 
+Business Autopilot: metadata-only agency intelligence, website/funnel audit memory, draft preparation, approval governance, and learning support for EVAVO.
+
 Business Autopilot extends Growth Ops into broader agency intelligence and operating memory. It is currently internal metadata only: it stores organizations, people/contact context, websites, pages, website/funnel audit runs, audit observations, evidence signals, opportunities, EVAVO service matches, audit packs, draft-only action records, approval requests, suppression records, content ideas, follow-ups and learning events. It also exposes computed audit observation candidates from stored internal metadata only.
 
 Core Business Autopilot modules:
@@ -357,7 +359,6 @@ git pull
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
 npm run growth:backend:check:local
-npm run growth:backend:final:print
 ```
 
 `growth:backend:check:local` runs the backend aggregate command contract checker before the full local backend check.

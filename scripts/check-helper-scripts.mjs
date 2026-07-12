@@ -141,6 +141,12 @@ const autonomousDiscoveryRouteTokens = [
   'growth_discovery_feedback_save',
 ];
 
+const helperSafetyFlagTokens = [
+  'canSendEmail: false',
+  'canPostSocial: false',
+  'canSubmitForms: false',
+];
+
 const predeployCommand = 'npm run git:sync:check && npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local';
 
 const expectedPackageScripts = {
@@ -215,6 +221,7 @@ const requiredTokens = {
   'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', ...autonomousDiscoveryRouteTokens],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
+  'scripts/check-helper-scripts.mjs': [...helperSafetyFlagTokens],
 };
 
 let failed = false;

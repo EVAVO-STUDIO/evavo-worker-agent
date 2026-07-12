@@ -188,7 +188,7 @@ const expectedPackageScripts = {
 };
 
 const requiredTokens = {
-  'README.md': ['Autonomous discovery is research-memory-first and supervised-action only.', 'Business Autopilot agency memory', 'business:operator:runbook:print', 'node scripts/print-business-operator-worker-runbook.mjs', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.', 'Run-WorkerFinalGate.ps1', ...autonomousDiscoveryRouteTokens],
+  'README.md': ['Autonomous discovery is research-memory-first and supervised-action only.', 'Business Autopilot agency memory', 'business:operator:runbook:print', 'node scripts/print-business-operator-worker-runbook.mjs', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.', 'Run-WorkerFinalGate.ps1'],
   'docs/business-autopilot-data-model.md': ['EVAVO Business Autopilot data model', 'Website/page relationship layer', 'People route layer', 'business_people', 'business_person_save', 'allowed_use', 'contact_status', 'People/contact-context relationship', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save', 'business_website_audit_runs', 'business_audit_observations', 'business_audit_observation_candidates', 'no crawling', 'no fetching', ...businessAutopilotTableTokens],
   'docs/business-autopilot-validation.md': ['Business Autopilot validation workflow', 'business_people', 'business_person_save', '/admin/business/people?limit=5', 'business:website-pages:docs:check', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save'],
   'docs/business-autopilot-people-routes.md': ['Business Autopilot people routes', 'business_people', 'business_person_save', 'GET /admin/business/people?limit=25', 'POST /admin/business/people?confirm=1', 'allowed_use', 'contact_status'],
@@ -213,7 +213,7 @@ const requiredTokens = {
   'scripts/print-worker-final-local-gate.mjs': ['EVAVO Worker final local gate', 'Do not rerun 0021 or 0022', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
   'Run-WorkerFinalGate.ps1': ['EVAVO Worker final local gate', 'does not run migrations', 'Invoke-Checked npm run git:sync:check', 'npm run scripts:check', 'npm run growth:backend:check:local', 'npm run growth:generated-routes:check', 'npm run db:verify:print', 'npm run deploy'],
   'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
-  'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', 'growth_research_runs', 'growth_source_candidates'],
+  'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', ...autonomousDiscoveryRouteTokens],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };
 

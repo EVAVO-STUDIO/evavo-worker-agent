@@ -240,7 +240,7 @@ export async function handleGrowthAdmin(request: Request, env: Env, pathname: st
       const body = await parseBody(request);
       if (!confirmed(url, body)) return writeBlocked(json);
       const routeSafety = safety({ readOnly: false, writesGrowthQueueOnly: true });
-      const updated = await updateGrowthSignalStatus(env, String(body.id || body.signalId || ""), String(body.status || "reviewed"), routeSafety);
+      const updated = await updateGrowthSignalStatus(env, String(body.id || body.signalId || ""), String(body.status || "reviewed"));
       return json({ ok: true, mode: "growth_signal_status_updated", contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed", signal: updated, safety: routeSafety });
     }
 

@@ -28,6 +28,7 @@ const helperScripts = [
   'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
+  'scripts/check-repo-sync-status.mjs',
   'scripts/check-worker-powershell-runners.mjs',
   'scripts/print-business-autopilot-readonly-verify-commands.mjs',
   'scripts/print-business-autopilot-route-contract-check.mjs',
@@ -140,7 +141,7 @@ const autonomousDiscoveryRouteTokens = [
   'growth_discovery_feedback_save',
 ];
 
-const predeployCommand = 'npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local';
+const predeployCommand = 'npm run git:sync:check && npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local';
 
 const expectedPackageScripts = {
   predeploy: predeployCommand,
@@ -150,6 +151,7 @@ const expectedPackageScripts = {
   'db:migrations:print': 'node scripts/print-migration-commands.mjs',
   'db:verify:print': 'node scripts/print-d1-verification-commands.mjs',
   'git:main-audit:print': 'node scripts/print-main-branch-audit.mjs',
+  'git:sync:check': 'node scripts/check-repo-sync-status.mjs',
   'business:autopilot:check': 'node scripts/check-business-autopilot.mjs',
   'business:autopilot:raw-error-safety:check': 'node scripts/check-business-autopilot-raw-error-safety.mjs',
   'business:autopilot:readonly:print': 'node scripts/print-business-autopilot-readonly-verify-commands.mjs',
@@ -200,16 +202,17 @@ const requiredTokens = {
   'scripts/check-business-autopilot.mjs': ['Business Autopilot foundation check passed.', 'business_people', 'business_person_save', 'src/core/businessAutopilotPeopleRecords.ts', 'src/routes/businessAutopilotPeopleAdmin.ts', 'business_websites', 'business_pages', 'docs/business-autopilot-website-page-routes.md', 'record.contentHash'],
   'scripts/check-business-autopilot-raw-error-safety.mjs': ['Business Autopilot raw-error safety check passed.', 'Business website/page route failed before a safe response could be returned.', 'business_website_failed'],
   'scripts/check-generated-route-wiring-clean.mjs': ['Generated route wiring clean check passed.', 'src/index.ts', 'src/routes/routeCataloguePlanner.ts', 'generated route wiring files are clean'],
-  'scripts/print-generated-route-drift-resolution.mjs': ['EVAVO generated route wiring drift resolution', 'npm run growth:wiring:apply', 'npm run growth:route-catalogue:apply', 'git restore src/index.ts src/routes/routeCataloguePlanner.ts', 'npm run growth:generated-routes:check'],
-  'scripts/check-worker-powershell-runners.mjs': ['Worker PowerShell runner check passed.', 'Run-BusinessOperatorWorkerRunbook.ps1', 'Run-WorkerFinalGate.ps1', 'Migrations 0021 and 0022 should not be rerun'],
+  'scripts/check-repo-sync-status.mjs': ['Repository sync check passed.', 'git', 'fetch', 'origin', 'Local HEAD matches origin branch'],
+  'scripts/check-worker-powershell-runners.mjs': ['Worker PowerShell runner check passed.', 'Run-BusinessOperatorWorkerRunbook.ps1', 'Run-WorkerFinalGate.ps1', 'Invoke-Checked npm run git:sync:check', 'Migrations 0021 and 0022 should not be rerun'],
   'scripts/check-migrations-present.mjs': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql'],
   'migrations/README.md': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql', 'Business Autopilot metadata foundation', 'Business website/funnel audit metadata'],
   'scripts/print-business-autopilot-readonly-verify-commands.mjs': ['EVAVO Business Autopilot read-only verification', 'Assert-BusinessRead', '/admin/business/audit-observation-candidates?limit=5', 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
   'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'business_audit_observation_candidates', '/admin/business/audit-observation-candidates?limit=5', 'All Business Autopilot read routes advertise readOnly'],
   'scripts/print-business-operator-worker-runbook.mjs': ['EVAVO Business Operator Worker runbook', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'npm run db:migration:one -- 0021 --execute', 'npm run db:migration:one -- 0022 --execute', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'npm run business:autopilot:readonly:print', 'external execution remains confirm-gated and disabled by default'],
+  'scripts/print-generated-route-drift-resolution.mjs': ['EVAVO generated route wiring drift resolution', 'npm run growth:wiring:apply', 'npm run growth:route-catalogue:apply', 'git restore src/index.ts src/routes/routeCataloguePlanner.ts'],
   'scripts/print-worker-final-local-gate.mjs': ['EVAVO Worker final local gate', 'Do not rerun 0021 or 0022', 'npm run check:local', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
-  'Run-WorkerFinalGate.ps1': ['EVAVO Worker final local gate', 'does not run migrations', 'Invoke-Checked', 'npm run scripts:check', 'npm run growth:backend:check:local', 'npm run growth:generated-routes:check', 'npm run db:verify:print', 'npm run deploy'],
-  'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'Invoke-Checked', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
+  'Run-WorkerFinalGate.ps1': ['EVAVO Worker final local gate', 'does not run migrations', 'Invoke-Checked npm run git:sync:check', 'npm run scripts:check', 'npm run growth:backend:check:local', 'npm run growth:generated-routes:check', 'npm run db:verify:print', 'npm run deploy'],
+  'Run-BusinessOperatorWorkerRunbook.ps1': ['EVAVO Business Operator Worker runbook', 'npm run growth:backend:check:local', 'npm run db:verify:print', 'npm run deploy'],
   'docs/growth-autonomous-discovery-architecture.md': ['Growth autonomous discovery architecture', 'source candidate registry', 'growth_research_runs', 'growth_source_candidates'],
   'migrations/0020_growth_autonomous_discovery.sql': ['CREATE TABLE IF NOT EXISTS growth_research_runs', 'CREATE TABLE IF NOT EXISTS growth_source_candidates'],
 };
@@ -250,7 +253,7 @@ if (fs.existsSync(packageJsonPath)) {
     if (scripts[scriptName] === expectedCommand) pass(`package.json script ${scriptName} is wired`);
     else fail(`package.json script ${scriptName} is not wired to ${expectedCommand}`);
   }
-  for (const step of ['npm run growth:generated-routes:check', 'npm run worker:powershell:check', 'npm run growth:backend:aggregate:check', 'npm run check:local']) {
+  for (const step of ['npm run git:sync:check', 'npm run growth:generated-routes:check', 'npm run worker:powershell:check', 'npm run growth:backend:aggregate:check', 'npm run check:local']) {
     if (scripts.predeploy?.includes(step)) pass(`predeploy includes ${step}`);
     else fail(`predeploy missing ${step}`);
   }

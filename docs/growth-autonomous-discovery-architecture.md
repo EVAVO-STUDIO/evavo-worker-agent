@@ -28,7 +28,7 @@ The system must not autonomously:
 ```text
 send email
 post on social platforms
-submit forms
+submit web forms
 log in to third-party systems
 click third-party buttons
 buy ads
@@ -238,7 +238,7 @@ growth_agent_decision_record
 growth_discovery_feedback_save
 ```
 
-All confirmation routes are internal metadata-only routes. They must not send, post, submit forms, call AI, browse arbitrarily, or mutate external systems.
+All confirmation routes are internal metadata-only routes. They must not send, post, submit web forms, call AI, browse arbitrarily, or mutate external systems.
 
 ## First implementation sequence
 
@@ -264,7 +264,7 @@ It extracts evidence, not instructions.
 It scores opportunities with visible reasons.
 It records decisions with confidence and blocked actions.
 It explains what it wants to do next.
-It never sends, posts, submits forms, or leaks secrets.
+It never sends, posts, submits web forms, or leaks secrets.
 It fails closed when safety metadata is missing or unsafe.
 It remains inspectable through the read-only Next dashboard.
 ```

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
+const gitSyncCheck = 'npm run git:sync:check';
 const backendAggregateCheck = 'npm run growth:backend:aggregate:check';
 const backendLocalCheck = 'npm run growth:backend:check:local';
 const workerFinalGatePrint = 'npm run worker:final-gate:print';
@@ -13,11 +14,12 @@ const backendWorkflowGateDoc = 'docs/growth-backend-workflow-gate.md';
 const businessAutopilotRawErrorSafetyCheck = 'npm run business:autopilot:raw-error-safety:check';
 const businessPeopleDocsCheck = 'npm run business:people:docs:check';
 const businessWebsitePageDocsCheck = 'npm run business:website-pages:docs:check';
-const predeployCommand = `${generatedRoutesCheck} && ${workerPowerShellCheck} && ${backendAggregateCheck} && npm run check:local`;
+const predeployCommand = `${gitSyncCheck} && ${generatedRoutesCheck} && ${workerPowerShellCheck} && ${backendAggregateCheck} && npm run check:local`;
 
 const expectedPackageScripts = {
   'predeploy': predeployCommand,
   'deploy': 'wrangler deploy',
+  'git:sync:check': 'node scripts/check-repo-sync-status.mjs',
   'business:autopilot:raw-error-safety:check': 'node scripts/check-business-autopilot-raw-error-safety.mjs',
   'business:people:docs:check': 'node scripts/check-business-people-docs.mjs',
   'business:website-pages:docs:check': 'node scripts/check-business-website-page-docs.mjs',
@@ -88,10 +90,18 @@ const requiredFileTokens = {
     'src/routes/routeCataloguePlanner.ts',
     'generated route wiring files are clean',
   ],
+  'scripts/check-repo-sync-status.mjs': [
+    'Repository sync check passed.',
+    'git',
+    'fetch',
+    'origin',
+    'Local HEAD matches origin branch',
+  ],
   'scripts/check-worker-powershell-runners.mjs': [
     'Worker PowerShell runner check passed.',
     'Run-BusinessOperatorWorkerRunbook.ps1',
     'Run-WorkerFinalGate.ps1',
+    'Invoke-Checked npm run git:sync:check',
     'npm run check:local',
     'npm run growth:backend:check:local',
     'npm run db:verify:print',
@@ -215,7 +225,7 @@ if (packageJsonContent) {
     else fail(`check:local missing ${requiredStep}`);
   }
   const predeploy = scripts.predeploy || '';
-  for (const requiredStep of [generatedRoutesCheck, workerPowerShellCheck, backendAggregateCheck, 'npm run check:local']) {
+  for (const requiredStep of [gitSyncCheck, generatedRoutesCheck, workerPowerShellCheck, backendAggregateCheck, 'npm run check:local']) {
     if (predeploy.includes(requiredStep)) pass(`predeploy includes ${requiredStep}`);
     else fail(`predeploy missing ${requiredStep}`);
   }

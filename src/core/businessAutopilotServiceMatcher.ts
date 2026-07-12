@@ -98,7 +98,8 @@ export function matchEvavoServicesFromSignals(signals: BusinessSignalLike[], lim
   }));
 
   const suggestions = serviceDefinitions.map((definition) => {
-    const matched = normalizedSignals.filter((signal) => definition.signals.includes(signal.signalType as any));
+    const definitionSignals = new Set<string>(definition.signals);
+    const matched = normalizedSignals.filter((signal) => definitionSignals.has(signal.signalType));
     const weightedScore = matched.reduce((sum, signal) => {
       const strength = score(signal.signalStrength || 40);
       const confidence = score(signal.confidenceScore || 50);

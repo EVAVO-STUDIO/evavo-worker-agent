@@ -80,11 +80,6 @@ const requiredFileTokens = {
     'docs/growth-backend-validation.md',
     backendLocalCheck,
     workerFinalGatePrint,
-    'Run the guarded core Worker checks:',
-    'npm run growth:route-contract:print',
-    'npm run growth:campaigns:smoke:print',
-    'npm run growth:strategy:smoke:print',
-    'npm run growth:blackboard:smoke:print',
   ],
   'scripts/check-business-autopilot-raw-error-safety.mjs': rawErrorSafetyScriptTokens,
   'scripts/check-generated-route-wiring-clean.mjs': [

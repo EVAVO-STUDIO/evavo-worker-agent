@@ -33,6 +33,7 @@ import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpa
 import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/sourceExpansionBudgetRecommendationsAdmin";
 import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceExpansionPublicDirectoryScanAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
+import { resolveGrowthRouteHandlerId } from "./routes/growthRoutePolicy";
 import { matchesWorkerRouteFamily } from "./routes/workerRoutePolicy";
 
 const unexpectedWorkerErrorMessage = "The Worker hit an unexpected internal error before a safe response could be returned.";
@@ -139,12 +140,24 @@ export default {
       if (pathname.startsWith("/admin/opportunities")) return await handleOpportunitiesAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/planner/routes") return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/planner" || pathname.startsWith("/admin/planner/")) return await handlePlannerAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/growth/approval-requests" || pathname === "/admin/growth/approval-requests/status") return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/growth/blackboard" || pathname === "/admin/growth/blackboard/facts" || pathname === "/admin/growth/blackboard/entities" || pathname === "/admin/growth/blackboard/relationships" || pathname === "/admin/growth/blackboard/signals" || pathname === "/admin/growth/blackboard/assets") return await handleGrowthBlackboardAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/growth/strategy-memory" || pathname === "/admin/growth/objectives" || pathname === "/admin/growth/key-results" || pathname === "/admin/growth/segments" || pathname === "/admin/growth/offers" || pathname === "/admin/growth/positioning" || pathname === "/admin/growth/runtime-constraints") return await handleGrowthStrategyMemoryAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/growth/autonomy" || pathname === "/admin/growth/cycle" || pathname === "/admin/growth/cycle/events" || pathname === "/admin/growth/cycle/record" || pathname === "/admin/growth/operator" || pathname === "/admin/growth/campaigns" || pathname === "/admin/growth/experiments" || pathname === "/admin/growth/decisions" || pathname === "/admin/growth/decisions/plan" || pathname === "/admin/growth/metrics" || pathname === "/admin/growth/evidence" || pathname === "/admin/growth/learning") return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/growth" || pathname.startsWith("/admin/growth/")) return await handleGrowthAdmin(req, env, pathname, jsonResponse);
+
+      switch (resolveGrowthRouteHandlerId(pathname)) {
+        case "approval-requests":
+          return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
+        case "capabilities":
+          return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);
+        case "blackboard":
+          return await handleGrowthBlackboardAdmin(req, env, pathname, jsonResponse);
+        case "strategy-memory":
+          return await handleGrowthStrategyMemoryAdmin(req, env, pathname, jsonResponse);
+        case "campaign-intelligence":
+          return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);
+        case "growth-fallback":
+          return await handleGrowthAdmin(req, env, pathname, jsonResponse);
+        default:
+          break;
+      }
+
       if (pathname === "/admin/business/people") return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse);
       if (isBusinessWebsitePath(pathname)) return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/business" || pathname.startsWith("/admin/business/")) return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);

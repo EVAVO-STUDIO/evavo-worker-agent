@@ -33,6 +33,7 @@ import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpa
 import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/sourceExpansionBudgetRecommendationsAdmin";
 import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceExpansionPublicDirectoryScanAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
+import { handleLegacyExecutionSafetyAdmin } from "./routes/legacyExecutionSafetyAdmin";
 import { resolveBusinessRouteHandlerId } from "./routes/businessRoutePolicy";
 import { resolveGrowthRouteHandlerId } from "./routes/growthRoutePolicy";
 import { resolveOperationsRouteHandlerId } from "./routes/operationsRoutePolicy";
@@ -158,6 +159,8 @@ export default {
       }
 
       switch (resolveOperationsRouteHandlerId(pathname)) {
+        case "legacy-admin-safety":
+          return await handleLegacyExecutionSafetyAdmin(req, env, pathname, jsonResponse);
         case "autonomy-settings":
           return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
         case "planner-routes":

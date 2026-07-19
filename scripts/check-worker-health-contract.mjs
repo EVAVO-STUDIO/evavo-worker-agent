@@ -5,18 +5,21 @@ import path from "node:path";
 
 const root = process.cwd();
 const indexPath = path.join(root, "src", "index.ts");
+const policyPath = path.join(root, "src", "routes", "workerRoutePolicy.ts");
 const wranglerPath = path.join(root, "wrangler.toml");
 const errors = [];
 
-if (!fs.existsSync(indexPath)) errors.push("Missing Worker entry point: src/index.ts");
-if (!fs.existsSync(wranglerPath)) errors.push("Missing Wrangler configuration: wrangler.toml");
+for (const filePath of [indexPath, policyPath, wranglerPath]) {
+  if (!fs.existsSync(filePath)) errors.push(`Missing Worker health dependency: ${path.relative(root, filePath)}`);
+}
 
 const source = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
+const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
 const wrangler = fs.existsSync(wranglerPath) ? fs.readFileSync(wranglerPath, "utf8") : "";
 
 for (const token of [
   'const HEALTH_CONTRACT_VERSION = "2026-07"',
-  'if (pathname === "/health") return await handleHealth(env)',
+  'matchesWorkerRouteFamily("health", pathname)',
   'env.DB.prepare("SELECT 1 AS ok")',
   'service: "evavo-worker-agent"',
   'database: databaseReady ? "ok" : "unavailable"',
@@ -27,6 +30,21 @@ for (const token of [
   if (!source.includes(token)) errors.push(`Worker health implementation is missing: ${token}`);
 }
 
+for (const token of [
+  'id: "health"',
+  'exposure: "public"',
+  'authentication: "none"',
+  'mutationPosture: "read-only"',
+  'matches: (pathname: string) => pathname === "/health"',
+]) {
+  if (!policy.includes(token)) errors.push(`Worker health route policy is missing: ${token}`);
+}
+
+const healthStart = source.indexOf("async function handleHealth");
+const healthEnd = source.indexOf("function isOpportunityDiscoveryPath", healthStart);
+const healthSource = healthStart >= 0 && healthEnd > healthStart ? source.slice(healthStart, healthEnd) : "";
+if (!healthSource) errors.push("Unable to isolate Worker health handler");
+
 for (const forbidden of [
   "ADMIN_TOKEN",
   "OUTBOUND_AGENT_ADMIN_TOKEN",
@@ -36,11 +54,10 @@ for (const forbidden of [
   "SELECT *",
   "settings",
   "usage_counters",
+  ".run(",
+  ".batch(",
 ]) {
-  const healthStart = source.indexOf("async function handleHealth");
-  const healthEnd = source.indexOf("function isOpportunityDiscoveryPath", healthStart);
-  const healthSource = healthStart >= 0 && healthEnd > healthStart ? source.slice(healthStart, healthEnd) : "";
-  if (healthSource.includes(forbidden)) errors.push(`Worker health endpoint must not reference sensitive or application data token: ${forbidden}`);
+  if (healthSource.includes(forbidden)) errors.push(`Worker health endpoint must not reference sensitive or mutable token: ${forbidden}`);
 }
 
 if (!/name\s*=\s*"evavo-outbound-agent"/.test(wrangler)) errors.push("Wrangler Worker name changed unexpectedly");
@@ -53,6 +70,7 @@ console.log(JSON.stringify({
   contract: "worker-health-readonly-v2026-07",
   checks: {
     route: "/health",
+    routePolicy: "public-read-only",
     databaseProbe: "SELECT 1",
     cachePolicy: "no-store",
     exposesSecrets: false,

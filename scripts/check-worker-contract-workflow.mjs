@@ -39,6 +39,7 @@ const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
   "db:historical-compatibility:check": "node scripts/check-historical-data-compatibility.mjs",
+  "db:migration-safety:check": "node scripts/check-migration-execution-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
@@ -87,6 +88,10 @@ console.log(JSON.stringify({
   draftOrSendRuntimeCapsAllowed: false,
   historicalStatusesExecutable: false,
   legacySchemaInitializationAllowed: false,
+  migrationTargetDefaultsAllowed: false,
+  ambiguousMigrationPrefixExecutionAllowed: false,
+  unacknowledgedOneTimeMigrationExecutionAllowed: false,
+  unacknowledgedRerunExecutionAllowed: false,
   publicOperationalRecordsExposed: false,
   errors,
 }, null, 2));

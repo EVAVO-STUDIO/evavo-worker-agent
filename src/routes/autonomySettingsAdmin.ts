@@ -2,7 +2,7 @@ import { Env, getAdminToken, getSetting, setSetting } from "../db";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
-type AutonomyMode = "observe_only" | "free_safe_autonomy" | "assisted_discovery" | "draft_preparation" | "controlled_outreach";
+type AutonomyMode = "observe_only" | "free_safe_autonomy" | "assisted_discovery";
 
 const SETTING_KEY = "autonomy_settings_v1";
 
@@ -10,8 +10,6 @@ const allowedModes: AutonomyMode[] = [
   "observe_only",
   "free_safe_autonomy",
   "assisted_discovery",
-  "draft_preparation",
-  "controlled_outreach",
 ];
 
 const defaultSettings = {
@@ -63,17 +61,16 @@ function intValue(value: any, fallback: number, min: number, max: number): numbe
 }
 
 function normalizeSettings(input: any) {
-  const mode = allowedModes.includes(input?.mode) ? input.mode : defaultSettings.mode;
-  const freeSafeOnly = boolValue(input?.freeSafeOnly, defaultSettings.freeSafeOnly);
+  const requestedMode = allowedModes.includes(input?.mode) ? input.mode : defaultSettings.mode;
   const settings = {
-    mode,
+    mode: requestedMode,
     engineEnabled: boolValue(input?.engineEnabled, defaultSettings.engineEnabled),
-    freeSafeOnly,
+    freeSafeOnly: true,
     opportunityDiscoveryEnabled: boolValue(input?.opportunityDiscoveryEnabled, defaultSettings.opportunityDiscoveryEnabled),
     sourceExpansionEnabled: boolValue(input?.sourceExpansionEnabled, defaultSettings.sourceExpansionEnabled),
-    leadDiscoveryEnabled: boolValue(input?.leadDiscoveryEnabled, defaultSettings.leadDiscoveryEnabled),
-    aiDraftsEnabled: boolValue(input?.aiDraftsEnabled, defaultSettings.aiDraftsEnabled),
-    sendingEnabled: boolValue(input?.sendingEnabled, defaultSettings.sendingEnabled),
+    leadDiscoveryEnabled: false,
+    aiDraftsEnabled: false,
+    sendingEnabled: false,
     dailySourceLimit: intValue(input?.dailySourceLimit, defaultSettings.dailySourceLimit, 0, 100),
     maxNetworkCallsPerRun: intValue(input?.maxNetworkCallsPerRun, defaultSettings.maxNetworkCallsPerRun, 0, 250),
     minOpportunityScore: intValue(input?.minOpportunityScore, defaultSettings.minOpportunityScore, 1, 100),
@@ -83,22 +80,9 @@ function normalizeSettings(input: any) {
     updatedBy: typeof input?.updatedBy === "string" ? input.updatedBy : "operator",
   };
 
-  if (settings.freeSafeOnly) {
-    settings.aiDraftsEnabled = false;
-    settings.sendingEnabled = false;
-    if (settings.mode === "draft_preparation" || settings.mode === "controlled_outreach") {
-      settings.mode = "free_safe_autonomy";
-    }
-  }
-
-  if (settings.sendingEnabled && !settings.aiDraftsEnabled) {
-    settings.sendingEnabled = false;
-  }
-
   if (settings.maxNetworkCallsPerRun <= 0) {
     settings.sourceExpansionEnabled = false;
     settings.opportunityDiscoveryEnabled = false;
-    settings.leadDiscoveryEnabled = false;
   }
 
   return settings;
@@ -111,9 +95,9 @@ function policyFor(settings: ReturnType<typeof normalizeSettings>) {
     canExpandSourceCandidates: settings.engineEnabled && settings.sourceExpansionEnabled && settings.maxNetworkCallsPerRun > 0 && settings.maxExpansionFetchesPerRun > 0,
     canSaveExpansionCandidatesAutomatically: false,
     canSaveOpportunities: settings.opportunityDiscoveryEnabled,
-    canSaveLeads: settings.leadDiscoveryEnabled && !settings.freeSafeOnly,
-    canGenerateDrafts: settings.aiDraftsEnabled && !settings.freeSafeOnly,
-    canSendEmail: settings.sendingEnabled && !settings.freeSafeOnly,
+    canSaveLeads: false,
+    canGenerateDrafts: false,
+    canSendEmail: false,
     dailySourceLimit: settings.dailySourceLimit,
     maxNetworkCallsPerRun: settings.maxNetworkCallsPerRun,
     minOpportunityScore: settings.minOpportunityScore,
@@ -127,17 +111,19 @@ async function readSettings(env: Env) {
   return {
     ok: true,
     mode: "autonomy_settings",
-    contractVersion: "autonomy_settings_v1",
+    contractVersion: "autonomy_settings_v2_review_first",
     settings: saved,
     policy: policyFor(saved),
     allowedModes,
     safety: {
-      freeSafeDefault: true,
-      aiOffWhenFreeSafe: true,
-      sendingOffWhenFreeSafe: true,
+      freeSafeOnly: true,
+      aiAlwaysOff: true,
+      sendingAlwaysOff: true,
+      leadDiscoveryAlwaysOff: true,
       readSecretsFromServerOnly: true,
       sourceExpansionSaveRequiresConfirmation: true,
       settingsWriteRequiresConfirmation: true,
+      scheduledExternalExecutionDisabled: true,
     },
   };
 }
@@ -156,8 +142,10 @@ async function writeSettings(env: Env, body: any) {
       callsAI: false,
       sendsEmail: false,
       writesSettingsOnly: true,
+      freeSafeOnly: true,
       sourceExpansionSaveRequiresConfirmation: true,
       settingsWriteRequiresConfirmation: true,
+      scheduledExternalExecutionDisabled: true,
     },
   };
 }
@@ -174,7 +162,7 @@ export async function handleAutonomySettingsAdmin(request: Request, env: Env, pa
       return json({
         ok: false,
         error: "confirm_required",
-        reason: "Autonomy setting changes require explicit confirmation because they can alter engine, research, AI-draft and sending capabilities.",
+        reason: "Autonomy setting changes require explicit confirmation. The Worker remains review-first: AI drafting, lead discovery and sending cannot be enabled from this route.",
       }, { status: 400 });
     }
     return json(await writeSettings(env, body));

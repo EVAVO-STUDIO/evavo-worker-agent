@@ -1,4 +1,5 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -18,9 +19,8 @@ const POSITIVE_DECISIONS = new Set<ReviewDecision>(["shortlist", "apply_later"])
 const WATCH_DECISIONS = new Set<ReviewDecision>(["watch", "needs_research"]);
 const NEGATIVE_DECISIONS = new Set<ReviewDecision>(["bad_fit", "not_eligible", "too_low_value", "too_much_effort", "duplicate", "archive"]);
 
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
+function confirmed(body: any): boolean {
+  return body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
 }
 
 function uuid() {
@@ -208,8 +208,10 @@ async function listStrategyScores(env: Env, url: URL) {
 }
 
 export async function handleOpportunityReviewAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
   const url = new URL(request.url);
 
   if (pathname === "/admin/opportunities/reviews" && request.method === "GET") return json(await listReviews(env, url));
@@ -219,6 +221,13 @@ export async function handleOpportunityReviewAdmin(request: Request, env: Env, p
   if (pathname.startsWith(prefix) && pathname.endsWith("/review") && request.method === "POST") {
     const id = decodeURIComponent(pathname.slice(prefix.length).replace(/\/review$/, ""));
     const body = await request.json().catch(() => ({}));
+    if (!confirmed(body)) {
+      return json({
+        ok: false,
+        error: "confirm_required",
+        reason: "Opportunity review-state and strategy-score changes require explicit confirmation and never trigger external execution.",
+      }, { status: 400 });
+    }
     return json(await reviewOpportunity(env, id, body));
   }
 

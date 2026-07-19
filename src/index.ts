@@ -33,6 +33,7 @@ import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpa
 import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/sourceExpansionBudgetRecommendationsAdmin";
 import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceExpansionPublicDirectoryScanAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
+import { resolveBusinessRouteHandlerId } from "./routes/businessRoutePolicy";
 import { resolveGrowthRouteHandlerId } from "./routes/growthRoutePolicy";
 import { resolveOpportunityRouteHandlerId } from "./routes/opportunityRoutePolicy";
 import { matchesWorkerRouteFamily } from "./routes/workerRoutePolicy";
@@ -78,14 +79,6 @@ async function handleHealth(env: Env): Promise<Response> {
       { status: 503, headers: { "cache-control": "no-store", "x-evavo-worker-health-version": HEALTH_CONTRACT_VERSION } },
     );
   }
-}
-
-function isBusinessWebsitePath(pathname: string): boolean {
-  return pathname === "/admin/business/websites"
-    || pathname === "/admin/business/pages"
-    || pathname === "/admin/business/website-audit-runs"
-    || pathname === "/admin/business/audit-observations"
-    || pathname === "/admin/business/audit-observation-candidates";
 }
 
 export default {
@@ -156,9 +149,17 @@ export default {
           break;
       }
 
-      if (pathname === "/admin/business/people") return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse);
-      if (isBusinessWebsitePath(pathname)) return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/business" || pathname.startsWith("/admin/business/")) return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);
+      switch (resolveBusinessRouteHandlerId(pathname)) {
+        case "people":
+          return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse);
+        case "website-audit":
+          return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
+        case "business-fallback":
+          return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);
+        default:
+          break;
+      }
+
       if (pathname === "/admin/sources/run-tiny") return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/sources") || pathname === "/admin/seeds") return await handleSourcesAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/draft-review") || pathname.startsWith("/admin/strategy-scores")) return await handleDraftReviewAdmin(req, env, pathname, jsonResponse);

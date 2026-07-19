@@ -48,6 +48,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Verify Worker workflow parity
+        run: node scripts/check-worker-contract-workflow.mjs
+
       - name: Verify read-only health contract
         run: node scripts/check-worker-health-contract.mjs
 

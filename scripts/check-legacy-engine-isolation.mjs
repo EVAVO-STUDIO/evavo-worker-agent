@@ -27,12 +27,8 @@ for (const absolute of sourceFiles) {
   }
 }
 
-const allowedImporters = new Set(["src/routes/admin.ts"]);
-for (const importer of imports) {
-  if (!allowedImporters.has(importer)) errors.push(`Legacy engine import is not allowed in ${importer}`);
-}
-if (imports.length !== 1 || imports[0] !== "src/routes/admin.ts") {
-  errors.push(`Expected exactly one quarantined legacy engine importer, found: ${imports.join(", ") || "none"}`);
+if (imports.length !== 0) {
+  errors.push(`Legacy engine must have zero active importers, found: ${imports.join(", ")}`);
 }
 
 const read = (relativePath) => {
@@ -76,9 +72,24 @@ for (const token of [
   if (!safetyHandler.includes(token)) errors.push(`Legacy safety handler is missing: ${token}`);
 }
 
+for (const forbidden of [
+  'from "../engine"',
+  'from "./engine"',
+  "dailyTick(",
+  "runDraftOnce(",
+  "runSendApproved(",
+  "runScanOnce(",
+  'pathname === "/admin/run"',
+  'pathname === "/admin/settings"',
+  'pathname === "/admin/overview"',
+]) {
+  if (admin.includes(forbidden)) errors.push(`Broad admin module must not contain quarantined legacy execution token: ${forbidden}`);
+}
+
 for (const helper of ["dailyTick", "runDraftOnce", "runSendApproved", "runScanOnce"]) {
-  if (!admin.includes(helper)) errors.push(`Quarantined admin module no longer references ${helper}; review isolation contract deliberately`);
-  if (!engine.includes(`export async function ${helper}`)) errors.push(`Legacy engine export ${helper} changed; review isolation contract deliberately`);
+  if (!engine.includes(`export async function ${helper}`)) {
+    errors.push(`Legacy engine export ${helper} changed; review removal or migration deliberately`);
+  }
 }
 
 const safetyDispatchPosition = index.indexOf("switch (resolveOperationsRouteHandlerId(pathname))");
@@ -90,11 +101,12 @@ if (safetyDispatchPosition < 0 || broadAdminPosition < 0 || safetyDispatchPositi
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "legacy-engine-export-isolation",
+  contract: "legacy-engine-zero-import-isolation",
   legacyImporters: imports,
   legacyRunRoutable: false,
   legacyOverviewTruthful: true,
   futureImportersAllowed: false,
+  broadAdminLegacyCodeRemoved: true,
   errors,
 }, null, 2));
 

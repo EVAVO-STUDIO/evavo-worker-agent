@@ -4,19 +4,15 @@ import {
   listDrafts,
   updateLead,
   getSetting,
-  setSetting,
   listEvents,
   logEvent,
   getAdminToken,
-  getDraftById,
   insertLead,
   getLeadById,
   parseLeadSignals,
 } from "../db";
-import { dailyTick, runDraftOnce, runScanOnce, runSendApproved } from "../engine";
 import { buildHealthReport, buildDiagnosticsReport } from "../core/health";
 import { buildSchemaReport } from "../core/schema";
-import { ALLOWED_SETTING_KEYS } from "../core/settings";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 type InferredKind = "agency" | "contractor" | "ecommerce" | "service" | "not_fit" | "general";
@@ -59,7 +55,7 @@ function inferMetadata(lead: any) {
 
   let opportunityType = "positioning_improvement";
   let draftStrategy = "light_teardown_offer";
-  let qualityTier = weak ? "weak" : strong ? "strong" : "average";
+  const qualityTier = weak ? "weak" : strong ? "strong" : "average";
 
   if (kind === "agency") {
     opportunityType = /white.?label|partner/.test(text) ? "white_label_partnership" : "overflow_delivery_support";
@@ -124,26 +120,6 @@ function isDirectorySource(url: string, type: string, label: string): boolean {
   return /truelocal|yellowpages|hipages|directory/.test(lower);
 }
 
-async function handleOverview(env: Env, json: JsonResponse) {
-  const counters = {
-    crawl_scanned: Number((await getSetting(env, "crawl_scanned_today")) || 0),
-    drafts_created: Number((await getSetting(env, "drafts_created_today")) || 0),
-    sends_sent: Number((await getSetting(env, "sends_sent_today")) || 0),
-    approvals: Number((await getSetting(env, "approvals_today")) || 0),
-    replies: Number((await getSetting(env, "replies_today")) || 0),
-    ai_calls: Number((await getSetting(env, "ai_calls")) || 0),
-    bounces: Number((await getSetting(env, "bounces_today")) || 0),
-    unsubscribes: Number((await getSetting(env, "unsubscribes_today")) || 0),
-    day: new Date().toISOString().slice(0, 10),
-  };
-  const caps = {
-    crawl: Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60),
-    drafts: Number((await getSetting(env, "draft_cap_per_day")) || env.CAP_DRAFTS_PER_DAY || 25),
-    send: Number((await getSetting(env, "send_cap_per_day")) || env.CAP_SEND_PER_DAY || 12),
-  };
-  return json({ ok: true, counters, caps, lastRun: await getSetting(env, "last_engine_run") });
-}
-
 async function handleLeads(request: Request, env: Env, json: JsonResponse) {
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
@@ -193,7 +169,7 @@ async function handleInsights(env: Env, json: JsonResponse) {
     summary: {
       totalLeads: leads.length,
       contactableLeads: contactable,
-      directEmailRate: leads.length ? Number(((leads.filter((x) => !!x.contact_email).length / leads.length) * 100).toFixed(1)) : 0,
+      directEmailRate: leads.length ? Number(((leads.filter((item) => Boolean(item.contact_email)).length / leads.length) * 100).toFixed(1)) : 0,
       averageScore: leads.length ? Number((totalScore / leads.length).toFixed(2)) : 0,
     },
     leadClasses,
@@ -207,8 +183,8 @@ async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
   const rawItems = Array.isArray(body?.items)
     ? body.items
     : Array.isArray(body?.urls)
-    ? body.urls.map((url: string) => ({ url }))
-    : [];
+      ? body.urls.map((url: string) => ({ url }))
+      : [];
   const inserted = [];
   const requeued = [];
 
@@ -232,9 +208,7 @@ async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
       signalsJson: "{}",
     });
 
-    const isSource = isDirectorySource(url, type, label);
-
-    if (isSource) {
+    if (isDirectorySource(url, type, label)) {
       await updateLead(env, lead.id, {
         category: category as any,
         country,
@@ -260,72 +234,12 @@ async function handleSeedInsert(env: Env, body: any, json: JsonResponse) {
   return json({ ok: true, inserted, requeued });
 }
 
-async function handleBackfill(env: Env, body: any, json: JsonResponse) {
-  const limit = Math.max(1, Math.min(500, Number(body?.limit || 100)));
-  const leads = await listLeads(env, { limit });
-  let updated = 0;
-  for (const lead of leads) {
-    const derived = inferMetadata(lead);
-    const signals = parseLeadSignals(lead) as any;
-    const nextSignals = {
-      ...signals,
-      leadClass: derived.kind,
-      opportunityType: derived.opportunityType,
-      qualityTier: derived.qualityTier,
-      draftStrategy: derived.draftStrategy,
-      decisionSummary:
-        derived.opportunityType === "white_label_partnership"
-          ? "Likely partner candidate where EVAVO should position as quiet white-label support."
-          : derived.opportunityType === "overflow_delivery_support"
-          ? "Likely delivery partner candidate where overflow support could make sense."
-          : derived.opportunityType === "lead_flow_uplift"
-          ? "Good lead-generation opportunity for a service business."
-          : derived.opportunityType === "conversion_optimisation"
-          ? "Conversion-focused opportunity rather than a generic redesign pitch."
-          : derived.opportunityType === "do_not_pitch"
-          ? "Not a fit for outbound outreach."
-          : "General improvement opportunity.",
-    };
-    await updateLead(env, lead.id, {
-      category: derived.kind as any,
-      signals_json: JSON.stringify(nextSignals),
-    });
-    updated += 1;
-  }
-  await logEvent(env, "backfill_ok", `Backfilled ${updated} leads`);
-  return json({ ok: true, updated });
-}
-
-async function handleSettingsPost(request: Request, env: Env, json: JsonResponse) {
-  const body = await request.json().catch(() => ({}));
-  const rawSettings = body?.settings && typeof body.settings === "object" ? body.settings : body;
-  const updated: Record<string, string> = {};
-  const rejected: string[] = [];
-
-  for (const [key, value] of Object.entries(rawSettings || {})) {
-    if (!ALLOWED_SETTING_KEYS.has(key)) {
-      rejected.push(key);
-      continue;
-    }
-    const nextValue = String(value);
-    await setSetting(env, key, nextValue);
-    updated[key] = nextValue;
-  }
-
-  if (rejected.length) {
-    return json({ ok: false, error: "unsupported_setting_keys", rejected, updated }, { status: 400 });
-  }
-
-  await logEvent(env, "settings_update", `Updated ${Object.keys(updated).length} free-safe setting(s)`);
-  return json({ ok: true, updated });
-}
-
 export async function handleAdmin(
   request: Request,
   env: Env,
   pathname: string,
   _ctx?: any,
-  json: JsonResponse = defaultJson
+  json: JsonResponse = defaultJson,
 ) {
   if (request.method === "OPTIONS") return json({ ok: true });
 
@@ -341,35 +255,11 @@ export async function handleAdmin(
     return json(await buildDiagnosticsReport(env, { deep: url.searchParams.get("deep") === "1", confirm: url.searchParams.get("confirm") === "1" }));
   }
   if (pathname === "/admin/schema" && request.method === "GET") return json(await buildSchemaReport(env));
-
-  if (pathname === "/admin/overview" && request.method === "GET") return handleOverview(env, json);
   if (pathname === "/admin/leads" && request.method === "GET") return handleLeads(request, env, json);
   if (pathname === "/admin/drafts" && request.method === "GET") return handleDrafts(request, env, json);
   if (pathname === "/admin/events" && request.method === "GET") return json({ ok: true, events: await listEvents(env, 150) });
   if (pathname === "/admin/insights" && request.method === "GET") return handleInsights(env, json);
   if (pathname === "/admin/runs" && request.method === "GET") return json({ ok: true, runs: await listEvents(env, 100) });
-
-  if (pathname === "/admin/settings" && request.method === "GET") {
-    return json({
-      ok: true,
-      settings: {
-        engine_enabled: (await getSetting(env, "engine_enabled")) || "1",
-        cost_mode: (await getSetting(env, "cost_mode")) || "free_safe",
-        ai_enabled: (await getSetting(env, "ai_enabled")) || "0",
-        ai_mode: (await getSetting(env, "ai_mode")) || "off",
-        drafting_enabled: (await getSetting(env, "drafting_enabled")) || "1",
-        sending_enabled: (await getSetting(env, "sending_enabled")) || "0",
-        approval_required: (await getSetting(env, "approval_required")) || "1",
-        crawl_cap_per_day: (await getSetting(env, "crawl_cap_per_day")) || String(env.CAP_CRAWL_PER_DAY || 60),
-        draft_cap_per_day: (await getSetting(env, "draft_cap_per_day")) || String(env.CAP_DRAFTS_PER_DAY || 25),
-        send_cap_per_day: (await getSetting(env, "send_cap_per_day")) || String(env.CAP_SEND_PER_DAY || 12),
-        min_score_for_draft: (await getSetting(env, "min_score_for_draft")) || "0.45",
-        min_score_for_send: (await getSetting(env, "min_score_for_send")) || "0.65",
-      },
-    });
-  }
-
-  if (pathname === "/admin/settings" && request.method === "POST") return handleSettingsPost(request, env, json);
 
   if (pathname === "/admin/leads" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
@@ -392,44 +282,6 @@ export async function handleAdmin(
   if (pathname === "/admin/seeds" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
     return handleSeedInsert(env, body, json);
-  }
-
-  if (pathname === "/admin/run" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
-    const kind = String(body?.kind || "");
-    if (kind === "scan") return json({ ok: true, kind, ...(await runScanOnce(env)) });
-    if (kind === "draft") return json({ ok: true, kind, ...(await runDraftOnce(env)) });
-    if (kind === "send") return json({ ok: true, kind, ...(await runSendApproved(env)) });
-    if (kind === "tick") {
-      await dailyTick(env);
-      return json({ ok: true, kind, finished: true });
-    }
-    if (kind === "backfill") return handleBackfill(env, body, json);
-    return json({ ok: false, error: "Unsupported run kind" }, { status: 400 });
-  }
-
-  if (pathname.startsWith("/admin/drafts/") && pathname.endsWith("/approve") && request.method === "POST") {
-    const id = pathname.split("/")[3];
-    const draft = await getDraftById(env, id);
-    if (!draft) return json({ ok: false, error: "Draft not found" }, { status: 404 });
-    await updateLead(env, draft.lead_id, { status: "approved" as any });
-    await env.DB.prepare(`UPDATE drafts SET status = 'approved', updated_at_iso = ? WHERE id = ?`)
-      .bind(new Date().toISOString(), id)
-      .run();
-    await logEvent(env, "approve_ok", `Draft approved`, draft.lead_id);
-    return json({ ok: true, id });
-  }
-
-  if (pathname.startsWith("/admin/drafts/") && pathname.endsWith("/reject") && request.method === "POST") {
-    const id = pathname.split("/")[3];
-    const draft = await getDraftById(env, id);
-    if (!draft) return json({ ok: false, error: "Draft not found" }, { status: 404 });
-    await updateLead(env, draft.lead_id, { status: "rejected" as any });
-    await env.DB.prepare(`UPDATE drafts SET status = 'rejected', updated_at_iso = ? WHERE id = ?`)
-      .bind(new Date().toISOString(), id)
-      .run();
-    await logEvent(env, "reject_ok", `Draft rejected`, draft.lead_id);
-    return json({ ok: true, id });
   }
 
   return json({ ok: false, error: "Not found" }, { status: 404 });

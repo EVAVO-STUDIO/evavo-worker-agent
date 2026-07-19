@@ -33,6 +33,7 @@ import { handleSourceExpansionQueryHintResolverAdmin } from "./routes/sourceExpa
 import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/sourceExpansionBudgetRecommendationsAdmin";
 import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceExpansionPublicDirectoryScanAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
+import { matchesWorkerRouteFamily } from "./routes/workerRoutePolicy";
 
 const unexpectedWorkerErrorMessage = "The Worker hit an unexpected internal error before a safe response could be returned.";
 const HEALTH_CONTRACT_VERSION = "2026-07";
@@ -119,7 +120,7 @@ export default {
       const url = new URL(req.url);
       const pathname = url.pathname;
 
-      if (pathname === "/health") return await handleHealth(env);
+      if (matchesWorkerRouteFamily("health", pathname)) return await handleHealth(env);
       if (pathname === "/admin/settings/autonomy") return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/opportunities/run-due") return await handleOpportunityRunDueAdmin(req, env, pathname, jsonResponse);
       if (isOpportunityRunAuditPath(pathname)) return await handleOpportunityRunsAdmin(req, env, pathname, jsonResponse);
@@ -150,10 +151,10 @@ export default {
       if (pathname === "/admin/sources/run-tiny") return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/sources") || pathname === "/admin/seeds") return await handleSourcesAdmin(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/admin/draft-review") || pathname.startsWith("/admin/strategy-scores")) return await handleDraftReviewAdmin(req, env, pathname, jsonResponse);
-      if (pathname.startsWith("/admin")) return await handleAdmin(req, env, pathname, ctx, jsonResponse);
-      if (pathname.startsWith("/tools")) return await handleTools(req, env, pathname, jsonResponse);
-      if (pathname.startsWith("/public")) return await handlePublic(req, env, pathname, ctx, jsonResponse);
-      if (pathname === "/" || pathname === "") return jsonResponse({ ok: true, message: "evavo-worker-agent", health: "/health" });
+      if (matchesWorkerRouteFamily("admin", pathname)) return await handleAdmin(req, env, pathname, ctx, jsonResponse);
+      if (matchesWorkerRouteFamily("tools", pathname)) return await handleTools(req, env, pathname, jsonResponse);
+      if (matchesWorkerRouteFamily("public", pathname)) return await handlePublic(req, env, pathname, ctx, jsonResponse);
+      if (matchesWorkerRouteFamily("root", pathname)) return jsonResponse({ ok: true, message: "evavo-worker-agent", health: "/health" });
       return jsonResponse({ ok: false, error: "not_found" }, { status: 404 });
     } catch {
       return jsonResponse({ ok: false, error: "worker_unexpected_error", message: unexpectedWorkerErrorMessage }, { status: 500 });

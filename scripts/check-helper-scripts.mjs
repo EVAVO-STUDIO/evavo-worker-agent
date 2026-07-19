@@ -59,7 +59,10 @@ for (const relativePath of [
   "src/routes/opportunityRoutePolicy.ts",
   "src/routes/businessRoutePolicy.ts",
   "src/routes/operationsRoutePolicy.ts",
+  "scripts/check-worker-credential-contract.mjs",
+  "scripts/check-worker-env-contract.mjs",
   "scripts/check-protected-response-safety.mjs",
+  "scripts/check-scheduled-entrypoint-safety.mjs",
   "scripts/check-runtime-capability-config.mjs",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
@@ -70,15 +73,21 @@ for (const relativePath of [
 requireAbsent("src/engine.ts");
 requireAbsent("src/email.ts");
 
+requireTokens("src/db.ts", [
+  "ADMIN_TOKEN?: string",
+  "export function getAdminToken(env: Env): string | undefined",
+  "return env.ADMIN_TOKEN;",
+]);
 requireTokens("src/index.ts", [
   'headers.set("cache-control", "no-store")',
   'headers.set("x-content-type-options", "nosniff")',
   'headers.set("referrer-policy", "no-referrer")',
+  "runScheduledSafely",
 ]);
 requireTokens("src/routes/admin.ts", [
   'error: "Unauthorized"',
   'error: "method_not_allowed"',
-  'status: 405',
+  "status: 405",
   'headers: { allow: "GET, POST" }',
   'headers.set("cache-control", "no-store")',
   'headers.set("x-content-type-options", "nosniff")',
@@ -164,6 +173,17 @@ requireTokens("wrangler.toml", [
   'PUBLIC_ENGINE_NAME = "EVAVO Growth Research Worker"',
   'CAP_CRAWL_PER_DAY = "60"',
   "No email-provider secrets are used or accepted by the active Worker source.",
+  "ADMIN_TOKEN",
+]);
+requireTokens("scripts/check-worker-credential-contract.mjs", [
+  'contract: "canonical-server-side-worker-credential"',
+  'canonicalCredential: "ADMIN_TOKEN"',
+  "legacyCredentialAliasesAllowed: false",
+  "publicControlCredentialAllowed: false",
+]);
+requireTokens("scripts/check-worker-env-contract.mjs", [
+  'canonicalCredential: "ADMIN_TOKEN"',
+  "legacyCredentialAliasesAdvertised: false",
 ]);
 requireTokens("scripts/check-protected-response-safety.mjs", [
   'contract: "protected-worker-response-safety"',
@@ -171,8 +191,15 @@ requireTokens("scripts/check-protected-response-safety.mjs", [
   "browserPreflightAllowedWithoutAuthentication: false",
   "protectedResponsesCacheable: false",
 ]);
+requireTokens("scripts/check-scheduled-entrypoint-safety.mjs", [
+  'contract: "scheduled-worker-entrypoint-safety"',
+  "automaticRetryAllowed: false",
+  "alternateExecutionFallbackAllowed: false",
+]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
   'contract: "review-first-runtime-capability-configuration"',
+  'canonicalCredential: "ADMIN_TOKEN"',
+  "legacyCredentialAliasesAdvertised: false",
   "emailProviderConfigured: false",
   "draftRuntimeCapConfigured: false",
   "sendRuntimeCapConfigured: false",
@@ -182,6 +209,11 @@ requireTokens("scripts/check-growth-negative-safety.mjs", [
   "canPostSocial: true",
   "canSubmitForms: true",
 ]);
+
+const dbContent = fs.readFileSync(path.join(root, "src/db.ts"), "utf8");
+for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
+  if (dbContent.includes(forbidden)) errors.push(`Worker environment must not contain legacy credential alias: ${forbidden}`);
+}
 
 const adminContent = fs.readFileSync(path.join(root, "src/routes/admin.ts"), "utf8");
 if (adminContent.includes('access-control-allow-origin": "*"')) {
@@ -194,8 +226,11 @@ if (fs.existsSync(packagePath)) {
   const scripts = packageJson.scripts || {};
   const expectedScripts = {
     "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+    "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
+    "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
     "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
     "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
+    "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
     "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
     "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
     "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
@@ -217,8 +252,11 @@ if (fs.existsSync(packagePath)) {
     "npm run scripts:check",
     "npm run db:migrations:check",
     "npm run worker:health:check",
+    "npm run worker:credential-contract:check",
+    "npm run worker:env-contract:check",
     "npm run worker:protected-response-safety:check",
     "npm run worker:routes:check",
+    "npm run scheduled:entrypoint-safety:check",
     "npm run scheduled:autonomy-safety:check",
     "npm run manual:execution-safety:check",
     "npm run legacy:engine-isolation:check",
@@ -246,8 +284,11 @@ console.log(JSON.stringify({
   contract: "dynamic-helper-and-gate-validation",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
+  canonicalCredentialRequired: "ADMIN_TOKEN",
+  legacyCredentialAliasesAllowed: false,
   removedLegacyExecutionModulesRequired: true,
   protectedResponseSafetyRequired: true,
+  scheduledEntrypointSafetyRequired: true,
   errors,
 }, null, 2));
 

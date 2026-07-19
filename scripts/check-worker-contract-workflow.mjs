@@ -37,6 +37,7 @@ if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_
 
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+  "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
   "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
   "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
@@ -82,6 +83,9 @@ console.log(JSON.stringify({
   contract: "worker-ci-workflow-parity",
   deploymentEnabled: false,
   credentialsRequired: false,
+  canonicalCredential: "ADMIN_TOKEN",
+  legacyCredentialAliasesAllowed: false,
+  publicControlCredentialAllowed: false,
   typedRoutePoliciesRequired: true,
   mailProviderFieldsAdvertised: false,
   draftOrSendRuntimeCapsAdvertised: false,

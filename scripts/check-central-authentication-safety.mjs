@@ -20,6 +20,7 @@ const protectedHandlers = [
   "src/routes/legacyExecutionSafetyAdmin.ts",
   "src/routes/businessAutopilotAdmin.ts",
   "src/routes/opportunitiesAdmin.ts",
+  "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/draftReviewAdmin.ts",
 ];

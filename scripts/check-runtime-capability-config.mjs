@@ -12,10 +12,12 @@ const read = (relativePath) => {
 
 const wrangler = read("wrangler.toml");
 const db = read("src/db.ts");
+const settings = read("src/core/settings.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
 if (!wrangler) errors.push("Missing wrangler.toml");
 if (!db) errors.push("Missing src/db.ts");
+if (!settings) errors.push("Missing src/core/settings.ts");
 
 for (const required of [
   'PUBLIC_ENGINE_NAME = "EVAVO Growth Research Worker"',
@@ -36,6 +38,40 @@ for (const forbidden of [
   "api.mailchannels.net",
 ]) {
   if (wrangler.includes(forbidden)) errors.push(`wrangler.toml must not advertise outbound capability: ${forbidden}`);
+}
+
+for (const required of [
+  "BLOCKED_EXECUTION_SETTING_KEYS",
+  '"ai_enabled"',
+  '"ai_mode"',
+  '"sending_enabled"',
+  '"drafting_enabled"',
+  '"daily_draft_limit"',
+  '"daily_ai_call_limit"',
+  '"daily_send_limit"',
+  '"per_tick_draft_limit"',
+  '"per_tick_ai_call_limit"',
+  "!blockedExecutionSettings.has(key)",
+  "never generally",
+  "mutable",
+]) {
+  if (!settings.includes(required)) errors.push(`settings contract is missing immutable execution token: ${required}`);
+}
+
+const blockedListMatch = settings.match(/BLOCKED_EXECUTION_SETTING_KEYS\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\s*as const/);
+const blockedList = blockedListMatch?.[1] || "";
+for (const key of [
+  "ai_enabled",
+  "ai_mode",
+  "sending_enabled",
+  "drafting_enabled",
+  "daily_draft_limit",
+  "daily_ai_call_limit",
+  "daily_send_limit",
+  "per_tick_draft_limit",
+  "per_tick_ai_call_limit",
+]) {
+  if (!blockedList.includes(`"${key}"`)) errors.push(`Execution setting must remain blocked from general writes: ${key}`);
 }
 
 for (const removedPath of ["src/engine.ts", "src/email.ts"]) {
@@ -79,6 +115,7 @@ console.log(JSON.stringify({
   emailProviderConfigured: false,
   draftRuntimeCapConfigured: false,
   sendRuntimeCapConfigured: false,
+  executionSettingsGenerallyMutable: false,
   boundedResearchConfigured: true,
   errors,
 }, null, 2));

@@ -51,8 +51,6 @@ export interface Env {
   BRAND_DOMAIN?: string;
   BRAND_COUNTRIES?: string;
   PUBLIC_ENGINE_NAME?: string;
-  PUBLIC_CONTROL_KEY?: string;
-  OUTBOUND_AGENT_ADMIN_TOKEN?: string;
   ADMIN_TOKEN?: string;
   CAP_CRAWL_PER_DAY?: string;
 }
@@ -153,7 +151,7 @@ export function safeJsonParse<T>(value: unknown): T | undefined {
 }
 
 export function getAdminToken(env: Env): string | undefined {
-  return env.OUTBOUND_AGENT_ADMIN_TOKEN || env.ADMIN_TOKEN;
+  return env.ADMIN_TOKEN;
 }
 
 export function parseLeadSignals(row: Pick<LeadRow, "signals_json"> | { signals_json?: string | null }): LeadSignals {

@@ -7,17 +7,20 @@ const root = process.cwd();
 const policyPath = path.join(root, "src", "routes", "operationsRoutePolicy.ts");
 const indexPath = path.join(root, "src", "index.ts");
 const autonomyPath = path.join(root, "src", "routes", "autonomySettingsAdmin.ts");
+const legacySafetyPath = path.join(root, "src", "routes", "legacyExecutionSafetyAdmin.ts");
 const errors = [];
 
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
 const autonomy = fs.existsSync(autonomyPath) ? fs.readFileSync(autonomyPath, "utf8") : "";
+const legacySafety = fs.existsSync(legacySafetyPath) ? fs.readFileSync(legacySafetyPath, "utf8") : "";
 
 if (!policy) errors.push("Missing typed operational route policy registry");
 if (!index) errors.push("Missing Worker dispatcher");
 if (!autonomy) errors.push("Missing autonomy settings handler");
+if (!legacySafety) errors.push("Missing legacy manual execution safety handler");
 
-const ids = ["autonomy-settings", "planner-routes", "planner", "source-batch", "sources", "draft-review", "strategy-scores"];
+const ids = ["legacy-admin-safety", "autonomy-settings", "planner-routes", "planner", "source-batch", "sources", "draft-review", "strategy-scores"];
 for (const id of ids) {
   const policyCount = policy.split(`id: "${id}"`).length - 1;
   const caseCount = index.split(`case "${id}":`).length - 1;
@@ -27,7 +30,9 @@ for (const id of ids) {
 
 for (const token of [
   'import { resolveOperationsRouteHandlerId } from "./routes/operationsRoutePolicy"',
+  'import { handleLegacyExecutionSafetyAdmin } from "./routes/legacyExecutionSafetyAdmin"',
   'switch (resolveOperationsRouteHandlerId(pathname))',
+  'return await handleLegacyExecutionSafetyAdmin(req, env, pathname, jsonResponse)',
   'return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse)',
   'return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse)',
   'return await handlePlannerAdmin(req, env, pathname, jsonResponse)',
@@ -84,8 +89,34 @@ for (const token of [
   if (!autonomy.includes(token)) errors.push(`Autonomy settings handler is missing confirmation guard: ${token}`);
 }
 
+for (const token of [
+  'error: "legacy_execution_disabled"',
+  'allowedKinds: []',
+  'settingsWriteRequiresConfirmation: true',
+  'draftDecisionRequiresConfirmation: true',
+  'reviewStateOnly: true',
+]) {
+  if (!legacySafety.includes(token)) errors.push(`Legacy manual safety handler is missing: ${token}`);
+}
+
+const legacyPolicyStart = policy.indexOf('id: "legacy-admin-safety"');
 const autonomyPolicyStart = policy.indexOf('id: "autonomy-settings"');
-const autonomyPolicyEnd = policy.indexOf('id: "planner-routes"', autonomyPolicyStart);
+const plannerRoutesPosition = policy.indexOf('id: "planner-routes"');
+const plannerPosition = policy.indexOf('id: "planner"');
+const sourceBatchPosition = policy.indexOf('id: "source-batch"');
+const sourcesPosition = policy.indexOf('id: "sources"');
+
+if (legacyPolicyStart < 0 || autonomyPolicyStart < 0 || legacyPolicyStart >= autonomyPolicyStart) {
+  errors.push("Legacy manual safety policy must precede autonomy settings and all broad operational routes");
+}
+if (plannerRoutesPosition < 0 || plannerPosition < 0 || plannerRoutesPosition >= plannerPosition) {
+  errors.push("Planner route catalogue must precede the general planner policy");
+}
+if (sourceBatchPosition < 0 || sourcesPosition < 0 || sourceBatchPosition >= sourcesPosition) {
+  errors.push("Tiny source batch must precede the broad sources policy");
+}
+
+const autonomyPolicyEnd = plannerRoutesPosition;
 const autonomyPolicy = autonomyPolicyStart >= 0 && autonomyPolicyEnd > autonomyPolicyStart
   ? policy.slice(autonomyPolicyStart, autonomyPolicyEnd)
   : "";
@@ -100,19 +131,9 @@ for (let i = 1; i < priorities.length; i += 1) {
   if (priorities[i] <= priorities[i - 1]) errors.push("Operational route priorities must be strictly increasing");
 }
 
-const plannerRoutesPosition = policy.indexOf('id: "planner-routes"');
-const plannerPosition = policy.indexOf('id: "planner"');
-if (plannerRoutesPosition < 0 || plannerPosition < 0 || plannerRoutesPosition >= plannerPosition) {
-  errors.push("Planner route catalogue must precede the general planner policy");
-}
-
-const sourceBatchPosition = policy.indexOf('id: "source-batch"');
-const sourcesPosition = policy.indexOf('id: "sources"');
-if (sourceBatchPosition < 0 || sourcesPosition < 0 || sourceBatchPosition >= sourcesPosition) {
-  errors.push("Tiny source batch must precede the broad sources policy");
-}
-
 for (const route of [
+  "/admin/run",
+  "/admin/settings",
   "/admin/settings/autonomy",
   "/admin/planner/routes",
   "/admin/sources/run-tiny",
@@ -127,6 +148,7 @@ console.log(JSON.stringify({
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "typed-operational-route-policy",
   routeGroups: ids,
+  legacyManualExecutionRoutable: false,
   autonomySettingsRequireConfirmation: true,
   externalResearchOnly: true,
   externalExecutionEnabled: false,

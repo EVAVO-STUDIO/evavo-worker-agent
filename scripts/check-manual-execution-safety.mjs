@@ -8,6 +8,7 @@ const indexPath = path.join(root, "src", "index.ts");
 const policyPath = path.join(root, "src", "routes", "operationsRoutePolicy.ts");
 const handlerPath = path.join(root, "src", "routes", "legacyExecutionSafetyAdmin.ts");
 const adminPath = path.join(root, "src", "routes", "admin.ts");
+const toolsPath = path.join(root, "src", "routes", "tools.ts");
 const errors = [];
 
 const read = (filePath) => fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "";
@@ -15,11 +16,13 @@ const index = read(indexPath);
 const policy = read(policyPath);
 const handler = read(handlerPath);
 const admin = read(adminPath);
+const tools = read(toolsPath);
 
 if (!index) errors.push("Missing Worker dispatcher");
 if (!policy) errors.push("Missing operational route policy");
 if (!handler) errors.push("Missing legacy execution safety handler");
 if (!admin) errors.push("Missing legacy admin handler");
+if (!tools) errors.push("Missing tools capability handler");
 
 for (const token of [
   'import { handleLegacyExecutionSafetyAdmin } from "./routes/legacyExecutionSafetyAdmin"',
@@ -63,6 +66,23 @@ for (const token of [
   if (!handler.includes(token)) errors.push(`Legacy safety handler is missing: ${token}`);
 }
 
+for (const token of [
+  "getAdminToken",
+  "function authorized(",
+  'error: "Unauthorized"',
+  'contractVersion: "worker_tools_v2_review_first"',
+  'aiDefault: "off"',
+  'sendingDefault: "off"',
+  'scheduledExternalExecutionDisabled: true',
+  'manualLegacyExecutionDisabled: true',
+  '"ai_draft_generation"',
+  '"email_sending"',
+  '"form_submission"',
+  '"external_state_mutation"',
+]) {
+  if (!tools.includes(token)) errors.push(`Tools capability handler is missing: ${token}`);
+}
+
 for (const unsafe of [
   "runSendApproved(",
   "runDraftOnce(",
@@ -71,6 +91,7 @@ for (const unsafe of [
   "sendEmail(",
 ]) {
   if (handler.includes(unsafe)) errors.push(`Legacy safety handler must never invoke ${unsafe}`);
+  if (tools.includes(unsafe)) errors.push(`Tools capability handler must never invoke ${unsafe}`);
 }
 
 const operationsPosition = index.indexOf("switch (resolveOperationsRouteHandlerId(pathname))");
@@ -98,6 +119,8 @@ console.log(JSON.stringify({
   manualSendingAllowed: false,
   unsafeLegacySettingsWritable: false,
   draftDecisionConfirmationRequired: true,
+  toolsAuthenticationRequired: true,
+  toolsCapabilitiesTruthful: true,
   errors,
 }, null, 2));
 

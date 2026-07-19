@@ -38,6 +38,19 @@ for (const forbidden of [
   "api.mailchannels.net",
 ]) {
   if (wrangler.includes(forbidden)) errors.push(`wrangler.toml must not advertise outbound capability: ${forbidden}`);
+  if (db.includes(forbidden)) errors.push(`src/db.ts Env must not advertise outbound capability: ${forbidden}`);
+}
+
+for (const required of [
+  "export interface Env",
+  "DB: D1Database",
+  "ADMIN_TOKEN?: string",
+  "CAP_CRAWL_PER_DAY?: string",
+  "export type LeadStatus",
+  '"sent"',
+  "export type DraftStatus",
+]) {
+  if (!db.includes(required)) errors.push(`src/db.ts is missing runtime or historical compatibility token: ${required}`);
 }
 
 for (const required of [
@@ -112,10 +125,13 @@ console.log(JSON.stringify({
   contract: "review-first-runtime-capability-configuration",
   outboundEmailModulePresent: fs.existsSync(path.join(root, "src/email.ts")),
   legacyExecutionModulePresent: fs.existsSync(path.join(root, "src/engine.ts")),
+  mailProviderFieldsAdvertised: false,
   emailProviderConfigured: false,
   draftRuntimeCapConfigured: false,
   sendRuntimeCapConfigured: false,
   executionSettingsGenerallyMutable: false,
+  historicalStatusesReadable: true,
+  historicalStatusesExecutable: false,
   boundedResearchConfigured: true,
   errors,
 }, null, 2));

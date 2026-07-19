@@ -1,5 +1,6 @@
 import { dailyTickWithAutonomy } from "./engineAutonomy";
 import type { Env } from "./db";
+import { logEvent } from "./db";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/admin";
 import { handleTools } from "./routes/tools";
@@ -86,9 +87,27 @@ async function handleHealth(env: Env): Promise<Response> {
   }
 }
 
+async function runScheduledSafely(env: Env): Promise<void> {
+  if (!env.DB) {
+    console.error("scheduled_autonomy_unavailable");
+    return;
+  }
+
+  try {
+    await dailyTickWithAutonomy(env);
+  } catch {
+    console.error("scheduled_autonomy_failed");
+    try {
+      await logEvent(env, "scheduled_autonomy_failed", "Scheduled autonomy stopped safely after an unexpected internal failure.");
+    } catch {
+      // The original failure may be a D1 outage. Do not retry, throw, or invoke an alternate execution path.
+    }
+  }
+}
+
 export default {
   async scheduled(_controller: any, env: Env, ctx: any) {
-    ctx.waitUntil(dailyTickWithAutonomy(env));
+    ctx.waitUntil(runScheduledSafely(env));
   },
 
   async fetch(req: Request, env: Env, ctx: any): Promise<Response> {

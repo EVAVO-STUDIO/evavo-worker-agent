@@ -41,6 +41,7 @@ const expectedScripts = {
   "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
   "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
   "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
+  "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
 };
 for (const [scriptName, expectedCommand] of Object.entries(expectedScripts)) {
   if (packageJson.scripts?.[scriptName] !== expectedCommand) {

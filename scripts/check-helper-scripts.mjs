@@ -22,14 +22,19 @@ const helperScripts = [
   'scripts/check-growth-blackboard.mjs',
   'scripts/check-growth-campaign-intelligence.mjs',
   'scripts/check-growth-capability-registry.mjs',
+  'scripts/check-growth-negative-safety.mjs',
   'scripts/check-growth-review-queue.mjs',
   'scripts/check-growth-route-delegates.mjs',
+  'scripts/check-growth-route-policy.mjs',
   'scripts/check-growth-route-safety-flags.mjs',
   'scripts/check-growth-strategy-memory.mjs',
   'scripts/check-helper-scripts.mjs',
   'scripts/check-migrations-present.mjs',
   'scripts/check-repo-sync-status.mjs',
+  'scripts/check-worker-contract-workflow.mjs',
+  'scripts/check-worker-health-contract.mjs',
   'scripts/check-worker-powershell-runners.mjs',
+  'scripts/check-worker-route-policy.mjs',
   'scripts/print-business-autopilot-readonly-verify-commands.mjs',
   'scripts/print-business-autopilot-route-contract-check.mjs',
   'scripts/print-business-operator-worker-runbook.mjs',
@@ -80,9 +85,11 @@ const sourceFiles = [
   'src/routes/growthBlackboardAdmin.ts',
   'src/routes/growthCapabilitiesAdmin.ts',
   'src/routes/growthCampaignIntelligenceAdmin.ts',
+  'src/routes/growthRoutePolicy.ts',
   'src/routes/growthStrategyMemoryAdmin.ts',
   'src/routes/routeCataloguePlanner.ts',
   'src/routes/routeCatalogueTypes.ts',
+  'src/routes/workerRoutePolicy.ts',
 ];
 
 const docs = [
@@ -148,6 +155,7 @@ const helperSafetyFlagTokens = [
 ];
 
 const predeployCommand = 'npm run git:sync:check && npm run growth:generated-routes:check && npm run worker:powershell:check && npm run growth:backend:aggregate:check && npm run check:local';
+const checkLocalCommand = 'npm run scripts:check && npm run db:migrations:check && npm run worker:health:check && npm run worker:routes:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run worker:powershell:check && npm run growth:route-delegates:check && npm run growth:route-policy:check && npm run growth:route-safety-flags:check && npm run growth:negative-safety:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck';
 
 const expectedPackageScripts = {
   predeploy: predeployCommand,
@@ -177,10 +185,12 @@ const expectedPackageScripts = {
   'growth:capabilities:check': 'node scripts/check-growth-capability-registry.mjs',
   'growth:generated-routes:check': 'node scripts/check-generated-route-wiring-clean.mjs',
   'growth:generated-routes:resolve:print': 'node scripts/print-generated-route-drift-resolution.mjs',
+  'growth:negative-safety:check': 'node scripts/check-growth-negative-safety.mjs',
   'growth:review-queue:check': 'node scripts/check-growth-review-queue.mjs',
   'growth:route-catalogue:apply': 'node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs && node scripts/apply-business-autopilot-route-catalogue.mjs',
   'growth:route-contract:print': 'node scripts/print-growth-route-contract-check.mjs',
   'growth:route-delegates:check': 'node scripts/check-growth-route-delegates.mjs',
+  'growth:route-policy:check': 'node scripts/check-growth-route-policy.mjs',
   'growth:route-safety-flags:check': 'node scripts/check-growth-route-safety-flags.mjs',
   'growth:smoke:print': 'node scripts/print-growth-smoke-commands.mjs',
   'growth:strategy:check': 'node scripts/check-growth-strategy-memory.mjs',
@@ -188,9 +198,11 @@ const expectedPackageScripts = {
   'growth:wiring:apply': 'node scripts/apply-growth-operator-route-wiring.mjs',
   'ops:smoke:print': 'node scripts/print-next-ops-smoke-commands.mjs',
   'worker:final-gate:print': 'node scripts/print-worker-final-local-gate.mjs',
+  'worker:health:check': 'node scripts/check-worker-health-contract.mjs',
+  'worker:routes:check': 'node scripts/check-worker-route-policy.mjs',
   'worker:powershell:check': 'node scripts/check-worker-powershell-runners.mjs',
   'scripts:check': 'node scripts/check-helper-scripts.mjs',
-  'check:local': 'npm run scripts:check && npm run db:migrations:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run worker:powershell:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck',
+  'check:local': checkLocalCommand,
 };
 
 const requiredTokens = {

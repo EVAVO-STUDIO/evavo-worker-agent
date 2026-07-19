@@ -1,11 +1,7 @@
-import { Env, getAdminToken, getSetting, logEvent, nowISO, uuid } from "../db";
+import { Env, getSetting, logEvent, nowISO, uuid } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 async function numberSetting(env: Env, key: string, fallback: number): Promise<number> {
   const raw = await getSetting(env, key);
@@ -119,8 +115,10 @@ async function runOneSource(env: Env, source: any) {
 }
 
 export async function handleSourceBatchAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
+  }
 
   if (pathname === "/admin/sources/run-tiny" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));

@@ -42,6 +42,7 @@ const expectedScripts = {
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
   "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
+  "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
   "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
   "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
   "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
@@ -70,7 +71,10 @@ console.log(JSON.stringify({
   typedRoutePoliciesRequired: true,
   scheduledExternalExecutionAllowed: false,
   manualLegacyExecutionAllowed: false,
+  legacyExecutionModulesPresent: false,
   legacyEngineImportExpansionAllowed: false,
+  emailProviderConfigurationAllowed: false,
+  draftOrSendRuntimeCapsAllowed: false,
   publicOperationalRecordsExposed: false,
   errors,
 }, null, 2));

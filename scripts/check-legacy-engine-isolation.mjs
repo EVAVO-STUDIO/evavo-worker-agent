@@ -6,7 +6,8 @@ import path from "node:path";
 const root = process.cwd();
 const srcRoot = path.join(root, "src");
 const errors = [];
-const imports = [];
+const engineImports = [];
+const emailImports = [];
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -22,13 +23,19 @@ const sourceFiles = fs.existsSync(srcRoot)
 for (const absolute of sourceFiles) {
   const relative = path.relative(root, absolute).replaceAll("\\", "/");
   const content = fs.readFileSync(absolute, "utf8");
-  if (/from\s+["']\.\.\/engine["']/.test(content) || /from\s+["']\.\/engine["']/.test(content)) {
-    imports.push(relative);
-  }
+  if (/from\s+["'](?:\.\.\/|\.\/)engine["']/.test(content)) engineImports.push(relative);
+  if (/from\s+["'](?:\.\.\/|\.\/)email["']/.test(content)) emailImports.push(relative);
 }
 
-if (imports.length !== 0) {
-  errors.push(`Legacy engine must have zero active importers, found: ${imports.join(", ")}`);
+if (engineImports.length !== 0) {
+  errors.push(`Legacy engine must have zero active importers, found: ${engineImports.join(", ")}`);
+}
+if (emailImports.length !== 0) {
+  errors.push(`Legacy email sender must have zero active importers, found: ${emailImports.join(", ")}`);
+}
+
+for (const removedPath of ["src/engine.ts", "src/email.ts"]) {
+  if (fs.existsSync(path.join(root, removedPath))) errors.push(`${removedPath} must remain deleted`);
 }
 
 const read = (relativePath) => {
@@ -40,7 +47,6 @@ const index = read("src/index.ts");
 const policy = read("src/routes/operationsRoutePolicy.ts");
 const safetyHandler = read("src/routes/legacyExecutionSafetyAdmin.ts");
 const admin = read("src/routes/admin.ts");
-const engine = read("src/engine.ts");
 
 for (const token of [
   'case "legacy-admin-safety":',
@@ -75,21 +81,18 @@ for (const token of [
 for (const forbidden of [
   'from "../engine"',
   'from "./engine"',
+  'from "../email"',
+  'from "./email"',
   "dailyTick(",
   "runDraftOnce(",
   "runSendApproved(",
   "runScanOnce(",
+  "sendEmail(",
   'pathname === "/admin/run"',
   'pathname === "/admin/settings"',
   'pathname === "/admin/overview"',
 ]) {
-  if (admin.includes(forbidden)) errors.push(`Broad admin module must not contain quarantined legacy execution token: ${forbidden}`);
-}
-
-for (const helper of ["dailyTick", "runDraftOnce", "runSendApproved", "runScanOnce"]) {
-  if (!engine.includes(`export async function ${helper}`)) {
-    errors.push(`Legacy engine export ${helper} changed; review removal or migration deliberately`);
-  }
+  if (admin.includes(forbidden)) errors.push(`Broad admin module must not contain legacy execution token: ${forbidden}`);
 }
 
 const safetyDispatchPosition = index.indexOf("switch (resolveOperationsRouteHandlerId(pathname))");
@@ -101,8 +104,11 @@ if (safetyDispatchPosition < 0 || broadAdminPosition < 0 || safetyDispatchPositi
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "legacy-engine-zero-import-isolation",
-  legacyImporters: imports,
+  contract: "legacy-execution-modules-removed",
+  legacyEnginePresent: fs.existsSync(path.join(root, "src/engine.ts")),
+  legacyEmailSenderPresent: fs.existsSync(path.join(root, "src/email.ts")),
+  engineImporters: engineImports,
+  emailImporters: emailImports,
   legacyRunRoutable: false,
   legacyOverviewTruthful: true,
   futureImportersAllowed: false,

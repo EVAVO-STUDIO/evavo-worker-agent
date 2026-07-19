@@ -38,6 +38,7 @@ if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
+  "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
   "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
   "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
@@ -64,6 +65,7 @@ console.log(JSON.stringify({
   deploymentEnabled: false,
   credentialsRequired: false,
   typedRoutePoliciesRequired: true,
+  scheduledExternalExecutionAllowed: false,
   errors,
 }, null, 2));
 

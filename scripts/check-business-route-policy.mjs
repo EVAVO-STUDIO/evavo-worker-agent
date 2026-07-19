@@ -46,7 +46,7 @@ for (const raw of [
 
 for (const unsafe of [
   'authentication: "none"',
-  'confirmation: "not-required"',
+  'writeConfirmation: "not-required"',
   'callsExternalNetwork: true',
   'callsAI: true',
   'canSendEmail: true',
@@ -59,7 +59,9 @@ for (const unsafe of [
 for (const required of [
   'authentication: "handler-enforced"',
   'mutationPosture: "mixed-internal"',
-  'confirmation: "handler-enforced"',
+  'readMethods: Object.freeze(["GET"] as const)',
+  'writeMethods: Object.freeze(["POST"] as const)',
+  'writeConfirmation: "handler-enforced"',
   'callsExternalNetwork: false',
   'callsAI: false',
   'canSendEmail: false',
@@ -99,6 +101,8 @@ console.log(JSON.stringify({
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "typed-business-route-policy",
   routeGroups: ids,
+  readMethods: ["GET"],
+  writeMethods: ["POST"],
   externalExecutionEnabled: false,
   confirmationRequiredForWrites: true,
   errors,

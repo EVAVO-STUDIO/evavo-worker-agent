@@ -72,7 +72,9 @@ requireTokens("src/routes/businessRoutePolicy.ts", [
   "canSendEmail: false",
   "canPostSocial: false",
   "canSubmitForms: false",
-  'confirmation: "handler-enforced"',
+  'readMethods: Object.freeze(["GET"] as const)',
+  'writeMethods: Object.freeze(["POST"] as const)',
+  'writeConfirmation: "handler-enforced"',
   'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/workerRoutePolicy.ts", [

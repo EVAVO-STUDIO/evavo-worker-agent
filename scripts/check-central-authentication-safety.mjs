@@ -22,6 +22,7 @@ const protectedHandlers = [
   "src/routes/businessAutopilotPeopleAdmin.ts",
   "src/routes/businessAutopilotWebsiteAdmin.ts",
   "src/routes/opportunitiesAdmin.ts",
+  "src/routes/opportunityReviewAdmin.ts",
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/draftReviewAdmin.ts",
@@ -113,6 +114,22 @@ if (draftBodyPosition < 0 || draftConfirmPosition < 0 || draftReviewCallPosition
   errors.push("Draft review confirmation must run after body parsing and before review-state mutation");
 }
 
+const opportunityReview = read("src/routes/opportunityReviewAdmin.ts");
+for (const token of [
+  "function confirmed(body: any): boolean",
+  "if (!confirmed(body))",
+  'error: "confirm_required"',
+  "Opportunity review-state and strategy-score changes require explicit confirmation",
+]) {
+  if (!opportunityReview.includes(token)) errors.push(`Opportunity review confirmation contract is missing: ${token}`);
+}
+const opportunityBodyPosition = opportunityReview.indexOf("const body = await request.json()");
+const opportunityConfirmPosition = opportunityReview.indexOf("if (!confirmed(body))");
+const opportunityMutationPosition = opportunityReview.indexOf("return json(await reviewOpportunity");
+if (opportunityBodyPosition < 0 || opportunityConfirmPosition < 0 || opportunityMutationPosition < 0 || !(opportunityBodyPosition < opportunityConfirmPosition && opportunityConfirmPosition < opportunityMutationPosition)) {
+  errors.push("Opportunity review confirmation must run after body parsing and before review-state or strategy-score mutation");
+}
+
 for (const forbidden of [
   "authorization ===",
   "authorization ==",
@@ -143,6 +160,7 @@ console.log(JSON.stringify({
   publicRoutesRequireAdminToken: false,
   protectedHandlersUsingSharedAuthentication: protectedHandlers,
   draftReviewRequiresConfirmation: true,
+  opportunityReviewRequiresConfirmation: true,
   unauthenticatedProtectedPreflightAllowed: false,
   localBearerEqualityAllowed: false,
   handlerDefenceInDepthRequired: true,

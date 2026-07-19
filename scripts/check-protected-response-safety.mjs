@@ -35,18 +35,28 @@ for (const forbidden of [
   if (admin.includes(forbidden)) errors.push(`Protected admin route must not advertise wildcard browser access: ${forbidden}`);
 }
 
-const authPosition = admin.indexOf("const token = getAdminToken(env)");
+for (const token of [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  "await isAdminRequestAuthorized(request, env)",
+]) {
+  if (!admin.includes(token)) errors.push(`Admin shared authentication contract is missing: ${token}`);
+}
+const authPosition = admin.indexOf("await isAdminRequestAuthorized(request, env)");
 const optionsPosition = admin.indexOf('request.method === "OPTIONS"');
 if (authPosition < 0 || optionsPosition < 0 || authPosition >= optionsPosition) {
   errors.push("Admin authentication must run before OPTIONS handling");
 }
 
+for (const forbidden of ["getAdminToken", "`Bearer ${token}`", "function authorized("]) {
+  if (admin.includes(forbidden)) errors.push(`Admin fallback must use shared authentication instead of: ${forbidden}`);
+}
+
 for (const token of [
   'error: "method_not_allowed"',
-  'status: 405',
+  "status: 405",
   'headers: { allow: "GET, POST" }',
   'error: "Unauthorized"',
-  'status: 401',
+  "status: 401",
 ]) {
   if (!admin.includes(token)) errors.push(`Protected admin method/auth contract is missing: ${token}`);
 }
@@ -65,6 +75,7 @@ console.log(JSON.stringify({
   contract: "protected-worker-response-safety",
   wildcardAdminCorsAllowed: false,
   browserPreflightAllowedWithoutAuthentication: false,
+  sharedAdminAuthenticationRequired: true,
   protectedResponsesCacheable: false,
   contentTypeSniffingAllowed: false,
   referrerDisclosureAllowed: false,

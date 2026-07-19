@@ -35,6 +35,7 @@ import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceEx
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 import { resolveBusinessRouteHandlerId } from "./routes/businessRoutePolicy";
 import { resolveGrowthRouteHandlerId } from "./routes/growthRoutePolicy";
+import { resolveOperationsRouteHandlerId } from "./routes/operationsRoutePolicy";
 import { resolveOpportunityRouteHandlerId } from "./routes/opportunityRoutePolicy";
 import { matchesWorkerRouteFamily } from "./routes/workerRoutePolicy";
 
@@ -92,7 +93,6 @@ export default {
       const pathname = url.pathname;
 
       if (matchesWorkerRouteFamily("health", pathname)) return await handleHealth(env);
-      if (pathname === "/admin/settings/autonomy") return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
 
       switch (resolveOpportunityRouteHandlerId(pathname)) {
         case "run-due":
@@ -129,9 +129,6 @@ export default {
           break;
       }
 
-      if (pathname === "/admin/planner/routes") return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/planner" || pathname.startsWith("/admin/planner/")) return await handlePlannerAdmin(req, env, pathname, jsonResponse);
-
       switch (resolveGrowthRouteHandlerId(pathname)) {
         case "approval-requests":
           return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
@@ -160,9 +157,24 @@ export default {
           break;
       }
 
-      if (pathname === "/admin/sources/run-tiny") return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);
-      if (pathname.startsWith("/admin/sources") || pathname === "/admin/seeds") return await handleSourcesAdmin(req, env, pathname, jsonResponse);
-      if (pathname.startsWith("/admin/draft-review") || pathname.startsWith("/admin/strategy-scores")) return await handleDraftReviewAdmin(req, env, pathname, jsonResponse);
+      switch (resolveOperationsRouteHandlerId(pathname)) {
+        case "autonomy-settings":
+          return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
+        case "planner-routes":
+          return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse);
+        case "planner":
+          return await handlePlannerAdmin(req, env, pathname, jsonResponse);
+        case "source-batch":
+          return await handleSourceBatchAdmin(req, env, pathname, jsonResponse);
+        case "sources":
+          return await handleSourcesAdmin(req, env, pathname, jsonResponse);
+        case "draft-review":
+        case "strategy-scores":
+          return await handleDraftReviewAdmin(req, env, pathname, jsonResponse);
+        default:
+          break;
+      }
+
       if (matchesWorkerRouteFamily("admin", pathname)) return await handleAdmin(req, env, pathname, ctx, jsonResponse);
       if (matchesWorkerRouteFamily("tools", pathname)) return await handleTools(req, env, pathname, jsonResponse);
       if (matchesWorkerRouteFamily("public", pathname)) return await handlePublic(req, env, pathname, ctx, jsonResponse);

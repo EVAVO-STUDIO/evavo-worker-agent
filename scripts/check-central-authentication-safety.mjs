@@ -21,6 +21,7 @@ const protectedHandlers = [
   "src/routes/businessAutopilotAdmin.ts",
   "src/routes/opportunitiesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
+  "src/routes/draftReviewAdmin.ts",
 ];
 
 for (const [name, content] of [["authentication helper", auth], ["Worker dispatcher", index]]) {
@@ -91,6 +92,22 @@ for (const relativePath of protectedHandlers) {
   }
 }
 
+const draftReview = read("src/routes/draftReviewAdmin.ts");
+for (const token of [
+  "function confirmed(body: any): boolean",
+  "if (!confirmed(body))",
+  'error: "confirm_required"',
+  "Draft review-state changes require explicit confirmation",
+]) {
+  if (!draftReview.includes(token)) errors.push(`Draft review confirmation contract is missing: ${token}`);
+}
+const draftBodyPosition = draftReview.indexOf("const body = await request.json()");
+const draftConfirmPosition = draftReview.indexOf("if (!confirmed(body))");
+const draftReviewCallPosition = draftReview.indexOf("const result = await reviewDraft");
+if (draftBodyPosition < 0 || draftConfirmPosition < 0 || draftReviewCallPosition < 0 || !(draftBodyPosition < draftConfirmPosition && draftConfirmPosition < draftReviewCallPosition)) {
+  errors.push("Draft review confirmation must run after body parsing and before review-state mutation");
+}
+
 for (const forbidden of [
   "authorization ===",
   "authorization ==",
@@ -120,6 +137,7 @@ console.log(JSON.stringify({
   centralAuthenticationBeforeProtectedDispatch: true,
   publicRoutesRequireAdminToken: false,
   protectedHandlersUsingSharedAuthentication: protectedHandlers,
+  draftReviewRequiresConfirmation: true,
   unauthenticatedProtectedPreflightAllowed: false,
   localBearerEqualityAllowed: false,
   handlerDefenceInDepthRequired: true,

@@ -46,6 +46,7 @@ for (const relativePath of [
   "src/routes/workerRoutePolicy.ts",
   "src/routes/growthRoutePolicy.ts",
   "src/routes/opportunityRoutePolicy.ts",
+  "src/routes/businessRoutePolicy.ts",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
   "package.json",
@@ -63,6 +64,15 @@ requireTokens("src/routes/opportunityRoutePolicy.ts", [
   "canPostSocial: false",
   "canSubmitForms: false",
   'networkPosture: "read-only-research"',
+  'authentication: "handler-enforced"',
+]);
+requireTokens("src/routes/businessRoutePolicy.ts", [
+  "callsExternalNetwork: false",
+  "callsAI: false",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
+  'confirmation: "handler-enforced"',
   'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/workerRoutePolicy.ts", [
@@ -96,6 +106,7 @@ if (fs.existsSync(packagePath)) {
     "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
     "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
+    "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
     "typecheck": "tsc --noEmit",
   };
@@ -109,6 +120,7 @@ if (fs.existsSync(packagePath)) {
     "npm run worker:health:check",
     "npm run worker:routes:check",
     "npm run opportunities:route-policy:check",
+    "npm run business:route-policy:check",
     "npm run growth:route-policy:check",
     "npm run growth:negative-safety:check",
     "npm run typecheck",

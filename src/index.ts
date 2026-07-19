@@ -1,6 +1,7 @@
 import { dailyTickWithAutonomy } from "./engineAutonomy";
 import type { Env } from "./db";
 import { logEvent } from "./db";
+import { isAdminRequestAuthorized } from "./core/adminAuthentication";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/admin";
 import { handleTools } from "./routes/tools";
@@ -116,6 +117,13 @@ export default {
       const pathname = url.pathname;
 
       if (matchesWorkerRouteFamily("health", pathname)) return await handleHealth(env);
+
+      const protectedRoute =
+        matchesWorkerRouteFamily("admin", pathname) ||
+        matchesWorkerRouteFamily("tools", pathname);
+      if (protectedRoute && !(await isAdminRequestAuthorized(req, env))) {
+        return jsonResponse({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
 
       switch (resolveOpportunityRouteHandlerId(pathname)) {
         case "run-due":

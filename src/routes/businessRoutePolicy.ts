@@ -5,7 +5,9 @@ export type BusinessRoutePolicy = Readonly<{
   priority: number;
   authentication: "handler-enforced";
   mutationPosture: "mixed-internal";
-  confirmation: "handler-enforced";
+  readMethods: readonly ["GET"];
+  writeMethods: readonly ["POST"];
+  writeConfirmation: "handler-enforced";
   callsExternalNetwork: false;
   callsAI: false;
   canSendEmail: false;
@@ -22,44 +24,36 @@ const websiteAuditPaths = Object.freeze([
   "/admin/business/audit-observation-candidates",
 ] as const);
 
+const sharedSafety = Object.freeze({
+  authentication: "handler-enforced" as const,
+  mutationPosture: "mixed-internal" as const,
+  readMethods: Object.freeze(["GET"] as const),
+  writeMethods: Object.freeze(["POST"] as const),
+  writeConfirmation: "handler-enforced" as const,
+  callsExternalNetwork: false as const,
+  callsAI: false as const,
+  canSendEmail: false as const,
+  canPostSocial: false as const,
+  canSubmitForms: false as const,
+});
+
 const policies: readonly BusinessRoutePolicy[] = Object.freeze([
   Object.freeze({
     id: "people",
     priority: 10,
-    authentication: "handler-enforced",
-    mutationPosture: "mixed-internal",
-    confirmation: "handler-enforced",
-    callsExternalNetwork: false,
-    callsAI: false,
-    canSendEmail: false,
-    canPostSocial: false,
-    canSubmitForms: false,
+    ...sharedSafety,
     matches: (pathname: string) => pathname === "/admin/business/people",
   }),
   Object.freeze({
     id: "website-audit",
     priority: 20,
-    authentication: "handler-enforced",
-    mutationPosture: "mixed-internal",
-    confirmation: "handler-enforced",
-    callsExternalNetwork: false,
-    callsAI: false,
-    canSendEmail: false,
-    canPostSocial: false,
-    canSubmitForms: false,
+    ...sharedSafety,
     matches: (pathname: string) => websiteAuditPaths.includes(pathname as (typeof websiteAuditPaths)[number]),
   }),
   Object.freeze({
     id: "business-fallback",
     priority: 30,
-    authentication: "handler-enforced",
-    mutationPosture: "mixed-internal",
-    confirmation: "handler-enforced",
-    callsExternalNetwork: false,
-    callsAI: false,
-    canSendEmail: false,
-    canPostSocial: false,
-    canSubmitForms: false,
+    ...sharedSafety,
     matches: (pathname: string) => pathname === "/admin/business" || pathname.startsWith("/admin/business/"),
   }),
 ]);

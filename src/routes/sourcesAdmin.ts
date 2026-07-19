@@ -1,11 +1,7 @@
-import { Env, getAdminToken, getSetting, insertLead, logEvent, nowISO, uuid } from "../db";
+import { Env, getSetting, insertLead, logEvent, nowISO, uuid } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function countryFromUrl(url: string): string {
   const lower = url.toLowerCase();
@@ -261,8 +257,10 @@ async function expandCommit(env: Env, sourceId: string, limit: number) {
 }
 
 export async function handleSourcesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   if (pathname === "/admin/sources" && request.method === "GET") {
     const url = new URL(request.url);

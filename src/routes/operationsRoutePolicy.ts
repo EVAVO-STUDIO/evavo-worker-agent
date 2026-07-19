@@ -42,6 +42,7 @@ const policies: readonly OperationsRoutePolicy[] = Object.freeze([
     canSubmitForms: false,
     matches: (pathname: string) => pathname === "/admin/run"
       || pathname === "/admin/settings"
+      || pathname === "/admin/overview"
       || /^\/admin\/drafts\/[^/]+\/(approve|reject)$/.test(pathname),
   }),
   Object.freeze({

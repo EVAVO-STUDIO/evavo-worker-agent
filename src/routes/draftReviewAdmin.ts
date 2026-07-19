@@ -1,11 +1,11 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { listStrategyScores, reviewDraft } from "../core/draftReview";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
+function confirmed(body: any): boolean {
+  return body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
 }
 
 export async function handleDraftReviewAdmin(
@@ -14,8 +14,10 @@ export async function handleDraftReviewAdmin(
   pathname: string,
   json: JsonResponse
 ): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   if (pathname === "/admin/strategy-scores" && request.method === "GET") {
     const url = new URL(request.url);
@@ -26,6 +28,14 @@ export async function handleDraftReviewAdmin(
   if (pathname.startsWith("/admin/draft-review/") && request.method === "POST") {
     const draftId = pathname.split("/")[3];
     const body = await request.json().catch(() => ({}));
+    if (!confirmed(body)) {
+      return json({
+        ok: false,
+        error: "confirm_required",
+        reason: "Draft review-state changes require explicit confirmation and never trigger external execution.",
+      }, { status: 400 });
+    }
+
     const decision = String(body?.decision || "").trim() as any;
     const allowed = new Set([
       "approved",

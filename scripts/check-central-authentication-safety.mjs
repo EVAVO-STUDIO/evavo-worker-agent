@@ -54,10 +54,23 @@ if (publicPosition < 0 || publicPosition <= authPosition) {
   errors.push("Public routing must remain outside the protected-route authentication branch");
 }
 
-for (const [name, content] of [["admin", admin], ["tools", tools]]) {
-  if (!content.includes("getAdminToken")) errors.push(`${name} handler must retain defence-in-depth authentication`);
-  if (!content.includes('error: "Unauthorized"')) errors.push(`${name} handler must retain a 401 response`);
+for (const token of [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  'if (!(await isAdminRequestAuthorized(request, env)))',
+  'error: "Unauthorized"',
+  'error: "method_not_allowed"',
+  "status: 405",
+]) {
+  if (!tools.includes(token)) errors.push(`Tools handler is missing shared authentication token: ${token}`);
 }
+const toolsAuthPosition = tools.indexOf("if (!(await isAdminRequestAuthorized(request, env)))");
+const toolsOptionsPosition = tools.indexOf('request.method === "OPTIONS"');
+if (toolsAuthPosition < 0 || toolsOptionsPosition < 0 || toolsAuthPosition >= toolsOptionsPosition) {
+  errors.push("Tools authentication must run before OPTIONS handling");
+}
+
+if (!admin.includes("getAdminToken")) errors.push("Admin handler must retain defence-in-depth authentication");
+if (!admin.includes('error: "Unauthorized"')) errors.push("Admin handler must retain a 401 response");
 
 for (const forbidden of [
   "authorization ===",
@@ -68,6 +81,7 @@ for (const forbidden of [
   "OUTBOUND_AGENT_ADMIN_TOKEN",
 ]) {
   if (auth.includes(forbidden)) errors.push(`Authentication helper contains forbidden token: ${forbidden}`);
+  if (tools.includes(forbidden)) errors.push(`Tools handler contains forbidden authentication token: ${forbidden}`);
 }
 
 const expectedCommand = "node scripts/check-central-authentication-safety.mjs";
@@ -87,6 +101,8 @@ console.log(JSON.stringify({
   constantTimeDigestComparison: true,
   centralAuthenticationBeforeProtectedDispatch: true,
   publicRoutesRequireAdminToken: false,
+  toolsUseSharedAuthentication: true,
+  unauthenticatedToolsPreflightAllowed: false,
   handlerDefenceInDepthRequired: true,
   errors,
 }, null, 2));

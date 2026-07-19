@@ -1,4 +1,5 @@
-import { Env, getAdminToken, getSetting, setSetting } from "../db";
+import { Env, getSetting, setSetting } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -29,11 +30,6 @@ const defaultSettings = {
   updatedAtISO: null as string | null,
   updatedBy: "system-default",
 };
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function confirmed(body: any): boolean {
   return body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
@@ -151,8 +147,10 @@ async function writeSettings(env: Env, body: any) {
 }
 
 export async function handleAutonomySettingsAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
   if (pathname !== "/admin/settings/autonomy") return json({ ok: false, error: "Not found" }, { status: 404 });
 
   if (request.method === "GET") return json(await readSettings(env));
@@ -167,5 +165,5 @@ export async function handleAutonomySettingsAdmin(request: Request, env: Env, pa
     }
     return json(await writeSettings(env, body));
   }
-  return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+  return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
 }

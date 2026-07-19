@@ -3,7 +3,6 @@ import {
   listLeads,
   listDrafts,
   updateLead,
-  getSetting,
   listEvents,
   logEvent,
   getAdminToken,
@@ -18,16 +17,12 @@ type JsonResponse = (data: any, init?: ResponseInit) => Response;
 type InferredKind = "agency" | "contractor" | "ecommerce" | "service" | "not_fit" | "general";
 
 function defaultJson(data: unknown, init: ResponseInit = {}) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "*",
-      "access-control-allow-headers": "Content-Type, Authorization",
-      "access-control-allow-methods": "GET, POST, OPTIONS",
-      ...(init.headers || {}),
-    },
-  });
+  const headers = new Headers(init.headers || {});
+  headers.set("content-type", "application/json; charset=utf-8");
+  if (!headers.has("cache-control")) headers.set("cache-control", "no-store");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  return new Response(JSON.stringify(data), { ...init, headers });
 }
 
 function inferKind(lead: any): InferredKind {
@@ -241,12 +236,14 @@ export async function handleAdmin(
   _ctx?: any,
   json: JsonResponse = defaultJson,
 ) {
-  if (request.method === "OPTIONS") return json({ ok: true });
-
   const token = getAdminToken(env);
   const auth = request.headers.get("authorization") || "";
   if (!token || auth !== `Bearer ${token}`) {
     return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
   }
 
   if (pathname === "/admin/health" && request.method === "GET") return json(await buildHealthReport(env));

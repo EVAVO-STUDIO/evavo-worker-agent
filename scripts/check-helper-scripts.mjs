@@ -43,6 +43,8 @@ for (const relativePath of [
   "Run-BusinessOperatorWorkerRunbook.ps1",
   "Run-WorkerFinalGate.ps1",
   "src/index.ts",
+  "src/engineAutonomy.ts",
+  "src/routes/autonomySettingsAdmin.ts",
   "src/routes/workerRoutePolicy.ts",
   "src/routes/growthRoutePolicy.ts",
   "src/routes/opportunityRoutePolicy.ts",
@@ -91,6 +93,21 @@ requireTokens("src/routes/operationsRoutePolicy.ts", [
   "canSubmitForms: false",
   'authentication: "handler-enforced"',
 ]);
+requireTokens("src/engineAutonomy.ts", [
+  "settings.aiDraftsEnabled = false",
+  "settings.sendingEnabled = false",
+  "settings.leadDiscoveryEnabled = false",
+  'setSetting(env, "engine_enabled", "0")',
+  'setSetting(env, "drafting_enabled", "0")',
+  'setSetting(env, "sending_enabled", "0")',
+]);
+requireTokens("src/routes/autonomySettingsAdmin.ts", [
+  'contractVersion: "autonomy_settings_v2_review_first"',
+  "freeSafeOnly: true",
+  "canGenerateDrafts: false",
+  "canSendEmail: false",
+  "scheduledExternalExecutionDisabled: true",
+]);
 requireTokens("src/routes/workerRoutePolicy.ts", [
   'id: "health"',
   'id: "admin"',
@@ -119,6 +136,7 @@ if (fs.existsSync(packagePath)) {
   const expectedScripts = {
     "worker:health:check": "node scripts/check-worker-health-contract.mjs",
     "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
+    "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
     "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
     "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
@@ -136,6 +154,7 @@ if (fs.existsSync(packagePath)) {
     "npm run db:migrations:check",
     "npm run worker:health:check",
     "npm run worker:routes:check",
+    "npm run scheduled:autonomy-safety:check",
     "npm run opportunities:route-policy:check",
     "npm run business:route-policy:check",
     "npm run operations:route-policy:check",

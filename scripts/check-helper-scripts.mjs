@@ -17,6 +17,11 @@ function requireFile(relativePath) {
   return absolutePath;
 }
 
+function requireAbsent(relativePath) {
+  if (fs.existsSync(path.join(root, relativePath))) errors.push(`Removed file must remain absent: ${relativePath}`);
+  else passes.push(`${relativePath} is absent`);
+}
+
 function requireTokens(relativePath, tokens) {
   const absolutePath = requireFile(relativePath);
   if (!fs.existsSync(absolutePath)) return;
@@ -43,6 +48,7 @@ for (const relativePath of [
   "Run-BusinessOperatorWorkerRunbook.ps1",
   "Run-WorkerFinalGate.ps1",
   "src/index.ts",
+  "src/db.ts",
   "src/engineAutonomy.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
@@ -52,11 +58,15 @@ for (const relativePath of [
   "src/routes/opportunityRoutePolicy.ts",
   "src/routes/businessRoutePolicy.ts",
   "src/routes/operationsRoutePolicy.ts",
+  "scripts/check-runtime-capability-config.mjs",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
   "package.json",
   "package-lock.json",
 ]) requireFile(relativePath);
+
+requireAbsent("src/engine.ts");
+requireAbsent("src/email.ts");
 
 requireTokens("src/routes/growthRoutePolicy.ts", [
   "canSendEmail: false",
@@ -113,13 +123,13 @@ requireTokens("src/routes/autonomySettingsAdmin.ts", [
 ]);
 requireTokens("src/routes/legacyExecutionSafetyAdmin.ts", [
   'error: "legacy_execution_disabled"',
-  'allowedKinds: []',
+  "allowedKinds: []",
   'engine_enabled", "0"',
   'drafting_enabled: "0"',
   'sending_enabled: "0"',
-  'settingsWriteRequiresConfirmation: true',
-  'draftDecisionRequiresConfirmation: true',
-  'reviewStateOnly: true',
+  "settingsWriteRequiresConfirmation: true",
+  "draftDecisionRequiresConfirmation: true",
+  "reviewStateOnly: true",
 ]);
 requireTokens("src/routes/tools.ts", [
   "getAdminToken",
@@ -127,7 +137,7 @@ requireTokens("src/routes/tools.ts", [
   'contractVersion: "worker_tools_v2_review_first"',
   'aiDefault: "off"',
   'sendingDefault: "off"',
-  'manualLegacyExecutionDisabled: true',
+  "manualLegacyExecutionDisabled: true",
 ]);
 requireTokens("src/routes/workerRoutePolicy.ts", [
   'id: "health"',
@@ -135,14 +145,16 @@ requireTokens("src/routes/workerRoutePolicy.ts", [
   'authentication: "handler-enforced"',
   'mutationPosture: "read-only"',
 ]);
-requireTokens("README.md", [
-  "Autonomous discovery is research-memory-first and supervised-action only.",
-  "Internal automation can reason, score, prioritise, draft and learn; external execution remains confirm-gated and disabled by default.",
+requireTokens("wrangler.toml", [
+  'PUBLIC_ENGINE_NAME = "EVAVO Growth Research Worker"',
+  'CAP_CRAWL_PER_DAY = "60"',
+  "No email-provider secrets are used or accepted by the active Worker source.",
 ]);
-requireTokens("docs/business-autopilot-validation.md", [
-  "Business Autopilot validation workflow",
-  "business_people",
-  "business_websites",
+requireTokens("scripts/check-runtime-capability-config.mjs", [
+  'contract: "review-first-runtime-capability-configuration"',
+  "emailProviderConfigured: false",
+  "draftRuntimeCapConfigured: false",
+  "sendRuntimeCapConfigured: false",
 ]);
 requireTokens("scripts/check-growth-negative-safety.mjs", [
   "canSendEmail: true",
@@ -159,6 +171,9 @@ if (fs.existsSync(packagePath)) {
     "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
     "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
     "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
+    "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
+    "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
+    "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
     "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
     "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
@@ -178,6 +193,9 @@ if (fs.existsSync(packagePath)) {
     "npm run worker:routes:check",
     "npm run scheduled:autonomy-safety:check",
     "npm run manual:execution-safety:check",
+    "npm run legacy:engine-isolation:check",
+    "npm run public:surface-safety:check",
+    "npm run runtime:capability-config:check",
     "npm run opportunities:route-policy:check",
     "npm run business:route-policy:check",
     "npm run operations:route-policy:check",
@@ -200,6 +218,7 @@ console.log(JSON.stringify({
   contract: "dynamic-helper-and-gate-validation",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
+  removedLegacyExecutionModulesRequired: true,
   errors,
 }, null, 2));
 

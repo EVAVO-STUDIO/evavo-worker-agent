@@ -1,6 +1,5 @@
 import type { Env } from "./db";
 import { getSetting, logEvent, setSetting } from "./db";
-import { dailyTick as legacyDailyTick } from "./engine";
 import { runOpportunityAutonomy } from "./opportunityAutonomy";
 import { runSourceExpansion } from "./core/sourceExpansionEngine";
 import { learnSourceExpansionQuality } from "./core/sourceExpansionLearning";
@@ -78,31 +77,30 @@ export async function readAutonomySettings(env: Env): Promise<AutonomySettings> 
     maxExpansionCandidatesPerRun: asInt(saved.maxExpansionCandidatesPerRun, DEFAULT_SETTINGS.maxExpansionCandidatesPerRun, 0, 100),
   };
 
-  if (settings.freeSafeOnly) {
-    settings.aiDraftsEnabled = false;
-    settings.sendingEnabled = false;
-    if (settings.mode === "draft_preparation" || settings.mode === "controlled_outreach") settings.mode = "free_safe_autonomy";
+  // Scheduled autonomy is permanently review-first. Stored settings may describe
+  // future/manual capabilities, but cron execution never drafts or sends.
+  settings.aiDraftsEnabled = false;
+  settings.sendingEnabled = false;
+  settings.leadDiscoveryEnabled = false;
+  if (settings.mode === "draft_preparation" || settings.mode === "controlled_outreach") {
+    settings.mode = "free_safe_autonomy";
   }
-
-  if (settings.sendingEnabled && !settings.aiDraftsEnabled) settings.sendingEnabled = false;
   return settings;
 }
 
 async function syncLegacyEngineFlags(env: Env, settings: AutonomySettings): Promise<void> {
-  const legacyScanAllowed = settings.leadDiscoveryEnabled && settings.maxNetworkCallsPerRun > 0;
-  const legacyDraftAllowed = settings.aiDraftsEnabled && !settings.freeSafeOnly;
-  const legacySendAllowed = settings.sendingEnabled && !settings.freeSafeOnly;
+  const researchCap = settings.maxNetworkCallsPerRun > 0
+    ? Math.min(settings.dailySourceLimit, settings.maxNetworkCallsPerRun)
+    : 0;
 
-  await setSetting(env, "engine_enabled", settings.engineEnabled ? "1" : "0");
-  await setSetting(env, "crawl_cap_per_day", String(legacyScanAllowed ? Math.min(settings.dailySourceLimit, settings.maxNetworkCallsPerRun) : 0));
-  await setSetting(env, "draft_cap_per_day", legacyDraftAllowed ? "10" : "0");
-  await setSetting(env, "send_cap_per_day", legacySendAllowed ? "5" : "0");
-  await setSetting(env, "drafting_enabled", legacyDraftAllowed ? "1" : "0");
-  await setSetting(env, "sending_enabled", legacySendAllowed ? "1" : "0");
-}
-
-function hasLegacyStage(settings: AutonomySettings): boolean {
-  return Boolean(settings.leadDiscoveryEnabled || settings.aiDraftsEnabled || settings.sendingEnabled);
+  // The legacy engine is not invoked by scheduled autonomy. Keep its external
+  // execution stages disabled defensively in case another path reads these flags.
+  await setSetting(env, "engine_enabled", "0");
+  await setSetting(env, "crawl_cap_per_day", String(researchCap));
+  await setSetting(env, "draft_cap_per_day", "0");
+  await setSetting(env, "send_cap_per_day", "0");
+  await setSetting(env, "drafting_enabled", "0");
+  await setSetting(env, "sending_enabled", "0");
 }
 
 function scheduledFallbackSummary(result: any): string {
@@ -159,26 +157,18 @@ async function runSourceExpansionIfAllowed(env: Env, settings: AutonomySettings)
 
 export async function dailyTickWithAutonomy(env: Env): Promise<void> {
   const settings = await readAutonomySettings(env);
+  await syncLegacyEngineFlags(env, settings);
 
   if (!settings.engineEnabled) {
-    await syncLegacyEngineFlags(env, settings);
     await logEvent(env, "tick_skip", "Autonomy engine disabled by autonomy_settings_v1.");
     return;
   }
 
   if (settings.maxNetworkCallsPerRun <= 0 && settings.mode !== "observe_only") {
-    await syncLegacyEngineFlags(env, settings);
     await logEvent(env, "tick_skip", "Autonomy engine blocked because maxNetworkCallsPerRun is zero.");
     return;
   }
 
-  if (settings.freeSafeOnly && (settings.aiDraftsEnabled || settings.sendingEnabled)) {
-    await syncLegacyEngineFlags(env, settings);
-    await logEvent(env, "tick_skip", "Autonomy settings invalid: freeSafeOnly blocks AI drafts and sending.");
-    return;
-  }
-
-  await syncLegacyEngineFlags(env, settings);
   await learnExpansionQualityIfPossible(env);
   await runSourceExpansionIfAllowed(env, settings);
 
@@ -187,11 +177,9 @@ export async function dailyTickWithAutonomy(env: Env): Promise<void> {
     await learnExpansionQualityIfPossible(env);
   }
 
-  if (!hasLegacyStage(settings)) {
-    await logEvent(env, "tick_ok", "Autonomy tick completed free-safe opportunity/source-expansion run with no legacy stages enabled.");
-    return;
-  }
-
-  await logEvent(env, "tick_policy", `Autonomy mode ${settings.mode} | freeSafeOnly ${settings.freeSafeOnly ? "on" : "off"} | sourceExpansion ${settings.sourceExpansionEnabled ? "on" : "off"} | opportunityDiscovery ${settings.opportunityDiscoveryEnabled ? "on" : "off"} | leadDiscovery ${settings.leadDiscoveryEnabled ? "on" : "off"} | drafts ${settings.aiDraftsEnabled ? "on" : "off"} | sending ${settings.sendingEnabled ? "on" : "off"}`);
-  await legacyDailyTick(env);
+  await logEvent(
+    env,
+    "tick_ok",
+    `Autonomy tick completed in review-first mode | sourceExpansion ${settings.sourceExpansionEnabled ? "on" : "off"} | opportunityDiscovery ${settings.opportunityDiscoveryEnabled ? "on" : "off"} | legacyEngine off | AI drafts off | sending off`,
+  );
 }

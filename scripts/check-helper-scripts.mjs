@@ -47,6 +47,7 @@ for (const relativePath of [
   "src/routes/growthRoutePolicy.ts",
   "src/routes/opportunityRoutePolicy.ts",
   "src/routes/businessRoutePolicy.ts",
+  "src/routes/operationsRoutePolicy.ts",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
   "package.json",
@@ -75,6 +76,19 @@ requireTokens("src/routes/businessRoutePolicy.ts", [
   'readMethods: Object.freeze(["GET"] as const)',
   'writeMethods: Object.freeze(["POST"] as const)',
   'writeConfirmation: "handler-enforced"',
+  'authentication: "handler-enforced"',
+]);
+requireTokens("src/routes/operationsRoutePolicy.ts", [
+  'id: "autonomy-settings"',
+  'id: "planner-routes"',
+  'id: "source-batch"',
+  'id: "strategy-scores"',
+  'networkPosture: "read-only-research"',
+  'writeConfirmation: "handler-enforced"',
+  "callsAI: false",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
   'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/workerRoutePolicy.ts", [
@@ -109,6 +123,7 @@ if (fs.existsSync(packagePath)) {
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
     "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
     "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
+    "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
     "typecheck": "tsc --noEmit",
   };
@@ -123,6 +138,7 @@ if (fs.existsSync(packagePath)) {
     "npm run worker:routes:check",
     "npm run opportunities:route-policy:check",
     "npm run business:route-policy:check",
+    "npm run operations:route-policy:check",
     "npm run growth:route-policy:check",
     "npm run growth:negative-safety:check",
     "npm run typecheck",

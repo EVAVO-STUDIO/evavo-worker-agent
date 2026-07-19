@@ -1,4 +1,5 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -12,11 +13,6 @@ const allowedSourceOrigins = new Set([
   "manual_or_unknown",
   "candidate_preview",
 ]);
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function nowISO() {
   return new Date().toISOString();
@@ -188,8 +184,10 @@ async function opportunitySummary(env: Env) {
 }
 
 export async function handleOpportunitiesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   const url = new URL(request.url);
 

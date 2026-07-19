@@ -5,11 +5,11 @@ import {
   updateLead,
   listEvents,
   logEvent,
-  getAdminToken,
   insertLead,
   getLeadById,
   parseLeadSignals,
 } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { buildHealthReport, buildDiagnosticsReport } from "../core/health";
 import { buildSchemaReport } from "../core/schema";
 
@@ -236,9 +236,7 @@ export async function handleAdmin(
   _ctx?: any,
   json: JsonResponse = defaultJson,
 ) {
-  const token = getAdminToken(env);
-  const auth = request.headers.get("authorization") || "";
-  if (!token || auth !== `Bearer ${token}`) {
+  if (!(await isAdminRequestAuthorized(request, env))) {
     return json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

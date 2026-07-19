@@ -21,7 +21,7 @@ const tools = read(toolsPath);
 if (!index) errors.push("Missing Worker dispatcher");
 if (!policy) errors.push("Missing operational route policy");
 if (!handler) errors.push("Missing legacy execution safety handler");
-if (!admin) errors.push("Missing legacy admin handler");
+if (!admin) errors.push("Missing broad admin handler");
 if (!tools) errors.push("Missing tools capability handler");
 
 for (const token of [
@@ -92,6 +92,18 @@ for (const unsafe of [
 ]) {
   if (handler.includes(unsafe)) errors.push(`Legacy safety handler must never invoke ${unsafe}`);
   if (tools.includes(unsafe)) errors.push(`Tools capability handler must never invoke ${unsafe}`);
+  if (admin.includes(unsafe)) errors.push(`Broad admin handler must not contain legacy execution helper ${unsafe}`);
+}
+
+for (const forbidden of [
+  'from "../engine"',
+  'pathname === "/admin/run"',
+  'pathname === "/admin/settings"',
+  'pathname === "/admin/overview"',
+  '/approve")',
+  '/reject")',
+]) {
+  if (admin.includes(forbidden)) errors.push(`Broad admin handler still contains shadowed legacy route or import: ${forbidden}`);
 }
 
 const operationsPosition = index.indexOf("switch (resolveOperationsRouteHandlerId(pathname))");
@@ -106,10 +118,6 @@ if (legacyCasePosition < 0 || autonomyCasePosition < 0 || legacyCasePosition >= 
   errors.push("Legacy manual safety intercept must be the first operational route case");
 }
 
-if (!admin.includes("runDraftOnce") || !admin.includes("runSendApproved") || !admin.includes("dailyTick")) {
-  errors.push("Legacy admin execution helpers changed; review and update this safety contract deliberately");
-}
-
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
@@ -121,6 +129,7 @@ console.log(JSON.stringify({
   draftDecisionConfirmationRequired: true,
   toolsAuthenticationRequired: true,
   toolsCapabilitiesTruthful: true,
+  broadAdminLegacyCodeRemoved: true,
   errors,
 }, null, 2));
 

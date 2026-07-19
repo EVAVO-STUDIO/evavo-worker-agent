@@ -38,6 +38,7 @@ if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
+  "db:historical-compatibility:check": "node scripts/check-historical-data-compatibility.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
@@ -58,6 +59,15 @@ for (const [scriptName, expectedCommand] of Object.entries(expectedScripts)) {
   }
 }
 
+for (const [scriptName, expectedCommand] of Object.entries({
+  "db:init:local": "node scripts/refuse-legacy-schema-init.mjs local",
+  "db:init:remote": "node scripts/refuse-legacy-schema-init.mjs remote",
+})) {
+  if (packageJson.scripts?.[scriptName] !== expectedCommand) {
+    errors.push(`package.json must keep ${scriptName} fail-closed as ${expectedCommand}`);
+  }
+}
+
 if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local")) {
   errors.push("Predeploy must continue to run the complete local gate");
 }
@@ -75,6 +85,8 @@ console.log(JSON.stringify({
   legacyEngineImportExpansionAllowed: false,
   emailProviderConfigurationAllowed: false,
   draftOrSendRuntimeCapsAllowed: false,
+  historicalStatusesExecutable: false,
+  legacySchemaInitializationAllowed: false,
   publicOperationalRecordsExposed: false,
   errors,
 }, null, 2));

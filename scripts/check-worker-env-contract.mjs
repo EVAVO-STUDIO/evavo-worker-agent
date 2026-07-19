@@ -22,6 +22,8 @@ for (const required of [
   "DB: D1Database",
   "ADMIN_TOKEN?: string",
   "CAP_CRAWL_PER_DAY?: string",
+  "export function getAdminToken(env: Env): string | undefined",
+  "return env.ADMIN_TOKEN;",
   "export type LeadStatus",
   '"sent"',
   "export type DraftStatus",
@@ -30,14 +32,16 @@ for (const required of [
 }
 
 for (const forbidden of [
+  "PUBLIC_CONTROL_KEY",
+  "OUTBOUND_AGENT_ADMIN_TOKEN",
   "MAILCHANNELS_API_KEY",
   "FROM_EMAIL",
   "REPLY_TO_EMAIL",
   "CAP_DRAFTS_PER_DAY",
   "CAP_SEND_PER_DAY",
 ]) {
-  if (db.includes(forbidden)) errors.push(`src/db.ts must not advertise deleted outbound capability: ${forbidden}`);
-  if (wrangler.includes(forbidden)) errors.push(`wrangler.toml must not configure deleted outbound capability: ${forbidden}`);
+  if (db.includes(forbidden)) errors.push(`src/db.ts must not advertise deleted or legacy capability: ${forbidden}`);
+  if (wrangler.includes(forbidden)) errors.push(`wrangler.toml must not configure deleted or legacy capability: ${forbidden}`);
 }
 
 for (const removedPath of ["src/engine.ts", "src/email.ts"]) {
@@ -56,6 +60,9 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "review-first-worker-environment",
+  canonicalCredential: "ADMIN_TOKEN",
+  legacyCredentialAliasesAdvertised: false,
+  publicControlCredentialAdvertised: false,
   mailProviderFieldsAdvertised: false,
   draftRuntimeCapAdvertised: false,
   sendRuntimeCapAdvertised: false,

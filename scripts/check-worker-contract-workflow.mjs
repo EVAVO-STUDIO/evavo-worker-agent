@@ -39,6 +39,7 @@ const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
+  "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
   "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
   "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
@@ -66,6 +67,7 @@ console.log(JSON.stringify({
   credentialsRequired: false,
   typedRoutePoliciesRequired: true,
   scheduledExternalExecutionAllowed: false,
+  manualLegacyExecutionAllowed: false,
   errors,
 }, null, 2));
 

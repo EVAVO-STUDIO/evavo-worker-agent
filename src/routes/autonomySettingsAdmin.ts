@@ -37,6 +37,10 @@ function authorized(request: Request, env: Env): boolean {
   return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
 }
 
+function confirmed(body: any): boolean {
+  return body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
+}
+
 function parseJson(value: string | null) {
   if (!value) return null;
   try {
@@ -133,6 +137,7 @@ async function readSettings(env: Env) {
       sendingOffWhenFreeSafe: true,
       readSecretsFromServerOnly: true,
       sourceExpansionSaveRequiresConfirmation: true,
+      settingsWriteRequiresConfirmation: true,
     },
   };
 }
@@ -152,6 +157,7 @@ async function writeSettings(env: Env, body: any) {
       sendsEmail: false,
       writesSettingsOnly: true,
       sourceExpansionSaveRequiresConfirmation: true,
+      settingsWriteRequiresConfirmation: true,
     },
   };
 }
@@ -164,6 +170,13 @@ export async function handleAutonomySettingsAdmin(request: Request, env: Env, pa
   if (request.method === "GET") return json(await readSettings(env));
   if (request.method === "POST") {
     const body = await request.json().catch(() => ({}));
+    if (!confirmed(body)) {
+      return json({
+        ok: false,
+        error: "confirm_required",
+        reason: "Autonomy setting changes require explicit confirmation because they can alter engine, research, AI-draft and sending capabilities.",
+      }, { status: 400 });
+    }
     return json(await writeSettings(env, body));
   }
   return json({ ok: false, error: "method_not_allowed" }, { status: 405 });

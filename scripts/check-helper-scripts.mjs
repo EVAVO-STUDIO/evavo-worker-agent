@@ -50,6 +50,7 @@ for (const relativePath of [
   "src/index.ts",
   "src/db.ts",
   "src/engineAutonomy.ts",
+  "src/core/adminAuthentication.ts",
   "src/routes/admin.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
@@ -59,6 +60,7 @@ for (const relativePath of [
   "src/routes/opportunityRoutePolicy.ts",
   "src/routes/businessRoutePolicy.ts",
   "src/routes/operationsRoutePolicy.ts",
+  "scripts/check-central-authentication-safety.mjs",
   "scripts/check-worker-credential-contract.mjs",
   "scripts/check-worker-env-contract.mjs",
   "scripts/check-protected-response-safety.mjs",
@@ -78,13 +80,24 @@ requireTokens("src/db.ts", [
   "export function getAdminToken(env: Env): string | undefined",
   "return env.ADMIN_TOKEN;",
 ]);
+requireTokens("src/core/adminAuthentication.ts", [
+  'authorization.startsWith("Bearer ")',
+  'authorization.slice("Bearer ".length)',
+  'crypto.subtle.digest("SHA-256"',
+  "difference |= leftDigest[index] ^ rightDigest[index]",
+  "return constantTimeEqual(provided, expected)",
+]);
 requireTokens("src/index.ts", [
   'headers.set("cache-control", "no-store")',
   'headers.set("x-content-type-options", "nosniff")',
   'headers.set("referrer-policy", "no-referrer")',
   "runScheduledSafely",
+  'import { isAdminRequestAuthorized } from "./core/adminAuthentication"',
+  "if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))",
 ]);
 requireTokens("src/routes/admin.ts", [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  "await isAdminRequestAuthorized(request, env)",
   'error: "Unauthorized"',
   'error: "method_not_allowed"',
   "status: 405",
@@ -139,6 +152,8 @@ requireTokens("src/engineAutonomy.ts", [
   'setSetting(env, "sending_enabled", "0")',
 ]);
 requireTokens("src/routes/autonomySettingsAdmin.ts", [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  "await isAdminRequestAuthorized(request, env)",
   'contractVersion: "autonomy_settings_v2_review_first"',
   "freeSafeOnly: true",
   "canGenerateDrafts: false",
@@ -146,6 +161,8 @@ requireTokens("src/routes/autonomySettingsAdmin.ts", [
   "scheduledExternalExecutionDisabled: true",
 ]);
 requireTokens("src/routes/legacyExecutionSafetyAdmin.ts", [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  "await isAdminRequestAuthorized(request, env)",
   'error: "legacy_execution_disabled"',
   "allowedKinds: []",
   'engine_enabled", "0"',
@@ -156,7 +173,8 @@ requireTokens("src/routes/legacyExecutionSafetyAdmin.ts", [
   "reviewStateOnly: true",
 ]);
 requireTokens("src/routes/tools.ts", [
-  "getAdminToken",
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  "await isAdminRequestAuthorized(request, env)",
   'error: "Unauthorized"',
   'contractVersion: "worker_tools_v2_review_first"',
   'aiDefault: "off"',
@@ -174,6 +192,13 @@ requireTokens("wrangler.toml", [
   'CAP_CRAWL_PER_DAY = "60"',
   "No email-provider secrets are used or accepted by the active Worker source.",
   "ADMIN_TOKEN",
+]);
+requireTokens("scripts/check-central-authentication-safety.mjs", [
+  'contract: "central-protected-route-authentication"',
+  'canonicalCredential: "ADMIN_TOKEN"',
+  "constantTimeDigestComparison: true",
+  "unauthenticatedProtectedPreflightAllowed: false",
+  "localBearerEqualityAllowed: false",
 ]);
 requireTokens("scripts/check-worker-credential-contract.mjs", [
   'contract: "canonical-server-side-worker-credential"',
@@ -215,6 +240,18 @@ for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
   if (dbContent.includes(forbidden)) errors.push(`Worker environment must not contain legacy credential alias: ${forbidden}`);
 }
 
+for (const relativePath of [
+  "src/routes/admin.ts",
+  "src/routes/tools.ts",
+  "src/routes/autonomySettingsAdmin.ts",
+  "src/routes/legacyExecutionSafetyAdmin.ts",
+]) {
+  const content = fs.readFileSync(path.join(root, relativePath), "utf8");
+  for (const forbidden of ["getAdminToken", "function authorized(", "`Bearer ${token}`"]) {
+    if (content.includes(forbidden)) errors.push(`${relativePath} must use shared authentication instead of: ${forbidden}`);
+  }
+}
+
 const adminContent = fs.readFileSync(path.join(root, "src/routes/admin.ts"), "utf8");
 if (adminContent.includes('access-control-allow-origin": "*"')) {
   errors.push("Protected admin fallback must not expose wildcard CORS");
@@ -226,6 +263,7 @@ if (fs.existsSync(packagePath)) {
   const scripts = packageJson.scripts || {};
   const expectedScripts = {
     "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+    "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
     "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
     "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
     "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
@@ -252,6 +290,7 @@ if (fs.existsSync(packagePath)) {
     "npm run scripts:check",
     "npm run db:migrations:check",
     "npm run worker:health:check",
+    "npm run worker:central-auth-safety:check",
     "npm run worker:credential-contract:check",
     "npm run worker:env-contract:check",
     "npm run worker:protected-response-safety:check",
@@ -285,6 +324,7 @@ console.log(JSON.stringify({
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
+  sharedProtectedAuthenticationRequired: true,
   legacyCredentialAliasesAllowed: false,
   removedLegacyExecutionModulesRequired: true,
   protectedResponseSafetyRequired: true,

@@ -18,6 +18,8 @@ const protectedHandlers = [
   "src/routes/tools.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
+  "src/routes/businessAutopilotAdmin.ts",
+  "src/routes/opportunitiesAdmin.ts",
 ];
 
 for (const [name, content] of [["authentication helper", auth], ["Worker dispatcher", index]]) {

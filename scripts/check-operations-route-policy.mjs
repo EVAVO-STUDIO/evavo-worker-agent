@@ -6,13 +6,16 @@ import path from "node:path";
 const root = process.cwd();
 const policyPath = path.join(root, "src", "routes", "operationsRoutePolicy.ts");
 const indexPath = path.join(root, "src", "index.ts");
+const autonomyPath = path.join(root, "src", "routes", "autonomySettingsAdmin.ts");
 const errors = [];
 
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
+const autonomy = fs.existsSync(autonomyPath) ? fs.readFileSync(autonomyPath, "utf8") : "";
 
 if (!policy) errors.push("Missing typed operational route policy registry");
 if (!index) errors.push("Missing Worker dispatcher");
+if (!autonomy) errors.push("Missing autonomy settings handler");
 
 const ids = ["autonomy-settings", "planner-routes", "planner", "source-batch", "sources", "draft-review", "strategy-scores"];
 for (const id of ids) {
@@ -72,6 +75,24 @@ for (const required of [
   if (!policy.includes(required)) errors.push(`Operational policy is missing: ${required}`);
 }
 
+for (const token of [
+  'function confirmed(body: any): boolean',
+  'if (!confirmed(body))',
+  'error: "confirm_required"',
+  'settingsWriteRequiresConfirmation: true',
+]) {
+  if (!autonomy.includes(token)) errors.push(`Autonomy settings handler is missing confirmation guard: ${token}`);
+}
+
+const autonomyPolicyStart = policy.indexOf('id: "autonomy-settings"');
+const autonomyPolicyEnd = policy.indexOf('id: "planner-routes"', autonomyPolicyStart);
+const autonomyPolicy = autonomyPolicyStart >= 0 && autonomyPolicyEnd > autonomyPolicyStart
+  ? policy.slice(autonomyPolicyStart, autonomyPolicyEnd)
+  : "";
+if (!autonomyPolicy.includes('writeConfirmation: "handler-enforced"')) {
+  errors.push("Autonomy settings policy must require handler-enforced confirmation");
+}
+
 const priorities = [...policy.matchAll(/priority:\s*(\d+)/g)].map((match) => Number(match[1]));
 if (priorities.length !== ids.length) errors.push(`Expected ${ids.length} operational priorities, found ${priorities.length}`);
 if (new Set(priorities).size !== priorities.length) errors.push("Operational route priorities must be unique");
@@ -106,6 +127,7 @@ console.log(JSON.stringify({
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "typed-operational-route-policy",
   routeGroups: ids,
+  autonomySettingsRequireConfirmation: true,
   externalResearchOnly: true,
   externalExecutionEnabled: false,
   errors,

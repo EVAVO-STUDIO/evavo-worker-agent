@@ -30,6 +30,8 @@ for (const required of [
 }
 
 for (const forbidden of [
+  "PUBLIC_CONTROL_KEY",
+  "OUTBOUND_AGENT_ADMIN_TOKEN",
   "CAP_DRAFTS_PER_DAY",
   "CAP_SEND_PER_DAY",
   "MAILCHANNELS_API_KEY",
@@ -37,8 +39,8 @@ for (const forbidden of [
   "REPLY_TO_EMAIL",
   "api.mailchannels.net",
 ]) {
-  if (wrangler.includes(forbidden)) errors.push(`wrangler.toml must not advertise outbound capability: ${forbidden}`);
-  if (db.includes(forbidden)) errors.push(`src/db.ts Env must not advertise outbound capability: ${forbidden}`);
+  if (wrangler.includes(forbidden)) errors.push(`wrangler.toml must not advertise legacy or outbound capability: ${forbidden}`);
+  if (db.includes(forbidden)) errors.push(`src/db.ts Env must not advertise legacy or outbound capability: ${forbidden}`);
 }
 
 for (const required of [
@@ -46,6 +48,8 @@ for (const required of [
   "DB: D1Database",
   "ADMIN_TOKEN?: string",
   "CAP_CRAWL_PER_DAY?: string",
+  "export function getAdminToken(env: Env): string | undefined",
+  "return env.ADMIN_TOKEN;",
   "export type LeadStatus",
   '"sent"',
   "export type DraftStatus",
@@ -106,8 +110,15 @@ const sourceFiles = fs.existsSync(srcRoot)
 for (const absolute of sourceFiles) {
   const relative = path.relative(root, absolute).replaceAll("\\", "/");
   const content = fs.readFileSync(absolute, "utf8");
-  for (const forbidden of ["api.mailchannels.net", "sendEmail(", 'from "./email"', 'from "../email"']) {
-    if (content.includes(forbidden)) errors.push(`${relative} contains forbidden outbound email token: ${forbidden}`);
+  for (const forbidden of [
+    "PUBLIC_CONTROL_KEY",
+    "OUTBOUND_AGENT_ADMIN_TOKEN",
+    "api.mailchannels.net",
+    "sendEmail(",
+    'from "./email"',
+    'from "../email"',
+  ]) {
+    if (content.includes(forbidden)) errors.push(`${relative} contains forbidden runtime token: ${forbidden}`);
   }
 }
 
@@ -123,6 +134,9 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "review-first-runtime-capability-configuration",
+  canonicalCredential: "ADMIN_TOKEN",
+  legacyCredentialAliasesAdvertised: false,
+  publicControlCredentialAdvertised: false,
   outboundEmailModulePresent: fs.existsSync(path.join(root, "src/email.ts")),
   legacyExecutionModulePresent: fs.existsSync(path.join(root, "src/engine.ts")),
   mailProviderFieldsAdvertised: false,

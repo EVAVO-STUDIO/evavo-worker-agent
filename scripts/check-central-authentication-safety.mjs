@@ -12,9 +12,13 @@ const read = (relativePath) => {
 
 const auth = read("src/core/adminAuthentication.ts");
 const index = read("src/index.ts");
-const admin = read("src/routes/admin.ts");
-const tools = read("src/routes/tools.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
+const protectedHandlers = [
+  "src/routes/admin.ts",
+  "src/routes/tools.ts",
+  "src/routes/autonomySettingsAdmin.ts",
+  "src/routes/legacyExecutionSafetyAdmin.ts",
+];
 
 for (const [name, content] of [["authentication helper", auth], ["Worker dispatcher", index]]) {
   if (!content) errors.push(`Missing ${name}`);
@@ -54,23 +58,35 @@ if (publicPosition < 0 || publicPosition <= authPosition) {
   errors.push("Public routing must remain outside the protected-route authentication branch");
 }
 
-for (const token of [
-  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-  'if (!(await isAdminRequestAuthorized(request, env)))',
-  'error: "Unauthorized"',
-  'error: "method_not_allowed"',
-  "status: 405",
-]) {
-  if (!tools.includes(token)) errors.push(`Tools handler is missing shared authentication token: ${token}`);
+for (const relativePath of protectedHandlers) {
+  const content = read(relativePath);
+  if (!content) {
+    errors.push(`Missing protected handler: ${relativePath}`);
+    continue;
+  }
+  for (const token of [
+    'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+    'await isAdminRequestAuthorized(request, env)',
+    'error: "Unauthorized"',
+  ]) {
+    if (!content.includes(token)) errors.push(`${relativePath} is missing shared authentication token: ${token}`);
+  }
+  const handlerAuthPosition = content.indexOf("await isAdminRequestAuthorized(request, env)");
+  const optionsPosition = content.indexOf('request.method === "OPTIONS"');
+  if (optionsPosition >= 0 && (handlerAuthPosition < 0 || handlerAuthPosition >= optionsPosition)) {
+    errors.push(`${relativePath} must authenticate before OPTIONS handling`);
+  }
+  for (const forbidden of [
+    "getAdminToken",
+    "function authorized(",
+    "authorization ===",
+    "authorization ==",
+    "`Bearer ${token}`",
+    'request.method === "OPTIONS") return json({ ok: true',
+  ]) {
+    if (content.includes(forbidden)) errors.push(`${relativePath} contains forbidden local authentication token: ${forbidden}`);
+  }
 }
-const toolsAuthPosition = tools.indexOf("if (!(await isAdminRequestAuthorized(request, env)))");
-const toolsOptionsPosition = tools.indexOf('request.method === "OPTIONS"');
-if (toolsAuthPosition < 0 || toolsOptionsPosition < 0 || toolsAuthPosition >= toolsOptionsPosition) {
-  errors.push("Tools authentication must run before OPTIONS handling");
-}
-
-if (!admin.includes("getAdminToken")) errors.push("Admin handler must retain defence-in-depth authentication");
-if (!admin.includes('error: "Unauthorized"')) errors.push("Admin handler must retain a 401 response");
 
 for (const forbidden of [
   "authorization ===",
@@ -81,7 +97,6 @@ for (const forbidden of [
   "OUTBOUND_AGENT_ADMIN_TOKEN",
 ]) {
   if (auth.includes(forbidden)) errors.push(`Authentication helper contains forbidden token: ${forbidden}`);
-  if (tools.includes(forbidden)) errors.push(`Tools handler contains forbidden authentication token: ${forbidden}`);
 }
 
 const expectedCommand = "node scripts/check-central-authentication-safety.mjs";
@@ -101,8 +116,9 @@ console.log(JSON.stringify({
   constantTimeDigestComparison: true,
   centralAuthenticationBeforeProtectedDispatch: true,
   publicRoutesRequireAdminToken: false,
-  toolsUseSharedAuthentication: true,
-  unauthenticatedToolsPreflightAllowed: false,
+  protectedHandlersUsingSharedAuthentication: protectedHandlers,
+  unauthenticatedProtectedPreflightAllowed: false,
+  localBearerEqualityAllowed: false,
   handlerDefenceInDepthRequired: true,
   errors,
 }, null, 2));

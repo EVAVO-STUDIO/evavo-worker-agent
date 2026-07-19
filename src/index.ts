@@ -34,6 +34,7 @@ import { handleSourceExpansionBudgetRecommendationsAdmin } from "./routes/source
 import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceExpansionPublicDirectoryScanAdmin";
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 import { resolveGrowthRouteHandlerId } from "./routes/growthRoutePolicy";
+import { resolveOpportunityRouteHandlerId } from "./routes/opportunityRoutePolicy";
 import { matchesWorkerRouteFamily } from "./routes/workerRoutePolicy";
 
 const unexpectedWorkerErrorMessage = "The Worker hit an unexpected internal error before a safe response could be returned.";
@@ -79,30 +80,6 @@ async function handleHealth(env: Env): Promise<Response> {
   }
 }
 
-function isOpportunityDiscoveryPath(pathname: string): boolean {
-  return pathname.startsWith("/admin/opportunities/sources/") && (pathname.endsWith("/test") || pathname.endsWith("/preview") || pathname.endsWith("/commit-preview"));
-}
-
-function isOpportunityReviewPath(pathname: string): boolean {
-  return pathname === "/admin/opportunities/reviews" || pathname === "/admin/opportunities/strategy-scores" || (pathname.startsWith("/admin/opportunities/") && pathname.endsWith("/review"));
-}
-
-function isOpportunityRunAuditPath(pathname: string): boolean {
-  return pathname === "/admin/opportunities/runs" || pathname.startsWith("/admin/opportunities/runs/");
-}
-
-function isOpportunitySourceHealthActionPath(pathname: string): boolean {
-  return /^\/admin\/opportunities\/sources\/[^/]+\/health-action$/.test(pathname);
-}
-
-function isOpportunitySourceCandidatePath(pathname: string): boolean {
-  return pathname === "/admin/opportunities/sources/candidates/preview" || pathname === "/admin/opportunities/sources/candidates/commit";
-}
-
-function isSourceExpansionPath(pathname: string): boolean {
-  return pathname.startsWith("/admin/opportunities/sources/expansion/");
-}
-
 function isBusinessWebsitePath(pathname: string): boolean {
   return pathname === "/admin/business/websites"
     || pathname === "/admin/business/pages"
@@ -123,21 +100,42 @@ export default {
 
       if (matchesWorkerRouteFamily("health", pathname)) return await handleHealth(env);
       if (pathname === "/admin/settings/autonomy") return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/run-due") return await handleOpportunityRunDueAdmin(req, env, pathname, jsonResponse);
-      if (isOpportunityRunAuditPath(pathname)) return await handleOpportunityRunsAdmin(req, env, pathname, jsonResponse);
-      if (isOpportunitySourceHealthActionPath(pathname)) return await handleOpportunitySourceHealthActionsAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/sources/origin-metrics") return await handleOpportunitySourceOriginMetricsAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/sources/expansion/budget-recommendations") return await handleSourceExpansionBudgetRecommendationsAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/sources/expansion/public-directory-scan") return await handleSourceExpansionPublicDirectoryScanAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/sources/expansion/query-hints/resolve") return await handleSourceExpansionQueryHintResolverAdmin(req, env, pathname, jsonResponse);
-      if (isSourceExpansionPath(pathname)) return await handleSourceExpansionAdmin(req, env, pathname, jsonResponse);
-      if (isOpportunitySourceCandidatePath(pathname)) return await handleOpportunitySourceCandidatesAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/sources/health") return await handleOpportunitySourceHealthAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/scoring-diagnostics") return await handleOpportunityScoringDiagnosticsAdmin(req, env, pathname, jsonResponse);
-      if (isOpportunityDiscoveryPath(pathname)) return await handleOpportunityDiscoveryAdmin(req, env, pathname, jsonResponse);
-      if (pathname === "/admin/opportunities/learning") return await handleOpportunityLearningAdmin(req, env, pathname, jsonResponse);
-      if (isOpportunityReviewPath(pathname)) return await handleOpportunityReviewAdmin(req, env, pathname, jsonResponse);
-      if (pathname.startsWith("/admin/opportunities")) return await handleOpportunitiesAdmin(req, env, pathname, jsonResponse);
+
+      switch (resolveOpportunityRouteHandlerId(pathname)) {
+        case "run-due":
+          return await handleOpportunityRunDueAdmin(req, env, pathname, jsonResponse);
+        case "runs":
+          return await handleOpportunityRunsAdmin(req, env, pathname, jsonResponse);
+        case "source-health-action":
+          return await handleOpportunitySourceHealthActionsAdmin(req, env, pathname, jsonResponse);
+        case "origin-metrics":
+          return await handleOpportunitySourceOriginMetricsAdmin(req, env, pathname, jsonResponse);
+        case "expansion-budget-recommendations":
+          return await handleSourceExpansionBudgetRecommendationsAdmin(req, env, pathname, jsonResponse);
+        case "public-directory-scan":
+          return await handleSourceExpansionPublicDirectoryScanAdmin(req, env, pathname, jsonResponse);
+        case "query-hint-resolver":
+          return await handleSourceExpansionQueryHintResolverAdmin(req, env, pathname, jsonResponse);
+        case "source-expansion":
+          return await handleSourceExpansionAdmin(req, env, pathname, jsonResponse);
+        case "source-candidates":
+          return await handleOpportunitySourceCandidatesAdmin(req, env, pathname, jsonResponse);
+        case "source-health":
+          return await handleOpportunitySourceHealthAdmin(req, env, pathname, jsonResponse);
+        case "scoring-diagnostics":
+          return await handleOpportunityScoringDiagnosticsAdmin(req, env, pathname, jsonResponse);
+        case "discovery":
+          return await handleOpportunityDiscoveryAdmin(req, env, pathname, jsonResponse);
+        case "learning":
+          return await handleOpportunityLearningAdmin(req, env, pathname, jsonResponse);
+        case "review":
+          return await handleOpportunityReviewAdmin(req, env, pathname, jsonResponse);
+        case "opportunities-fallback":
+          return await handleOpportunitiesAdmin(req, env, pathname, jsonResponse);
+        default:
+          break;
+      }
+
       if (pathname === "/admin/planner/routes") return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/planner" || pathname.startsWith("/admin/planner/")) return await handlePlannerAdmin(req, env, pathname, jsonResponse);
 

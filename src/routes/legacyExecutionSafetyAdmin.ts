@@ -1,4 +1,5 @@
-import { Env, getAdminToken, getDraftById, getSetting, logEvent, setSetting, updateLead } from "../db";
+import { Env, getDraftById, getSetting, logEvent, setSetting, updateLead } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { FREE_SAFE_DEFAULT_SETTINGS } from "../core/settings";
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -35,11 +36,6 @@ const FORCED_SAFE_SETTINGS = Object.freeze({
   per_tick_draft_limit: "0",
   per_tick_ai_call_limit: "0",
 });
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function confirmed(body: any): boolean {
   return body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
@@ -184,8 +180,10 @@ async function updateDraftDecision(request: Request, env: Env, pathname: string,
 }
 
 export async function handleLegacyExecutionSafetyAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   if (pathname === "/admin/run") {
     await enforceSafeExecutionSettings(env);

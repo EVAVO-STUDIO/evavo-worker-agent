@@ -1,4 +1,5 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { plannerRouteCatalogue } from "./routeCataloguePlanner";
 import { sourceRouteCatalogue } from "./routeCatalogueSources";
 import { opportunityRouteCatalogue } from "./routeCatalogueOpportunities";
@@ -14,11 +15,6 @@ const routes: RouteCatalogueItem[] = [
   ...safetyRouteCatalogue,
 ];
 
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
-
 function groupedRoutes() {
   return routes.reduce<Record<string, RouteCatalogueItem[]>>((acc, route) => {
     acc[route.section] = acc[route.section] || [];
@@ -28,9 +24,11 @@ function groupedRoutes() {
 }
 
 export async function handlePlannerRoutesAdmin(request: Request, env: Env, _pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET" } });
+  }
+  if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET" } });
 
   return json({
     ok: true,

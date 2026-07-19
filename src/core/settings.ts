@@ -33,7 +33,30 @@ export const FREE_SAFE_DEFAULT_SETTINGS = {
 } as const;
 
 export type SettingKey = keyof typeof FREE_SAFE_DEFAULT_SETTINGS;
-export const ALLOWED_SETTING_KEYS = new Set<string>(Object.keys(FREE_SAFE_DEFAULT_SETTINGS));
+
+export const BLOCKED_EXECUTION_SETTING_KEYS = Object.freeze([
+  "ai_enabled",
+  "ai_mode",
+  "sending_enabled",
+  "drafting_enabled",
+  "daily_draft_limit",
+  "daily_ai_call_limit",
+  "daily_send_limit",
+  "per_tick_draft_limit",
+  "per_tick_ai_call_limit",
+] as const satisfies readonly SettingKey[]);
+
+const blockedExecutionSettings = new Set<string>(BLOCKED_EXECUTION_SETTING_KEYS);
+
+/**
+ * General settings writers may change bounded research, retention and review
+ * controls only. Execution-related keys remain readable with fail-closed
+ * defaults for historical D1 compatibility, but they are never generally
+ * mutable and are forced off by the dedicated safety handlers.
+ */
+export const ALLOWED_SETTING_KEYS = new Set<string>(
+  Object.keys(FREE_SAFE_DEFAULT_SETTINGS).filter((key) => !blockedExecutionSettings.has(key))
+);
 
 export async function getSettingWithDefault(env: Env, key: SettingKey): Promise<string> {
   return (await getSetting(env, key)) ?? FREE_SAFE_DEFAULT_SETTINGS[key];

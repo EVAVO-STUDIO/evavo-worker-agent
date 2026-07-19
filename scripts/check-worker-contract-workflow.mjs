@@ -37,6 +37,7 @@ if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_
 
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+  "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
   "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
   "db:historical-compatibility:check": "node scripts/check-historical-data-compatibility.mjs",
@@ -81,6 +82,10 @@ console.log(JSON.stringify({
   deploymentEnabled: false,
   credentialsRequired: false,
   typedRoutePoliciesRequired: true,
+  mailProviderFieldsAdvertised: false,
+  draftOrSendRuntimeCapsAdvertised: false,
+  historicalStatusesReadable: true,
+  historicalStatusesExecutable: false,
   protectedResponsesCacheable: false,
   wildcardProtectedCorsAllowed: false,
   unauthenticatedProtectedPreflightAllowed: false,
@@ -90,7 +95,6 @@ console.log(JSON.stringify({
   legacyEngineImportExpansionAllowed: false,
   emailProviderConfigurationAllowed: false,
   draftOrSendRuntimeCapsAllowed: false,
-  historicalStatusesExecutable: false,
   legacySchemaInitializationAllowed: false,
   migrationTargetDefaultsAllowed: false,
   ambiguousMigrationPrefixExecutionAllowed: false,

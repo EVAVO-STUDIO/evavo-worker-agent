@@ -46,6 +46,9 @@ const HEALTH_CONTRACT_VERSION = "2026-07";
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
+  if (!headers.has("cache-control")) headers.set("cache-control", "no-store");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 

@@ -50,6 +50,7 @@ for (const relativePath of [
   "src/index.ts",
   "src/db.ts",
   "src/engineAutonomy.ts",
+  "src/routes/admin.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
   "src/routes/tools.ts",
@@ -58,6 +59,7 @@ for (const relativePath of [
   "src/routes/opportunityRoutePolicy.ts",
   "src/routes/businessRoutePolicy.ts",
   "src/routes/operationsRoutePolicy.ts",
+  "scripts/check-protected-response-safety.mjs",
   "scripts/check-runtime-capability-config.mjs",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
@@ -68,6 +70,19 @@ for (const relativePath of [
 requireAbsent("src/engine.ts");
 requireAbsent("src/email.ts");
 
+requireTokens("src/index.ts", [
+  'headers.set("cache-control", "no-store")',
+  'headers.set("x-content-type-options", "nosniff")',
+  'headers.set("referrer-policy", "no-referrer")',
+]);
+requireTokens("src/routes/admin.ts", [
+  'error: "Unauthorized"',
+  'error: "method_not_allowed"',
+  'status: 405',
+  'headers: { allow: "GET, POST" }',
+  'headers.set("cache-control", "no-store")',
+  'headers.set("x-content-type-options", "nosniff")',
+]);
 requireTokens("src/routes/growthRoutePolicy.ts", [
   "canSendEmail: false",
   "canPostSocial: false",
@@ -150,6 +165,12 @@ requireTokens("wrangler.toml", [
   'CAP_CRAWL_PER_DAY = "60"',
   "No email-provider secrets are used or accepted by the active Worker source.",
 ]);
+requireTokens("scripts/check-protected-response-safety.mjs", [
+  'contract: "protected-worker-response-safety"',
+  "wildcardAdminCorsAllowed: false",
+  "browserPreflightAllowedWithoutAuthentication: false",
+  "protectedResponsesCacheable: false",
+]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
   'contract: "review-first-runtime-capability-configuration"',
   "emailProviderConfigured: false",
@@ -162,12 +183,18 @@ requireTokens("scripts/check-growth-negative-safety.mjs", [
   "canSubmitForms: true",
 ]);
 
+const adminContent = fs.readFileSync(path.join(root, "src/routes/admin.ts"), "utf8");
+if (adminContent.includes('access-control-allow-origin": "*"')) {
+  errors.push("Protected admin fallback must not expose wildcard CORS");
+}
+
 const packagePath = path.join(root, "package.json");
 if (fs.existsSync(packagePath)) {
   const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
   const scripts = packageJson.scripts || {};
   const expectedScripts = {
     "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+    "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
     "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
     "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
     "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
@@ -190,6 +217,7 @@ if (fs.existsSync(packagePath)) {
     "npm run scripts:check",
     "npm run db:migrations:check",
     "npm run worker:health:check",
+    "npm run worker:protected-response-safety:check",
     "npm run worker:routes:check",
     "npm run scheduled:autonomy-safety:check",
     "npm run manual:execution-safety:check",
@@ -219,6 +247,7 @@ console.log(JSON.stringify({
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   removedLegacyExecutionModulesRequired: true,
+  protectedResponseSafetyRequired: true,
   errors,
 }, null, 2));
 

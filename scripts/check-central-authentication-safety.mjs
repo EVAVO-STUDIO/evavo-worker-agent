@@ -19,6 +19,8 @@ const protectedHandlers = [
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
   "src/routes/businessAutopilotAdmin.ts",
+  "src/routes/businessAutopilotPeopleAdmin.ts",
+  "src/routes/businessAutopilotWebsiteAdmin.ts",
   "src/routes/opportunitiesAdmin.ts",
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",

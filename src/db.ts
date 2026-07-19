@@ -47,9 +47,6 @@ export interface Env {
   DB: D1Database;
   KV?: any;
   AI?: any;
-  MAILCHANNELS_API_KEY?: string;
-  FROM_EMAIL?: string;
-  REPLY_TO_EMAIL?: string;
   BRAND_NAME?: string;
   BRAND_DOMAIN?: string;
   BRAND_COUNTRIES?: string;
@@ -58,8 +55,6 @@ export interface Env {
   OUTBOUND_AGENT_ADMIN_TOKEN?: string;
   ADMIN_TOKEN?: string;
   CAP_CRAWL_PER_DAY?: string;
-  CAP_DRAFTS_PER_DAY?: string;
-  CAP_SEND_PER_DAY?: string;
 }
 
 export interface LeadSignals {

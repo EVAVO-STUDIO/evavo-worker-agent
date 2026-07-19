@@ -40,6 +40,7 @@ const expectedScripts = {
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
+  "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
   "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
   "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
   "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
@@ -69,6 +70,7 @@ console.log(JSON.stringify({
   typedRoutePoliciesRequired: true,
   scheduledExternalExecutionAllowed: false,
   manualLegacyExecutionAllowed: false,
+  legacyEngineImportExpansionAllowed: false,
   publicOperationalRecordsExposed: false,
   errors,
 }, null, 2));

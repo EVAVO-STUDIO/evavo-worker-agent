@@ -81,6 +81,41 @@ async function safeSettingsPayload(env: Env) {
   };
 }
 
+async function safeOverviewPayload(env: Env) {
+  return {
+    ok: true,
+    mode: "review_first_overview",
+    contractVersion: "legacy_admin_overview_v2_review_first",
+    counters: {
+      researchPagesProcessedToday: Number((await getSetting(env, "crawl_scanned_today")) || 0),
+      internalDraftRecordsCreatedToday: Number((await getSetting(env, "drafts_created_today")) || 0),
+      reviewDecisionsToday: Number((await getSetting(env, "approvals_today")) || 0),
+      externalSendsToday: 0,
+      aiCallsToday: 0,
+    },
+    caps: {
+      boundedResearchPerDay: Number((await getSetting(env, "daily_external_fetch_limit")) || FREE_SAFE_DEFAULT_SETTINGS.daily_external_fetch_limit),
+      aiCallsPerDay: 0,
+      draftsPerDay: 0,
+      sendsPerDay: 0,
+    },
+    execution: {
+      scheduledEngineEnabled: false,
+      manualLegacyExecutionEnabled: false,
+      aiDraftGenerationEnabled: false,
+      emailSendingEnabled: false,
+      socialPostingEnabled: false,
+      formSubmissionEnabled: false,
+    },
+    safety: {
+      aggregateOnly: true,
+      contactDataExposed: false,
+      rawEventsExposed: false,
+      externalExecutionEnabled: false,
+    },
+  };
+}
+
 async function updateSafeSettings(env: Env, body: any, json: JsonResponse): Promise<Response> {
   if (!confirmed(body)) {
     return json({
@@ -163,6 +198,10 @@ export async function handleLegacyExecutionSafetyAdmin(request: Request, env: En
     }, { status: 410 });
   }
 
+  if (pathname === "/admin/overview" && request.method === "GET") {
+    await enforceSafeExecutionSettings(env);
+    return json(await safeOverviewPayload(env));
+  }
   if (pathname === "/admin/settings" && request.method === "GET") {
     await enforceSafeExecutionSettings(env);
     return json(await safeSettingsPayload(env));

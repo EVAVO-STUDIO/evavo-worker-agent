@@ -1,16 +1,25 @@
--- Schema for the EVAVO outbound worker
--- This file defines all tables and indexes used by the application. Run it
--- against your D1 database using `wrangler d1 execute`.
+-- LEGACY BOOTSTRAP SCHEMA ONLY.
+--
+-- Do not apply this file to the live or an already-migrated D1 database.
+-- The production database has evolved through the ordered files under
+-- migrations/, and active Worker code expects the expanded migrated schema.
+--
+-- This file is retained only to describe the earliest bootstrap shape for
+-- historical/local recovery work. New environments must use the documented,
+-- reviewed migration process in migrations/README.md. Never use this file as
+-- a reset, repair, reconciliation or production migration script.
 
--- Settings table stores arbitrary key/value pairs. Also used to persist
--- distributed locks when the key starts with `lock:`.
+-- Historical settings table. The migrated database may contain additional
+-- operational and compatibility values.
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT,
   updated_at_iso TEXT
 );
 
--- Leads table tracks discovered websites and the pipeline status for each.
+-- Historical compact leads shape. Active code expects the expanded migrated
+-- leads table, including website_url, scoring, contact and classification
+-- fields. This definition is not sufficient for the current Worker runtime.
 CREATE TABLE IF NOT EXISTS leads (
   id TEXT PRIMARY KEY,
   website TEXT NOT NULL,
@@ -21,7 +30,10 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 
--- Drafts table stores email drafts prepared for leads.
+-- Historical compact drafts shape. Active code expects the expanded migrated
+-- drafts table. Historical statuses such as approved, sent, failed and
+-- rejected remain readable data states; they do not indicate active outbound
+-- capability.
 CREATE TABLE IF NOT EXISTS drafts (
   id TEXT PRIMARY KEY,
   lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
@@ -33,7 +45,8 @@ CREATE TABLE IF NOT EXISTS drafts (
 );
 CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
 
--- Events table logs system actions and errors for observability.
+-- Historical compact event shape. Active code expects the migrated event
+-- columns and later append-only audit tables.
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -43,7 +56,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 
--- Suppression list stores unsubscribed email addresses.
+-- Historical suppression records are retained for compliance and reporting.
 CREATE TABLE IF NOT EXISTS suppression (
   email TEXT PRIMARY KEY,
   reason TEXT,

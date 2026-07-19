@@ -35,11 +35,46 @@ import { handleSourceExpansionPublicDirectoryScanAdmin } from "./routes/sourceEx
 import { handleAutonomySettingsAdmin } from "./routes/autonomySettingsAdmin";
 
 const unexpectedWorkerErrorMessage = "The Worker hit an unexpected internal error before a safe response could be returned.";
+const HEALTH_CONTRACT_VERSION = "2026-07";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
   return new Response(JSON.stringify(data), { ...init, headers });
+}
+
+async function handleHealth(env: Env): Promise<Response> {
+  const checkedAt = new Date().toISOString();
+  if (!env.DB) {
+    return jsonResponse(
+      { ok: false, status: "unavailable", service: "evavo-worker-agent", version: HEALTH_CONTRACT_VERSION, database: "unavailable", checkedAt },
+      { status: 503, headers: { "cache-control": "no-store", "x-evavo-worker-health-version": HEALTH_CONTRACT_VERSION } },
+    );
+  }
+
+  try {
+    const result = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+    const databaseReady = Number(result?.ok) === 1;
+    return jsonResponse(
+      {
+        ok: databaseReady,
+        status: databaseReady ? "ok" : "unavailable",
+        service: "evavo-worker-agent",
+        version: HEALTH_CONTRACT_VERSION,
+        database: databaseReady ? "ok" : "unavailable",
+        checkedAt,
+      },
+      {
+        status: databaseReady ? 200 : 503,
+        headers: { "cache-control": "no-store", "x-evavo-worker-health-version": HEALTH_CONTRACT_VERSION },
+      },
+    );
+  } catch {
+    return jsonResponse(
+      { ok: false, status: "unavailable", service: "evavo-worker-agent", version: HEALTH_CONTRACT_VERSION, database: "unavailable", checkedAt },
+      { status: 503, headers: { "cache-control": "no-store", "x-evavo-worker-health-version": HEALTH_CONTRACT_VERSION } },
+    );
+  }
 }
 
 function isOpportunityDiscoveryPath(pathname: string): boolean {
@@ -84,6 +119,7 @@ export default {
       const url = new URL(req.url);
       const pathname = url.pathname;
 
+      if (pathname === "/health") return await handleHealth(env);
       if (pathname === "/admin/settings/autonomy") return await handleAutonomySettingsAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/opportunities/run-due") return await handleOpportunityRunDueAdmin(req, env, pathname, jsonResponse);
       if (isOpportunityRunAuditPath(pathname)) return await handleOpportunityRunsAdmin(req, env, pathname, jsonResponse);
@@ -103,10 +139,10 @@ export default {
       if (pathname === "/admin/planner/routes") return await handlePlannerRoutesAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/planner" || pathname.startsWith("/admin/planner/")) return await handlePlannerAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/growth/approval-requests" || pathname === "/admin/growth/approval-requests/status") return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
-            if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);
-            if (pathname === "/admin/growth/blackboard" || pathname === "/admin/growth/blackboard/facts" || pathname === "/admin/growth/blackboard/entities" || pathname === "/admin/growth/blackboard/relationships" || pathname === "/admin/growth/blackboard/signals" || pathname === "/admin/growth/blackboard/assets") return await handleGrowthBlackboardAdmin(req, env, pathname, jsonResponse);
-            if (pathname === "/admin/growth/strategy-memory" || pathname === "/admin/growth/objectives" || pathname === "/admin/growth/key-results" || pathname === "/admin/growth/segments" || pathname === "/admin/growth/offers" || pathname === "/admin/growth/positioning" || pathname === "/admin/growth/runtime-constraints") return await handleGrowthStrategyMemoryAdmin(req, env, pathname, jsonResponse);
-            if (pathname === "/admin/growth/autonomy" || pathname === "/admin/growth/cycle" || pathname === "/admin/growth/cycle/events" || pathname === "/admin/growth/cycle/record" || pathname === "/admin/growth/operator" || pathname === "/admin/growth/campaigns" || pathname === "/admin/growth/experiments" || pathname === "/admin/growth/decisions" || pathname === "/admin/growth/decisions/plan" || pathname === "/admin/growth/metrics" || pathname === "/admin/growth/evidence" || pathname === "/admin/growth/learning") return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);
+      if (pathname === "/admin/growth/capabilities") return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);
+      if (pathname === "/admin/growth/blackboard" || pathname === "/admin/growth/blackboard/facts" || pathname === "/admin/growth/blackboard/entities" || pathname === "/admin/growth/blackboard/relationships" || pathname === "/admin/growth/blackboard/signals" || pathname === "/admin/growth/blackboard/assets") return await handleGrowthBlackboardAdmin(req, env, pathname, jsonResponse);
+      if (pathname === "/admin/growth/strategy-memory" || pathname === "/admin/growth/objectives" || pathname === "/admin/growth/key-results" || pathname === "/admin/growth/segments" || pathname === "/admin/growth/offers" || pathname === "/admin/growth/positioning" || pathname === "/admin/growth/runtime-constraints") return await handleGrowthStrategyMemoryAdmin(req, env, pathname, jsonResponse);
+      if (pathname === "/admin/growth/autonomy" || pathname === "/admin/growth/cycle" || pathname === "/admin/growth/cycle/events" || pathname === "/admin/growth/cycle/record" || pathname === "/admin/growth/operator" || pathname === "/admin/growth/campaigns" || pathname === "/admin/growth/experiments" || pathname === "/admin/growth/decisions" || pathname === "/admin/growth/decisions/plan" || pathname === "/admin/growth/metrics" || pathname === "/admin/growth/evidence" || pathname === "/admin/growth/learning") return await handleGrowthCampaignIntelligenceAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/growth" || pathname.startsWith("/admin/growth/")) return await handleGrowthAdmin(req, env, pathname, jsonResponse);
       if (pathname === "/admin/business/people") return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse);
       if (isBusinessWebsitePath(pathname)) return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
@@ -117,7 +153,7 @@ export default {
       if (pathname.startsWith("/admin")) return await handleAdmin(req, env, pathname, ctx, jsonResponse);
       if (pathname.startsWith("/tools")) return await handleTools(req, env, pathname, jsonResponse);
       if (pathname.startsWith("/public")) return await handlePublic(req, env, pathname, ctx, jsonResponse);
-      if (pathname === "/" || pathname === "") return jsonResponse({ ok: true, message: "evavo-worker-agent" });
+      if (pathname === "/" || pathname === "") return jsonResponse({ ok: true, message: "evavo-worker-agent", health: "/health" });
       return jsonResponse({ ok: false, error: "not_found" }, { status: 404 });
     } catch {
       return jsonResponse({ ok: false, error: "worker_unexpected_error", message: unexpectedWorkerErrorMessage }, { status: 500 });

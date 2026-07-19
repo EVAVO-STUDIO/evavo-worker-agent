@@ -1,4 +1,5 @@
 export type OperationsRouteHandlerId =
+  | "legacy-admin-safety"
   | "autonomy-settings"
   | "planner-routes"
   | "planner"
@@ -26,6 +27,23 @@ export type OperationsRoutePolicy = Readonly<{
 }>;
 
 const policies: readonly OperationsRoutePolicy[] = Object.freeze([
+  Object.freeze({
+    id: "legacy-admin-safety",
+    priority: 5,
+    authentication: "handler-enforced",
+    readMethods: Object.freeze(["GET"] as const),
+    writeMethods: Object.freeze(["POST"] as const),
+    writeConfirmation: "handler-enforced",
+    mutationPosture: "mixed-internal",
+    networkPosture: "none",
+    callsAI: false,
+    canSendEmail: false,
+    canPostSocial: false,
+    canSubmitForms: false,
+    matches: (pathname: string) => pathname === "/admin/run"
+      || pathname === "/admin/settings"
+      || /^\/admin\/drafts\/[^/]+\/(approve|reject)$/.test(pathname),
+  }),
   Object.freeze({
     id: "autonomy-settings",
     priority: 10,

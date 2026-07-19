@@ -13,6 +13,7 @@ if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
+const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
   "branches: [main]",
@@ -34,12 +35,21 @@ if (!workflow.includes('      - "package-lock.json"')) errors.push("Worker workf
 if (workflow.includes("wrangler deploy")) errors.push("Contract workflow must not deploy the Worker");
 if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_TOKEN")) errors.push("Contract workflow must not request Worker credentials");
 
-if (packageJson.scripts?.["worker:health:check"] !== "node scripts/check-worker-health-contract.mjs") {
-  errors.push("package.json must expose the Worker health contract command");
+const expectedScripts = {
+  "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+  "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
+  "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
+  "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
+};
+for (const [scriptName, expectedCommand] of Object.entries(expectedScripts)) {
+  if (packageJson.scripts?.[scriptName] !== expectedCommand) {
+    errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
+  }
+  if (!checkLocal.includes(`npm run ${scriptName}`)) {
+    errors.push(`The complete local gate must include ${scriptName}`);
+  }
 }
-if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run worker:health:check")) {
-  errors.push("The complete local gate must include the Worker health contract");
-}
+
 if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local")) {
   errors.push("Predeploy must continue to run the complete local gate");
 }
@@ -50,6 +60,7 @@ console.log(JSON.stringify({
   contract: "worker-ci-workflow-parity",
   deploymentEnabled: false,
   credentialsRequired: false,
+  typedRoutePoliciesRequired: true,
   errors,
 }, null, 2));
 

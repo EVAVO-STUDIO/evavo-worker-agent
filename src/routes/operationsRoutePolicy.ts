@@ -32,7 +32,7 @@ const policies: readonly OperationsRoutePolicy[] = Object.freeze([
     authentication: "handler-enforced",
     readMethods: Object.freeze(["GET"] as const),
     writeMethods: Object.freeze(["POST"] as const),
-    writeConfirmation: "handler-defined",
+    writeConfirmation: "handler-enforced",
     mutationPosture: "mixed-internal",
     networkPosture: "none",
     callsAI: false,

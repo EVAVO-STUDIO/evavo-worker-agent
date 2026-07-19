@@ -12,12 +12,13 @@ const read = (relativePath) => {
 
 const applyOne = read("scripts/apply-one-migration.mjs");
 const printCommands = read("scripts/print-migration-commands.mjs");
+const printVerification = read("scripts/print-d1-verification-commands.mjs");
 const inventory = read("scripts/check-migrations-present.mjs");
 const refusal = read("scripts/refuse-legacy-schema-init.mjs");
 const migrationReadme = read("migrations/README.md");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
-for (const [name, content] of Object.entries({ applyOne, printCommands, inventory, refusal, migrationReadme })) {
+for (const [name, content] of Object.entries({ applyOne, printCommands, printVerification, inventory, refusal, migrationReadme })) {
   if (!content) errors.push(`Missing migration safety dependency: ${name}`);
 }
 
@@ -55,6 +56,21 @@ for (const token of [
   '--allow-rerun',
 ]) {
   if (!printCommands.includes(token)) errors.push(`Migration printer is missing safeguard: ${token}`);
+}
+
+for (const token of [
+  'const expectedDatabaseName = "evavo_outbound_agent"',
+  'const isLocal = process.argv.includes("--local")',
+  'const isRemote = process.argv.includes("--remote")',
+  'if (isLocal === isRemote)',
+  'Select exactly one target: --local or --remote.',
+  'readOnlyVerification: true',
+  'const targetFlag = isRemote ? "--remote" : "--local"',
+]) {
+  if (!printVerification.includes(token)) errors.push(`D1 verification printer is missing safeguard: ${token}`);
+}
+if (printVerification.includes("process.argv.includes('--local') ? '' : ' --remote'")) {
+  errors.push("D1 verification printer must not default silently to remote");
 }
 
 for (const token of [
@@ -103,6 +119,7 @@ console.log(JSON.stringify({
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "d1-migration-execution-safety",
   targetSelectionExplicit: true,
+  verificationTargetSelectionExplicit: true,
   remoteDatabaseConfirmationRequired: true,
   oneTimeMigrationAcknowledgementRequired: true,
   rerunnableMigrationAcknowledgementRequired: true,

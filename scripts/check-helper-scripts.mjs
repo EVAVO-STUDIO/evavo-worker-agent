@@ -45,6 +45,8 @@ for (const relativePath of [
   "src/index.ts",
   "src/engineAutonomy.ts",
   "src/routes/autonomySettingsAdmin.ts",
+  "src/routes/legacyExecutionSafetyAdmin.ts",
+  "src/routes/tools.ts",
   "src/routes/workerRoutePolicy.ts",
   "src/routes/growthRoutePolicy.ts",
   "src/routes/opportunityRoutePolicy.ts",
@@ -81,6 +83,7 @@ requireTokens("src/routes/businessRoutePolicy.ts", [
   'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/operationsRoutePolicy.ts", [
+  'id: "legacy-admin-safety"',
   'id: "autonomy-settings"',
   'id: "planner-routes"',
   'id: "source-batch"',
@@ -107,6 +110,24 @@ requireTokens("src/routes/autonomySettingsAdmin.ts", [
   "canGenerateDrafts: false",
   "canSendEmail: false",
   "scheduledExternalExecutionDisabled: true",
+]);
+requireTokens("src/routes/legacyExecutionSafetyAdmin.ts", [
+  'error: "legacy_execution_disabled"',
+  'allowedKinds: []',
+  'engine_enabled", "0"',
+  'drafting_enabled: "0"',
+  'sending_enabled: "0"',
+  'settingsWriteRequiresConfirmation: true',
+  'draftDecisionRequiresConfirmation: true',
+  'reviewStateOnly: true',
+]);
+requireTokens("src/routes/tools.ts", [
+  "getAdminToken",
+  'error: "Unauthorized"',
+  'contractVersion: "worker_tools_v2_review_first"',
+  'aiDefault: "off"',
+  'sendingDefault: "off"',
+  'manualLegacyExecutionDisabled: true',
 ]);
 requireTokens("src/routes/workerRoutePolicy.ts", [
   'id: "health"',
@@ -137,6 +158,7 @@ if (fs.existsSync(packagePath)) {
     "worker:health:check": "node scripts/check-worker-health-contract.mjs",
     "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
     "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
+    "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
     "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
     "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
@@ -155,6 +177,7 @@ if (fs.existsSync(packagePath)) {
     "npm run worker:health:check",
     "npm run worker:routes:check",
     "npm run scheduled:autonomy-safety:check",
+    "npm run manual:execution-safety:check",
     "npm run opportunities:route-policy:check",
     "npm run business:route-policy:check",
     "npm run operations:route-policy:check",

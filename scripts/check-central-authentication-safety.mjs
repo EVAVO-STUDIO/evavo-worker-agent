@@ -23,6 +23,7 @@ const protectedHandlers = [
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/draftReviewAdmin.ts",
+  "src/routes/plannerRoutesAdmin.ts",
 ];
 
 for (const [name, content] of [["authentication helper", auth], ["Worker dispatcher", index]]) {

@@ -34,6 +34,7 @@
     "growth:capabilities:check": "node scripts/check-growth-capability-registry.mjs",
     "growth:generated-routes:check": "node scripts/check-generated-route-wiring-clean.mjs",
     "growth:generated-routes:resolve:print": "node scripts/print-generated-route-drift-resolution.mjs",
+    "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
     "growth:review-queue:check": "node scripts/check-growth-review-queue.mjs",
     "growth:route-catalogue:apply": "node scripts/apply-growth-campaign-analytics-route-catalogue.mjs && node scripts/apply-growth-autonomous-discovery-route-catalogue.mjs && node scripts/apply-business-autopilot-route-catalogue.mjs",
     "growth:route-contract:print": "node scripts/print-growth-route-contract-check.mjs",
@@ -48,7 +49,7 @@
     "worker:health:check": "node scripts/check-worker-health-contract.mjs",
     "worker:powershell:check": "node scripts/check-worker-powershell-runners.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
-    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run worker:health:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run worker:powershell:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck",
+    "check:local": "npm run scripts:check && npm run db:migrations:check && npm run worker:health:check && npm run business:autopilot:check && npm run business:autopilot:raw-error-safety:check && npm run business:people:docs:check && npm run business:website-pages:docs:check && npm run worker:powershell:check && npm run growth:route-delegates:check && npm run growth:route-safety-flags:check && npm run growth:negative-safety:check && npm run growth:capabilities:check && npm run growth:campaigns:check && npm run growth:strategy:check && npm run growth:blackboard:check && npm run growth:review-queue:check && npm run growth:autonomous-discovery:check && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

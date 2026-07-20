@@ -28,6 +28,7 @@ const protectedHandlers = [
   "src/routes/opportunityRunsAdmin.ts",
   "src/routes/opportunitySourceHealthAdmin.ts",
   "src/routes/opportunityScoringDiagnosticsAdmin.ts",
+  "src/routes/opportunitySourceCandidatesAdmin.ts",
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/draftReviewAdmin.ts",
@@ -187,6 +188,27 @@ if (opportunityBodyPosition < 0 || opportunityConfirmPosition < 0 || opportunity
   errors.push("Opportunity review confirmation must run after body parsing and before review-state or strategy-score mutation");
 }
 
+const sourceCandidates = read("src/routes/opportunitySourceCandidatesAdmin.ts");
+for (const token of [
+  'pathname === "/admin/opportunities/sources/candidates/commit"',
+  "if (body?.confirm !== true)",
+  'error: "confirm_required"',
+  "saveOpportunitySourceCandidates",
+]) {
+  if (!sourceCandidates.includes(token)) errors.push(`Source-candidate confirmation contract is missing: ${token}`);
+}
+const sourceCandidateBodyPosition = sourceCandidates.indexOf("const body = await readJson(request)");
+const sourceCandidateConfirmPosition = sourceCandidates.indexOf("if (body?.confirm !== true)");
+const sourceCandidateSavePosition = sourceCandidates.indexOf("return json(await saveOpportunitySourceCandidates");
+if (
+  sourceCandidateBodyPosition < 0 ||
+  sourceCandidateConfirmPosition < 0 ||
+  sourceCandidateSavePosition < 0 ||
+  !(sourceCandidateBodyPosition < sourceCandidateConfirmPosition && sourceCandidateConfirmPosition < sourceCandidateSavePosition)
+) {
+  errors.push("Source-candidate confirmation must run after body parsing and before candidate persistence");
+}
+
 for (const forbidden of [
   "authorization ===",
   "authorization ==",
@@ -225,6 +247,8 @@ console.log(JSON.stringify({
   opportunityRunsUseSharedAuthentication: true,
   opportunitySourceHealthUsesSharedAuthentication: true,
   opportunityScoringDiagnosticsUseSharedAuthentication: true,
+  opportunitySourceCandidatesUseSharedAuthentication: true,
+  opportunitySourceCandidateCommitRequiresConfirmation: true,
   unauthenticatedProtectedPreflightAllowed: false,
   localBearerEqualityAllowed: false,
   handlerDefenceInDepthRequired: true,

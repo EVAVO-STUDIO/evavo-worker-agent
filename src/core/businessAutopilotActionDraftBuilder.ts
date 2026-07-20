@@ -31,122 +31,42 @@ function clean(value?: string | null, fallback = '') {
   return text || fallback;
 }
 
-function firstName(value?: string | null) {
-  const name = clean(value);
-  return name ? name.split(/\s+/)[0] : '';
+function compatibilityIntent(value?: BusinessDraftBuildIntent): BusinessDraftBuildIntent {
+  return value || 'internal_note';
 }
 
-function serviceLabel(value?: string | null) {
-  const key = clean(value, 'digital improvement').replaceAll('_', ' ');
-  return key.charAt(0).toUpperCase() + key.slice(1);
+function reviewSubject(input: BusinessDraftBuildInput) {
+  const organization = clean(input.organizationName, 'Unspecified organization');
+  return `Internal review record: ${organization}`;
 }
 
-function greeting(input: BusinessDraftBuildInput) {
-  const name = firstName(input.contactName);
-  return name ? `Hi ${name},` : 'Hi,';
-}
-
-function subjectFor(input: BusinessDraftBuildInput) {
-  const organization = clean(input.organizationName, 'your website');
-  const service = serviceLabel(input.recommendedService);
-  if (input.intent === 'follow_up') return `Following up on ${organization}`;
-  if (input.intent === 'linkedin_dm') return `Quick thought for ${organization}`;
-  if (input.intent === 'content_idea') return `Content idea for ${organization}`;
-  if (input.intent === 'internal_note') return `Internal note: ${organization}`;
-  return `${organization} ${service} opportunity`;
-}
-
-function buildBody(input: BusinessDraftBuildInput) {
-  const organization = clean(input.organizationName, 'your business');
-  const evidence = clean(input.evidenceSummary, 'I noticed a few areas where the digital experience could potentially be clearer, faster or easier to convert.');
-  const angle = clean(input.recommendedAngle, 'There may be an opportunity to improve the customer journey and make the site work harder as a sales asset.');
-  const nextStep = clean(input.nextStep, 'I can put together a short, practical review with the most useful fixes and opportunities.');
-
-  if (input.intent === 'internal_note') {
-    return [
-      `Internal review note for ${organization}.`,
-      '',
-      `Evidence: ${evidence}`,
-      `Recommended angle: ${angle}`,
-      `Next step: ${nextStep}`,
-      '',
-      'Do not send externally until suppression, approval, contactability and compliance checks have passed.',
-    ].join('\n');
-  }
-
-  if (input.intent === 'content_idea') {
-    return [
-      `Content idea for ${organization}:`,
-      '',
-      `Create a short practical teardown around: ${angle}`,
-      '',
-      `Evidence basis: ${evidence}`,
-      '',
-      'Keep this as an internal content draft until reviewed. Do not publish or comment externally from this system.',
-    ].join('\n');
-  }
-
-  if (input.intent === 'linkedin_dm') {
-    return [
-      greeting(input),
-      '',
-      `I came across ${organization} and noticed something that may be worth reviewing: ${evidence}`,
-      '',
-      `${angle}`,
-      '',
-      'No pressure at all, but I thought it may be useful to flag. Happy to send a short practical teardown if helpful.',
-      '',
-      'Greg',
-    ].join('\n');
-  }
-
-  if (input.intent === 'follow_up') {
-    return [
-      greeting(input),
-      '',
-      `Just following up on the ${organization} digital opportunity I noted earlier.`,
-      '',
-      `The main point was: ${angle}`,
-      '',
-      `${nextStep}`,
-      '',
-      'Greg',
-    ].join('\n');
-  }
+function reviewBody(input: BusinessDraftBuildInput) {
+  const organization = clean(input.organizationName, 'Unspecified organization');
+  const evidence = clean(input.evidenceSummary, 'No evidence summary supplied.');
+  const angle = clean(input.recommendedAngle, 'No recommendation supplied.');
+  const nextStep = clean(input.nextStep, 'Manual review required.');
 
   return [
-    greeting(input),
+    `Internal Business Autopilot review record for ${organization}.`,
     '',
-    `I came across ${organization} and noticed a few things that may be worth reviewing from a digital/customer journey point of view.`,
+    `Evidence: ${evidence}`,
+    `Recommendation: ${angle}`,
+    `Manual next step: ${nextStep}`,
     '',
-    `The main evidence was: ${evidence}`,
-    '',
-    `${angle}`,
-    '',
-    `${nextStep}`,
-    '',
-    'Greg',
+    'This record is not a message, draft, approval or delivery instruction.',
+    'Do not send, post, submit, publish or otherwise use it externally.',
   ].join('\n');
 }
 
-function draftTypeFor(intent: BusinessDraftBuildIntent): BusinessActionDraftInput['draftType'] {
-  if (intent === 'linkedin_dm') return 'linkedin_dm';
-  if (intent === 'follow_up') return 'follow_up';
-  if (intent === 'internal_note') return 'crm_note';
-  if (intent === 'content_idea') return 'internal_report';
-  return 'email';
-}
-
-function channelFor(intent: BusinessDraftBuildIntent) {
-  if (intent === 'linkedin_dm') return 'linkedin';
-  if (intent === 'content_idea') return 'content';
-  if (intent === 'internal_note') return 'internal';
-  return 'email';
-}
-
 export function buildBusinessDraftOnlyAction(input: BusinessDraftBuildInput): BusinessDraftBuildResult {
-  const intent = input.intent || 'audit_email';
-  const riskFlags = ['draft_only', 'approval_required', 'suppression_check_required', 'contactability_check_required'];
+  const intent = compatibilityIntent(input.intent);
+  const riskFlags = [
+    'historical_record_only',
+    'review_only',
+    'non_deliverable',
+    'external_use_not_allowed_by_this_record',
+    'approval_cannot_enable_execution',
+  ];
   const explicitBlocks = [
     'Do not send email from this route.',
     'Do not post on social platforms from this route.',
@@ -154,14 +74,14 @@ export function buildBusinessDraftOnlyAction(input: BusinessDraftBuildInput): Bu
     'Do not submit contact forms from this route.',
     'Do not execute browser actions from this route.',
     'Do not bypass suppression, unsubscribe or consent requirements.',
+    'Do not treat this record as deliverable copy or an approval to act.',
   ];
   const reviewChecklist = [
-    'Confirm the organization and contact are correct.',
+    'Confirm the organization and evidence references are correct.',
     'Confirm evidence is accurate, current and not sensitive.',
-    'Check suppression and unsubscribe state before any future external action.',
-    'Check jurisdiction-specific outreach requirements before any future send.',
-    'Check tone, relevance and EVAVO positioning.',
-    'Get explicit operator approval before any external action.',
+    'Record any suppression, privacy or legal risk.',
+    'Choose a manual internal next step or mark the record blocked.',
+    'Do not convert this record into external communication inside this Worker.',
   ];
 
   return {
@@ -170,24 +90,34 @@ export function buildBusinessDraftOnlyAction(input: BusinessDraftBuildInput): Bu
       personId: clean(input.personId) || undefined,
       opportunityId: clean(input.opportunityId) || undefined,
       auditPackId: clean(input.auditPackId) || undefined,
-      draftType: draftTypeFor(intent),
-      channel: channelFor(intent),
-      subject: subjectFor({ ...input, intent }),
-      body: buildBody({ ...input, intent }),
+      draftType: 'crm_note',
+      channel: 'internal',
+      subject: reviewSubject(input),
+      body: reviewBody(input),
       payload: {
-        intent,
+        compatibilityIntent: intent,
         organizationName: clean(input.organizationName) || null,
         recommendedService: clean(input.recommendedService) || null,
         recommendedAngle: clean(input.recommendedAngle) || null,
         evidenceSummary: clean(input.evidenceSummary) || null,
         nextStep: clean(input.nextStep) || null,
-        tone: input.tone || 'low_key',
+        requestedTone: input.tone || null,
+        historicalOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
       },
       riskFlags,
       metadata: {
         generatedBy: 'businessAutopilotActionDraftBuilder',
+        contract: 'business_historical_review_record_v2',
+        historicalOnly: true,
+        reviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
         externalExecution: false,
-        requiresApproval: true,
+        requiresApproval: false,
         explicitBlocks,
         reviewChecklist,
       },

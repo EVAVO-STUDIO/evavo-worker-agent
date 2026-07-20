@@ -3,7 +3,7 @@ import type { Env } from "./db";
 import { logEvent } from "./db";
 import { isAdminRequestAuthorized } from "./core/adminAuthentication";
 import { handlePublic } from "./routes/public";
-import { handleAdmin } from "./routes/admin";
+import { handleAdmin } from "./routes/adminProtected";
 import { handleTools } from "./routes/tools";
 import { handleDraftReviewAdmin } from "./routes/draftReviewAdmin";
 import { handleSourcesAdmin } from "./routes/sourcesAdmin";

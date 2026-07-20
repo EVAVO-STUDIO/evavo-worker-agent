@@ -1,263 +1,203 @@
 # Growth engagement action model
 
-The Growth Autonomy Agent must treat every possible action as a typed, scored, policy-governed object.
+This document defines the active internal action taxonomy for the EVAVO Growth Research Worker.
 
-No action should execute just because a draft exists.
+The Worker does not draft, queue, approve for delivery or execute engagement actions. It may save public-source evidence, score an internal opportunity, record a blocked decision and recommend a manual operator next step.
 
-## Action lifecycle
+## Current action lifecycle
 
-1. `discovered`
-2. `scored`
-3. `drafted`
-4. `queued`
-5. `approved`
-6. `executed`
-7. `outcome_recorded`
-8. `learned`
+```text
+discovered
+scored
+needs_manual_review
+blocked
+archived
+```
 
-Blocked or rejected actions should keep their reason for future learning.
+The following historical lifecycle states are non-executable compatibility data only:
 
-## Action types
+```text
+drafted
+queued
+approved
+executed
+outcome_recorded
+```
+
+A stored historical status never enables execution.
+
+## Active action types
 
 ### save_signal
 
-Save the signal and evidence only.
+Save public evidence and internal classification metadata.
 
-Execution risk: low.
+Safety posture:
 
-Allowed in observe mode.
+```text
+internalMetadataOnly: true
+reviewOnly: true
+scheduled: false
+callsNetwork: false unless a separately confirmed bounded manual-research route is executing
+callsAI: false
+sendsEmail: false
+postsExternally: false
+submitsForms: false
+externalStateChange: false
+```
 
-### draft_email
+### research_public_source
 
-Prepare an email draft from a specific business trigger or permitted contact context.
+Run one explicitly classified public-source research action.
 
-Execution risk: medium.
+Requirements:
 
-Execution requires direct-channel policy, compliance checks, and approval unless the relationship is already permissioned.
+- shared `ADMIN_TOKEN` authentication
+- POST request
+- explicit confirmation
+- bounded request, byte, redirect, time and result limits
+- public HTTP or HTTPS target only
+- GET-only behaviour
+- SSRF and redirect validation
+- review-only internal persistence
+- no automatic retry or scheduled fallback
 
-### draft_contact_form
+### score_internal_opportunity
 
-Prepare contact-form message and field plan.
+Score existing evidence and save internal reasons, confidence and risk metadata.
 
-Execution risk: medium.
+This action is internal-only and cannot create a draft, campaign or external delivery task.
 
-Execution requires approval by default. The agent must not bypass CAPTCHA, hidden anti-bot fields, rate limits, or form rules.
+### request_manual_review
 
-### draft_thread_reply
+Record that an operator should review evidence and decide what to do outside the Worker.
 
-Prepare a Reddit/forum/community reply.
-
-Execution risk: high.
-
-Default draft should be no-link, helpful, context-specific, and not reusable elsewhere.
-
-### draft_video_comment
-
-Prepare a YouTube/video-platform comment or reply.
-
-Execution risk: high.
-
-Default draft should answer the real context and avoid repeated link-first promotion.
-
-### draft_directory_profile
-
-Prepare EVAVO service profile for a provider-expected directory or marketplace.
-
-Execution risk: low to medium.
-
-Can become approved autopilot when channel rules clearly allow provider listings.
-
-### draft_owned_social_post
-
-Prepare EVAVO-owned social post.
-
-Execution risk: low.
-
-Can become owned-channel autopilot under cadence and quality rules.
-
-### draft_blog_outline
-
-Prepare EVAVO blog, teardown, checklist, or landing-page outline.
-
-Execution risk: low.
-
-Can be automated as owned content preparation.
-
-### submit_directory_listing
-
-Submit EVAVO profile to a provider-expected channel.
-
-Execution risk: low to medium.
-
-Requires duplicate check, rules check, submission proof, and action cap.
-
-### submit_contact_form
-
-Submit a contact form.
-
-Execution risk: medium to high.
-
-Requires approval by default, real trigger, EVAVO identity, no CAPTCHA bypass, suppression checks, and low cap.
-
-### send_email
-
-Send an email.
-
-Execution risk: medium to high.
-
-Requires contact policy, consent or permitted basis, sender identity, unsubscribe where required, suppression checks, and audit trail.
-
-### post_owned_channel
-
-Publish or schedule on EVAVO-owned channel.
-
-Execution risk: low.
-
-Requires owned-channel policy, cadence cap, EVAVO voice score, and audit trail.
-
-### post_community_reply
-
-Post a reply/comment in a community channel.
-
-Execution risk: high.
-
-Requires channel rules memory, no repeated templates, link policy pass, disclosure policy pass, approval by default, and strict cooldowns.
+This is not approval for execution and does not activate any channel capability.
 
 ### do_not_engage
 
-Explicitly mark that the agent should not engage.
+Record that no engagement should occur.
 
-Reasons include:
+Reasons may include:
 
 - bad fit
 - channel rules unclear
-- self-promo banned
-- too generic
-- budget paused
-- suppression rule
+- self-promotion blocked
+- insufficient evidence
+- suppression or privacy concern
 - negative channel history
 - low expected value
+- reputational risk
 
-## Required action fields
+## Disabled historical action types
 
-Every action record should include:
+The following names may exist in historical records or design documents, but they are disabled in the active Worker:
 
-- signal id
-- channel id
+```text
+draft_email
+draft_contact_form
+draft_thread_reply
+draft_video_comment
+draft_directory_profile
+draft_owned_social_post
+draft_blog_outline
+submit_directory_listing
+submit_contact_form
+send_email
+post_owned_channel
+post_community_reply
+book_meeting
+buy_ads
+```
+
+No route, approval object, stored setting, channel class or budget state may activate them.
+
+## Required internal record fields
+
+Every active internal action record should include:
+
+- source or signal identifier
 - action type
-- recommended automation mode
 - reason
-- context evidence
-- EVAVO fit explanation
-- channel policy result
-- link policy result
-- disclosure policy result
-- cost estimate
+- public evidence references
+- confidence
 - risk flags
-- status
-- created at
-- updated at
+- manual-review status
+- blocked external actions
+- created and updated timestamps
 
-## Required draft fields
+It must also include or inherit these safety facts:
 
-Every draft record should include:
-
-- action id
-- variant
-- subject, when applicable
-- body
-- specificity score
-- EVAVO voice score
-- generic-risk score
-- usefulness score
-- link-risk score
-- disclosure status
-- banned phrase hits
-- can be reused elsewhere: yes/no
-- reviewer notes
+```text
+reviewOnly: true
+executable: false
+draftingEnabled: false
+emailSendingEnabled: false
+socialPostingEnabled: false
+formSubmissionEnabled: false
+browserExecutionEnabled: false
+externalStateChangeEnabled: false
+```
 
 ## Scoring gates
 
-### context fit
+### evidence fit
 
-Passes only when the action responds to a real page, post, business issue, tender, directory, enquiry path, or owned-channel goal.
-
-Hard fail when the message could be posted anywhere without changing it.
+Pass only when the score is supported by stored public evidence.
 
 ### EVAVO fit
 
-Passes only when the signal maps to EVAVO services, proof points, projects, or active goals.
+Pass only when the signal maps to an active EVAVO service or strategic objective.
 
-### channel fit
+### channel risk
 
-Passes only when channel class, link policy, disclosure policy, action type, and automation mode align.
+Record channel constraints and disclosure concerns as internal metadata only.
 
-### human quality
+### privacy and suppression
 
-Passes only when the draft sounds specific, useful, and EVAVO-like.
-
-Hard fail examples:
-
-- fake praise
-- generic greeting
-- hype language
-- template structure
-- link-first pitch
-- hidden affiliation
+Block or minimise records when personal data, consent, suppression or do-not-contact concerns exist.
 
 ### cost fit
 
-Passes only when budget ledger and caps allow the action.
+Cost metadata may limit research priority. It cannot authorise drafting or execution.
 
-If budget state is unknown, stale, or near hard cap, execution is blocked.
+## Manual review envelope
 
-## Execution envelope
+Before saving a manual-review recommendation, the Worker must verify:
 
-Before execution, the Worker must verify:
+- evidence is present
+- the recommendation is specific and non-deceptive
+- blocked external actions are recorded
+- no delivery payload is generated
+- no third-party credential is required
+- no external state change will occur
+- an audit record can be written
 
-- action status is approved or autopilot-eligible
-- current channel policy still allows the action
-- daily and per-channel caps are available
-- no suppression rule matches
-- no cooldown is active
-- draft still passes quality gates
-- budget ledger is healthy
-- audit record can be written
+If any check fails, mark the record `blocked` with a reason.
 
-If any check fails, action status changes to `blocked` or `needs_review` with a reason.
+## Outcome and learning model
 
-## Outcome model
+The Worker may learn only from existing internal review metadata and manually recorded outcomes.
 
-Outcomes should include:
+Learning may adjust:
 
-- accepted/listed/published
-- sent/submitted
-- replied
-- clicked
-- meeting booked
-- lead created
-- ignored
-- rejected
-- removed
-- negative reaction
-- unsubscribe/do-not-contact
-- error
+- source quality
+- evidence confidence
+- internal opportunity score
+- manual-review priority
+- cooldown or suppression metadata
 
-Outcomes feed strategy learning, channel cooldowns, budget recommendations, and draft-quality tuning.
+Learning must not activate drafting, sending, posting, form submission, browser execution or autonomous campaigns.
 
-## Default execution order
+## Default order
 
-Safer actions should be enabled first:
+The active safe order is:
 
 1. save signal
-2. draft owned content
-3. draft directory profile
-4. draft direct contact
-5. draft community reply
-6. submit provider-expected directory listing
-7. post owned channel
-8. send permissioned/warm email
-9. submit contact form
-10. post community reply
+2. research one confirmed bounded public source when explicitly requested
+3. score internal evidence
+4. request manual review or mark blocked
+5. record manual outcome metadata
+6. learn from existing review metadata
 
-Community and cold/direct-contact execution should remain last because they carry the highest reputation risk.
+There is no execution stage in the active Worker.

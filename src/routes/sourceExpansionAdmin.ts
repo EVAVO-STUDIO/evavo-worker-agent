@@ -1,16 +1,11 @@
 import type { Env } from "../db";
-import { getAdminToken } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { bootstrapSourceExpansionSeeds, listSourceExpansionCandidates, runSourceExpansion } from "../core/sourceExpansionEngine";
 import { learnSourceExpansionQuality, listSourceExpansionStrategyScores } from "../core/sourceExpansionLearning";
 import { runSitemapSourceExpansion } from "../core/sourceExpansionSitemap";
 import { listQueryHints, saveQueryHints } from "../core/sourceExpansionQueryHints";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function boundedInteger(value: unknown, fallback: number, min: number, max: number) {
   const parsed = Number(value || fallback);
@@ -100,18 +95,20 @@ function sourceExpansionFallback(result: any) {
 }
 
 export async function handleSourceExpansionAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   if (pathname === "/admin/opportunities/sources/expansion/bootstrap") {
-    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
     return json(await bootstrapSourceExpansionSeeds(env));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/scan") {
-    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
     const result = await runSourceExpansion(env, {
@@ -125,7 +122,7 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/sitemap-scan") {
-    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
     return json(await runSitemapSourceExpansion(env, {
@@ -137,7 +134,7 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/query-hints/generate") {
-    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
     return json(await saveQueryHints(env, {
@@ -147,7 +144,7 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/query-hints") {
-    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET" } });
     const url = new URL(request.url);
     return json(await listQueryHints(env, {
       status: url.searchParams.get("status") || "candidate",
@@ -157,20 +154,20 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/learn") {
-    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
     return json(await learnSourceExpansionQuality(env));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/strategies") {
-    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET" } });
     const url = new URL(request.url);
     return json(await listSourceExpansionStrategyScores(env, boundedInteger(url.searchParams.get("limit"), 50, 1, 100)));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/candidates") {
-    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET" } });
     const url = new URL(request.url);
     return json(await listSourceExpansionCandidates(env, {
       status: url.searchParams.get("status") || "candidate",

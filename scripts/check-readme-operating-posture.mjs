@@ -9,6 +9,8 @@ const architecturePath = path.join(root, "docs", "growth-autonomous-discovery-ar
 const runbookPath = path.join(root, "docs", "growth-zero-source-research-runbook.md");
 const policyPath = path.join(root, "docs", "growth-source-discovery-safety-policy.md");
 const autonomyAgentPath = path.join(root, "docs", "growth-autonomy-agent.md");
+const channelPolicyPath = path.join(root, "docs", "growth-channel-policy.md");
+const actionModelPath = path.join(root, "docs", "growth-engagement-action-model.md");
 const packagePath = path.join(root, "package.json");
 const errors = [];
 
@@ -17,6 +19,8 @@ const architecture = fs.existsSync(architecturePath) ? fs.readFileSync(architect
 const runbook = fs.existsSync(runbookPath) ? fs.readFileSync(runbookPath, "utf8") : "";
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
 const autonomyAgent = fs.existsSync(autonomyAgentPath) ? fs.readFileSync(autonomyAgentPath, "utf8") : "";
+const channelPolicy = fs.existsSync(channelPolicyPath) ? fs.readFileSync(channelPolicyPath, "utf8") : "";
+const actionModel = fs.existsSync(actionModelPath) ? fs.readFileSync(actionModelPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 
 if (!readme) errors.push("Missing README.md");
@@ -24,6 +28,8 @@ if (!architecture) errors.push("Missing Growth discovery architecture document")
 if (!runbook) errors.push("Missing zero-source research runbook");
 if (!policy) errors.push("Missing source discovery safety policy");
 if (!autonomyAgent) errors.push("Missing Growth autonomy agent document");
+if (!channelPolicy) errors.push("Missing Growth channel policy");
+if (!actionModel) errors.push("Missing Growth engagement action model");
 
 for (const token of [
   "# EVAVO Growth Research Worker",
@@ -104,6 +110,40 @@ for (const token of [
   if (!autonomyAgent.includes(token)) errors.push(`Growth autonomy agent posture is missing: ${token}`);
 }
 
+for (const token of [
+  "This document is the authoritative channel-classification policy for the active EVAVO Growth Research Worker.",
+  "The active Worker is manual-research-only.",
+  "Approval records, channel policies, stored settings and historical modes are internal metadata only.",
+  "draftingEnabled: false",
+  "emailSendingEnabled: false",
+  "socialPostingEnabled: false",
+  "formSubmissionEnabled: false",
+  "browserExecutionEnabled: false",
+  "externalStateChangeEnabled: false",
+  "The active Worker has one execution classification:",
+  "There is no `auto_allowed`, `owned_only`, `approved_autopilot`, `owned_channel_autopilot` or confirmation-to-execution mode in the active runtime.",
+  "Explicit confirmation authorises only the specific bounded internal metadata write or manual public-source research action named by the route.",
+]) {
+  if (!channelPolicy.includes(token)) errors.push(`Growth channel policy posture is missing: ${token}`);
+}
+
+for (const token of [
+  "This document defines the active internal action taxonomy for the EVAVO Growth Research Worker.",
+  "The Worker does not draft, queue, approve for delivery or execute engagement actions.",
+  "The following historical lifecycle states are non-executable compatibility data only:",
+  "A stored historical status never enables execution.",
+  "reviewOnly: true",
+  "scheduled: false",
+  "callsAI: false",
+  "sendsEmail: false",
+  "postsExternally: false",
+  "submitsForms: false",
+  "No route, approval object, stored setting, channel class or budget state may activate them.",
+  "There is no execution stage in the active Worker.",
+]) {
+  if (!actionModel.includes(token)) errors.push(`Growth engagement action model posture is missing: ${token}`);
+}
+
 for (const forbidden of [
   "Scheduled work is limited to bounded research",
   "scheduled bounded research",
@@ -113,9 +153,7 @@ for (const forbidden of [
   "draft generation is enabled",
   "external state mutation is enabled",
 ]) {
-  if (readme.toLowerCase().includes(forbidden.toLowerCase())) {
-    errors.push(`README contains stale or unsafe posture claim: ${forbidden}`);
-  }
+  if (readme.toLowerCase().includes(forbidden.toLowerCase())) errors.push(`README contains stale or unsafe posture claim: ${forbidden}`);
 }
 
 for (const forbidden of [
@@ -124,9 +162,7 @@ for (const forbidden of [
   "The current build target is Levels 1 through 4 only.",
   "add crawl policy and queued fetch execution",
 ]) {
-  if (architecture.includes(forbidden)) {
-    errors.push(`Growth discovery architecture contains stale current-capability claim: ${forbidden}`);
-  }
+  if (architecture.includes(forbidden)) errors.push(`Growth discovery architecture contains stale current-capability claim: ${forbidden}`);
 }
 
 for (const forbidden of [
@@ -135,9 +171,7 @@ for (const forbidden of [
   "queued_for_research",
   "Queue fetch work",
 ]) {
-  if (runbook.includes(forbidden)) {
-    errors.push(`Zero-source runbook contains stale execution instruction: ${forbidden}`);
-  }
+  if (runbook.includes(forbidden)) errors.push(`Zero-source runbook contains stale execution instruction: ${forbidden}`);
 }
 
 for (const forbidden of [
@@ -148,9 +182,7 @@ for (const forbidden of [
   "Autonomous decisions must be internal only.",
   "max queue depth per domain",
 ]) {
-  if (policy.includes(forbidden)) {
-    errors.push(`Source discovery policy contains stale autonomous or queue instruction: ${forbidden}`);
-  }
+  if (policy.includes(forbidden)) errors.push(`Source discovery policy contains stale autonomous or queue instruction: ${forbidden}`);
 }
 
 for (const forbidden of [
@@ -162,9 +194,37 @@ for (const forbidden of [
   "5. Draft generation and scoring routes",
   "7. Controlled execution",
 ]) {
-  if (autonomyAgent.includes(forbidden)) {
-    errors.push(`Growth autonomy agent document contains stale execution capability: ${forbidden}`);
-  }
+  if (autonomyAgent.includes(forbidden)) errors.push(`Growth autonomy agent document contains stale execution capability: ${forbidden}`);
+}
+
+for (const forbidden of [
+  "Default mode: `owned_channel_autopilot`",
+  "Default mode: `approved_autopilot`",
+  "approved low-volume sends/submissions",
+  "approval-gated posting when allowed",
+  "Action can execute autonomously only if all gates pass",
+  "Action must be approved before execution.",
+  "Action can execute only on EVAVO-owned channels.",
+  "scheduled EVAVO posts under configured cadence",
+]) {
+  if (channelPolicy.includes(forbidden)) errors.push(`Growth channel policy contains stale delivery capability: ${forbidden}`);
+}
+
+for (const forbidden of [
+  "3. `drafted`",
+  "4. `queued`",
+  "5. `approved`",
+  "6. `executed`",
+  "Can become approved autopilot",
+  "Can become owned-channel autopilot",
+  "## Execution envelope",
+  "Before execution, the Worker must verify:",
+  "## Default execution order",
+  "send permissioned/warm email",
+  "submit contact form",
+  "post community reply",
+]) {
+  if (actionModel.includes(forbidden)) errors.push(`Growth engagement action model contains stale execution capability: ${forbidden}`);
 }
 
 const expectedCommand = "node scripts/check-readme-operating-posture.mjs";
@@ -184,6 +244,8 @@ console.log(JSON.stringify({
   zeroSourceRunbookManualOnly: true,
   sourceDiscoveryPolicyManualOnly: true,
   autonomyAgentMarkedHistoricalFutureState: true,
+  channelPolicyReviewOnly: true,
+  engagementActionModelReviewOnly: true,
   autonomousFetchQueueDocumentedAsDisabled: true,
   scheduledExternalResearchDocumentedAsDisabled: true,
   manualResearchAuthenticationDocumented: true,

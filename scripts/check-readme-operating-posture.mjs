@@ -5,13 +5,16 @@ import path from "node:path";
 
 const root = process.cwd();
 const readmePath = path.join(root, "README.md");
+const architecturePath = path.join(root, "docs", "growth-autonomous-discovery-architecture.md");
 const packagePath = path.join(root, "package.json");
 const errors = [];
 
 const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : "";
+const architecture = fs.existsSync(architecturePath) ? fs.readFileSync(architecturePath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 
 if (!readme) errors.push("Missing README.md");
+if (!architecture) errors.push("Missing Growth discovery architecture document");
 
 for (const token of [
   "# EVAVO Growth Research Worker",
@@ -28,6 +31,20 @@ for (const token of [
   if (!readme.includes(token)) errors.push(`README operating posture is missing: ${token}`);
 }
 
+for (const token of [
+  "This document records a future-state design vocabulary",
+  "It is not an active-runtime contract",
+  "The active Worker is manual-research-only.",
+  "Scheduled processing is internal-only.",
+  "Cron must not fetch public pages, discover opportunities, expand sources or enqueue network work.",
+  "manual network research is authenticated and explicitly confirmed",
+  "scheduled external research is disabled",
+  "No autonomous fetch queue or scheduled research mode is enabled.",
+  "Nothing in this document enables those steps.",
+]) {
+  if (!architecture.includes(token)) errors.push(`Growth discovery architecture posture is missing: ${token}`);
+}
+
 for (const forbidden of [
   "Scheduled work is limited to bounded research",
   "scheduled bounded research",
@@ -42,6 +59,17 @@ for (const forbidden of [
   }
 }
 
+for (const forbidden of [
+  "Autonomous research, supervised action.",
+  "The system may autonomously:",
+  "The current build target is Levels 1 through 4 only.",
+  "add crawl policy and queued fetch execution",
+]) {
+  if (architecture.includes(forbidden)) {
+    errors.push(`Growth discovery architecture contains stale current-capability claim: ${forbidden}`);
+  }
+}
+
 const expectedCommand = "node scripts/check-readme-operating-posture.mjs";
 if (packageJson.scripts?.["docs:operating-posture:check"] !== expectedCommand) {
   errors.push(`package.json must expose docs:operating-posture:check as ${expectedCommand}`);
@@ -53,7 +81,9 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run docs:o
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "readme-operating-posture",
+  contract: "repository-operating-posture",
+  readmePostureEnforced: true,
+  discoveryArchitectureMarkedFutureState: true,
   scheduledExternalResearchDocumentedAsDisabled: true,
   manualResearchAuthenticationDocumented: true,
   manualResearchConfirmationDocumented: true,

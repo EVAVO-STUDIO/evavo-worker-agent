@@ -44,6 +44,7 @@ import { matchesWorkerRouteFamily } from "./routes/workerRoutePolicy";
 
 const unexpectedWorkerErrorMessage = "The Worker hit an unexpected internal error before a safe response could be returned.";
 const HEALTH_CONTRACT_VERSION = "2026-07";
+const PUBLIC_SERVICE_NAME = "EVAVO Growth Research Worker";
 
 function jsonResponse(data: any, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers || {});
@@ -77,7 +78,7 @@ async function handleHealth(env: Env): Promise<Response> {
   const checkedAt = new Date().toISOString();
   if (!env.DB) {
     return jsonResponse(
-      { ok: false, status: "unavailable", service: "evavo-worker-agent", version: HEALTH_CONTRACT_VERSION, database: "unavailable", checkedAt },
+      { ok: false, status: "unavailable", service: PUBLIC_SERVICE_NAME, version: HEALTH_CONTRACT_VERSION, database: "unavailable", checkedAt },
       { status: 503, headers: { "cache-control": "no-store", "x-evavo-worker-health-version": HEALTH_CONTRACT_VERSION } },
     );
   }
@@ -89,7 +90,7 @@ async function handleHealth(env: Env): Promise<Response> {
       {
         ok: databaseReady,
         status: databaseReady ? "ok" : "unavailable",
-        service: "evavo-worker-agent",
+        service: PUBLIC_SERVICE_NAME,
         version: HEALTH_CONTRACT_VERSION,
         database: databaseReady ? "ok" : "unavailable",
         checkedAt,
@@ -101,7 +102,7 @@ async function handleHealth(env: Env): Promise<Response> {
     );
   } catch {
     return jsonResponse(
-      { ok: false, status: "unavailable", service: "evavo-worker-agent", version: HEALTH_CONTRACT_VERSION, database: "unavailable", checkedAt },
+      { ok: false, status: "unavailable", service: PUBLIC_SERVICE_NAME, version: HEALTH_CONTRACT_VERSION, database: "unavailable", checkedAt },
       { status: 503, headers: { "cache-control": "no-store", "x-evavo-worker-health-version": HEALTH_CONTRACT_VERSION } },
     );
   }
@@ -233,7 +234,7 @@ export default {
       if (matchesWorkerRouteFamily("admin", pathname)) return await handleAdmin(req, env, pathname, ctx, jsonResponse);
       if (matchesWorkerRouteFamily("tools", pathname)) return await handleTools(req, env, pathname, jsonResponse);
       if (matchesWorkerRouteFamily("public", pathname)) return await handlePublic(req, env, pathname, ctx, jsonResponse);
-      if (matchesWorkerRouteFamily("root", pathname)) return jsonResponse({ ok: true, message: "evavo-worker-agent", health: "/health" });
+      if (matchesWorkerRouteFamily("root", pathname)) return jsonResponse({ ok: true, service: PUBLIC_SERVICE_NAME, health: "/health" });
       return jsonResponse({ ok: false, error: "not_found" }, { status: 404 });
     } catch {
       return jsonResponse({ ok: false, error: "worker_unexpected_error", message: unexpectedWorkerErrorMessage }, { status: 500 });

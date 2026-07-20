@@ -52,9 +52,9 @@ const safeRouteText = 'does not send, post, comment, submit forms, call AI, brow
 
 const required = {
   'README.md': ['EVAVO Business Autopilot', 'metadata, scoring, website/funnel audit, audit-observation, audit-pack, draft-only and approval-governance first', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'Growth Operator and Business Autopilot read routes and confirmed metadata-write routes do not send, post, comment, submit forms, execute browser actions, browse, spend, mutate external systems, or call AI', 'docs/business-autopilot-validation.md', 'docs/business-autopilot-website-page-routes.md', 'Run-WorkerFinalGate.ps1'],
-  'docs/business-autopilot-architecture.md': ['EVAVO Business Autopilot architecture', 'Evidence-backed decisions and approved actions', 'Intelligence layer', 'Evaluation layer', 'Strategy layer', 'Action-preparation layer', 'Governance layer', 'Execution layer', 'Level 0: Read-only intelligence', 'Level 1: Draft-only', 'Level 2: Approval-required execution', 'Level 3: Rules-approved internal actions', 'Level 4: Capped campaign mode', 'Level 5: Broad external autonomy', ...tables],
-  'docs/business-autopilot-governance-policy.md': ['EVAVO Business Autopilot governance policy', 'Research autonomously. Draft helpfully. Execute only under governed approval.', 'send_email', 'post_social', 'comment_social', 'submit_form', 'mutate_external_system', 'execute_browser_action', 'ignore_suppression', 'Approval records must capture', 'Suppression wins over approval.', 'kill switch', 'The browser must not receive'],
-  'docs/business-autopilot-compliance-policy.md': ['EVAVO Business Autopilot compliance policy', 'The first implementation is metadata-only and draft-only.', 'Email compliance gates', 'Social compliance gates', 'Contact-form policy', 'Suppression records must be treated as higher priority than approval records.', 'compliance gate', 'suppression gate', 'approval gate', 'rate/cap gate', 'audit gate', 'kill switch gate'],
+  'docs/business-autopilot-architecture.md': ['EVAVO Business Autopilot architecture', 'Evidence-backed internal decisions and review metadata only.', 'Current runtime posture', 'Intelligence layer', 'Evaluation layer', 'Strategy layer', 'Review-output layer', 'Governance layer', 'Disabled execution layer', 'Level 0: authenticated internal intelligence and review metadata', 'There is no active execution layer.', 'No approval, policy, stored setting, budget profile or historical status may activate these capabilities.', ...tables],
+  'docs/business-autopilot-governance-policy.md': ['EVAVO Business Autopilot governance policy', 'Research manually when explicitly confirmed. Store internal review metadata. Never execute externally.', 'Current governance posture', 'send_email', 'post_social', 'comment_social', 'submit_form', 'mutate_external_system', 'execute_browser_action', 'generate_deliverable_draft', 'No approval record, historical status, budget profile, channel policy, operator preference or stored setting may activate a blocked action.', 'Suppression wins over all recommendations and review metadata.', 'The effective external-execution kill switch is permanently on.', 'The browser must never receive'],
+  'docs/business-autopilot-compliance-policy.md': ['EVAVO Business Autopilot compliance policy', 'The active Worker is internal, authenticated, review-first and non-executing.', 'Compliance metadata can block or classify internal work. It cannot enable a disabled capability.', 'Email sending is disabled.', 'Social publishing and commenting are disabled.', 'Contact-form submission is disabled.', 'Suppression records take priority over opportunity scores, recommendations, approvals and historical action statuses.', 'authoritativeForExecution: false', 'externalUseAllowed: false', 'The active Worker must not append a new external execution attempt.', 'Nothing in this policy is a checklist for enabling delivery.'],
   'docs/business-autopilot-data-model.md': ['EVAVO Business Autopilot data model', 'business intelligence', 'opportunity scoring', 'website audit packs', 'service matching', 'action drafts', 'approval records', 'execution records', 'suppression records', 'migrations/0021_business_autopilot_foundation.sql', 'business_website_audit_runs', 'business_audit_observations', 'business_audit_observation_candidates', ...tables],
   'docs/business-autopilot-draft-review-route-plan.md': ['Business Autopilot draft review route plan', 'buildBusinessDraftReviewBundle(input)', 'saveBusinessActionDraft(env, bundle.draftBuild.draft)', 'saveBusinessApprovalRequest(env', 'business_action_draft_review', 'external_use_not_allowed_by_this_record', 'no email sending', 'no social posting', 'no contact-form submission', 'no browser execution', 'createApprovalRequest: false'],
   'docs/business-autopilot-validation.md': ['Business Autopilot validation workflow', 'npm run business:autopilot:check', 'npm run business:route-contract:print', 'npm run business:autopilot:readonly:print', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save', 'safety.readOnly: true', 'safety.internalMetadataOnly: true', 'does not perform external execution'],
@@ -90,6 +90,31 @@ const required = {
   'package.json': ['business:autopilot:check', 'business:autopilot:raw-error-safety:check', 'business:autopilot:readonly:print', 'business:route-contract:print', 'node scripts/check-business-autopilot.mjs', 'node scripts/check-business-autopilot-raw-error-safety.mjs', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'node scripts/print-business-autopilot-route-contract-check.mjs', 'node scripts/apply-business-autopilot-route-catalogue.mjs'],
 };
 
+const forbiddenDocumentClaims = {
+  'docs/business-autopilot-architecture.md': [
+    'The system should autonomously research, organise, score, draft, monitor, and recommend.',
+    '### Level 1: Draft-only',
+    '### Level 2: Approval-required execution',
+    '### Level 4: Capped campaign mode',
+    'send approved email',
+    'publish approved owned social post',
+  ],
+  'docs/business-autopilot-governance-policy.md': [
+    'Research autonomously. Draft helpfully. Execute only under governed approval.',
+    'Any action that can change external state requires an approval request and execution record.',
+    'approved_to_send',
+    'External actions must support caps before execution is enabled',
+    'only read-only and draft-only actions may proceed',
+  ],
+  'docs/business-autopilot-compliance-policy.md': [
+    'The first implementation is metadata-only and draft-only.',
+    'Before any email send endpoint can be enabled',
+    'Owned social publishing requires:',
+    'Draft generation may occur without consent checks',
+    'Before enabling any send/post/submit endpoint',
+  ],
+};
+
 let failed = false;
 function fail(message) { failed = true; console.error(`FAIL ${message}`); }
 function pass(message) { console.log(`OK   ${message}`); }
@@ -105,6 +130,16 @@ for (const [relativePath, tokens] of Object.entries(required)) {
   for (const token of tokens) {
     if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
     else pass(`${relativePath} contains ${token}`);
+  }
+}
+
+for (const [relativePath, tokens] of Object.entries(forbiddenDocumentClaims)) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) continue;
+  const content = fs.readFileSync(absolutePath, 'utf8');
+  for (const token of tokens) {
+    if (content.includes(token)) fail(`${relativePath} contains stale execution claim ${token}`);
+    else pass(`${relativePath} excludes stale execution claim ${token}`);
   }
 }
 

@@ -6,13 +6,19 @@ import path from "node:path";
 const root = process.cwd();
 const workflowPath = path.join(root, ".github", "workflows", "worker-contract.yml");
 const packagePath = path.join(root, "package.json");
+const indexPath = path.join(root, "src", "index.ts");
+const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtected.ts");
 const errors = [];
 
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
 if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
+if (!fs.existsSync(indexPath)) errors.push("Missing Worker dispatcher");
+if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
+const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
+const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -34,6 +40,25 @@ if (!workflow.includes('      - "wrangler.toml"')) errors.push("Worker workflow 
 if (!workflow.includes('      - "package-lock.json"')) errors.push("Worker workflow must watch the dependency lockfile");
 if (workflow.includes("wrangler deploy")) errors.push("Contract workflow must not deploy the Worker");
 if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_TOKEN")) errors.push("Contract workflow must not request Worker credentials");
+
+for (const token of [
+  'import { handlePlannerAdmin } from "./routes/plannerAdminProtected"',
+  'case "planner":',
+  "return await handlePlannerAdmin(req, env, pathname, jsonResponse)",
+]) {
+  if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected planner routing token: ${token}`);
+}
+if (index.includes('from "./routes/plannerAdmin"')) errors.push("Worker dispatcher must not import the legacy planner implementation directly");
+
+for (const token of [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  'await isAdminRequestAuthorized(request, env)',
+  'request.method === "OPTIONS"',
+  'status: 405',
+  'return handlePlannerAdminImplementation(request, env, pathname, json)',
+]) {
+  if (!plannerWrapper.includes(token)) errors.push(`Protected planner wrapper is missing: ${token}`);
+}
 
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
@@ -89,6 +114,9 @@ console.log(JSON.stringify({
   strictBearerParsingRequired: true,
   constantTimeCredentialComparisonRequired: true,
   centralAuthenticationBeforeProtectedDispatchRequired: true,
+  plannerRuntimeUsesProtectedWrapper: true,
+  directPlannerImplementationImportAllowed: false,
+  unauthenticatedPlannerPreflightAllowed: false,
   publicRoutesRequireAdminToken: false,
   legacyCredentialAliasesAllowed: false,
   publicControlCredentialAllowed: false,

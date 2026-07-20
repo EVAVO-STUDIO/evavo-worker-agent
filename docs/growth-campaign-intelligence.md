@@ -1,16 +1,27 @@
 # Growth Campaign Intelligence Brain
 
-This is the campaign, analysis, decision, loop, cycle, and cycle-memory layer for the EVAVO Growth Operator.
+This is the internal campaign analysis, decision, loop, cycle and memory layer for the EVAVO Growth Research Worker.
 
-It began as the first large-step architecture layer for campaign intelligence, but the current Worker brain now reads from three connected internal memory layers:
+The implementation is **metadata only**. It does not deliver messages, generate drafts, publish content, submit forms, run browser actions, call AI, browse, perform network research or mutate third-party systems.
+
+## Authoritative runtime posture
 
 ```text
-campaign intelligence
-strategy memory
-blackboard knowledge
+scheduledExternalResearchEnabled: false
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+draftingEnabled: false
+emailSendingEnabled: false
+socialPostingEnabled: false
+formSubmissionEnabled: false
+browserExecutionEnabled: false
+externalStateChangeEnabled: false
+autonomousCampaignsEnabled: false
 ```
 
-The implementation is intentionally internal metadata only. It does not deliver messages, publish content, submit browser steps, call AI, browse, or perform network research.
+Campaign records, decisions, experiments, metrics and candidate actions are internal planning and review metadata. No status, approval, score, readiness value, budget or recommended command can activate delivery.
 
 ## Current contracts
 
@@ -20,15 +31,15 @@ Main cycle contract:
 growth_operator_cycle_v3_strategy_blackboard_read_only
 ```
 
-Autonomy contract:
+Historical autonomy-named compatibility contract:
 
 ```text
 growth_autonomous_runtime_v3_strategy_blackboard
 ```
 
-These contracts mean the Worker can read campaign state, strategic intent, and blackboard knowledge together, then choose the safest next internal metadata step.
+The second identifier is retained for compatibility with existing clients and stored records. It does not indicate autonomous network or external execution.
 
-## Code
+## Code and migrations
 
 ```text
 migrations/0014_growth_campaign_intelligence.sql
@@ -51,56 +62,13 @@ src/routes/growthStrategyMemoryAdmin.ts
 src/routes/growthBlackboardAdmin.ts
 ```
 
-## Migrations
+The `growthAutonomousRuntime.ts` filename is historical compatibility naming. Its output is internal analysis only.
 
-```powershell
-cd C:\GitRepos\evavo-worker-agent
-npm run db:migration:one -- 0014 --execute
-npm run db:migration:one -- 0015 --execute
-npm run db:migration:one -- 0016 --execute
-npm run db:migration:one -- 0017 --execute
-npm run db:migration:one -- 0018 --execute
-```
+Apply migrations only through the guarded migration process documented in `migrations/README.md`. Do not infer runtime capability from table names such as `growth_candidate_actions`.
 
-## Tables
+## Route families
 
-Campaign intelligence tables:
-
-```text
-growth_campaigns
-growth_experiments
-growth_campaign_metrics
-growth_decisions
-growth_candidate_actions
-growth_evidence_items
-growth_learning_notes
-growth_operator_cycle_events
-```
-
-Strategy memory tables:
-
-```text
-growth_objectives
-growth_key_results
-growth_target_segments
-growth_offer_profiles
-growth_positioning_profiles
-growth_runtime_constraints
-```
-
-Blackboard tables:
-
-```text
-growth_blackboard_facts
-growth_entities
-growth_entity_relationships
-growth_market_signals
-growth_asset_inventory
-```
-
-## Intended routes
-
-Campaign and cycle routes:
+Internal campaign and cycle routes include:
 
 ```text
 GET  /admin/growth/operator
@@ -108,348 +76,121 @@ GET  /admin/growth/autonomy
 GET  /admin/growth/cycle
 GET  /admin/growth/cycle/events
 POST /admin/growth/cycle/record?confirm=1
-
 GET  /admin/growth/campaigns
 POST /admin/growth/campaigns?confirm=1
-
 GET  /admin/growth/experiments
 POST /admin/growth/experiments?confirm=1
-
 GET  /admin/growth/decisions
 POST /admin/growth/decisions/plan?confirm=1
-
 GET  /admin/growth/metrics
 POST /admin/growth/metrics?confirm=1
-
 GET  /admin/growth/evidence
 POST /admin/growth/evidence?confirm=1
-
 GET  /admin/growth/learning
 POST /admin/growth/learning?confirm=1
 ```
 
-Strategy routes:
+Strategy and blackboard routes remain authenticated internal metadata routes. Confirm-gated POST routes write only the named D1 metadata records.
 
-```text
-GET  /admin/growth/strategy-memory
-GET  /admin/growth/objectives
-POST /admin/growth/objectives?confirm=1
-GET  /admin/growth/key-results
-POST /admin/growth/key-results?confirm=1
-GET  /admin/growth/segments
-POST /admin/growth/segments?confirm=1
-GET  /admin/growth/offers
-POST /admin/growth/offers?confirm=1
-GET  /admin/growth/positioning
-POST /admin/growth/positioning?confirm=1
-GET  /admin/growth/runtime-constraints
-POST /admin/growth/runtime-constraints?confirm=1
-```
-
-Blackboard routes:
-
-```text
-GET  /admin/growth/blackboard
-GET  /admin/growth/blackboard/facts
-POST /admin/growth/blackboard/facts?confirm=1
-GET  /admin/growth/blackboard/entities
-POST /admin/growth/blackboard/entities?confirm=1
-GET  /admin/growth/blackboard/relationships
-POST /admin/growth/blackboard/relationships?confirm=1
-GET  /admin/growth/blackboard/signals
-POST /admin/growth/blackboard/signals?confirm=1
-GET  /admin/growth/blackboard/assets
-POST /admin/growth/blackboard/assets?confirm=1
-```
-
-Wire these paths in `src/index.ts` before the generic `/admin/growth/` branch by running:
-
-```powershell
-npm run growth:wiring:apply
-```
-
-Add the route catalogue entries by running:
-
-```powershell
-npm run growth:route-catalogue:apply
-```
+Confirmation does not authorise drafting, delivery, network research or external mutation.
 
 ## Decision planner
 
-The deterministic planner uses a game-AI-inspired utility model. It considers campaign state, experiment state, latest metrics, evidence count, and pending review count.
-
-It produces:
-
-```text
-candidate actions
-utility score
-risk score
-expected value score
-learning value score
-readiness score
-selected action
-reasoning summary
-constraints
-next step
-```
-
-Initial candidate action types:
+The deterministic planner may produce internal candidate steps such as:
 
 ```text
 review_campaign_health
-gather_more_evidence
-prepare_reviewable_draft
-prepare_owned_content
+gather_more_existing_evidence
 create_internal_followup_task
 record_learning_note
+request_manual_review
+mark_blocked
 ```
 
-These are still metadata planning records only. Drafting and external execution remain blocked.
-
-## Campaign health and analysis
-
-The campaign health model returns:
+It must not produce or promote:
 
 ```text
-green
-amber
-red
-unknown
+prepare_reviewable_draft
+prepare_owned_content
+send_email
+submit_form
+post_content
+run_browser_step
+execute_campaign
 ```
 
-It looks at campaign status, recorded feedback, meeting count, review coverage, sample size, and the existence of metrics.
+All scores, readiness values, reasons and recommended commands are advisory metadata only.
 
-`GET /admin/growth/operator` returns campaign-level analyses and a readiness summary:
+## Operator loop and cycle
 
-```text
-analyses
-readiness
-loopPlan
-```
+`GET /admin/growth/operator` returns campaign analyses and readiness summaries.
 
-Each analysis includes:
-
-```text
-health
-operatorState
-signalScore
-riskScore
-readinessScore
-positiveRate
-reviewCoverage
-evidenceScore
-learningScore
-decisionScore
-reasons
-recommendedNextActions
-counts
-```
-
-## Operator loop
-
-The operator loop is the first deterministic "always keep moving" layer. It picks the safest next internal step from the current Worker state.
-
-Possible loop steps:
-
-```text
-create_campaign
-add_metric_snapshot
-add_evidence
-plan_decision
-record_learning
-review_risk
-continue_testing
-```
-
-## Operator cycle
-
-`GET /admin/growth/cycle` returns a full read-only cycle report.
-
-Current contract:
+`GET /admin/growth/cycle` returns the read-only cycle contract:
 
 ```text
 growth_operator_cycle_v3_strategy_blackboard_read_only
 ```
 
-The cycle report includes:
+Possible loop steps are limited to internal work:
 
 ```text
-readiness
-strategy
-blackboard
-loopPlan
-campaignBriefs
-capabilitySummary
-blocked
-counts
-safety
+create_campaign_metadata
+add_metric_snapshot
+add_existing_evidence
+plan_internal_decision
+record_learning
+review_risk
+request_manual_review
 ```
 
-The `strategy` section summarizes:
+The loop must not call network, AI, drafting or delivery helpers.
 
-```text
-complete
-missing
-counts
-activeObjectives
-targetSegments
-offerProfiles
-positioningProfiles
-runtimeConstraints
-```
+## Historical autonomy view
 
-The `blackboard` section summarizes:
-
-```text
-complete
-missing
-counts
-facts
-entities
-marketSignals
-assets
-```
-
-Current setup blockers can include:
-
-```text
-no_campaigns
-missing_objectives
-missing_target_segments
-missing_offer_profiles
-missing_positioning_profiles
-missing_runtime_constraints
-missing_blackboard_facts
-missing_growth_entities
-missing_entity_relationships
-missing_market_signals
-missing_asset_inventory
-missing_metric_snapshot
-missing_evidence
-missing_reasoned_decision
-```
-
-## Autonomous runtime
-
-`GET /admin/growth/autonomy` returns the supervised autonomous runtime contract.
-
-Current contract:
+`GET /admin/growth/autonomy` returns an internal reasoning and readiness view under the compatibility contract:
 
 ```text
 growth_autonomous_runtime_v3_strategy_blackboard
 ```
 
-The runtime includes:
+Its `strategicIntent`, `knowledgeSubstrate`, `currentFocus`, `readiness`, `blockers`, `cognitionStages`, `autonomyLevels`, `capabilitySummary`, `governance`, `nextRuntimeMilestones` and `safety` fields are reporting metadata.
 
-```text
-strategicIntent
-knowledgeSubstrate
-currentFocus
-readiness
-blockers
-cognitionStages
-autonomyLevels
-capabilitySummary
-governance
-nextRuntimeMilestones
-safety
-```
-
-`knowledgeSubstrate` is sourced from the Growth Blackboard and reports whether the Worker has enough internal knowledge to reason safely before future approval-gated execution exists.
+`autonomyLevels` and `nextRuntimeMilestones` must not be interpreted as permission or a roadmap to enable external execution. Disabled capabilities remain disabled regardless of readiness.
 
 ## Cycle memory
 
 `POST /admin/growth/cycle/record?confirm=1` records the current read-only cycle into `growth_operator_cycle_events`.
 
-This gives the Worker a durable history of its internal campaign-thinking loop without executing anything externally.
-
-Stored fields include:
-
-```text
-selected_step
-target_campaign_id
-target_campaign_name
-priority
-rationale_json
-blocked_json
-recommended_command
-readiness_json
-loop_plan_json
-counts_json
-strategy_json
-blackboard_json
-safety_json
-created_at
-```
-
-`GET /admin/growth/cycle/events` returns hydrated parsed convenience fields alongside the raw JSON columns:
-
-```text
-rationale
-blocked
-readiness
-loopPlan
-counts
-strategy
-blackboard
-safety
-```
+It stores internal planning, readiness, strategy, blackboard and safety snapshots. It does not execute the selected step and cannot activate a historical candidate action.
 
 ## Safety posture
 
-All routes are internal metadata only:
+All campaign-intelligence routes are internal metadata only:
 
 ```text
 externalStateChange: false
 callsAI: false
 callsNetwork: false
+sendsEmail: false
+postsExternally: false
+submitsForms: false
+browserExecution: false
 ```
 
-Confirm-gated write routes write only internal metadata records. They do not send, publish, submit forms, run browser work, perform public actions, browse, or call AI.
+Historical campaign, candidate-action or decision rows remain readable but non-executable.
 
-This layer is the brain, analytics, memory, and planning layer. Execution remains a later phase after evidence packs, approvals, suppression, caps, identity, audit, and channel-specific controls exist.
+There is no later execution phase authorised by this document. Any future proposal to add AI, drafting, sending, posting, form submission, browser automation or third-party mutation requires a separate product decision, threat model and new implementation. Documentation, approval metadata or stored configuration alone can never enable it.
 
 ## Local verification
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
-git pull
-npm run growth:wiring:apply
-npm run growth:route-catalogue:apply
-npm run db:migrations:check
+git pull origin main
 npm run growth:campaigns:check
 npm run growth:strategy:check
 npm run growth:blackboard:check
+npm run docs:operating-posture:check
 npm run check:local
 ```
 
-## Smoke verification
-
-```powershell
-npm run growth:route-contract:print
-npm run growth:campaigns:smoke:print
-npm run growth:strategy:smoke:print
-npm run growth:blackboard:smoke:print
-```
-
-The campaign smoke validates:
-
-```text
-operator overview
-operator cycle
-campaign create
-experiment create
-metric snapshot create
-evidence item create
-learning note create
-next-best decision planning
-cycle record create
-cycle events list
-```
-
-The strategy and blackboard smokes validate the v3 cycle/autonomy contracts:
-
-```text
-growth_operator_cycle_v3_strategy_blackboard_read_only
-growth_autonomous_runtime_v3_strategy_blackboard
-```
+The current validation contracts must continue to verify internal-only, read-only and non-executing behaviour.

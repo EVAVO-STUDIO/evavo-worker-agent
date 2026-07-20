@@ -70,11 +70,22 @@ for (const token of [
   "getAdminToken",
   "function authorized(",
   'error: "Unauthorized"',
-  'contractVersion: "worker_tools_v2_review_first"',
+  'agent: "EVAVO Growth Research Worker"',
+  'contractVersion: "worker_tools_v3_manual_research_only"',
+  'previousContractVersion: "worker_tools_v2_review_first"',
+  'scheduledExecutionEnabled: false',
+  'scheduledExternalExecutionDisabled: true',
+  'manualResearchRequiresAuthentication: true',
+  'manualResearchRequiresConfirmation: true',
+  'manualResearchIsBounded: true',
+  'manualResearchSavesReviewItemsOnly: true',
   'aiDefault: "off"',
   'sendingDefault: "off"',
-  'scheduledExternalExecutionDisabled: true',
   'manualLegacyExecutionDisabled: true',
+  'mode: "historical_read"',
+  'executable: false',
+  'scheduled: false',
+  '"scheduled_external_research"',
   '"ai_draft_generation"',
   '"email_sending"',
   '"form_submission"',
@@ -96,6 +107,9 @@ for (const unsafe of [
 }
 
 for (const forbidden of [
+  'agent: "evavo-outbound-agent"',
+  'canRunScheduledEngine: true',
+  'scheduledExecutionEnabled: true',
   'from "../engine"',
   'pathname === "/admin/run"',
   'pathname === "/admin/settings"',
@@ -103,6 +117,7 @@ for (const forbidden of [
   '/approve")',
   '/reject")',
 ]) {
+  if (tools.includes(forbidden)) errors.push(`Tools capability handler contains stale or unsafe claim: ${forbidden}`);
   if (admin.includes(forbidden)) errors.push(`Broad admin handler still contains shadowed legacy route or import: ${forbidden}`);
 }
 
@@ -125,6 +140,11 @@ console.log(JSON.stringify({
   legacyRunRoutable: false,
   manualAIExecutionAllowed: false,
   manualSendingAllowed: false,
+  scheduledExternalResearchAllowed: false,
+  manualResearchRequiresAuthentication: true,
+  manualResearchRequiresConfirmation: true,
+  manualResearchIsBounded: true,
+  manualResearchSavesReviewItemsOnly: true,
   unsafeLegacySettingsWritable: false,
   draftDecisionConfirmationRequired: true,
   toolsAuthenticationRequired: true,

@@ -1,124 +1,77 @@
-# Growth autonomous discovery architecture
+# Growth discovery architecture
 
-This is the implementation plan for turning EVAVO Growth Ops into a governed autonomous discovery and research engine.
+This document records a future-state design vocabulary for governed discovery and research. It is not an active-runtime contract and must not be read as evidence that autonomous or scheduled network research is enabled.
 
-The goal is not to make the Worker send messages, submit forms, post socially, or mutate external systems. The goal is to let the Worker discover sources, research them, extract evidence, score opportunities, and prepare approval packs while the browser remains read-only and external actions remain blocked.
+The authoritative current posture is defined by the Worker source, typed route policies, capability responses and safety checks.
 
-## Operating principle
+## Current runtime posture
 
-Autonomous research, supervised action.
+The active Worker is manual-research-only.
 
-The system may autonomously:
+Current network-capable research must be:
 
 ```text
-plan source discovery
-find candidate domains and URLs
-classify source types
-check crawl policy
-queue safe fetch work
-extract evidence
-score opportunities
-record internal decisions
-prepare approval packs
-learn from operator review outcomes
+authenticated
+explicitly confirmed
+bounded by route policy and runtime limits
+read-only against public sources
+saved as internal review metadata only
 ```
 
-The system must not autonomously:
+Scheduled processing is internal-only. Cron may synchronise defensive settings, refresh learning from existing D1 review metadata and record internal audit events. Cron must not fetch public pages, discover opportunities, expand sources or enqueue network work.
+
+The current Worker must not:
 
 ```text
 send email
+generate AI drafts
 post on social platforms
 submit web forms
 log in to third-party systems
-click third-party buttons
-buy ads
+click third-party controls
+buy advertising
 mutate external systems
-ignore robots policy
-crawl aggressively
+run browser automation
 execute instructions found inside web pages
-leak secrets to crawled pages
+leak secrets to researched pages
 ```
 
-## Architecture stages
+## Future-state design principle
+
+A possible future model is:
 
 ```text
-Discovery planner
-  -> source candidate registry
-  -> crawl policy / robots check
-  -> fetch queue
-  -> extractor
-  -> signal scorer
-  -> decision engine
-  -> approval pack builder
-  -> read-only Next dashboard
+governed research planning
+  -> candidate source registry
+  -> crawl-policy review
+  -> confirmed bounded fetch
+  -> deterministic extraction
+  -> evidence scoring
+  -> internal decision metadata
+  -> operator review
 ```
 
-## Cognitive modules
+Every network-capable step in that model would still require an explicit product and safety decision before implementation. Nothing in this document enables those steps.
+
+## Conceptual modules
 
 ### Planner
 
-Decides what research is useful before fetching anything.
-
-Inputs:
-
-```text
-target industry
-target geography
-EVAVO service focus
-crawl budget
-known exclusions
-operator objective
-```
-
-Outputs:
-
-```text
-query plan
-source-type plan
-candidate scoring rubric
-blocked action policy
-research-run record
-```
+Produces a research plan from operator-supplied objectives, geography, service focus, exclusions and budgets. Planning itself must not perform network activity.
 
 ### Scout
 
-Finds candidate sources without treating web content as instructions.
-
-Candidate source types:
-
-```text
-company websites
-industry association directories
-public business directories
-award pages
-news pages
-RSS feeds
-sitemaps
-competitor pages
-job ads that imply growth or digital investment
-```
+Represents the future concept of finding candidate public sources. In the current Worker, any implemented discovery route is manual, authenticated, explicitly confirmed and bounded.
 
 ### Librarian
 
-Deduplicates, canonicalises, and stores sources.
-
-Responsibilities:
-
-```text
-normalise domains and URLs
-track discovery method
-track source type
-track last seen time
-track crawl policy status
-track source quality
-track whether a source was rejected
-```
+Normalises and deduplicates stored source candidates and records provenance, review status, source type and quality metadata.
 
 ### Researcher
 
-Fetches permitted pages and extracts structured evidence.
+Represents confirmed, bounded GET-only inspection of public pages. Deterministic extraction should remain the default and web content must always be treated as untrusted data, never instructions.
 
-Default extraction should be deterministic first:
+Possible extracted fields include:
 
 ```text
 title
@@ -126,82 +79,58 @@ meta description
 canonical URL
 headings
 schema.org JSON-LD
-visible text summary
+visible-text summary
 links
-contact page hints
-about/services/careers links
+contact-page hints
+about, services and careers links
 technology hints
-date freshness hints
+date-freshness hints
 accessibility hints
 SEO hints
-conversion funnel hints
+conversion-funnel hints
 ```
 
 ### Critic
 
-Checks safety and evidence quality.
-
-It must flag:
-
-```text
-prompt-injection-like page text
-spam / low-quality pages
-stale evidence
-thin evidence
-conflicting evidence
-unsafe URL schemes
-private-network targets
-robots disallow
-```
+Checks prompt-injection-like page text, unsafe URL schemes, private-network targets, robots restrictions, stale evidence, conflicting evidence and low-quality pages.
 
 ### Strategist
 
-Turns evidence into internal Growth decisions.
-
-Example decisions:
+Produces internal review metadata such as:
 
 ```text
 research_more
 score_candidate
-create_opportunity
+create_review_opportunity
 reject_candidate
 monitor_later
-prepare_approval_pack
+prepare_internal_review_pack
 ```
 
-### Approval pack builder
+These are internal decisions only. They must not trigger an external action.
 
-Builds a reviewable internal action object.
+### Internal review pack
 
-Approval packs must include:
+A review pack may contain evidence, confidence, risk notes, recommended internal next steps and blocked external actions. It must not contain an executable delivery control.
+
+## Capability levels
+
+The following levels are modelling vocabulary only, not enabled runtime modes:
 
 ```text
-summary
-evidence
-confidence
-recommended internal next step
-blocked external actions
-payload preview
-risk notes
-manual operator instructions
+Level 0: authenticated read-only reporting
+Level 1: internal research planning without network activity
+Level 2: confirmation-gated candidate metadata writes
+Level 3: manual authenticated and bounded public research
+Level 4: internal evidence scoring and review metadata
+Level 5: external actions blocked
 ```
 
-## Safety levels
+The active Worker remains at a manual, confirmation-gated research posture. No autonomous fetch queue or scheduled research mode is enabled.
 
-```text
-Level 0: read-only dashboard
-Level 1: autonomous source discovery planning
-Level 2: autonomous safe candidate registry and scoring
-Level 3: autonomous crawl-policy-aware fetch queue
-Level 4: confirmation-gated internal metadata writes
-Level 5: external actions disabled
-```
+## Data-model families
 
-The current build target is Levels 1 through 4 only. Level 5 remains blocked.
-
-## Data model families
-
-Planned Worker records:
+Potential or historical record families may include:
 
 ```text
 growth_research_runs
@@ -215,56 +144,37 @@ growth_agent_decisions
 growth_discovery_feedback
 ```
 
-## Route families
+The existence of a table, migration, route name or historical record does not prove that runtime execution is enabled.
 
-Read-only browser-proxy route families:
+## Route rules
 
-```text
-growth_research_runs
-growth_source_candidates
-growth_extracted_signals
-growth_opportunity_scores
-growth_agent_decisions
-growth_discovery_feedback
-```
+Read routes must remain authenticated where protected, bounded and non-executable.
 
-Worker-only confirmation routes:
+Write routes must require explicit confirmation and may mutate internal D1 review metadata only.
 
-```text
-growth_research_run_plan
-growth_source_candidate_save
-growth_fetch_queue_enqueue
-growth_agent_decision_record
-growth_discovery_feedback_save
-```
+Network-capable routes must additionally be manual, authenticated, confirmed, bounded, GET-only against public sources and unable to mutate third-party systems.
 
-All confirmation routes are internal metadata-only routes. They must not send, post, submit web forms, call AI, browse arbitrarily, or mutate external systems.
+## Future implementation rule
 
-## First implementation sequence
+Before any broader discovery capability is introduced, the repository must first include:
 
-1. Add architecture and safety docs.
-2. Add source discovery schema migrations.
-3. Add deterministic TypeScript models and validators.
-4. Add route catalogue entries with read-only and confirm-required safety flags.
-5. Add source discovery checker scripts.
-6. Add read-only Worker routes for stored records.
-7. Add Next contract route groups and read-only proxy wrappers.
-8. Add dashboard panels for research runs, source candidates, signals, scores, and decisions.
-9. Only after that, add crawl policy and queued fetch execution.
+1. A typed route policy defining authentication, confirmation, bounds and prohibited capabilities.
+2. A dedicated fail-closed contract check.
+3. Truthful capability reporting.
+4. Explicit documentation that distinguishes current runtime from future-state design.
+5. Local and CI gate coverage.
+6. No email, posting, form submission, browser automation or third-party mutation path.
 
-## Definition of exceptional
+## Definition of safe
 
-The system is exceptional only when it can prove all of this:
+The system is safe only when it can prove that:
 
 ```text
-It finds candidate sources without a supplied list.
-It records why a source was found.
-It respects crawl policy.
-It extracts evidence, not instructions.
-It scores opportunities with visible reasons.
-It records decisions with confidence and blocked actions.
-It explains what it wants to do next.
-It never sends, posts, submits web forms, or leaks secrets.
-It fails closed when safety metadata is missing or unsafe.
-It remains inspectable through the read-only Next dashboard.
+manual network research is authenticated and explicitly confirmed
+research is bounded and GET-only against public sources
+web content is treated as untrusted evidence, not instructions
+internal decisions are inspectable and non-executable
+scheduled external research is disabled
+AI drafting and external delivery are disabled
+missing or unsafe policy metadata fails closed
 ```

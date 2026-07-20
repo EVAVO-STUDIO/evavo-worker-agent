@@ -1,189 +1,197 @@
 # EVAVO Business Autopilot compliance policy
 
-This policy defines the minimum compliance model before the Business Autopilot can execute email, social, form, CRM, calendar, or other external actions.
+This policy defines the active compliance posture for EVAVO Business Autopilot.
 
-It is intentionally stricter than the first implementation needs. The first implementation is metadata-only and draft-only.
+The active Worker is internal, authenticated, review-first and non-executing. It does not generate deliverable drafts, send email, publish or comment socially, submit forms, invite external calendar attendees, write to external CRM systems, buy ads, run browser automation or mutate third-party systems.
 
-## Initial posture
-
-The first implementation supports:
+## Current posture
 
 ```text
-read-only intelligence
-action drafts
-approval metadata
-suppression metadata
-execution metadata
-learning metadata
+manualResearchOnly: true
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+scheduledExternalResearchEnabled: false
+draftingEnabled: false
+emailSendingEnabled: false
+socialPublishingEnabled: false
+socialCommentingEnabled: false
+formSubmissionEnabled: false
+browserExecutionEnabled: false
+externalStateChangeEnabled: false
 ```
 
-The first implementation does not support autonomous sending, posting, commenting, submitting forms, buying ads, or mutating external systems.
-
-## Email compliance gates
-
-Before any email send endpoint can be enabled, the platform must verify:
+## Active compliance rule
 
 ```text
-recipient identity is known
-contact source is recorded
-consent basis or lawful basis is recorded
-sender identity is configured
-business contact details are configured
-unsubscribe mechanism is configured where required
-suppression list has been checked
-approval record exists
-message body matches approved draft or approved template family
-daily and campaign caps are not exceeded
-audit record is created before execution
+Compliance metadata can block or classify internal work. It cannot enable a disabled capability.
 ```
 
-If any check fails, the action status must become:
+Approval, consent, lawful-basis, suppression, audit and execution records are internal governance metadata only. No record creates permission to deliver externally.
+
+## Email posture
+
+Email sending is disabled.
+
+The system may store internal evidence such as:
 
 ```text
-blocked
+public contact-path existence
+operator-provided contact source
+allowed-use classification
+suppression status
+manual-review notes
 ```
 
-or:
+It must not:
 
 ```text
-suppressed
+generate a deliverable email draft
+send email
+validate an address by contacting it
+subscribe or unsubscribe externally
+invoke an email provider
+convert approval metadata into send permission
 ```
 
-## Social compliance gates
+Historical send-oriented fields remain non-executable compatibility data.
 
-Owned social publishing requires:
+## Social posture
+
+Social publishing and commenting are disabled.
+
+The system may store:
 
 ```text
-approved content draft
-approved target channel
-operator approval
-publish window
-brand voice check
-campaign cap check
-audit record
+public channel URL
+channel classification
+public rule evidence
+brand-risk notes
+manual-review recommendation
 ```
 
-Third-party commenting requires a higher threshold:
+It must not create deliverable post or comment drafts, publish, schedule, react or authenticate to a social platform.
+
+## Contact-form posture
+
+Contact-form submission is disabled.
+
+A confirmed bounded manual research action may record that a public contact page or form exists, but it must not:
 
 ```text
-specific post URL
-specific approved comment text
-manual approval per comment
-brand-risk check
-no impersonation
-no spam repetition
-no hidden automation identity
+populate fields
+prepare a submission payload
+solve CAPTCHA
+bypass anti-bot controls
+submit the form
+retry submission
 ```
-
-Third-party commenting should remain disabled until owned-channel scheduling is reliable.
-
-## Contact-form policy
-
-Contact form submission is blocked by default.
-
-The system may:
-
-```text
-detect contact forms
-summarise form fields
-draft a message
-prepare manual submission instructions
-```
-
-The system must not submit forms automatically unless the target form is an explicitly trusted and approved workflow.
 
 ## Data minimisation
 
-Store only what is useful for business intelligence, approval, execution and audit.
+Store only information necessary for internal business intelligence, audit, review, suppression and learning.
 
-Avoid storing sensitive personal information unless there is a clear business purpose and retention policy.
+Avoid sensitive personal information unless the operator supplies it for a clear internal purpose and a defined retention policy applies.
 
-## Source-of-contact recording
-
-Any person or email record used for outreach must store:
+For person or contact metadata, prefer:
 
 ```text
 source type
-source URL or operator source
+public source URL or operator source
 collection timestamp
 confidence
-allowed use
-notes
+allowed-use classification
+review notes
 ```
 
-## Unsubscribe and suppression
+Do not enrich private profiles, scrape authenticated sources or infer sensitive attributes.
 
-Suppression must be checked before any external message action.
+## Suppression and do-not-contact metadata
 
-Suppression records may be created by:
+Suppression remains authoritative even though delivery is disabled.
+
+Suppression records may be created from:
 
 ```text
 operator decision
-unsubscribe event
-complaint
-bounce
+historical unsubscribe
+historical complaint
+historical bounce
 bad-fit review
 competitor flag
 legal-risk flag
+brand-risk flag
 duplicate detection
 ```
 
-Suppression records must be treated as higher priority than approval records.
+Suppression records take priority over opportunity scores, recommendations, approvals and historical action statuses.
 
-## Execution evidence
+## Historical approval and execution metadata
 
-Every external execution attempt must record:
+Retained records may include:
 
 ```text
-draft id
+action draft id
 approval id
 compliance status
 suppression status
-execution provider
-execution status
+historical execution provider
+historical execution status
 attempt count
 result reference
 failure reason
 ```
 
-## Draft-only exception
-
-Draft generation may occur without consent checks if the draft is not sent or posted and remains internal.
-
-Drafts must clearly identify whether they are:
+These fields are read-only compatibility and audit data.
 
 ```text
-internal note
-email draft
-social post draft
-social comment draft
-contact form draft
-proposal draft
-follow-up draft
+authoritativeForExecution: false
+externalUseAllowed: false
+executable: false
+deliverable: false
 ```
+
+The active Worker must not append a new external execution attempt.
+
+## Manual research compliance gates
+
+Before a network-capable manual research route runs, verify:
+
+```text
+shared ADMIN_TOKEN authentication
+explicit confirmation
+bounded route classification
+public-target and redirect safety
+GET-only method
+request, byte, time and result limits
+review-only persistence
+no AI call
+no alternate retry executor
+```
+
+If any condition fails, return a safe error and perform no network fallback.
 
 ## Operator override policy
 
-Operator overrides must record:
+Operator metadata may clarify source, classification or review outcome. It cannot override blocked capabilities.
+
+No operator override may enable:
 
 ```text
-operator id or label
-reason
-risk accepted
-expiry
+email sending
+social publishing
+social commenting
+form submission
+browser execution
+ad buying
+third-party mutation
+AI drafting
+scheduled external research
 ```
 
-Overrides must not bypass suppression unless the suppression reason is corrected or removed.
+## Future capability boundary
 
-## Future execution requirement
+Nothing in this policy is a checklist for enabling delivery.
 
-Before enabling any send/post/submit endpoint, add dedicated checks for:
-
-```text
-compliance gate
-suppression gate
-approval gate
-rate/cap gate
-audit gate
-kill switch gate
-```
+Any future proposal to add email, social, form, CRM, calendar, browser or advertising execution requires a separate product decision, legal review, threat model, implementation and independently enforced contract. Current metadata tables and historical fields do not satisfy that requirement.

@@ -7,6 +7,7 @@ const root = process.cwd();
 const workflowPath = path.join(root, ".github", "workflows", "worker-contract.yml");
 const packagePath = path.join(root, "package.json");
 const indexPath = path.join(root, "src", "index.ts");
+const adminPath = path.join(root, "src", "routes", "admin.ts");
 const adminWrapperPath = path.join(root, "src", "routes", "adminProtected.ts");
 const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtected.ts");
 const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
@@ -16,6 +17,7 @@ const errors = [];
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
 if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
 if (!fs.existsSync(indexPath)) errors.push("Missing Worker dispatcher");
+if (!fs.existsSync(adminPath)) errors.push("Missing broad admin implementation");
 if (!fs.existsSync(adminWrapperPath)) errors.push("Missing protected broad admin wrapper");
 if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
 if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
@@ -24,6 +26,7 @@ if (!fs.existsSync(healthPath)) errors.push("Missing admin health implementation
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
+const admin = fs.existsSync(adminPath) ? fs.readFileSync(adminPath, "utf8") : "";
 const adminWrapper = fs.existsSync(adminWrapperPath) ? fs.readFileSync(adminWrapperPath, "utf8") : "";
 const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
 const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
@@ -98,6 +101,36 @@ for (const token of [
 }
 
 for (const token of [
+  "const historicalReadSafety = Object.freeze({",
+  "readOnly: true",
+  "authenticated: true",
+  "historicalOnly: true",
+  "executable: false",
+  "scheduled: false",
+  "callsNetwork: false",
+  "callsAI: false",
+  "sendsEmail: false",
+  'contractVersion: "admin_historical_leads_v2_read_only"',
+  'contractVersion: "admin_historical_drafts_v2_read_only"',
+  'contractVersion: "admin_historical_events_v2_read_only"',
+  'contractVersion: "admin_historical_insights_v2_read_only"',
+  'contractVersion: "admin_historical_runs_v2_read_only"',
+  "safety: historicalReadSafety",
+]) {
+  if (!admin.includes(token)) errors.push(`Broad admin read implementation is missing truthful token: ${token}`);
+}
+for (const forbidden of [
+  "return json({ ok: true, leads });",
+  "return json({ ok: true, drafts: enriched });",
+  "return json({ ok: true, events: await listEvents(env, 150) });",
+  "return json({ ok: true, runs: await listEvents(env, 100) });",
+  "executable: true",
+  "scheduled: true",
+]) {
+  if (admin.includes(forbidden)) errors.push(`Broad admin reads must not contain stale execution token: ${forbidden}`);
+}
+
+for (const token of [
   'contractVersion: "admin_health_v2_manual_research_only"',
   "scheduledExecutionEnabled: false",
   "scheduledExternalResearchEnabled: false",
@@ -113,7 +146,7 @@ for (const token of [
 for (const forbidden of [
   'recs.push("continue_free_safe_tick")',
   'status: HealthReport["status"] = !engineEnabled ? "paused"',
-  'lastEngineRun:',
+  "lastEngineRun:",
 ]) {
   if (health.includes(forbidden)) errors.push(`Admin reporting must not contain stale execution token: ${forbidden}`);
 }
@@ -128,6 +161,7 @@ const expectedScripts = {
   "db:historical-compatibility:check": "node scripts/check-historical-data-compatibility.mjs",
   "db:migration-safety:check": "node scripts/check-migration-execution-safety.mjs",
   "safety:gates:check": "node scripts/check-safety-gate-completeness.mjs",
+  "admin:broad-read-truthfulness:check": "node scripts/check-broad-admin-read-truthfulness.mjs",
   "admin:broad-write-safety:check": "node scripts/check-broad-admin-write-safety.mjs",
   "admin:reporting-truthfulness:check": "node scripts/check-admin-reporting-truthfulness.mjs",
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
@@ -173,6 +207,8 @@ console.log(JSON.stringify({
   broadAdminRuntimeUsesProtectedWrapper: true,
   directBroadAdminImplementationImportAllowed: false,
   broadAdminManualWritesRequireConfirmation: true,
+  broadAdminReadTruthfulnessRequired: true,
+  broadAdminHistoricalReadsExecutable: false,
   adminReportingTruthfulnessRequired: true,
   adminHealthTreatsDisabledExecutionAsSafe: true,
   historicalAdminRecordsExecutable: false,

@@ -16,6 +16,9 @@ const documents = {
   actionModel: "docs/growth-engagement-action-model.md",
   costGovernor: "docs/growth-cost-governor.md",
   campaignIntelligence: "docs/growth-campaign-intelligence.md",
+  businessArchitecture: "docs/business-autopilot-architecture.md",
+  businessGovernance: "docs/business-autopilot-governance-policy.md",
+  businessCompliance: "docs/business-autopilot-compliance-policy.md",
 };
 
 const content = {};
@@ -127,6 +130,40 @@ requireTokens("Campaign intelligence", content.campaignIntelligence, [
   "There is no later execution phase authorised by this document.",
 ]);
 
+requireTokens("Business Autopilot architecture", content.businessArchitecture, [
+  "This document defines the active internal architecture for EVAVO Business Autopilot.",
+  "Evidence-backed internal decisions and review metadata only.",
+  "Current runtime posture",
+  "There is no active execution layer.",
+  "Level 0: authenticated internal intelligence and review metadata",
+  "No approval, policy, stored setting, budget profile or historical status may activate these capabilities.",
+  "Historical labels such as draft-only, approval-required execution, capped campaign mode and broad external autonomy are not active levels.",
+  "It must not produce deliverable drafts or execute external activity.",
+]);
+
+requireTokens("Business Autopilot governance", content.businessGovernance, [
+  "This policy is authoritative for the active EVAVO Business Autopilot runtime.",
+  "Research manually when explicitly confirmed. Store internal review metadata. Never execute externally.",
+  "No approval record, historical status, budget profile, channel policy, operator preference or stored setting may activate a blocked action.",
+  "There is no scheduled crawler, background queue, automatic retry executor or alternate fallback path.",
+  "authoritativeForExecution: false",
+  "externalUseAllowed: false",
+  "The effective external-execution kill switch is permanently on.",
+  "It does not draft deliverable content and does not execute external actions.",
+]);
+
+requireTokens("Business Autopilot compliance", content.businessCompliance, [
+  "The active Worker is internal, authenticated, review-first and non-executing.",
+  "Compliance metadata can block or classify internal work. It cannot enable a disabled capability.",
+  "Email sending is disabled.",
+  "Social publishing and commenting are disabled.",
+  "Contact-form submission is disabled.",
+  "Suppression records take priority over opportunity scores, recommendations, approvals and historical action statuses.",
+  "authoritativeForExecution: false",
+  "The active Worker must not append a new external execution attempt.",
+  "Nothing in this policy is a checklist for enabling delivery.",
+]);
+
 forbidTokens("README", content.readme, [
   "Scheduled work is limited to bounded research",
   "scheduled public-source research",
@@ -196,6 +233,31 @@ forbidTokens("Campaign intelligence", content.campaignIntelligence, [
   "before future approval-gated execution exists",
 ]);
 
+forbidTokens("Business Autopilot architecture", content.businessArchitecture, [
+  "The system should autonomously research, organise, score, draft, monitor, and recommend.",
+  "### Level 1: Draft-only",
+  "### Level 2: Approval-required execution",
+  "### Level 4: Capped campaign mode",
+  "send approved email",
+  "publish approved owned social post",
+]);
+
+forbidTokens("Business Autopilot governance", content.businessGovernance, [
+  "Research autonomously. Draft helpfully. Execute only under governed approval.",
+  "Any action that can change external state requires an approval request and execution record.",
+  "approved_to_send",
+  "External actions must support caps before execution is enabled",
+  "only read-only and draft-only actions may proceed",
+]);
+
+forbidTokens("Business Autopilot compliance", content.businessCompliance, [
+  "The first implementation is metadata-only and draft-only.",
+  "Before any email send endpoint can be enabled",
+  "Owned social publishing requires:",
+  "Draft generation may occur without consent checks",
+  "Before enabling any send/post/submit endpoint",
+]);
+
 const expectedCommand = "node scripts/check-readme-operating-posture.mjs";
 if (packageJson.scripts?.["docs:operating-posture:check"] !== expectedCommand) {
   errors.push(`package.json must expose docs:operating-posture:check as ${expectedCommand}`);
@@ -217,6 +279,7 @@ console.log(JSON.stringify({
   automaticRetriesDocumentedAsDisabled: true,
   aiAndDraftBudgetsDocumentedAsZero: true,
   campaignIntelligenceDocumentedAsMetadataOnly: true,
+  businessAutopilotDocumentedAsNonExecuting: true,
   draftingDocumentedAsDisabled: true,
   outboundExecutionDocumentedAsDisabled: true,
   errors,

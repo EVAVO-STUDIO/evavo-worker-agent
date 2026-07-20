@@ -1,8 +1,10 @@
-# Business Autopilot draft review route plan
+# Business Autopilot historical review-record plan
 
-This plan documents the intended route glue between the draft-only action builder and the approval request builder.
+This document preserves compatibility context for the historical Business Autopilot draft and approval record builders.
 
-The direct admin route patch was blocked by the connector safety layer, so the current implementation keeps the core pieces separate and guarded:
+It is not an active roadmap for drafting or delivery. The current Worker is internal-metadata-only and non-executing.
+
+## Compatibility components
 
 ```text
 src/core/businessAutopilotActionDraftBuilder.ts
@@ -12,36 +14,29 @@ src/core/businessAutopilotRecords.ts
 src/routes/businessAutopilotAdmin.ts
 ```
 
-## Existing route
+These names remain because existing records, route contracts and validators reference them. Their presence does not enable a capability.
+
+## Existing compatibility route
 
 ```text
 POST /admin/business/action-drafts/build?confirm=1
 ```
 
-Current behavior:
-
-1. Requires confirmation.
-2. Builds a draft-only action via `buildBusinessDraftOnlyAction`.
-3. Saves the generated draft to `business_action_drafts`.
-4. Returns the saved draft, review checklist, explicit blocks, risk flags and safety posture.
-
-Current hard blocks:
+The route is confirmation-gated and may create internal review metadata only. It must report:
 
 ```text
-no email sending
-no social posting
-no third-party commenting
-no contact-form submission
-no browser execution
-no ad buying
-no external mutation
-no AI calls
-no network calls
+internalMetadataOnly: true
+reviewOnly: true
+externalExecutionAllowed: false
+callsNetwork: false
+callsAI: false
 ```
 
-## Intended next glue
+Confirmation authorises only the named internal metadata write. It cannot authorise delivery, browser work or external mutation.
 
-The safe route implementation should use:
+## Historical builder contract
+
+Compatibility helpers include:
 
 ```ts
 buildBusinessDraftReviewBundle(input)
@@ -52,10 +47,23 @@ saveBusinessApprovalRequest(env, {
 })
 ```
 
-The route response should include:
+Any records produced by these helpers must be treated as historical review records:
 
 ```text
-ok: true
+historicalOnly: true
+executable: false
+deliverable: false
+authoritativeForExecution: false
+external_use_not_allowed_by_this_record
+```
+
+A stored `approvalStatus`, `requestType` or review checklist never enables another action.
+
+## Compatibility response fields
+
+Existing consumers may still expect:
+
+```text
 mode: business_action_draft_built
 draft
 approvalRequest
@@ -66,59 +74,17 @@ riskFlags
 safety
 ```
 
-## Approval defaults
+These are compatibility fields. They must not be presented as a deliverable message or executable approval.
 
-The approval record should use:
+`createApprovalRequest: false` may remain supported for compatibility. Whether true or false, no delivery permission is created.
 
-```text
-requestType: business_action_draft_review
-approvalStatus: pending
-riskFlags includes approval_required
-riskFlags includes suppression_check_required
-riskFlags includes external_use_not_allowed_by_this_record
-```
+## Permanent blocks
 
-The approval metadata should preserve:
-
-```text
-generatedBy: businessAutopilotApprovalBuilder
-draftType
-channel
-explicitBlocks
-payload
-```
-
-## Optional behavior
-
-The route may support:
-
-```text
-createApprovalRequest: false
-```
-
-When false, it should still save the draft and return the bundle review summary, but `approvalRequest` should be `null`.
-
-## Non-goals
-
-This route must not:
-
-```text
-send email
-post social content
-comment on third-party websites or posts
-submit contact forms
-execute browser actions
-buy ads
-mutate external systems
-call AI
-make network calls
-bypass suppression
-bypass unsubscribe or consent requirements
-```
+The route and helpers must remain unable to perform external communication, browser automation, paid activity, AI generation, network research or third-party mutation.
 
 ## Validation requirements
 
-`npm run business:autopilot:check` must keep guarding:
+`npm run business:autopilot:check` must continue guarding:
 
 ```text
 src/core/businessAutopilotActionDraftBuilder.ts
@@ -128,6 +94,9 @@ business_action_draft_build
 /admin/business/action-drafts/build
 business_action_draft_review
 external_use_not_allowed_by_this_record
+createApprovalRequest: false
 ```
 
-The route-contract smoke printer should continue to verify that unconfirmed calls to the build route are rejected.
+The route-contract smoke printer must continue to reject unconfirmed calls.
+
+No future implementation is authorised by this document.

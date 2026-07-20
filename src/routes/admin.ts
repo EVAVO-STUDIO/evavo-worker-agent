@@ -16,6 +16,20 @@ import { buildSchemaReport } from "../core/schema";
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 type InferredKind = "agency" | "contractor" | "ecommerce" | "service" | "not_fit" | "general";
 
+const historicalReadSafety = Object.freeze({
+  readOnly: true,
+  authenticated: true,
+  historicalOnly: true,
+  executable: false,
+  scheduled: false,
+  callsNetwork: false,
+  callsAI: false,
+  sendsEmail: false,
+  postsExternally: false,
+  submitsForms: false,
+  externalStateChange: false,
+});
+
 function defaultJson(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
@@ -120,7 +134,12 @@ async function handleLeads(request: Request, env: Env, json: JsonResponse) {
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
   const status = url.searchParams.get("status") || undefined;
   const leads = (await listLeads(env, { status: status as any, limit })).map(withDerivedLead);
-  return json({ ok: true, leads });
+  return json({
+    ok: true,
+    contractVersion: "admin_historical_leads_v2_read_only",
+    leads,
+    safety: historicalReadSafety,
+  });
 }
 
 async function handleDrafts(request: Request, env: Env, json: JsonResponse) {
@@ -136,9 +155,17 @@ async function handleDrafts(request: Request, env: Env, json: JsonResponse) {
       to_email: lead?.contact_email || null,
       to_name: lead?.company_name || null,
       website: lead?.website_url || null,
+      historicalOnly: true,
+      executable: false,
+      deliverable: false,
     });
   }
-  return json({ ok: true, drafts: enriched });
+  return json({
+    ok: true,
+    contractVersion: "admin_historical_drafts_v2_read_only",
+    drafts: enriched,
+    safety: historicalReadSafety,
+  });
 }
 
 async function handleInsights(env: Env, json: JsonResponse) {
@@ -161,16 +188,20 @@ async function handleInsights(env: Env, json: JsonResponse) {
 
   return json({
     ok: true,
+    contractVersion: "admin_historical_insights_v2_read_only",
     summary: {
       totalLeads: leads.length,
       contactableLeads: contactable,
       directEmailRate: leads.length ? Number(((leads.filter((item) => Boolean(item.contact_email)).length / leads.length) * 100).toFixed(1)) : 0,
       averageScore: leads.length ? Number((totalScore / leads.length).toFixed(2)) : 0,
+      historicalOnly: true,
+      executable: false,
     },
     leadClasses,
     qualityTiers,
     opportunityTypes,
     statuses,
+    safety: historicalReadSafety,
   });
 }
 
@@ -252,9 +283,23 @@ export async function handleAdmin(
   if (pathname === "/admin/schema" && request.method === "GET") return json(await buildSchemaReport(env));
   if (pathname === "/admin/leads" && request.method === "GET") return handleLeads(request, env, json);
   if (pathname === "/admin/drafts" && request.method === "GET") return handleDrafts(request, env, json);
-  if (pathname === "/admin/events" && request.method === "GET") return json({ ok: true, events: await listEvents(env, 150) });
+  if (pathname === "/admin/events" && request.method === "GET") {
+    return json({
+      ok: true,
+      contractVersion: "admin_historical_events_v2_read_only",
+      events: await listEvents(env, 150),
+      safety: historicalReadSafety,
+    });
+  }
   if (pathname === "/admin/insights" && request.method === "GET") return handleInsights(env, json);
-  if (pathname === "/admin/runs" && request.method === "GET") return json({ ok: true, runs: await listEvents(env, 100) });
+  if (pathname === "/admin/runs" && request.method === "GET") {
+    return json({
+      ok: true,
+      contractVersion: "admin_historical_runs_v2_read_only",
+      runs: await listEvents(env, 100),
+      safety: historicalReadSafety,
+    });
+  }
 
   if (pathname === "/admin/leads" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
@@ -271,7 +316,20 @@ export async function handleAdmin(
     });
 
     await logEvent(env, "lead_add", `Manually added ${websiteUrl}`, lead.id);
-    return json({ ok: true, lead });
+    return json({
+      ok: true,
+      lead,
+      safety: {
+        internalMetadataOnly: true,
+        scheduled: false,
+        callsNetwork: false,
+        callsAI: false,
+        sendsEmail: false,
+        postsExternally: false,
+        submitsForms: false,
+        externalStateChange: false,
+      },
+    });
   }
 
   if (pathname === "/admin/seeds" && request.method === "POST") {

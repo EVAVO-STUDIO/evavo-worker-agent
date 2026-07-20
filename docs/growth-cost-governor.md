@@ -1,257 +1,147 @@
 # Growth cost governor
 
-The Growth Autonomy Agent must be cost-governed before it becomes action-governed.
+This document defines cost controls for the active EVAVO Growth Research Worker.
 
-The goal is not to permanently limit useful work. The goal is to make the agent sleep, pause, and scale gradually so it does not create accidental Cloudflare, D1, network, or AI costs.
+It is authoritative only for internal reporting, confirmed bounded manual research, D1 metadata reads and writes, and review-first learning. It does not authorise drafting, AI execution, scheduled external research, sending, posting, form submission, browser automation or third-party mutation.
 
-## Contract
+## Active runtime posture
 
-Before any run that may fetch, write, draft, or execute, the Worker must check a budget ledger.
+```text
+scheduledExternalResearchEnabled: false
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+aiExecutionEnabled: false
+draftingEnabled: false
+emailSendingEnabled: false
+socialPostingEnabled: false
+formSubmissionEnabled: false
+browserExecutionEnabled: false
+externalStateChangeEnabled: false
+```
 
-If budget state is missing, stale, or near cap, the Worker must pause new work and return a clear reason.
+A budget profile can restrict an allowed internal action. It cannot enable a disabled capability.
 
-## Cost categories
+## Governed cost categories
 
-Track at least:
+Track only costs and usage that can occur in the active runtime:
 
 - Worker invocations
 - estimated CPU milliseconds
 - D1 rows read
 - D1 rows written
-- network fetches
-- AI calls
-- draft generations
-- public actions executed
-- contact actions executed
-- retries
+- confirmed manual network fetches
+- bytes fetched
+- bounded research results saved for review
+- internal learning passes
+- validation failures
 - errors
 - estimated cost cents
 
-## Budget profiles
+Historical columns or records for AI calls, draft generations, public actions, contact actions or execution attempts may remain readable for compatibility. They are historical-only and non-executable.
 
-### free_safe
+## Active budget profile
 
-Default low-cost mode.
+The active posture is `manual_research_safe`.
 
-Recommended caps:
+Recommended limits must remain conservative and deployment-specific:
 
-- network fetches/day: 20
-- AI drafts/day: 0
-- D1 writes/day: 2,000
-- public actions/day: 0
-- contact actions/day: 0
-
-Use for initial setup, zero-source startup, and low-risk source discovery.
-
-### research_budgeted
-
-More discovery, still no public execution.
-
-Recommended caps:
-
-- network fetches/day: 100
-- AI drafts/day: 5
-- D1 writes/day: 5,000
-- public actions/day: 0
-- contact actions/day: 0
-
-Use when the agent is learning what channels and signals are useful.
-
-### growth_budgeted
-
-Controlled growth mode.
-
-Recommended caps:
-
-- network fetches/day: 250
-- AI drafts/day: 20
-- D1 writes/day: 10,000
-- public actions/day: 3
-- contact actions/day: 5
-
-Use only after strategy board, channel policy, scoring gates, and review queue exist.
-
-## Budget ledger
-
-Planned table shape:
-
-```sql
-CREATE TABLE growth_budget_ledger (
-  id TEXT PRIMARY KEY,
-  budget_date TEXT NOT NULL,
-  profile_id TEXT NOT NULL,
-  worker_invocations INTEGER NOT NULL DEFAULT 0,
-  cpu_ms_estimate INTEGER NOT NULL DEFAULT 0,
-  d1_rows_read INTEGER NOT NULL DEFAULT 0,
-  d1_rows_written INTEGER NOT NULL DEFAULT 0,
-  network_fetches INTEGER NOT NULL DEFAULT 0,
-  ai_calls INTEGER NOT NULL DEFAULT 0,
-  draft_generations INTEGER NOT NULL DEFAULT 0,
-  public_actions_executed INTEGER NOT NULL DEFAULT 0,
-  contact_actions_executed INTEGER NOT NULL DEFAULT 0,
-  retries INTEGER NOT NULL DEFAULT 0,
-  errors INTEGER NOT NULL DEFAULT 0,
-  estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
-  hard_stop_reason TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
+```text
+scheduled network fetches/day: 0
+AI calls/day: 0
+draft generations/day: 0
+public actions/day: 0
+contact actions/day: 0
+manual network requests/run: bounded by route policy
+manual results/run: bounded by route policy
+D1 writes/day: bounded internal metadata only
 ```
 
-## Run envelope
+No profile named `research_budgeted`, `growth_budgeted`, `autopilot`, or similar may activate AI, drafting or delivery.
 
-Every run follows:
+## Manual research envelope
 
-1. Load budget profile.
-2. Load today's budget ledger.
-3. Check caps before doing work.
-4. Reserve budget for planned work where practical.
-5. Execute tiny batch.
-6. Record actual usage.
-7. Stop before caps are exceeded.
-8. Return next safe action.
+Each network-capable run must follow this order:
 
-## Rest triggers
+1. Authenticate with the shared `ADMIN_TOKEN` contract.
+2. Require an explicit POST confirmation.
+3. Resolve a route that is classified as bounded manual research.
+4. Validate the public target and redirect chain.
+5. Enforce request, byte, time and result limits before fetching.
+6. Perform only GET requests.
+7. Persist only internal review metadata.
+8. Record actual bounded usage and any failure reason.
+9. Stop immediately when a cap or safety check fails.
 
-The agent should rest when:
-
-- budget state is missing or stale
-- usage reaches 80 percent of a soft cap
-- usage reaches 95 percent of a hard cap
-- duplicate candidates dominate a run
-- two or more consecutive runs are low yield
-- source health is poor
-- channel cooldown is active
-- post/comment removal is detected
-- negative reaction or unsubscribe spike occurs
-- AI draft quality is repeatedly rejected
-
-Rest means:
-
-- do not fetch more
-- do not call AI
-- do not execute actions
-- return a dashboard recommendation
-- optionally schedule a later lightweight check
-
-## Batch design
-
-Do not crawl continuously.
-
-Use small batches:
-
-- max sources per run
-- max URLs per source
-- max fetches per channel
-- max drafts per run
-- max actions per channel
-- max retries per target
-
-Default retries should be low. Repeated failures should create cooldowns, not more retries.
-
-## Cache and memory rules
-
-The Worker should avoid repeat work by storing:
-
-- URL fingerprint
-- content hash
-- last fetched time
-- next eligible fetch time
-- unchanged count
-- failed count
-- cooldown until
-- channel id
-- signal id
-
-If a URL has not changed, the agent should not spend AI or action budget on it.
-
-## AI cost rules
-
-AI calls should be last, not first.
-
-Use cheap logic before AI:
-
-- keyword rules
-- URL patterns
-- known channel class
-- previous outcomes
-- source health
-- existing signal score
-
-Call AI only when:
-
-- the signal score is high enough
-- a draft is likely to be useful
-- the target is not duplicate
-- budget allows it
-- expected value justifies the call
-
-## Execution cost rules
-
-Execution is more expensive than discovery because it carries reputation risk.
-
-Before execution:
-
-- budget profile must allow the action type
-- action cap must be available
-- channel cap must be available
-- cooldown must be clear
-- suppression rules must pass
-- audit write must be available
-
-If execution fails, retries must be capped. A second failure should normally create a cooldown.
+There is no scheduled network budget, background queue, alternate executor or retry worker.
 
 ## Fail-closed rules
 
-Pause when:
+Reject or stop work when:
 
-- budget profile is missing
-- budget ledger cannot be read
-- usage cannot be written
-- caps are malformed
-- date rollover is ambiguous
-- estimated cost is unknown for a paid action
-- AI provider key or quota state is unclear
+- authentication fails
+- confirmation is absent
+- route classification is missing or unsafe
+- budget state is missing or malformed
+- target validation fails
+- request, byte, time or result limits cannot be resolved
+- redirect safety cannot be verified
+- usage accounting cannot be written where required
+- a retry would exceed the single-run policy
+- the operation would call AI, generate a draft or mutate an external system
 
-Failing closed protects the account and avoids surprise spend.
+A failed manual run must not fall back to another network path.
+
+## Retry policy
+
+Automatic retries are disabled.
+
+A manual operator may start a new confirmed request after reviewing the prior failure. That new request must pass the complete authentication, confirmation, target-validation and budget sequence again.
+
+## Scheduled processing
+
+Cron is internal-only. It may:
+
+- synchronise defensive settings
+- learn from existing D1 review metadata
+- record internal audit information
+
+Cron must not consume a network budget, fetch public pages, expand sources, discover opportunities, call AI, create drafts or perform external actions.
+
+## Historical ledger compatibility
+
+Existing ledger fields such as these may remain for historical data compatibility:
+
+```text
+ai_calls
+draft_generations
+public_actions_executed
+contact_actions_executed
+retries
+```
+
+Their current-runtime limits are always zero. Their presence in a table, report or migration is not capability evidence.
 
 ## Dashboard requirements
 
-The Ops UI should show:
+Authenticated reporting may show:
 
-- current budget profile
-- today's usage
-- soft cap percentage
-- hard stop reason
-- next safe run
-- rest/cooldown reason
-- recent low-yield runs
-- recent negative outcomes
-- AI calls used today
-- network fetches used today
-- public/contact actions used today
+- current manual-research limits
+- confirmed manual usage
+- D1 read/write usage
+- bounded request and byte usage
+- hard-stop reasons
+- recent failed or partial manual runs
+- internal learning activity
+- historical counters clearly labelled non-executable
+
+The dashboard must not present a next executable action, delivery allowance, AI allowance or autopilot budget.
 
 ## Scaling rule
 
-The agent earns more budget only through good outcomes.
+The active runtime does not earn execution capability through outcomes.
 
-Good outcomes:
+Good review outcomes may inform future manual research prioritisation or tighter source selection. They must not increase AI, drafting, send, post, form, browser or external-mutation limits above zero.
 
-- reply
-- meeting
-- lead
-- accepted listing
-- useful traffic
-- positive community response
-- shortlist or watch decision
-
-Bad outcomes:
-
-- removal
-- negative reply
-- unsubscribe
-- duplicate-heavy run
-- ignored action batches
-- low-quality draft rejections
-
-Good outcomes may increase caps gradually. Bad outcomes reduce caps or trigger rest.
+Any proposal to add a new paid service or external capability requires a separate product decision, threat model, route contract, implementation and safety review. Editing this document or a budget record is never sufficient.

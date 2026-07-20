@@ -12,12 +12,18 @@ const read = (relativePath) => {
 
 const approvalRequests = read("src/routes/growthApprovalRequestsAdmin.ts");
 const strategyMemory = read("src/routes/growthStrategyMemoryAdmin.ts");
+const campaignIntelligence = read("src/routes/growthCampaignIntelligenceAdmin.ts");
+const blackboard = read("src/routes/growthBlackboardAdmin.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
-for (const [label, content] of [
+const protectedHandlers = [
   ["Growth approval requests handler", approvalRequests],
   ["Growth strategy memory handler", strategyMemory],
-]) {
+  ["Growth campaign intelligence handler", campaignIntelligence],
+  ["Growth blackboard handler", blackboard],
+];
+
+for (const [label, content] of protectedHandlers) {
   if (!content) errors.push(`Missing ${label}`);
   for (const token of [
     'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
@@ -67,6 +73,30 @@ for (const [label, content, persistenceCalls] of [
       "upsertGrowthRuntimeConstraint(env,",
     ],
   ],
+  [
+    "Growth campaign intelligence handler",
+    campaignIntelligence,
+    [
+      "saveGrowthOperatorCycleEvent(env,",
+      "upsertGrowthCampaign(env,",
+      "upsertGrowthExperiment(env,",
+      "upsertGrowthCampaignMetric(env,",
+      "createGrowthEvidenceItem(env,",
+      "createGrowthLearningNote(env,",
+      "saveGrowthDecision(env,",
+    ],
+  ],
+  [
+    "Growth blackboard handler",
+    blackboard,
+    [
+      "upsertGrowthBlackboardFact(env,",
+      "upsertGrowthEntity(env,",
+      "upsertGrowthEntityRelationship(env,",
+      "upsertGrowthMarketSignal(env,",
+      "upsertGrowthAsset(env,",
+    ],
+  ],
 ]) {
   for (const call of persistenceCalls) {
     const callPosition = content.indexOf(call);
@@ -91,8 +121,30 @@ for (const token of [
   "canPostSocial: false",
   "canSubmitForms: false",
 ]) {
-  if (!approvalRequests.includes(token)) errors.push(`Growth approval safety token is missing: ${token}`);
-  if (!strategyMemory.includes(token)) errors.push(`Growth strategy safety token is missing: ${token}`);
+  for (const [label, content] of protectedHandlers) {
+    if (!content.includes(token)) errors.push(`${label} safety token is missing: ${token}`);
+  }
+}
+
+for (const token of [
+  'intParam(url, "limit", 10, 1, 50)',
+  'intParam(url, "experimentLimit", 10, 1, 50)',
+  'intParam(url, "decisionLimit", 10, 1, 50)',
+  'intParam(url, "metricLimit", 10, 1, 50)',
+  'intParam(url, "evidenceLimit", 10, 1, 50)',
+  'intParam(url, "learningLimit", 10, 1, 50)',
+]) {
+  if (!campaignIntelligence.includes(token)) errors.push(`Growth campaign intelligence limit is missing: ${token}`);
+}
+for (const token of [
+  'intParam(url, "limit", 50, 1, 100)',
+  'pathname === "/admin/growth/blackboard/facts"',
+  'pathname === "/admin/growth/blackboard/entities"',
+  'pathname === "/admin/growth/blackboard/relationships"',
+  'pathname === "/admin/growth/blackboard/signals"',
+  'pathname === "/admin/growth/blackboard/assets"',
+]) {
+  if (!blackboard.includes(token)) errors.push(`Growth blackboard bound or route is missing: ${token}`);
 }
 
 const expectedCommand = "node scripts/check-growth-subhandler-auth-safety.mjs";
@@ -111,6 +163,12 @@ console.log(JSON.stringify({
   approvalRequestWritesRequireConfirmation: true,
   strategyMemoryUsesSharedAuthentication: true,
   strategyMemoryWritesRequireConfirmation: true,
+  campaignIntelligenceUsesSharedAuthentication: true,
+  campaignIntelligenceWritesRequireConfirmation: true,
+  campaignIntelligenceReadLimitsBounded: true,
+  blackboardUsesSharedAuthentication: true,
+  blackboardWritesRequireConfirmation: true,
+  blackboardReadLimitsBounded: true,
   externalStateChangeAllowed: false,
   callsAI: false,
   callsNetwork: false,

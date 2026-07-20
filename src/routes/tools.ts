@@ -21,7 +21,12 @@ export async function handleTools(
       ok: true,
       agent: "EVAVO Growth Research Worker",
       contractVersion: "worker_tools_v3_manual_research_only",
-      previousContractVersion: "worker_tools_v2_review_first",
+      compatibility: {
+        contractVersion: "worker_tools_v2_review_first",
+        readOnlyAlias: true,
+        authoritative: false,
+        executable: false,
+      },
       costMode: (await getSetting(env, "cost_mode")) || "free_safe",
       scheduledExecutionEnabled: false,
       scheduledExternalExecutionDisabled: true,

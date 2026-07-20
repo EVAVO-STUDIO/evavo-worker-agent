@@ -61,19 +61,45 @@ const doc = read('docs/growth-capability-registry.md', docPath);
 for (const id of expectedCapabilityIds) mustContain('capability registry', registry, id);
 for (const id of expectedLevelIds) mustContain('autonomy levels', registry, id);
 
-mustContain('capability registry', registry, 'growth_capabilities_v1_autonomy_execution_contract');
-mustContain('capability registry', registry, 'executesCapabilities: false');
-mustContain('capability registry', registry, 'touchesExternalChannel: false');
+for (const token of [
+  'growth_capabilities_v2_registry_only',
+  'scheduledExecutionEnabled: false',
+  'scheduledExternalResearchEnabled: false',
+  'manualResearchRequiresAuthentication: true',
+  'manualResearchRequiresConfirmation: true',
+  'manualResearchIsBounded: true',
+  'manualResearchSavesReviewItemsOnly: true',
+  'draftingEnabled: false',
+  'browserExecutionEnabled: false',
+  'externalDeliveryEnabled: false',
+  'autonomousCampaignsEnabled: false',
+  'executesCapabilities: false',
+  'touchesExternalChannel: false',
+]) mustContain('capability registry', registry, token);
+
+for (const forbidden of [
+  'growth_capabilities_v1_autonomy_execution_contract',
+  'currentImplementation: "planned", notes: ["Draft-only.',
+  'currentImplementation: "planned", notes: ["Preparation only.',
+]) {
+  if (registry.includes(forbidden)) {
+    failed = true;
+    console.error(`FAIL capability registry contains stale execution posture: ${forbidden}`);
+  }
+}
+
 mustContain('capability route', route, 'mode: "growth_capabilities"');
 mustContain('capability route', route, 'listGrowthCapabilities');
 mustContain('capability docs', doc, 'GET /admin/growth/capabilities');
+mustContain('capability docs', doc, 'Scheduled external execution is disabled');
+mustContain('capability docs', doc, 'Draft generation is disabled');
+mustContain('capability docs', doc, 'External delivery is blocked');
 
 if (index.includes('handleGrowthCapabilitiesAdmin') && index.includes('/admin/growth/capabilities')) {
   console.log('OK   src/index.ts wires the Growth capabilities route');
 } else {
   failed = true;
   console.error('FAIL src/index.ts does not wire /admin/growth/capabilities yet');
-  console.error('      Import handleGrowthCapabilitiesAdmin and route it before the generic /admin/growth/ branch.');
 }
 
 if (failed) {

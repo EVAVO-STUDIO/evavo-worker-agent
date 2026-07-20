@@ -7,6 +7,7 @@ const root = process.cwd();
 const workflowPath = path.join(root, ".github", "workflows", "worker-contract.yml");
 const packagePath = path.join(root, "package.json");
 const indexPath = path.join(root, "src", "index.ts");
+const adminWrapperPath = path.join(root, "src", "routes", "adminProtected.ts");
 const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtected.ts");
 const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
 const errors = [];
@@ -14,12 +15,14 @@ const errors = [];
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
 if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
 if (!fs.existsSync(indexPath)) errors.push("Missing Worker dispatcher");
+if (!fs.existsSync(adminWrapperPath)) errors.push("Missing protected broad admin wrapper");
 if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
 if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
+const adminWrapper = fs.existsSync(adminWrapperPath) ? fs.readFileSync(adminWrapperPath, "utf8") : "";
 const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
 const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
@@ -45,31 +48,50 @@ if (workflow.includes("wrangler deploy")) errors.push("Contract workflow must no
 if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_TOKEN")) errors.push("Contract workflow must not request Worker credentials");
 
 for (const token of [
+  'import { handleAdmin } from "./routes/adminProtected"',
   'import { handlePlannerAdmin } from "./routes/plannerAdminProtected"',
   'import { handleGrowthAdmin } from "./routes/growthAdminProtected"',
   'case "planner":',
   'case "growth-fallback":',
+  "return await handleAdmin(req, env, pathname, ctx, jsonResponse)",
   "return await handlePlannerAdmin(req, env, pathname, jsonResponse)",
   "return await handleGrowthAdmin(req, env, pathname, jsonResponse)",
 ]) {
   if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected wrapper routing token: ${token}`);
 }
+if (index.includes('from "./routes/admin"')) errors.push("Worker dispatcher must not import the broad admin implementation directly");
 if (index.includes('from "./routes/plannerAdmin"')) errors.push("Worker dispatcher must not import the legacy planner implementation directly");
 if (index.includes('from "./routes/growthAdmin"')) errors.push("Worker dispatcher must not import the legacy Growth fallback implementation directly");
 
 for (const [label, content, delegateCall] of [
+  ["Protected broad admin wrapper", adminWrapper, 'return handleAdminImplementation(request, env, pathname, ctx, json)'],
   ["Protected planner wrapper", plannerWrapper, 'return handlePlannerAdminImplementation(request, env, pathname, json)'],
   ["Protected Growth wrapper", growthWrapper, 'return handleGrowthAdminImplementation(request, env, pathname, json)'],
 ]) {
   for (const token of [
     'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-    'await isAdminRequestAuthorized(request, env)',
+    "await isAdminRequestAuthorized(request, env)",
     'request.method === "OPTIONS"',
-    'status: 405',
+    "status: 405",
     delegateCall,
   ]) {
     if (!content.includes(token)) errors.push(`${label} is missing: ${token}`);
   }
+}
+
+for (const token of [
+  'pathname === "/admin/leads" && request.method === "POST"',
+  "const body = await request.clone().json()",
+  "if (!confirmed(body))",
+  'error: "confirm_required"',
+  "internalMetadataOnly: true",
+  "scheduled: false",
+  "callsNetwork: false",
+  "callsAI: false",
+  "sendsEmail: false",
+  "externalStateChange: false",
+]) {
+  if (!adminWrapper.includes(token)) errors.push(`Protected broad admin wrapper is missing manual-write safety token: ${token}`);
 }
 
 const expectedScripts = {
@@ -82,6 +104,7 @@ const expectedScripts = {
   "db:historical-compatibility:check": "node scripts/check-historical-data-compatibility.mjs",
   "db:migration-safety:check": "node scripts/check-migration-execution-safety.mjs",
   "safety:gates:check": "node scripts/check-safety-gate-completeness.mjs",
+  "admin:broad-write-safety:check": "node scripts/check-broad-admin-write-safety.mjs",
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
@@ -130,6 +153,9 @@ console.log(JSON.stringify({
   strictBearerParsingRequired: true,
   constantTimeCredentialComparisonRequired: true,
   centralAuthenticationBeforeProtectedDispatchRequired: true,
+  broadAdminRuntimeUsesProtectedWrapper: true,
+  directBroadAdminImplementationImportAllowed: false,
+  broadAdminManualWritesRequireConfirmation: true,
   plannerRuntimeUsesProtectedWrapper: true,
   directPlannerImplementationImportAllowed: false,
   unauthenticatedPlannerPreflightAllowed: false,

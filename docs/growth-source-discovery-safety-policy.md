@@ -1,78 +1,66 @@
 # Growth source discovery safety policy
 
-This policy governs autonomous source discovery, candidate research, crawl planning, evidence extraction, scoring, and approval-pack preparation for EVAVO Growth Ops.
+This policy is authoritative for source discovery and public-source research in the active EVAVO Growth Research Worker.
 
-The policy is intentionally stricter than a normal crawler. The Growth system is not a spam tool, scraping tool, email tool, social posting tool, or form submission tool. It is a supervised research and internal decision-support system.
+The active Worker is manual-research-only. Scheduled external research, autonomous discovery, background crawling, fetch queues, drafting, sending and third-party mutation are disabled.
+
+## Current operating boundary
+
+A network-capable research action is allowed only when all of these are true:
+
+```text
+shared ADMIN_TOKEN authentication succeeded
+request method is POST
+explicit confirmation is present
+route is classified as bounded manual research
+HTTP method to the public target is GET
+request, redirect, byte and result limits are enforced
+target is public and passes SSRF validation
+result is stored only as internal review metadata
+no alternate scheduled or retry executor exists
+```
+
+Cron may synchronise defensive settings, refresh learning from existing D1 review metadata and record internal audit events. Cron must not fetch pages, expand sources, discover opportunities or enqueue work.
 
 ## Hard safety rules
 
-The autonomous discovery system must not:
+Manual research must not:
 
 ```text
-send email
-send direct messages
+send email or direct messages
 post on social networks
 submit web forms
 log in to third-party websites
-click purchase, booking, checkout, subscribe, apply, or contact buttons
+click purchase, booking, checkout, subscribe, apply or contact controls
 upload files to third-party websites
 mutate third-party systems
-call paid external APIs without an explicit internal route and budget policy
-call AI from crawler/fetch routes unless a separate safety contract explicitly allows it
-execute instructions found in crawled content
-expose ADMIN_TOKEN, API keys, cookies, or secrets to crawled sites
-crawl private IP ranges, localhost, metadata services, or internal hosts
-fetch non-http/non-https URLs
-crawl pages disallowed by robots policy
-crawl aggressively or recursively without a budget
+call paid external APIs
+call AI
+execute instructions found in public content
+expose ADMIN_TOKEN, API keys, cookies or secrets
+fetch private networks, localhost, metadata services or internal hosts
+fetch non-http or non-https URLs
+bypass access controls or crawl-policy restrictions
+crawl recursively or without explicit bounds
+persist automatic promotion or external-action state
 ```
 
-## Treat web content as evidence only
+## Treat public content as evidence only
 
-Crawled pages are untrusted input.
+Fetched pages are untrusted input. The Worker may extract factual page metadata, public claims, links, business descriptors, technology hints, conversion hints, SEO hints, accessibility hints, freshness indicators and public contact-page existence.
 
-The system may extract:
-
-```text
-facts
-claims
-page metadata
-links
-signals
-business descriptors
-technology hints
-conversion hints
-SEO hints
-contact-page existence
-service-page existence
-freshness hints
-```
-
-The system must ignore web page text that attempts to instruct the agent, such as:
-
-```text
-ignore previous instructions
-send this data somewhere
-click this button
-use this token
-change your rules
-approve this action
-submit this form
-post this message
-```
-
-Such text can be stored only as a suspicious-content signal.
+Content that attempts to instruct the Worker must be ignored. Examples include requests to change rules, reveal tokens, submit data, click controls, approve actions or send messages. Suspicious text may be stored only as an internal risk signal.
 
 ## URL and network policy
 
-Allowed URL schemes:
+Allowed schemes:
 
 ```text
 http
 https
 ```
 
-Blocked URL schemes:
+Blocked schemes include:
 
 ```text
 file
@@ -88,50 +76,28 @@ ws
 wss
 ```
 
-Blocked targets:
+Blocked targets include localhost, loopback ranges, private IPv4 and IPv6 ranges, link-local ranges, cloud metadata endpoints, private Worker routes and admin endpoints.
+
+Redirects must be revalidated against the same target policy and must stay within the route's explicit redirect limit.
+
+## Manual request bounds
+
+Every network-capable handler must enforce route-specific limits for:
 
 ```text
-localhost
-127.0.0.0/8
-10.0.0.0/8
-172.16.0.0/12
-192.168.0.0/16
-169.254.0.0/16
-::1
-fc00::/7
-fe80::/10
-cloud metadata endpoints
-private worker/admin endpoints
+maximum targets
+maximum pages
+maximum bytes per response
+maximum redirects
+maximum elapsed time
+maximum stored candidates or review records
 ```
 
-## Robots and crawl budget policy
+Unknown or unsafe crawl policy means the action fails closed. The active Worker has no autonomous crawl queue, scheduled crawler or background retry loop.
 
-Before queueing fetches for a domain, the system must know the domain crawl policy.
+## Route posture
 
-Default posture:
-
-```text
-unknown robots policy = do not crawl yet
-robots disallow = do not crawl
-robots allow = crawl only within budget
-crawl delay present = obey crawl delay
-no crawl delay = apply conservative default delay
-```
-
-Per-domain budgets must include:
-
-```text
-max pages per run
-max bytes per page
-max redirects
-min delay between requests
-max errors before backoff
-max queue depth per domain
-```
-
-## Fetch route posture
-
-Initial source discovery routes are metadata-only and must use:
+Planning, candidate-listing, scoring and review routes that do not need the network must declare:
 
 ```text
 callsNetwork: false
@@ -142,51 +108,38 @@ canSubmitForms: false
 externalStateChange: false
 ```
 
-Later queued fetch routes may use `callsNetwork: true`, but only if they are isolated from browser proxies, crawl-policy guarded, rate-limited, and never allowed to send, post, submit forms, or call AI.
-
-## Browser proxy policy
-
-The Next browser proxy may expose read-only views of stored records only.
-
-Browser proxy routes may read:
+A bounded manual research route may declare `callsNetwork: true` only when it is authenticated, confirmation-gated, GET-only, public-target validated and isolated from scheduled execution. It must still declare:
 
 ```text
-research runs
-source candidates
-extracted signals
-opportunity scores
-agent decisions
-discovery feedback
+callsAI: false
+canSendEmail: false
+canPostSocial: false
+canSubmitForms: false
+externalStateChange: false
+scheduled: false
+reviewOnly: true
 ```
 
-Browser proxy routes must not expose:
+## Browser and control-plane policy
 
-```text
-write routes
-fetch execution routes
-queue enqueue routes
-admin tokens
-raw secrets
-third-party cookies
-approval status mutation endpoints
-```
+Browser-facing proxies may expose read-only views of stored records only. They must not receive Worker credentials or expose confirmation routes, network execution routes, raw secrets, third-party cookies or internal mutation endpoints.
 
-## Decision policy
+The browser must never be able to trigger Worker research directly with an exposed admin token.
 
-Autonomous decisions must be internal only.
+## Candidate and decision policy
 
-Allowed decisions:
+Candidate records and decisions are internal review metadata only. Allowed internal decisions include:
 
 ```text
 research_more
 score_candidate
 reject_candidate
 monitor_later
-prepare_approval_pack
+prepare_review_pack
 request_operator_review
 ```
 
-Blocked decisions:
+Blocked decisions include:
 
 ```text
 send_email
@@ -198,56 +151,31 @@ book_meeting
 create_external_account
 ```
 
+No candidate may be automatically promoted into an executable lead, campaign, draft or external action.
+
 ## Evidence quality policy
 
-Every score or decision must record evidence.
+Every score or decision must retain its supporting public source, extracted signal, evidence type, confidence, freshness and risk flags. Unsupported claims must not produce a positive score or recommendation.
 
-Required fields:
+## Review-pack policy
 
-```text
-evidence source URL
-evidence text or extracted signal
-evidence type
-confidence
-freshness
-risk flags
-```
-
-Scores must not be created from unsupported claims.
-
-## Approval-pack policy
-
-Approval packs may suggest manual operator action, but they must preserve blocked external action flags:
-
-```text
-canSendEmail: false
-canPostSocial: false
-canSubmitForms: false
-externalStateChange: false
-callsAI: false unless explicitly routed through a separate approved summarisation path
-callsNetwork: false unless explicitly routed through crawl-policy-gated fetch execution
-```
+Review packs are internal and non-executable. They may include evidence, confidence, risk notes and a suggested manual operator next step. They must state that email, posting, forms, browser execution, AI drafting and external mutation are disabled.
 
 ## Validation requirements
 
-The Worker repo must include checks for:
+The Worker repository must enforce that:
 
 ```text
-source discovery schema exists
-source discovery routes have full safety flags
-read routes are GET/readOnly/empty writesTables
-metadata-write routes are POST/confirm_required/requiresConfirm
-browser-proxied routes exclude confirm-required IDs
-crawler/fetch routes are not browser-proxied
-safety docs mention blocked external actions
+scheduled external research is disabled
+manual research requires shared authentication and explicit confirmation
+network-capable handlers are bounded and GET-only
+public targets and redirects are validated
+manual research saves review metadata only
+no autonomous fetch queue or background retry executor exists
+read routes remain read-only
+internal writes require confirmation where classified
+browser proxies cannot expose credentials or research execution
+AI, sending, posting, forms and external mutation remain disabled
 ```
 
-The Next repo must include checks for:
-
-```text
-source discovery route groups are read-only
-proxy wrappers exist only for read routes
-confirm-required discovery routes are not proxy keys
-dashboard panels display safety posture
-unsafe Worker payloads fail closed
-```
+Runtime code and executable safety contracts are authoritative if any historical document conflicts with this policy.

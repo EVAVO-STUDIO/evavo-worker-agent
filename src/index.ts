@@ -54,6 +54,25 @@ function jsonResponse(data: any, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
+function sourceActionRequiresConfirmation(pathname: string, method: string): boolean {
+  if (method !== "POST") return false;
+  if (pathname === "/admin/sources" || pathname === "/admin/seeds" || pathname === "/admin/sources/run-tiny") return true;
+  return /^\/admin\/sources\/[^/]+\/(test|expand-preview|expand-commit|cooldown|retire|activate)$/.test(pathname);
+}
+
+async function sourceActionConfirmationFailure(request: Request, pathname: string): Promise<Response | null> {
+  if (!sourceActionRequiresConfirmation(pathname, request.method)) return null;
+  const url = new URL(request.url);
+  const body = await request.clone().json().catch(() => ({}));
+  const confirmed = url.searchParams.get("confirm") === "1" || body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
+  if (confirmed) return null;
+  return jsonResponse({
+    ok: false,
+    error: "confirm_required",
+    reason: "Source writes and bounded source-network actions require explicit confirmation. No AI, email, posting, form submission, browser automation, or third-party mutation is performed.",
+  }, { status: 400 });
+}
+
 async function handleHealth(env: Env): Promise<Response> {
   const checkedAt = new Date().toISOString();
   if (!env.DB) {
@@ -124,6 +143,9 @@ export default {
       if (protectedRoute && !(await isAdminRequestAuthorized(req, env))) {
         return jsonResponse({ ok: false, error: "Unauthorized" }, { status: 401 });
       }
+
+      const sourceConfirmationFailure = await sourceActionConfirmationFailure(req, pathname);
+      if (sourceConfirmationFailure) return sourceConfirmationFailure;
 
       switch (resolveOpportunityRouteHandlerId(pathname)) {
         case "run-due":

@@ -16,7 +16,9 @@ It does **not** provide outbound execution.
 - Browser automation is disabled.
 - External state mutation is disabled.
 - The former legacy execution engine and email sender have been deleted.
-- Scheduled work is limited to bounded research, internal scoring, learning and metadata updates.
+- Scheduled work is internal-only and may synchronise defensive flags, refresh learning from existing D1 review metadata and record internal audit events.
+- Scheduled work cannot fetch public sources, expand source candidates, discover opportunities, generate drafts or perform external actions.
+- Public-source research is manual-only, authenticated, explicitly confirmed, bounded and review-only.
 - Manual legacy execution routes return a fail-closed response.
 - All protected routes require server-side Worker authentication.
 - Confirmed write routes mutate internal D1 metadata only.
@@ -39,9 +41,9 @@ Each policy records authentication, mutation, confirmation, network and prohibit
 
 ## Research boundary
 
-Allowed network activity is read-only public research through explicitly classified and bounded source or opportunity handlers.
+Allowed network activity is read-only public research through explicitly classified, authenticated, confirmation-gated and bounded manual source or opportunity handlers.
 
-Research handlers may:
+Manual research handlers may:
 
 - fetch public HTML with GET requests
 - inspect public directory or business pages
@@ -51,6 +53,7 @@ Research handlers may:
 
 They may not:
 
+- run from the scheduled entrypoint
 - authenticate to third-party services
 - bypass access controls
 - submit forms
@@ -161,8 +164,8 @@ An optional `PUBLIC_BASE_URL` may be retained for future private-hub integration
 `wrangler.toml` configures:
 
 - the D1 binding
-- bounded public-research capacity
-- the Worker schedule
+- bounded manual public-research capacity
+- an internal-only Worker schedule
 - brand and geographic context
 - a compatibility Cloudflare AI binding that active safety contracts prohibit from executing
 
@@ -173,10 +176,11 @@ There are no draft or send runtime caps because those execution capabilities and
 When no approved source list exists:
 
 1. Read the autonomy and runtime policy.
-2. Create a bounded research plan.
-3. Save source candidates rather than promoting them automatically.
-4. Review and promote candidates through explicit confirmation gates.
-5. Run opportunity scoring and internal review from approved research metadata.
-6. Keep every external action disabled.
+2. Create a bounded manual research plan.
+3. Authenticate and explicitly confirm each network-capable research action.
+4. Save source candidates rather than promoting them automatically.
+5. Review and promote candidates through explicit confirmation gates.
+6. Run opportunity scoring and internal review from approved research metadata.
+7. Keep every scheduled external and outbound action disabled.
 
 The authoritative model is research-memory-first, metadata-first, review-first and approval-gated.

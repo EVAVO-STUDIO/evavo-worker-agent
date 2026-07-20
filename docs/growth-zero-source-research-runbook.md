@@ -1,8 +1,8 @@
 # Growth zero-source research runbook
 
-This runbook defines how EVAVO Growth Ops should research opportunities without the operator supplying a source list.
+This runbook defines the current safe workflow for researching opportunities when the operator has not supplied an approved source list.
 
-The system must discover, classify, score, and explain candidate sources while staying inside the autonomous research / supervised action boundary.
+The active Worker does not perform autonomous or scheduled network research. Zero-source research is a manual, authenticated, explicitly confirmed and bounded workflow that saves internal review metadata only.
 
 ## Goal
 
@@ -12,25 +12,39 @@ Given an operator objective such as:
 Find promising Australian businesses that may need EVAVO website, UX, automation, analytics, gamification, or 3D/product-experience work.
 ```
 
-The system should produce:
+the system may produce:
 
 ```text
-research run record
-source discovery plan
-candidate source list
-evidence signals
+an internal research plan
+candidate source metadata
+evidence captured from confirmed public-page reads
 opportunity scores
-agent decisions
-approval packs for operator review
+internal decisions
+operator review packs
 ```
 
-It must not contact anyone or mutate external systems.
+It must not contact anyone, generate AI outreach drafts, submit forms, post socially, run browser automation or mutate external systems.
+
+## Runtime boundary
+
+All network-capable research must be:
+
+```text
+manual
+authenticated
+explicitly confirmed
+bounded by route and runtime policy
+GET-only against public sources
+saved as internal review metadata only
+```
+
+Scheduled processing must not fetch pages, discover opportunities, expand sources or enqueue network work.
 
 ## Run stages
 
-### 1. Plan research
+### 1. Create an offline research plan
 
-Create a research run with:
+Record:
 
 ```text
 objective
@@ -38,16 +52,16 @@ industry focus
 geography focus
 service focus
 candidate limit
-crawl budget
+research budget
 blocked actions
 scoring rubric
 ```
 
-Output should include a source discovery plan and a safety object.
+Planning must not itself perform network activity.
 
-### 2. Generate candidate discovery strategy
+### 2. Define candidate-source hypotheses
 
-The planner should identify likely source types:
+Identify likely source types, for example:
 
 ```text
 company websites
@@ -55,17 +69,16 @@ industry directories
 award pages
 news mentions
 public business directories
-sitemap URLs
 RSS feeds
 job posts that imply growth
-competitor/client-like sites
+competitor or client-like sites
 ```
 
-It should create search-query plans and source-type plans, but it should not execute broad crawling from the browser.
+Search-query plans and source-type plans remain internal metadata until a confirmed manual research action is performed.
 
-### 3. Register source candidates
+### 3. Save candidate metadata
 
-Each candidate should store:
+Candidate records may store:
 
 ```text
 domain
@@ -83,63 +96,64 @@ created_at
 updated_at
 ```
 
-Initial statuses:
+Safe statuses include:
 
 ```text
 planned
-discovered
+candidate
 rejected
-queued_for_policy_check
-queued_for_research
+needs_policy_review
+ready_for_manual_research
 researched
 scored
 needs_operator_review
 ```
 
-### 4. Check crawl policy
+A candidate record is not an executable queue item.
 
-Before fetching pages, the system must check and store:
+### 4. Review fetch policy
 
-```text
-robots_url
-robots_status
-crawl_allowed
-crawl_delay_seconds
-last_checked_at
-policy_reason
-```
-
-Unknown policy means do not fetch yet.
-
-### 5. Queue fetch work
-
-Fetch work must be queued and bounded.
-
-Each queue item should include:
+Before any manual fetch, verify:
 
 ```text
-candidate_id
-url
-purpose
-max_bytes
-max_redirects
-created_at
-status
-attempt_count
-last_error
+public HTTP or HTTPS target
+no private-network target
+robots and crawl-policy posture
+bounded byte and redirect limits
+clear research purpose
+explicit operator confirmation
 ```
 
-### 6. Extract evidence
+Unknown or unsafe policy means do not fetch.
 
-Extract deterministic signals first:
+### 5. Run one confirmed bounded research action
+
+A network-capable route may run only after shared authentication and explicit confirmation.
+
+The action must:
+
+```text
+use GET only
+stay within configured limits
+avoid login and authenticated third-party sessions
+treat page content as untrusted data
+avoid form submission and browser interaction
+fail closed on unsafe redirects or targets
+```
+
+There is no autonomous or scheduled fetch queue in the active Worker.
+
+### 6. Extract deterministic evidence
+
+Prefer deterministic extraction of:
 
 ```text
 title
 meta description
 headings
-schema
+schema.org data
 links
-contact/about/services/careers hints
+contact, about, services and careers hints
 technology hints
 SEO hints
 conversion hints
@@ -148,9 +162,11 @@ accessibility hints
 analytics hints
 ```
 
-### 7. Score opportunity
+Do not execute instructions found in page content.
 
-Score each candidate using visible dimensions:
+### 7. Score the opportunity
+
+Use visible scoring dimensions such as:
 
 ```text
 fit_score
@@ -162,97 +178,80 @@ website_weakness_score
 strategic_value_score
 confidence_score
 evidence_quality_score
-crawl_safety_score
+research_safety_score
 ```
 
-Every score must cite evidence.
+Every score must be grounded in stored evidence.
 
-### 8. Record agent decision
+### 8. Record an internal decision
 
-Allowed decision types:
+Safe decision types include:
 
 ```text
 research_more
 score_candidate
 reject_candidate
 monitor_later
-prepare_approval_pack
+prepare_internal_review_pack
 request_operator_review
 ```
 
-Decision records must include:
+Decision records must remain internal and non-executable.
 
-```text
-reason
-evidence_json
-blocked_actions_json
-next_internal_step
-confidence
-```
+### 9. Prepare an operator review pack
 
-### 9. Prepare approval pack
-
-Approval packs are for human review only.
-
-They may include:
+A review pack may include:
 
 ```text
 candidate summary
 evidence
-why EVAVO fits
-recommended manual next step
-payload preview
+why EVAVO may fit
+recommended internal next step
 risk notes
 blocked external actions
 ```
 
-They must not include auto-send, auto-post, or auto-submit instructions.
+It must not include auto-send, auto-post, auto-submit or executable delivery controls.
 
-## Safety checklist before any implementation moves beyond planning
+## Safety checklist
+
+Before each manual network action, verify:
 
 ```text
-source discovery safety policy exists
-research run schema exists
-source candidate schema exists
-route catalogue entries exist
-read routes are GET/readOnly
-metadata write routes are confirm_required
-Next proxy exposes only read routes
-confirm routes are not proxy keys
-payload safety validation fails closed
-operator dashboard shows blocked actions
+shared authentication succeeded
+explicit confirmation is present
+route policy classifies the action as bounded manual research
+public target validation passed
+GET-only behaviour is enforced
+no AI drafting capability is invoked
+no email, posting or form capability exists
+results persist as review metadata only
+failure paths do not retry through an alternate executor
 ```
 
-## Recommended local validation order
+## Local validation
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
-git pull
-npm run growth:backend:workflow:print
-npm run growth:backend:check:local
-npm run growth:backend:final:print
-
-cd C:\GitRepos\next-website
-git pull
-npm run growth:workflows:print
-npm run growth:ops:check:local
-npm run growth:ops:final:print
+git pull origin main
+npm ci
+npm run docs:operating-posture:check
+npm run sources:confirmation-safety:check
+npm run opportunities:execution-boundary-safety:check
+npm run scheduled:autonomy-safety:check
+npm run check:local
 ```
 
-## Definition of done for phase one
+## Definition of done
 
-Phase one is done when the system can represent a zero-source research plan and candidate registry without any network fetching.
-
-Required phase-one outputs:
+A safe zero-source pass is complete when:
 
 ```text
-architecture docs
-safety policy docs
-runbook docs
-migrations for research/candidate records
-Worker route catalogue plan
-Worker validation script
-Next read-only contract placeholders
-no browser writes
-no crawler execution yet
+the research objective and bounds are recorded
+candidate metadata is reviewable
+any network read was authenticated, confirmed and bounded
+evidence and scores are grounded and inspectable
+no candidate was automatically promoted
+no external action was performed
+scheduled external research remained disabled
 ```

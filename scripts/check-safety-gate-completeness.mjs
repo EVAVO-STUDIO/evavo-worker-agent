@@ -18,6 +18,7 @@ const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
 const requiredSafetyCommands = {
+  "docs:operating-posture:check": "node scripts/check-readme-operating-posture.mjs",
   "admin:broad-read-truthfulness:check": "node scripts/check-broad-admin-read-truthfulness.mjs",
   "admin:broad-write-safety:check": "node scripts/check-broad-admin-write-safety.mjs",
   "admin:reporting-truthfulness:check": "node scripts/check-admin-reporting-truthfulness.mjs",
@@ -39,6 +40,7 @@ for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommand
 }
 
 for (const relativePath of [
+  "scripts/check-readme-operating-posture.mjs",
   "scripts/check-broad-admin-read-truthfulness.mjs",
   "scripts/check-broad-admin-write-safety.mjs",
   "scripts/check-admin-reporting-truthfulness.mjs",
@@ -62,6 +64,7 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "safety-gate-completeness",
+  readmeOperatingPostureRequired: true,
   broadAdminReadTruthfulnessRequired: true,
   broadAdminWriteSafetyRequired: true,
   adminReportingTruthfulnessRequired: true,

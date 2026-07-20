@@ -10,6 +10,7 @@ const indexPath = path.join(root, "src", "index.ts");
 const adminWrapperPath = path.join(root, "src", "routes", "adminProtected.ts");
 const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtected.ts");
 const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
+const healthPath = path.join(root, "src", "core", "health.ts");
 const errors = [];
 
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
@@ -18,6 +19,7 @@ if (!fs.existsSync(indexPath)) errors.push("Missing Worker dispatcher");
 if (!fs.existsSync(adminWrapperPath)) errors.push("Missing protected broad admin wrapper");
 if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
 if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
+if (!fs.existsSync(healthPath)) errors.push("Missing admin health implementation");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
@@ -25,6 +27,7 @@ const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : ""
 const adminWrapper = fs.existsSync(adminWrapperPath) ? fs.readFileSync(adminWrapperPath, "utf8") : "";
 const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
 const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
+const health = fs.existsSync(healthPath) ? fs.readFileSync(healthPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -94,6 +97,27 @@ for (const token of [
   if (!adminWrapper.includes(token)) errors.push(`Protected broad admin wrapper is missing manual-write safety token: ${token}`);
 }
 
+for (const token of [
+  'contractVersion: "admin_health_v2_manual_research_only"',
+  "scheduledExecutionEnabled: false",
+  "scheduledExternalResearchEnabled: false",
+  "manualResearchRequiresAuthentication: true",
+  "manualResearchRequiresConfirmation: true",
+  "historicalOnly: true",
+  "executable: false",
+  'contractVersion: "admin_diagnostics_v2_historical_read_only"',
+  "authoritativeForExecution: false",
+]) {
+  if (!health.includes(token)) errors.push(`Admin reporting implementation is missing truthful runtime token: ${token}`);
+}
+for (const forbidden of [
+  'recs.push("continue_free_safe_tick")',
+  'status: HealthReport["status"] = !engineEnabled ? "paused"',
+  'lastEngineRun:',
+]) {
+  if (health.includes(forbidden)) errors.push(`Admin reporting must not contain stale execution token: ${forbidden}`);
+}
+
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
@@ -105,6 +129,7 @@ const expectedScripts = {
   "db:migration-safety:check": "node scripts/check-migration-execution-safety.mjs",
   "safety:gates:check": "node scripts/check-safety-gate-completeness.mjs",
   "admin:broad-write-safety:check": "node scripts/check-broad-admin-write-safety.mjs",
+  "admin:reporting-truthfulness:check": "node scripts/check-admin-reporting-truthfulness.mjs",
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
@@ -122,26 +147,18 @@ const expectedScripts = {
   "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
 };
 for (const [scriptName, expectedCommand] of Object.entries(expectedScripts)) {
-  if (packageJson.scripts?.[scriptName] !== expectedCommand) {
-    errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
-  }
-  if (!checkLocal.includes(`npm run ${scriptName}`)) {
-    errors.push(`The complete local gate must include ${scriptName}`);
-  }
+  if (packageJson.scripts?.[scriptName] !== expectedCommand) errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
+  if (!checkLocal.includes(`npm run ${scriptName}`)) errors.push(`The complete local gate must include ${scriptName}`);
 }
 
 for (const [scriptName, expectedCommand] of Object.entries({
   "db:init:local": "node scripts/refuse-legacy-schema-init.mjs local",
   "db:init:remote": "node scripts/refuse-legacy-schema-init.mjs remote",
 })) {
-  if (packageJson.scripts?.[scriptName] !== expectedCommand) {
-    errors.push(`package.json must keep ${scriptName} fail-closed as ${expectedCommand}`);
-  }
+  if (packageJson.scripts?.[scriptName] !== expectedCommand) errors.push(`package.json must keep ${scriptName} fail-closed as ${expectedCommand}`);
 }
 
-if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local")) {
-  errors.push("Predeploy must continue to run the complete local gate");
-}
+if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local")) errors.push("Predeploy must continue to run the complete local gate");
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
@@ -156,6 +173,9 @@ console.log(JSON.stringify({
   broadAdminRuntimeUsesProtectedWrapper: true,
   directBroadAdminImplementationImportAllowed: false,
   broadAdminManualWritesRequireConfirmation: true,
+  adminReportingTruthfulnessRequired: true,
+  adminHealthTreatsDisabledExecutionAsSafe: true,
+  historicalAdminRecordsExecutable: false,
   plannerRuntimeUsesProtectedWrapper: true,
   directPlannerImplementationImportAllowed: false,
   unauthenticatedPlannerPreflightAllowed: false,

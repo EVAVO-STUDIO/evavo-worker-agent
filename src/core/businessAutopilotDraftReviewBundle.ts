@@ -11,8 +11,12 @@ export type BusinessDraftReviewBundle = {
   draftBuild: ReturnType<typeof buildBusinessDraftOnlyAction>;
   approvalBuild: ReturnType<typeof buildBusinessActionDraftApproval> | null;
   reviewSummary: {
-    needsApproval: boolean;
-    draftOnly: true;
+    needsApproval: false;
+    draftOnly: false;
+    historicalOnly: true;
+    reviewOnly: true;
+    deliverable: false;
+    authoritativeForExecution: false;
     externalExecutionAllowed: false;
     blockedExternalActions: string[];
     operatorChecklist: string[];
@@ -22,20 +26,6 @@ export type BusinessDraftReviewBundle = {
 
 export function buildBusinessDraftReviewBundle(input: BusinessDraftReviewBundleInput): BusinessDraftReviewBundle {
   const draftBuild = buildBusinessDraftOnlyAction(input);
-  const createApprovalRequest = input.createApprovalRequest !== false;
-  const approvalBuild = createApprovalRequest
-    ? buildBusinessActionDraftApproval({
-        actionDraftId: undefined,
-        draftType: draftBuild.draft.draftType,
-        channel: draftBuild.draft.channel,
-        reviewChecklist: draftBuild.reviewChecklist,
-        riskFlags: draftBuild.riskFlags,
-        explicitBlocks: draftBuild.explicitBlocks,
-        payload: draftBuild.draft.payload,
-        expiresAt: input.approvalExpiresAt || undefined,
-      })
-    : null;
-
   const blockedExternalActions = [
     'send_email',
     'post_social',
@@ -44,17 +34,23 @@ export function buildBusinessDraftReviewBundle(input: BusinessDraftReviewBundleI
     'execute_browser_action',
     'mutate_external_system',
     'buy_ads',
+    'generate_deliverable_draft',
+    'create_executable_approval',
   ];
 
   return {
     draftBuild,
-    approvalBuild,
+    approvalBuild: null,
     reviewSummary: {
-      needsApproval: createApprovalRequest,
-      draftOnly: true,
+      needsApproval: false,
+      draftOnly: false,
+      historicalOnly: true,
+      reviewOnly: true,
+      deliverable: false,
+      authoritativeForExecution: false,
       externalExecutionAllowed: false,
       blockedExternalActions,
-      operatorChecklist: approvalBuild?.approvalRequest.reviewChecklist || draftBuild.reviewChecklist,
+      operatorChecklist: draftBuild.reviewChecklist,
     },
     safety: businessAutopilotMetadataWriteSafety(),
   };

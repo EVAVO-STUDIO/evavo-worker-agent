@@ -1,51 +1,61 @@
 # EVAVO Business Autopilot architecture
 
-The EVAVO Business Autopilot is the broader governed autonomy layer above Growth Ops.
+This document defines the active internal architecture for EVAVO Business Autopilot.
 
-Growth remains a core use case, but the platform should support a wider agency operating model:
+The active system is a private, authenticated, review-first intelligence and metadata platform. It does not draft deliverable content, send messages, publish content, submit forms, execute browser actions, buy advertising, schedule external activity or mutate third-party systems.
 
-```text
-business intelligence
-opportunity discovery
-website and market audits
-service matching
-content strategy
-relationship memory
-approval packs
-action drafts
-controlled execution
-learning loops
-```
-
-## Operating principle
+## Authoritative operating principle
 
 ```text
-Evidence-backed decisions and approved actions, not uncontrolled automation.
+Evidence-backed internal decisions and review metadata only.
 ```
 
-The system should autonomously research, organise, score, draft, monitor, and recommend. External actions such as email, social publishing, commenting, contact-form submission, ad buying, or other state-changing actions require explicit governance, approval, suppression checks, and audit records.
+Confirmation authorises only the specific internal D1 metadata write named by a route. Approval records, historical draft records, execution records and suppression records are compatibility or governance metadata. They never enable delivery.
 
-## Core layers
+## Current runtime posture
+
+```text
+scheduledExternalResearchEnabled: false
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+draftingEnabled: false
+emailSendingEnabled: false
+socialPublishingEnabled: false
+socialCommentingEnabled: false
+formSubmissionEnabled: false
+browserExecutionEnabled: false
+adBuyingEnabled: false
+externalStateChangeEnabled: false
+autonomousCampaignsEnabled: false
+```
+
+Scheduled processing is internal-only. Cron must not research public sources, expand sources, discover opportunities, draft content or perform external actions.
+
+## Active layers
 
 ### 1. Intelligence layer
 
-Responsible for reading public or operator-approved sources, extracting facts, classifying entities, and creating evidence records.
+Stores operator-provided or confirmed bounded-research evidence as internal metadata.
 
 Includes:
 
 ```text
-source discovery
-robots / crawl policy
-fetch queue
-page evidence extraction
-entity resolution
-signal extraction
-source quality scoring
+organization records
+person records
+website and page records
+website audit observations
+business signals
+opportunity records
+source and evidence quality metadata
 ```
+
+There is no autonomous crawl queue or background research executor.
 
 ### 2. Evaluation layer
 
-Responsible for deciding whether a business is worth attention.
+Produces deterministic internal scoring and review metadata.
 
 Includes:
 
@@ -60,9 +70,11 @@ risk scoring
 confidence scoring
 ```
 
+Scores are advisory and non-executable.
+
 ### 3. Strategy layer
 
-Responsible for mapping evidence to EVAVO services and campaign angles.
+Maps stored evidence to EVAVO services and internal review priorities.
 
 Includes:
 
@@ -72,132 +84,97 @@ segment analysis
 market-map summaries
 competitor and peer signals
 positioning recommendations
-campaign theme recommendations
+internal campaign-theme observations
 ```
 
-### 4. Action-preparation layer
+### 4. Review-output layer
 
-Responsible for preparing useful human-reviewable outputs.
+Creates internal review objects only.
 
 Includes:
 
 ```text
 website audit packs
 opportunity briefs
-email drafts
-LinkedIn draft posts
-LinkedIn draft comments
-contact-form message drafts
-proposal intros
-follow-up drafts
-CRM notes
-calendar / task suggestions
+service-match records
+internal follow-up tasks
+content ideas
+manual-review recommendations
+learning notes
 ```
+
+Historical action-draft and approval records may remain readable, but they are non-deliverable and non-executable.
 
 ### 5. Governance layer
 
-Responsible for making sure actions are legal, safe, brand-appropriate, capped, auditable, and reversible.
+Enforces authentication, explicit confirmation, internal-only writes, bounded manual research, auditability and fail-closed behaviour.
 
 Includes:
 
 ```text
-approval queue
-consent and lawful-basis records
-suppression list
-unsubscribe readiness
-sender identity checks
-daily and campaign caps
+route safety classification
+confirmation gates
+suppression metadata
 risk flags
 audit logs
-kill switch
+historical compatibility records
 ```
 
-### 6. Execution layer
+### 6. Disabled execution layer
 
-Responsible for performing only approved controlled actions.
+There is no active execution layer.
 
-Early execution should be internal-only.
-
-Allowed early:
+The following capabilities are blocked:
 
 ```text
-create internal task
-create internal reminder
-create CRM note
-send internal report
-save approved content to calendar
-```
-
-Allowed later only after compliance/governance is proven:
-
-```text
-send approved email
-publish approved owned social post
-schedule approved content
-```
-
-High-friction / late-stage only:
-
-```text
-comment on third-party posts
+send email
+publish social content
+comment on third-party content
 submit contact forms
-any browser automation
-any paid ad action
+create external calendar invitations
+write to external CRM systems
+run browser automation
+buy advertising
+call delivery webhooks
+mutate third-party systems
 ```
 
-## Autonomy levels
+No approval, policy, stored setting, budget profile or historical status may activate these capabilities.
 
-### Level 0: Read-only intelligence
+## Active capability level
 
-The system may research, extract, score, summarise, and recommend.
+The active Worker has one Business Autopilot level:
+
+### Level 0: authenticated internal intelligence and review metadata
+
+Allowed:
+
+```text
+read internal records
+save confirmed internal metadata
+run explicitly confirmed bounded manual public-source research
+score stored evidence
+build internal audit packs
+record review outcomes
+record learning metadata
+```
 
 Blocked:
 
 ```text
-send email
-post socially
-comment
-submit forms
-log in
-spend money
-mutate external systems
+AI generation
+external delivery
+browser execution
+scheduled external research
+autonomous campaigns
+third-party mutation
 ```
 
-### Level 1: Draft-only
-
-The system may draft messages, posts, comments, proposals, audit summaries, and follow-ups.
-
-External execution remains blocked.
-
-### Level 2: Approval-required execution
-
-The system may execute a specific action only after an explicit approval record exists.
-
-### Level 3: Rules-approved internal actions
-
-The system may automatically tag leads, create internal notes, schedule reminders, or send internal summaries under configured caps.
-
-### Level 4: Capped campaign mode
-
-The system may execute tightly scoped external campaigns only when all of these exist:
-
-```text
-approved audience
-approved template family
-send / publish caps
-suppression checks
-unsubscribe readiness where required
-audit logs
-kill switch
-```
-
-### Level 5: Broad external autonomy
-
-Blocked until the system has proven reliability, compliance, feedback learning, suppression handling, and operator trust.
+Historical labels such as draft-only, approval-required execution, capped campaign mode and broad external autonomy are not active levels.
 
 ## Data model families
 
-The foundation model is split into reusable families:
+The retained metadata foundation includes:
 
 ```text
 business_organizations
@@ -218,36 +195,41 @@ business_followups
 business_learning_events
 ```
 
+The names `business_action_drafts`, `business_approval_requests` and `business_execution_records` are historical schema compatibility names. Records in those tables do not authorise drafting, approval-to-delivery or execution.
+
 ## Useful operator outputs
 
-The Business Autopilot should provide weekly outputs such as:
+The system may provide internal outputs such as:
 
 ```text
-Top businesses worth reviewing
-Weak websites by EVAVO service fit
-Recommended website teardown packs
-Recommended outreach angles
-Prepared action drafts
-Content ideas from market patterns
-Industries showing strongest digital weakness
-Follow-ups due
-Rejected leads and why
-Learning from approvals and rejections
+businesses worth manual review
+website weaknesses by EVAVO service fit
+website audit packs
+stored evidence and confidence
+service-match recommendations
+internal follow-up tasks
+content-topic observations
+industries showing digital weakness
+review outcomes and learning notes
 ```
 
-## Non-goals for the first implementation
+It must not produce deliverable drafts or execute external activity.
 
-The first implementation must not send, post, comment, submit forms, buy ads, execute browser actions, scrape behind logins, or call AI from browser-proxied routes.
+## Non-goals
 
-The first implementation should create the durable foundation for these future capabilities:
+The active Business Autopilot must not:
 
 ```text
-metadata storage
-route catalogue safety
-read-only Next visibility
-approval records
-action drafts
-execution records
-suppression records
-learning records
+generate email or social drafts
+send, post or comment
+submit forms
+schedule external activity
+buy ads
+execute browser actions
+scrape behind authentication
+call AI
+turn approval metadata into permission
+turn historical execution records into runnable work
 ```
+
+Any future proposal to add an external capability requires a separate product decision, threat model, implementation, migration and independently enforced safety contract. Nothing in this document authorises that work.

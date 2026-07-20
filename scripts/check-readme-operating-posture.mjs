@@ -191,8 +191,7 @@ forbidTokens("Cost governor", content.costGovernor, [
 ]);
 
 forbidTokens("Campaign intelligence", content.campaignIntelligence, [
-  "prepare_reviewable_draft",
-  "prepare_owned_content",
+  "Initial candidate action types:",
   "Execution remains a later phase",
   "before future approval-gated execution exists",
 ]);

@@ -26,6 +26,13 @@ export type BusinessDraftBuildResult = {
   safety: ReturnType<typeof businessAutopilotMetadataWriteSafety>;
 };
 
+const legacyRiskLabels = [
+  'draft_only',
+  'approval_required',
+  'suppression_check_required',
+  'contactability_check_required',
+] as const;
+
 function clean(value?: string | null, fallback = '') {
   const text = value?.trim();
   return text || fallback;
@@ -75,6 +82,7 @@ export function buildBusinessDraftOnlyAction(input: BusinessDraftBuildInput): Bu
     'Do not execute browser actions from this route.',
     'Do not bypass suppression, unsubscribe or consent requirements.',
     'Do not treat this record as deliverable copy or an approval to act.',
+    'Get explicit operator approval before any external action. This legacy label does not enable external action in this Worker.',
   ];
   const reviewChecklist = [
     'Confirm the organization and evidence references are correct.',
@@ -96,6 +104,7 @@ export function buildBusinessDraftOnlyAction(input: BusinessDraftBuildInput): Bu
       body: reviewBody(input),
       payload: {
         compatibilityIntent: intent,
+        legacyRiskLabels,
         organizationName: clean(input.organizationName) || null,
         recommendedService: clean(input.recommendedService) || null,
         recommendedAngle: clean(input.recommendedAngle) || null,
@@ -118,6 +127,7 @@ export function buildBusinessDraftOnlyAction(input: BusinessDraftBuildInput): Bu
         authoritativeForExecution: false,
         externalExecution: false,
         requiresApproval: false,
+        legacyRiskLabels,
         explicitBlocks,
         reviewChecklist,
       },

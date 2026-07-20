@@ -31,6 +31,8 @@ const protectedHandlers = [
   "src/routes/opportunitySourceCandidatesAdmin.ts",
   "src/routes/opportunitySourceOriginMetricsAdmin.ts",
   "src/routes/sourceExpansionBudgetRecommendationsAdmin.ts",
+  "src/routes/sourceExpansionQueryHintResolverAdmin.ts",
+  "src/routes/sourceExpansionPublicDirectoryScanAdmin.ts",
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/draftReviewAdmin.ts",
@@ -149,6 +151,7 @@ for (const relativePath of protectedHandlers) {
   for (const forbidden of [
     "getAdminToken",
     "function authorized(",
+    "function authorised(",
     "authorization ===",
     "authorization ==",
     "`Bearer ${token}`",
@@ -211,6 +214,48 @@ if (
   errors.push("Source-candidate confirmation must run after body parsing and before candidate persistence");
 }
 
+const queryHintResolver = read("src/routes/sourceExpansionQueryHintResolverAdmin.ts");
+for (const token of [
+  "const body = await readJson(request)",
+  "if (body?.confirm !== true)",
+  'error: "confirm_required"',
+  "resolveQueryHintUrls",
+]) {
+  if (!queryHintResolver.includes(token)) errors.push(`Query-hint confirmation contract is missing: ${token}`);
+}
+const queryHintBodyPosition = queryHintResolver.indexOf("const body = await readJson(request)");
+const queryHintConfirmPosition = queryHintResolver.indexOf("if (body?.confirm !== true)");
+const queryHintRunPosition = queryHintResolver.indexOf("return json(await resolveQueryHintUrls");
+if (
+  queryHintBodyPosition < 0 ||
+  queryHintConfirmPosition < 0 ||
+  queryHintRunPosition < 0 ||
+  !(queryHintBodyPosition < queryHintConfirmPosition && queryHintConfirmPosition < queryHintRunPosition)
+) {
+  errors.push("Query-hint confirmation must run after body parsing and before resolution writes");
+}
+
+const publicDirectoryScan = read("src/routes/sourceExpansionPublicDirectoryScanAdmin.ts");
+for (const token of [
+  "const body = await bodyJson(request)",
+  "if (body?.confirm !== true)",
+  'error: "confirm_required"',
+  "runRelationshipGraphDiscovery",
+]) {
+  if (!publicDirectoryScan.includes(token)) errors.push(`Public-directory confirmation contract is missing: ${token}`);
+}
+const publicDirectoryBodyPosition = publicDirectoryScan.indexOf("const body = await bodyJson(request)");
+const publicDirectoryConfirmPosition = publicDirectoryScan.indexOf("if (body?.confirm !== true)");
+const publicDirectoryRunPosition = publicDirectoryScan.indexOf("return json(await runRelationshipGraphDiscovery");
+if (
+  publicDirectoryBodyPosition < 0 ||
+  publicDirectoryConfirmPosition < 0 ||
+  publicDirectoryRunPosition < 0 ||
+  !(publicDirectoryBodyPosition < publicDirectoryConfirmPosition && publicDirectoryConfirmPosition < publicDirectoryRunPosition)
+) {
+  errors.push("Public-directory confirmation must run after body parsing and before bounded network discovery");
+}
+
 for (const forbidden of [
   "authorization ===",
   "authorization ==",
@@ -253,6 +298,10 @@ console.log(JSON.stringify({
   opportunitySourceCandidateCommitRequiresConfirmation: true,
   opportunitySourceOriginMetricsUseSharedAuthentication: true,
   sourceExpansionBudgetRecommendationsUseSharedAuthentication: true,
+  sourceExpansionQueryHintResolverUsesSharedAuthentication: true,
+  queryHintResolutionRequiresConfirmation: true,
+  sourceExpansionPublicDirectoryScanUsesSharedAuthentication: true,
+  publicDirectoryScanRequiresConfirmation: true,
   unauthenticatedProtectedPreflightAllowed: false,
   localBearerEqualityAllowed: false,
   handlerDefenceInDepthRequired: true,

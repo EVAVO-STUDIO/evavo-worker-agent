@@ -1,18 +1,33 @@
 # EVAVO Business Autopilot governance policy
 
-The Business Autopilot must be useful without becoming an uncontrolled internet actor.
+This policy is authoritative for the active EVAVO Business Autopilot runtime.
 
-This policy governs autonomy, approvals, external actions, suppression, auditability, and operator controls.
+The platform is an authenticated, review-first internal intelligence system. It is not an internet actor and it has no drafting, sending, posting, form-submission, browser-execution, advertising or third-party mutation capability.
 
 ## Primary rule
 
 ```text
-Research autonomously. Draft helpfully. Execute only under governed approval.
+Research manually when explicitly confirmed. Store internal review metadata. Never execute externally.
 ```
 
-## Hard blocks by default
+## Current governance posture
 
-The default platform posture blocks:
+```text
+scheduledExternalResearchEnabled: false
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+draftingEnabled: false
+externalDeliveryEnabled: false
+browserExecutionEnabled: false
+externalStateChangeEnabled: false
+autonomousCampaignsEnabled: false
+```
+
+## Hard blocks
+
+The following actions are always blocked:
 
 ```text
 send_email
@@ -29,97 +44,79 @@ bypass_robots_policy
 scrape_private_or_login_content
 ignore_suppression
 ignore_unsubscribe
+call_delivery_webhook
+generate_deliverable_draft
 ```
 
-## Allowed by default
+No approval record, historical status, budget profile, channel policy, operator preference or stored setting may activate a blocked action.
 
-The system may perform safe internal metadata actions:
+## Allowed internal actions
+
+The Worker may perform authenticated internal metadata actions:
 
 ```text
 record organization
-record person
-record website
-record page metadata
+record person metadata
+record website and page metadata
+record website audit observation
 record signal
 record opportunity
 record service match
 record audit pack
-record action draft
-record approval request
-record follow-up
-record content idea
+record manual-review request
+record suppression metadata
+record internal follow-up
+record content-topic idea
 record learning event
 ```
 
-## Approval requirements
+Any write requires the route's explicit confirmation contract. Confirmation authorises only that named internal write.
 
-Any action that can change external state requires an approval request and execution record.
+## Manual research governance
 
-External-state actions include:
-
-```text
-email_send
-social_publish
-social_comment
-contact_form_submit
-crm_external_write
-calendar_external_invite
-ad_platform_change
-webhook_to_external_system
-```
-
-Approval records must capture:
+A network-capable route is allowed only when all of the following are true:
 
 ```text
-action type
-target entity
-target person or channel
-content preview
-evidence ids
-risk flags
-compliance status
-approver
-approval timestamp
-expiry timestamp
-approved execution window
-maximum retry count
+shared ADMIN_TOKEN authentication succeeded
+request method and route policy permit manual research
+explicit confirmation is present
+public target validation succeeds
+redirect validation succeeds
+GET-only behaviour is enforced
+request, byte, time and result bounds are enforced
+result is stored as internal review metadata only
 ```
 
-## Action statuses
+There is no scheduled crawler, background queue, automatic retry executor or alternate fallback path.
+
+## Historical approval and execution records
+
+The retained schema may include:
 
 ```text
-draft
-needs_review
-approved
-rejected
-scheduled
-executed
-failed
-cancelled
-suppressed
-expired
+business_action_drafts
+business_approval_requests
+business_execution_records
 ```
 
-## Compliance statuses
+These names are historical compatibility metadata only.
+
+Approval records may capture a review decision, but:
 
 ```text
-not_required_internal
-draft_only
-requires_consent
-consent_verified
-suppressed
-unsubscribe_required
-sender_identity_missing
-approval_missing
-approved_to_send
-blocked
+authoritativeForExecution: false
+externalUseAllowed: false
+executable: false
+deliverable: false
 ```
 
-## Suppression rules
+Historical statuses such as `draft`, `approved`, `scheduled`, `executed`, `failed` or `expired` remain readable only for compatibility and audit history. They cannot enter a runnable lifecycle.
 
-The suppression list is mandatory before external execution.
+## Suppression policy
 
-Suppression can apply to:
+Suppression metadata remains useful for privacy, legal-risk and do-not-contact review even though delivery is disabled.
+
+Suppression may apply to:
 
 ```text
 email address
@@ -131,7 +128,7 @@ campaign
 source
 ```
 
-Suppression reasons include:
+Suppression reasons may include:
 
 ```text
 manual_do_not_contact
@@ -146,76 +143,76 @@ brand_risk
 duplicate
 ```
 
-Suppression wins over approval. If an approved action becomes suppressed before execution, it must not run.
+Suppression wins over all recommendations and review metadata.
 
-## Rate and campaign caps
+## Rate and budget policy
 
-External actions must support caps before execution is enabled:
+Current limits for disabled capabilities are permanently zero:
 
 ```text
-daily cap
-weekly cap
-campaign cap
-per-domain cap
-per-channel cap
-cooldown window
-retry cap
+AI generations: 0
+email sends: 0
+social posts: 0
+social comments: 0
+form submissions: 0
+browser actions: 0
+ad actions: 0
+external retries: 0
 ```
 
-The initial implementation should store cap fields and enforce them for any future execution endpoint.
+Budgets may further restrict internal reads, internal writes and confirmed bounded manual research. They cannot enable execution.
 
 ## Audit requirements
 
-Every draft, approval, suppression decision, execution attempt, and outcome must be recorded.
-
-Execution records must include:
+Record:
 
 ```text
-action draft id
-approval id
-execution status
-provider
-provider message id or external reference
-attempt count
-request timestamp
-result timestamp
+authenticated route family
+confirmation state
+internal record type
+manual research bounds when applicable
+review decision
+suppression decision
 failure reason
-operator override reason
+operator-provided context
+created and updated timestamps
 ```
 
-## Kill switch
+Do not create delivery attempts or provider-message references because the active Worker has no delivery provider.
 
-The platform must support an environment-level or settings-level kill switch for external execution.
+## Fail-closed control
 
-If the kill switch is active, only read-only and draft-only actions may proceed.
+The effective external-execution kill switch is permanently on.
+
+When authentication, confirmation, target validation, bounds, schema state or audit metadata is unavailable, the action must fail without retry, fallback or partial external work.
 
 ## Browser safety
 
-The Next dashboard may display records and submit confirmation-gated metadata writes through server-side proxy routes only.
+The browser may display read-only records and request server-side confirmed internal metadata writes through protected proxy routes.
 
-The browser must not receive:
+The browser must never receive:
 
 ```text
 Worker admin token
-email provider token
-social provider token
+provider token
 execution secret
-raw private credentials
+raw private credential
+server-side research credential
 ```
 
-## Initial implementation posture
+## Authoritative active posture
 
-The first Business Autopilot implementation is limited to:
+The Business Autopilot is limited to:
 
 ```text
-metadata records
+internal metadata records
 read-only dashboard visibility
-action drafts
-approval request metadata
-execution record metadata
+confirmed internal metadata writes
+confirmed bounded manual public-source research
+internal scoring and audit packs
+manual-review metadata
 suppression metadata
-content calendar metadata
 learning metadata
 ```
 
-It must not execute external actions until the execution layer has explicit compliance checks and approval enforcement.
+It does not draft deliverable content and does not execute external actions.

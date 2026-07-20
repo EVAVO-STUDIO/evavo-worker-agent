@@ -85,15 +85,23 @@ function normalizeSettings(input: any) {
 }
 
 function policyFor(settings: ReturnType<typeof normalizeSettings>) {
+  const manualResearchConfigured = settings.engineEnabled && settings.maxNetworkCallsPerRun > 0;
   return {
-    canRunScheduledEngine: settings.engineEnabled,
-    canFetchSources: settings.engineEnabled && settings.maxNetworkCallsPerRun > 0,
-    canExpandSourceCandidates: settings.engineEnabled && settings.sourceExpansionEnabled && settings.maxNetworkCallsPerRun > 0 && settings.maxExpansionFetchesPerRun > 0,
+    scheduledExecutionEnabled: false,
+    canRunScheduledEngine: false,
+    canFetchSources: false,
+    canExpandSourceCandidates: false,
     canSaveExpansionCandidatesAutomatically: false,
-    canSaveOpportunities: settings.opportunityDiscoveryEnabled,
+    canSaveOpportunities: false,
     canSaveLeads: false,
     canGenerateDrafts: false,
     canSendEmail: false,
+    manualResearchConfigured,
+    manualResearchRequiresAuthentication: true,
+    manualResearchRequiresConfirmation: true,
+    manualOpportunityDiscoveryAvailable: manualResearchConfigured && settings.opportunityDiscoveryEnabled,
+    manualSourceExpansionAvailable: manualResearchConfigured && settings.sourceExpansionEnabled && settings.maxExpansionFetchesPerRun > 0,
+    manualResearchSavesReviewItemsOnly: true,
     dailySourceLimit: settings.dailySourceLimit,
     maxNetworkCallsPerRun: settings.maxNetworkCallsPerRun,
     minOpportunityScore: settings.minOpportunityScore,
@@ -107,7 +115,7 @@ async function readSettings(env: Env) {
   return {
     ok: true,
     mode: "autonomy_settings",
-    contractVersion: "autonomy_settings_v2_review_first",
+    contractVersion: "autonomy_settings_v3_manual_research_only",
     settings: saved,
     policy: policyFor(saved),
     allowedModes,
@@ -120,6 +128,9 @@ async function readSettings(env: Env) {
       sourceExpansionSaveRequiresConfirmation: true,
       settingsWriteRequiresConfirmation: true,
       scheduledExternalExecutionDisabled: true,
+      manualResearchRequiresAuthentication: true,
+      manualResearchRequiresConfirmation: true,
+      manualResearchSavesReviewItemsOnly: true,
     },
   };
 }
@@ -142,6 +153,9 @@ async function writeSettings(env: Env, body: any) {
       sourceExpansionSaveRequiresConfirmation: true,
       settingsWriteRequiresConfirmation: true,
       scheduledExternalExecutionDisabled: true,
+      manualResearchRequiresAuthentication: true,
+      manualResearchRequiresConfirmation: true,
+      manualResearchSavesReviewItemsOnly: true,
     },
   };
 }
@@ -160,7 +174,7 @@ export async function handleAutonomySettingsAdmin(request: Request, env: Env, pa
       return json({
         ok: false,
         error: "confirm_required",
-        reason: "Autonomy setting changes require explicit confirmation. The Worker remains review-first: AI drafting, lead discovery and sending cannot be enabled from this route.",
+        reason: "Autonomy setting changes require explicit confirmation. Scheduled external execution, AI drafting, lead discovery and sending cannot be enabled from this route. Research remains manual, authenticated, confirmation-gated and review-only.",
       }, { status: 400 });
     }
     return json(await writeSettings(env, body));

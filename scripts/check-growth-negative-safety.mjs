@@ -18,6 +18,12 @@ function walk(directory) {
 
 for (const directory of scanRoots) walk(directory);
 
+const forbiddenCapabilityTokens = [
+  "canSendEmail: true",
+  "canPostSocial: true",
+  "canSubmitForms: true",
+];
+
 const forbidden = [
   { pattern: /canSendEmail\s*:\s*true/g, reason: "Growth routes must never enable email sending" },
   { pattern: /canPostSocial\s*:\s*true/g, reason: "Growth routes must never enable social posting" },
@@ -61,6 +67,7 @@ console.log(JSON.stringify({
   passed: violations.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "growth-negative-safety-scan",
+  forbiddenCapabilityTokens,
   checkedFiles: files.map((file) => path.relative(root, file).replaceAll(path.sep, "/")),
   guarantees: [
     "no email sending",

@@ -1,20 +1,18 @@
 import type { Env } from "../db";
-import { getAdminToken, logEvent } from "../db";
+import { logEvent } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { readAutonomySettings } from "../engineAutonomy";
 import { runOpportunityAutonomy } from "../opportunityAutonomy";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
-
 export async function handleOpportunityRunDueAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
+  }
   if (pathname !== "/admin/opportunities/run-due") return json({ ok: false, error: "Not found" }, { status: 404 });
-  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
 
   const body = await request.json().catch(() => ({}));
   if (body?.confirm !== true) {

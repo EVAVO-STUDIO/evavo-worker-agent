@@ -8,6 +8,7 @@ const readmePath = path.join(root, "README.md");
 const architecturePath = path.join(root, "docs", "growth-autonomous-discovery-architecture.md");
 const runbookPath = path.join(root, "docs", "growth-zero-source-research-runbook.md");
 const policyPath = path.join(root, "docs", "growth-source-discovery-safety-policy.md");
+const autonomyAgentPath = path.join(root, "docs", "growth-autonomy-agent.md");
 const packagePath = path.join(root, "package.json");
 const errors = [];
 
@@ -15,12 +16,14 @@ const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") :
 const architecture = fs.existsSync(architecturePath) ? fs.readFileSync(architecturePath, "utf8") : "";
 const runbook = fs.existsSync(runbookPath) ? fs.readFileSync(runbookPath, "utf8") : "";
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
+const autonomyAgent = fs.existsSync(autonomyAgentPath) ? fs.readFileSync(autonomyAgentPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 
 if (!readme) errors.push("Missing README.md");
 if (!architecture) errors.push("Missing Growth discovery architecture document");
 if (!runbook) errors.push("Missing zero-source research runbook");
 if (!policy) errors.push("Missing source discovery safety policy");
+if (!autonomyAgent) errors.push("Missing Growth autonomy agent document");
 
 for (const token of [
   "# EVAVO Growth Research Worker",
@@ -82,6 +85,25 @@ for (const token of [
   if (!policy.includes(token)) errors.push(`Source discovery safety policy posture is missing: ${token}`);
 }
 
+for (const token of [
+  "This document preserves historical future-state design vocabulary.",
+  "It is not an active-runtime contract, implementation authorisation or roadmap for enabling outbound execution.",
+  "The active EVAVO Growth Research Worker is manual-research-only, review-first and non-executing.",
+  "Scheduled processing is internal-only.",
+  "These labels are retained only to explain historical records or future design discussions.",
+  "They do not correspond to enabled runtime modes.",
+  "manual_research_review_only",
+  "Approval metadata does not enable an action",
+  "No route, capability registry, stored setting or approval state may activate them.",
+  "draftingEnabled: false",
+  "browserExecutionEnabled: false",
+  "externalDeliveryEnabled: false",
+  "autonomousCampaignsEnabled: false",
+  "scheduledExternalResearchEnabled: false",
+]) {
+  if (!autonomyAgent.includes(token)) errors.push(`Growth autonomy agent posture is missing: ${token}`);
+}
+
 for (const forbidden of [
   "Scheduled work is limited to bounded research",
   "scheduled bounded research",
@@ -131,6 +153,20 @@ for (const forbidden of [
   }
 }
 
+for (const forbidden of [
+  "The agent is an autonomous EVAVO growth employee:",
+  "It can research, classify, draft, queue, and execute allowed actions",
+  "### draft",
+  "### approved_autopilot",
+  "### owned_channel_autopilot",
+  "5. Draft generation and scoring routes",
+  "7. Controlled execution",
+]) {
+  if (autonomyAgent.includes(forbidden)) {
+    errors.push(`Growth autonomy agent document contains stale execution capability: ${forbidden}`);
+  }
+}
+
 const expectedCommand = "node scripts/check-readme-operating-posture.mjs";
 if (packageJson.scripts?.["docs:operating-posture:check"] !== expectedCommand) {
   errors.push(`package.json must expose docs:operating-posture:check as ${expectedCommand}`);
@@ -147,12 +183,14 @@ console.log(JSON.stringify({
   discoveryArchitectureMarkedFutureState: true,
   zeroSourceRunbookManualOnly: true,
   sourceDiscoveryPolicyManualOnly: true,
+  autonomyAgentMarkedHistoricalFutureState: true,
   autonomousFetchQueueDocumentedAsDisabled: true,
   scheduledExternalResearchDocumentedAsDisabled: true,
   manualResearchAuthenticationDocumented: true,
   manualResearchConfirmationDocumented: true,
   manualResearchBoundedDocumented: true,
   manualResearchReviewOnlyDocumented: true,
+  draftingDocumentedAsDisabled: true,
   outboundExecutionDocumentedAsDisabled: true,
   errors,
 }, null, 2));

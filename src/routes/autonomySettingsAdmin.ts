@@ -110,12 +110,22 @@ function policyFor(settings: ReturnType<typeof normalizeSettings>) {
   };
 }
 
+function compatibilityMetadata() {
+  return {
+    contractVersion: "autonomy_settings_v2_review_first",
+    readOnlyAlias: true,
+    authoritative: false,
+    executable: false,
+  };
+}
+
 async function readSettings(env: Env) {
   const saved = normalizeSettings(parseJson(await getSetting(env, SETTING_KEY)) || defaultSettings);
   return {
     ok: true,
     mode: "autonomy_settings",
     contractVersion: "autonomy_settings_v3_manual_research_only",
+    compatibility: compatibilityMetadata(),
     settings: saved,
     policy: policyFor(saved),
     allowedModes,
@@ -142,6 +152,8 @@ async function writeSettings(env: Env, body: any) {
   return {
     ok: true,
     mode: "autonomy_settings_saved",
+    contractVersion: "autonomy_settings_v3_manual_research_only",
+    compatibility: compatibilityMetadata(),
     settings: next,
     policy: policyFor(next),
     changed: JSON.stringify(previous) !== JSON.stringify(next),

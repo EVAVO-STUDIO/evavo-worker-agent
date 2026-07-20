@@ -1,247 +1,199 @@
 # Growth channel policy
 
-Growth Autonomy actions are governed by channel class. The same draft may be acceptable on one channel and blocked on another.
+This document is the authoritative channel-classification policy for the active EVAVO Growth Research Worker.
+
+The active Worker is manual-research-only. Channel classifications may guide internal research, scoring and operator review, but they do not enable drafting, sending, posting, form submission, browser automation or third-party mutation.
+
+## Current runtime posture
+
+```text
+scheduledExternalResearchEnabled: false
+draftingEnabled: false
+emailSendingEnabled: false
+socialPostingEnabled: false
+formSubmissionEnabled: false
+browserExecutionEnabled: false
+externalStateChangeEnabled: false
+autonomousCampaignsEnabled: false
+```
+
+Approval records, channel policies, stored settings and historical modes are internal metadata only. They are not execution permission.
 
 ## Shared policy
 
-All channels inherit these rules:
+All channel classes inherit these rules:
 
+- public-source research is manual, authenticated, explicitly confirmed and bounded
+- research results are saved as internal review metadata only
 - no hidden-human mode
 - no fake neutral recommendations
-- no repeated templates
+- no repeated automated outreach
 - no hidden promotional links
 - no CAPTCHA or access-control bypass
-- no public execution without audit logging
-- if rules are unclear, save intelligence and do not execute
-- if budget state is unknown, pause execution
+- no drafting or external execution
+- if channel rules are unclear, save a blocked reason and stop
+- no route may convert approval metadata into delivery capability
 
 ## Channel classes
 
 ### owned
 
-EVAVO-controlled channels such as EVAVO blog, EVAVO site pages, EVAVO-owned social accounts, and opted-in EVAVO newsletters.
+EVAVO-controlled websites, social accounts, newsletters and other owned properties.
 
-Default mode: `owned_channel_autopilot`
+Current Worker use:
 
-Allowed:
+- record owned-channel context
+- save internal content opportunities
+- score relevance and evidence
+- recommend a manual operator next step
 
-- blog drafts
-- social post drafts
-- scheduled EVAVO posts under configured cadence
-- landing-page ideas
-- case-study snippets
-- service pages
+Blocked in the Worker:
 
-Rules:
-
-- EVAVO identity is inherent.
-- Links are allowed.
-- Draft quality and cadence still matter.
-- Track traffic and engagement outcomes.
-
-Risk: low.
+- drafting
+- publishing
+- scheduling posts
+- changing website content
+- sending newsletters
 
 ### provider_expected
 
-Directories, marketplaces, vendor databases, agency lists, supplier directories, or threads/pages where provider listings are expected.
+Directories, marketplaces, supplier databases and provider-listing channels.
 
-Default mode: `approved_autopilot`
+Current Worker use:
 
-Allowed:
+- record public listing requirements
+- store eligibility and evidence
+- identify duplicate or missing-profile risks
+- recommend manual review
 
-- directory profile drafts
-- provider listing submissions
-- service category selection
-- EVAVO profile updates
+Blocked in the Worker:
 
-Rules:
-
-- EVAVO identity must be explicit.
-- Duplicates must be prevented.
-- Submission proof must be stored.
-- Channel terms and listing rules must be checked where available.
-
-Risk: low to medium.
+- creating or updating profiles
+- submitting listings
+- selecting service categories on third-party systems
+- uploading assets
 
 ### direct
 
-Business email, contact forms, public procurement contacts, warm contacts, and inbound/permissioned follow-ups.
+Business email, contact pages, procurement contacts, warm contacts and inbound or permissioned follow-ups.
 
-Default mode: `assist`
+Current Worker use:
 
-Allowed:
+- identify public contact paths as evidence
+- classify consent and suppression risk
+- record a manual follow-up recommendation
 
-- contact-path discovery
-- contact-form drafts
-- email drafts
-- approved low-volume sends/submissions
+Blocked in the Worker:
 
-Rules:
-
-- Use a real trigger or observation.
-- Identify EVAVO clearly.
-- Respect consent, unsubscribe, and do-not-contact rules.
-- No harvested-email blasts.
-- No CAPTCHA bypass.
-- No repeated form submissions.
-
-Risk: medium.
+- generating email or contact-form drafts
+- sending email
+- submitting forms
+- booking meetings
+- calling prospects
 
 ### community
 
-Reddit, forums, YouTube comments, niche groups, product/startup communities, and similar public discussion spaces.
+Forums, comments, discussion groups and public communities.
 
-Default mode: `assist`
+Current Worker use:
 
-Allowed:
+- record public context and channel rules
+- save a do-not-engage or manual-review recommendation
+- store reputational risk evidence
 
-- read-only discovery
-- channel rules memory
-- no-link helpful reply drafts
-- transparent-affiliation drafts when EVAVO is relevant
-- approval-gated posting when allowed
+Blocked in the Worker:
 
-Rules:
-
-- Reply only to real context, questions, requests for help, or provider-welcome threads.
-- No mass posting.
-- No repeated templates.
-- No fake neutral recommendations.
-- No link by default.
-- Links require channel permission and a clear reason.
-- If the reply is promotional or EVAVO-linked, affiliation must be clear enough for the context.
-
-Risk: high.
+- generating replies
+- posting comments
+- voting, reacting or messaging
+- joining groups or authenticating to platforms
 
 ### procurement
 
-Tenders, grants, supplier panels, government procurement, private procurement portals, and formal proposal pathways.
+Tenders, grants, supplier panels and formal proposal pathways.
 
-Default mode: `draft`
+Current Worker use:
 
-Allowed:
+- extract public opportunity metadata
+- record eligibility requirements and deadlines
+- save evidence and internal review notes
 
-- opportunity extraction
-- eligibility checks
-- required-document extraction
-- response angle drafts
-- clarification-question drafts
-- proposal outline drafts
+Blocked in the Worker:
 
-Rules:
-
-- No formal submission without review.
-- Do not fabricate eligibility, experience, pricing, or credentials.
-- Track deadlines and required documents.
-- Store source evidence.
-
-Risk: medium.
+- generating proposal drafts
+- submitting tenders or applications
+- uploading documents
+- answering clarification questions
 
 ### blocked
 
-Any channel where rules are unclear, hostile to provider engagement, private/gated, rate-limit sensitive, or reputationally risky.
-
-Default mode: `blocked`
+Any channel that is private, gated, unclear, hostile to provider engagement, rate-limit sensitive or reputationally unsafe.
 
 Allowed:
 
-- save public intelligence if useful
-- mark blocked reason
-- revisit after manual review
+- store a blocked reason
+- retain minimal public evidence needed for review
 
-Blocked:
+Everything else is blocked.
 
-- drafting
-- sending
-- posting
-- form submission
+## Link and disclosure metadata
 
-Risk: blocked.
+Link and disclosure classifications are internal review metadata only. They may help an operator assess a manual action outside the Worker, but they do not enable drafting or execution.
 
-## Link policy
+Possible link classifications:
 
-### allowed
+```text
+allowed_for_manual_review
+contextual_manual_review
+manual_approval_required
+blocked
+```
 
-Links can be used when accurate and useful.
+Possible disclosure classifications:
 
-### contextual
-
-Links are allowed only when the user/channel context makes them useful.
-
-### approval_required
-
-Links must be reviewed before execution.
-
-### blocked
-
-No links.
-
-## Disclosure policy
-
-### not_required
-
-EVAVO identity is already clear or not relevant.
-
-### recommended
-
-Use light EVAVO context when it helps credibility.
-
-### required_when_promotional
-
-If EVAVO, EVAVO services, or an EVAVO link is included, the relationship must be clear.
-
-### always_required
-
-EVAVO identity must be explicit.
+```text
+not_applicable
+recommended_for_manual_action
+required_for_manual_action
+blocked
+```
 
 ## Execution policy
 
-### auto_allowed
+The active Worker has one execution classification:
 
-Action can execute autonomously only if all gates pass and caps allow it.
+```text
+blocked
+```
 
-### confirm_required
+There is no `auto_allowed`, `owned_only`, `approved_autopilot`, `owned_channel_autopilot` or confirmation-to-execution mode in the active runtime.
 
-Action must be approved before execution.
-
-### owned_only
-
-Action can execute only on EVAVO-owned channels.
-
-### blocked
-
-Action cannot execute.
+Explicit confirmation authorises only the specific bounded internal metadata write or manual public-source research action named by the route. It never authorises delivery.
 
 ## Channel memory
 
-Each channel record should eventually store:
+Channel records may store internal review metadata such as:
 
-- platform
-- URL
-- name
+- platform and public URL
 - channel class
-- link policy
-- self-promo policy
-- disclosure policy
-- allowed action types
-- automation mode
-- max actions per day/week
-- last action time
-- cooldown until
-- positive outcome count
-- negative outcome count
-- removal count
-- notes and rule evidence
+- public rules evidence
+- risk classification
+- manual-review status
+- blocked reason
+- last reviewed time
+- internal notes
 
-## Cooldowns
+They must not store reusable third-party credentials, authenticated cookies, execution tokens or instructions for automated delivery.
 
-The agent must rest a channel when:
+## Cooldowns and risk learning
 
-- a post is removed
-- a reply is negative
-- a moderation warning appears
-- action volume approaches cap
-- repeated drafts are rejected
-- outcomes are poor over several runs
+Historical outcomes or operator feedback may lower a channel's internal research priority. They cannot increase execution capability because external execution remains disabled.
 
-Cooldowns should reduce budget before they increase it.
+The safe default for every uncertain channel is:
+
+```text
+save minimal evidence
+mark needs_manual_review or blocked
+do not draft
+do not execute
+```

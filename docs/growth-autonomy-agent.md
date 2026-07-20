@@ -1,199 +1,123 @@
 # EVAVO Growth Autonomy Agent
 
-The Growth Autonomy Agent is the next layer above the existing Opportunity Intelligence / Outbound Agent.
+This document preserves historical future-state design vocabulary. It is not an active-runtime contract, implementation authorisation or roadmap for enabling outbound execution.
 
-The existing agent finds and scores opportunity/source signals. The Growth Autonomy Agent decides what EVAVO should do with those signals across owned content, directories, procurement, contact forms, email, and community-style channels.
+The active EVAVO Growth Research Worker is manual-research-only, review-first and non-executing.
 
-## Contract
+## Current authoritative posture
 
-The agent is an autonomous EVAVO growth employee:
+The active Worker may:
 
-- automated, but accountable
-- natural, but not deceptive
-- EVAVO-aligned, not generic
-- useful first, commercial second
-- cost-aware, not always-on
+```text
+read stored internal metadata
+score and prioritise existing research evidence
+maintain strategy and learning metadata
+create internal approval or review records
+perform explicitly classified manual public-source research only after shared authentication and explicit confirmation
+save bounded research results as review-only internal metadata
+```
 
-It can research, classify, draft, queue, and execute allowed actions, but only when channel policy, action policy, cost budget, and audit requirements pass.
+The active Worker must not:
 
-## Hard rules
+```text
+generate drafts
+send email or direct messages
+post or comment
+submit forms
+operate a browser
+buy advertising
+log in to third-party systems
+mutate third-party data
+publish owned-channel content
+run autonomous or scheduled external research
+queue background network work
+execute approved external actions
+```
 
-The Growth Autonomy Agent must not support:
+Scheduled processing is internal-only. Cron must not fetch public pages, discover opportunities, expand sources or trigger an alternate executor.
 
-- hidden-human mode
-- fake neutral recommendations
-- CAPTCHA bypass
-- private or gated-source scraping
-- harvested-email blasts
-- repetitive mass posting
-- hidden promotional links
-- unaudited public actions
-- execution when budget state is unknown
+## Historical concept vocabulary
 
-If an action relies on hiding who is behind it, the action is blocked.
+Earlier designs used terms such as autonomy agent, observe, draft, assist, approved autopilot and owned-channel autopilot. These labels are retained only to explain historical records or future design discussions.
 
-If a channel, budget, or rules state is unclear, the agent saves intelligence and does not execute.
+They do not correspond to enabled runtime modes.
 
-## Operating modes
+The only current operational posture is:
 
-### observe
+```text
+manual_research_review_only
+```
 
-Find, classify, score, and save signals only.
+That posture requires:
 
-Allowed:
+```text
+shared ADMIN_TOKEN authentication
+explicit confirmation
+bounded route classification
+GET-only public research
+public-target and redirect validation
+review-only persistence
+no AI
+no drafting
+no sending
+no posting
+no forms
+no browser execution
+no external state mutation
+```
 
-- public-source discovery
-- signal extraction
-- fit scoring
-- channel classification
-- budget-safe memory writes
+## Internal decision support
 
-Blocked:
+The Worker may record internal decisions such as:
 
-- drafting
-- sending
-- posting
-- contact-form submission
+```text
+research_more
+score_candidate
+reject_candidate
+monitor_later
+prepare_review_pack
+request_operator_review
+```
 
-### draft
+These records are non-executable. Approval metadata does not enable an action and must never be interpreted as permission to send, post, submit, publish or mutate an external system.
 
-Prepare drafts but do not execute them.
+## Blocked historical action classes
 
-Allowed:
+Historical design materials may refer to these action classes, but they are blocked in the active Worker:
 
-- EVAVO voice drafts
-- no-link community reply drafts
-- contact-form drafts
-- email drafts
-- directory profile drafts
-- blog/social post drafts
-- draft scoring
+```text
+draft email
+draft contact form
+draft social or community content
+send email
+submit contact form
+submit directory listing
+post owned-channel content
+post community replies
+schedule publication
+execute provider or marketplace actions
+```
 
-Blocked:
+No route, capability registry, stored setting or approval state may activate them.
 
-- public posting
-- sending
-- form submission
+## Strategy inputs
 
-### assist
+Internal strategy records may still describe services, campaigns, audiences, regions, offers, proof points, tone, risk appetite and budgets. These inputs are used only for internal scoring, prioritisation and review context.
 
-Queue recommended actions for approval.
+They do not authorise external execution.
 
-Allowed:
+## Future-state governance rule
 
-- draft generation
-- risk scoring
-- cost estimate
-- approve/edit/reject queue
-- audit preparation
+Any proposal to add drafting, browser execution, delivery or external mutation would require a separate product decision, new threat model, new runtime design and explicit approval outside this document.
 
-Execution requires explicit approval.
+Until that happens:
 
-### approved_autopilot
+```text
+draftingEnabled: false
+browserExecutionEnabled: false
+externalDeliveryEnabled: false
+autonomousCampaignsEnabled: false
+scheduledExternalResearchEnabled: false
+```
 
-Execute only whitelisted, low-risk actions under caps.
-
-Allowed examples:
-
-- provider-expected directory updates
-- approved service marketplace actions
-- warm/permissioned follow-up actions
-
-Blocked examples:
-
-- community autoposting unless explicitly whitelisted
-- cold mass outreach
-- high-volume contact forms
-
-### owned_channel_autopilot
-
-Publish or schedule only EVAVO-owned channel work under cadence and quality rules.
-
-Examples:
-
-- EVAVO blog drafts or scheduled posts
-- EVAVO social drafts or posts
-- EVAVO landing-page idea drafts
-- case-study snippets
-
-### blocked
-
-No drafting and no execution. Intelligence may still be saved if it is public and useful.
-
-## Decision ladder
-
-For every signal, the agent decides:
-
-1. Is there a real context or prompt?
-2. Does it map to an active EVAVO goal?
-3. Is this channel appropriate for action?
-4. Is a link allowed, contextual, approval-gated, or blocked?
-5. Is EVAVO identity clear enough for this channel?
-6. Is the draft specific enough that it cannot be reused unchanged elsewhere?
-7. Is the daily budget healthy?
-8. Should the system execute, queue, draft only, save, or ignore?
-
-## Growth goals
-
-The Growth Strategy Board should supply:
-
-- active services
-- current campaigns
-- target audiences
-- target regions
-- offer stack
-- proof points
-- tone profile
-- risk appetite
-- budget profile
-
-Signals and actions must be evaluated against those goals.
-
-## Allowed channel classes
-
-- owned channels
-- provider-expected spaces
-- direct business contact
-- community channels
-- procurement channels
-- blocked or unclear channels
-
-See `docs/growth-channel-policy.md`.
-
-## Action classes
-
-- save signal
-- draft email
-- draft contact form
-- draft thread reply
-- draft video comment
-- draft directory profile
-- draft owned social post
-- draft blog outline
-- submit directory listing
-- submit contact form
-- send email
-- post owned channel
-- post community reply
-- do not engage
-
-See `docs/growth-engagement-action-model.md`.
-
-## Cost governance
-
-Every run must check a budget ledger before work starts. If budget state is missing, stale, or near cap, new work pauses.
-
-See `docs/growth-cost-governor.md`.
-
-## Implementation sequence
-
-1. Contract and policy docs
-2. Growth Strategy Board config and UI
-3. Worker schema and migrations
-4. Read-only discovery routes
-5. Draft generation and scoring routes
-6. Engagement queue
-7. Controlled execution
-8. Outcome learning
-
-Execution must not be added before channel policy, cost governance, draft scoring, and audit records exist.
+The source code and executable safety contracts are authoritative if any historical document or stored record conflicts with this posture.

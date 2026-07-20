@@ -18,6 +18,7 @@ const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
 const requiredSafetyCommands = {
+  "admin:broad-write-safety:check": "node scripts/check-broad-admin-write-safety.mjs",
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
   "sources:confirmation-safety:check": "node scripts/check-source-action-confirmation-safety.mjs",
   "opportunities:execution-boundary-safety:check": "node scripts/check-opportunity-execution-boundary-safety.mjs",
@@ -35,6 +36,7 @@ for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommand
 }
 
 for (const relativePath of [
+  "scripts/check-broad-admin-write-safety.mjs",
   "scripts/check-autonomy-capability-truthfulness.mjs",
   "scripts/check-source-action-confirmation-safety.mjs",
   "scripts/check-opportunity-execution-boundary-safety.mjs",
@@ -54,6 +56,7 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "safety-gate-completeness",
+  broadAdminWriteSafetyRequired: true,
   autonomyCapabilityTruthfulnessRequired: true,
   sourceConfirmationSafetyRequired: true,
   opportunityExecutionBoundarySafetyRequired: true,

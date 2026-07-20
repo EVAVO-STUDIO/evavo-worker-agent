@@ -10,7 +10,7 @@ import { handleSourcesAdmin } from "./routes/sourcesAdmin";
 import { handleSourceBatchAdmin } from "./routes/sourceBatchAdmin";
 import { handlePlannerAdmin } from "./routes/plannerAdminProtected";
 import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
-import { handleGrowthAdmin } from "./routes/growthAdmin";
+import { handleGrowthAdmin } from "./routes/growthAdminProtected";
 import { handleGrowthCapabilitiesAdmin } from "./routes/growthCapabilitiesAdmin";
 import { handleGrowthCampaignIntelligenceAdmin } from "./routes/growthCampaignIntelligenceAdmin";
 import { handleGrowthStrategyMemoryAdmin } from "./routes/growthStrategyMemoryAdmin";

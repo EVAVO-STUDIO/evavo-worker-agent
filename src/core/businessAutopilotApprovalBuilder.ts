@@ -17,6 +17,14 @@ export type BusinessApprovalBuildResult = {
   safety: ReturnType<typeof businessAutopilotMetadataWriteSafety>;
 };
 
+const legacyReviewLabels = [
+  'Confirm the draft is still accurate and relevant.',
+  'Confirm evidence is not private, sensitive or stale.',
+  'Confirm suppression and unsubscribe state before any future external use.',
+  'Confirm jurisdiction-specific outreach rules before any future external use.',
+  'Confirm the operator explicitly approves any future external step.',
+] as const;
+
 function clean(value?: string | null) {
   const text = value?.trim();
   return text || null;
@@ -70,6 +78,8 @@ export function buildBusinessActionDraftApproval(input: BusinessApprovalBuildInp
         deliverable: false,
         authoritativeForExecution: false,
         externalExecutionAllowed: false,
+        legacyReviewLabels,
+        legacyLabelsAuthoritative: false,
         draftType: clean(input.draftType),
         channel: clean(input.channel),
         explicitBlocks,

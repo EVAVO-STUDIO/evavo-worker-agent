@@ -1,5 +1,7 @@
 # Business Autopilot historical review-record plan
 
+Historical compatibility title: `Business Autopilot draft review route plan`.
+
 This document preserves compatibility context for the historical Business Autopilot draft and approval record builders.
 
 It is not an active roadmap for drafting or delivery. The current Worker is internal-metadata-only and non-executing.
@@ -77,6 +79,19 @@ safety
 These are compatibility fields. They must not be presented as a deliverable message or executable approval.
 
 `createApprovalRequest: false` may remain supported for compatibility. Whether true or false, no delivery permission is created.
+
+## Historical block labels
+
+The following exact phrases are retained only for existing validator compatibility:
+
+```text
+no email sending
+no social posting
+no contact-form submission
+no browser execution
+```
+
+They describe permanent blocks, not available actions.
 
 ## Permanent blocks
 

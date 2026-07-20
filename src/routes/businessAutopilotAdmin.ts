@@ -15,7 +15,6 @@ import {
   listBusinessSignals,
   listBusinessSuppression,
   saveBusinessActionDraft,
-  saveBusinessApprovalRequest,
   saveBusinessContentIdea,
   saveBusinessFollowup,
   saveBusinessLearningEvent,
@@ -56,6 +55,26 @@ function blockedWrite(json: JsonResponse) {
   }, { status: 400 });
 }
 
+function blockedHistoricalRecordWrite(json: JsonResponse, mode: string) {
+  return json({
+    ok: false,
+    mode,
+    error: "historical_record_write_disabled",
+    reason: "New arbitrary draft and approval records are disabled. Historical records remain available through authenticated read-only routes.",
+    historicalOnly: true,
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
+    compatibility: {
+      legacyBuilder: "buildBusinessDraftOnlyAction",
+      legacyMode: "business_action_draft_built",
+    },
+    safety: businessAutopilotMetadataWriteSafety(),
+  }, { status: 410 });
+}
+
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -84,52 +103,42 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       const organizations = await listBusinessOrganizations(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       return json({ mode: "business_organizations", ...businessReadPayload(organizations, "organizations") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/signals") {
       const signals = await listBusinessSignals(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("signalType") || undefined);
       return json({ mode: "business_signals", ...businessReadPayload(signals, "signals") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/opportunities") {
       const opportunities = await listBusinessOpportunities(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       return json({ mode: "business_opportunities", ...businessReadPayload(opportunities, "opportunities") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/service-matches") {
       const matches = await listBusinessServiceMatches(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("serviceKey") || undefined);
       return json({ mode: "business_service_matches", ...businessReadPayload(matches, "serviceMatches") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/audit-packs") {
       const packs = await listBusinessAuditPacks(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       return json({ mode: "business_audit_packs", ...businessAuditPackReadPayload(packs) });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/action-drafts") {
       const drafts = await listBusinessActionDrafts(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_action_drafts", ...businessReadPayload(drafts, "drafts") });
+      return json({ mode: "business_action_drafts", historicalOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(drafts, "drafts") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/approval-requests") {
       const approvals = await listBusinessApprovalRequests(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_approval_requests", ...businessReadPayload(approvals, "approvalRequests") });
+      return json({ mode: "business_approval_requests", historicalOnly: true, executable: false, authoritativeForExecution: false, ...businessReadPayload(approvals, "approvalRequests") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/suppression") {
       const records = await listBusinessSuppression(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("active") !== "0");
       return json({ mode: "business_suppression_list", ...businessReadPayload(records, "suppression") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/content-ideas") {
       const ideas = await listBusinessContentIdeas(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       return json({ mode: "business_content_ideas", ...businessReadPayload(ideas, "contentIdeas") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/followups") {
       const followups = await listBusinessFollowups(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       return json({ mode: "business_followups", ...businessReadPayload(followups, "followups") });
     }
-
     if (request.method === "GET" && pathname === "/admin/business/learning") {
       const learning = await listBusinessLearningEvents(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("entityType") || undefined);
       return json({ mode: "business_learning_events", ...businessReadPayload(learning, "learningEvents") });
@@ -141,86 +150,76 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       const organization = await saveBusinessOrganization(env, body.organization || body);
       return json({ mode: "business_organization_saved", ...businessWritePayload(organization, "organization") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/signals") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const signal = await saveBusinessSignal(env, body.signal || body);
       return json({ mode: "business_signal_saved", ...businessWritePayload(signal, "signal") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/opportunities") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const opportunity = await saveBusinessOpportunity(env, body.opportunity || body);
       return json({ mode: "business_opportunity_saved", ...businessWritePayload(opportunity, "opportunity") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/service-matches") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const serviceMatch = await saveBusinessServiceMatch(env, body.serviceMatch || body);
       return json({ mode: "business_service_match_saved", ...businessWritePayload(serviceMatch, "serviceMatch") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/audit-packs") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const auditPack = await saveBusinessAuditPack(env, body.auditPack || body);
       return json({ mode: "business_audit_pack_saved", ...businessWritePayload(auditPack, "auditPack") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/action-drafts/build") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const built = buildBusinessDraftOnlyAction(body.draftRequest || body);
-      const draft = await saveBusinessActionDraft(env, built.draft);
+      const reviewRecord = await saveBusinessActionDraft(env, built.draft);
       return json({
         ok: true,
-        mode: "business_action_draft_built",
-        draft,
+        mode: "business_historical_review_record_saved",
+        legacyMode: "business_action_draft_built",
+        reviewRecord,
+        historicalOnly: true,
+        reviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        externalExecutionAllowed: false,
         reviewChecklist: built.reviewChecklist,
         explicitBlocks: built.explicitBlocks,
         riskFlags: built.riskFlags,
         safety: built.safety,
       });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/action-drafts") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const draft = await saveBusinessActionDraft(env, body.draft || body);
-      return json({ mode: "business_action_draft_saved", ...businessWritePayload(draft, "draft") });
+      return blockedHistoricalRecordWrite(json, "business_action_draft_write_disabled");
     }
-
     if (request.method === "POST" && pathname === "/admin/business/approval-requests") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const approvalRequest = await saveBusinessApprovalRequest(env, body.approvalRequest || body);
-      return json({ mode: "business_approval_request_saved", ...businessWritePayload(approvalRequest, "approvalRequest") });
+      return blockedHistoricalRecordWrite(json, "business_approval_request_write_disabled");
     }
-
     if (request.method === "POST" && pathname === "/admin/business/suppression") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const suppression = await saveBusinessSuppression(env, body.suppression || body);
       return json({ mode: "business_suppression_saved", ...businessWritePayload(suppression, "suppression") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/content-ideas") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const contentIdea = await saveBusinessContentIdea(env, body.contentIdea || body);
       return json({ mode: "business_content_idea_saved", ...businessWritePayload(contentIdea, "contentIdea") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/followups") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const followup = await saveBusinessFollowup(env, body.followup || body);
       return json({ mode: "business_followup_saved", ...businessWritePayload(followup, "followup") });
     }
-
     if (request.method === "POST" && pathname === "/admin/business/learning") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);

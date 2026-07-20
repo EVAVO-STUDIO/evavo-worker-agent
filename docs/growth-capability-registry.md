@@ -1,8 +1,8 @@
 # Growth capability registry
 
-This document defines the first capability model for the EVAVO Growth Operator.
+This document defines the capability model for the EVAVO Growth Research Worker.
 
-The registry is intentionally a control-plane feature. It describes what the agent can do, what is planned, what is blocked, and what level of autonomy is required. It does not execute any capability by itself.
+The registry is a control-plane and reporting feature. It describes currently available internal capabilities, reserved modelling levels, and blocked capabilities. It does not execute any capability by itself.
 
 ## Current code
 
@@ -11,9 +11,23 @@ src/core/growthCapabilities.ts
 src/routes/growthCapabilitiesAdmin.ts
 ```
 
-The registry currently supports a static typed list. Persistence and operator overrides should come later.
+The registry is a static typed source of truth. It does not accept runtime overrides and does not grant execution permission.
 
-## Autonomy levels
+## Runtime posture
+
+Scheduled external execution is disabled.
+
+Manual research is permitted only through authenticated, POST-only routes that require explicit confirmation and enforce bounded limits. Manual research saves review items or internal metadata only.
+
+Draft generation is disabled.
+
+Browser execution is disabled.
+
+External delivery is blocked.
+
+Email sending, social posting, form submission and external state mutation are disabled.
+
+## Autonomy modelling levels
 
 ```text
 0 read_only
@@ -24,9 +38,9 @@ The registry currently supports a static typed list. Persistence and operator ov
 5 autonomous_campaign
 ```
 
-The system should move through these levels gradually. Current safe operating scope remains mostly level 0, level 1 planning, and level 2 internal metadata.
+These levels are modelling vocabulary, not enabled runtime modes. The current Worker supports read-only analysis and explicitly confirmed internal metadata writes. Levels involving drafting, browser execution, external delivery or autonomous campaigns remain blocked.
 
-## Initial capability IDs
+## Capability IDs
 
 ```text
 research_public_website
@@ -40,6 +54,16 @@ external_delivery_approved
 record_outcome
 generate_growth_brief
 ```
+
+A capability entry may exist to model a blocked or future concept. `currentImplementation` is authoritative:
+
+```text
+available
+planned
+blocked
+```
+
+An entry marked `blocked` has no executable runtime implementation.
 
 ## Registry fields
 
@@ -64,11 +88,21 @@ currentImplementation
 notes
 ```
 
-## Current safety posture
+## Registry safety posture
 
-The registry itself reports:
+The registry reports:
 
 ```text
+scheduledExecutionEnabled: false
+scheduledExternalResearchEnabled: false
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+draftingEnabled: false
+browserExecutionEnabled: false
+externalDeliveryEnabled: false
+autonomousCampaignsEnabled: false
 readOnly: true
 registryOnly: true
 executesCapabilities: false
@@ -77,30 +111,24 @@ touchesExternalChannel: false
 callsNetwork: false
 ```
 
-The placeholder for future approved external delivery is blocked. It is present only so the control plane can model future work before execution exists.
+The blocked external-delivery entry exists only so the control plane can describe a prohibited capability explicitly. It is not a roadmap commitment and does not enable external execution.
 
-## Build order from here
+Internal approval requests are metadata records only. Creating an approval request does not activate the proposed action.
 
-1. Keep the static capability registry as source of truth.
-2. Expose it through the Worker route once the route wiring is applied locally.
-3. Add a Next proxy and Ops UI panel.
-4. Add approval request records.
-5. Add draft records.
-6. Add browser observe/prepare service.
-7. Add approved execution only after evidence, approval, suppression, and caps exist.
+Historical draft and lead records may remain readable for compatibility, but they are not executable.
 
-## Local wiring note
+## Worker route
 
-The intended Worker route is:
+The protected Worker route is:
 
 ```text
 GET /admin/growth/capabilities
 ```
 
-A route handler exists at:
+The handler is:
 
 ```text
 src/routes/growthCapabilitiesAdmin.ts
 ```
 
-If connector-side content filtering prevents direct index wiring, wire it locally by importing `handleGrowthCapabilitiesAdmin` in `src/index.ts` and routing `/admin/growth/capabilities` before the generic `/admin/growth/` branch.
+The route requires the canonical server-side `ADMIN_TOKEN`, authenticates before method handling, accepts GET only, and returns registry metadata without executing any capability.

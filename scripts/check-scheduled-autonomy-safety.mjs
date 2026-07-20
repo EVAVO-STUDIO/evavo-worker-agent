@@ -16,7 +16,12 @@ if (!index) errors.push("Missing Worker entry point");
 
 for (const forbidden of [
   'from "./engine"',
+  'from "./opportunityAutonomy"',
+  'from "./core/sourceExpansionEngine"',
   "legacyDailyTick",
+  "runSourceExpansion(",
+  "runSourceExpansionIfAllowed(",
+  "runOpportunityAutonomy(",
   "runSend(",
   "sendEmail(",
   'setSetting(env, "sending_enabled", "1")',
@@ -36,15 +41,24 @@ for (const required of [
   'setSetting(env, "send_cap_per_day", "0")',
   'setSetting(env, "drafting_enabled", "0")',
   'setSetting(env, "sending_enabled", "0")',
-  "await runSourceExpansionIfAllowed(env, settings)",
-  "await runOpportunityAutonomy(env, settings)",
-  "legacyEngine off | AI drafts off | sending off",
+  "await learnExpansionQualityIfPossible(env)",
+  "scheduled external research off",
+  "source expansion off",
+  "opportunity discovery off",
+  "legacy engine off | AI drafts off | sending off",
 ]) {
   if (!engine.includes(required)) errors.push(`Scheduled autonomy is missing safety token: ${required}`);
 }
 
-if (!index.includes("ctx.waitUntil(dailyTickWithAutonomy(env))")) {
-  errors.push("Worker scheduled entry point must continue to delegate through dailyTickWithAutonomy");
+for (const required of [
+  "async function runScheduledSafely(env: Env): Promise<void>",
+  "await dailyTickWithAutonomy(env)",
+  "ctx.waitUntil(runScheduledSafely(env))",
+]) {
+  if (!index.includes(required)) errors.push(`Worker scheduled entry point is missing: ${required}`);
+}
+if (index.includes("ctx.waitUntil(dailyTickWithAutonomy(env))")) {
+  errors.push("Worker scheduled entry point must use the fail-closed wrapper instead of direct waitUntil delegation");
 }
 if (index.includes("dailyTick(env)")) {
   errors.push("Worker scheduled entry point must not call the legacy engine directly");
@@ -54,10 +68,12 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "scheduled-autonomy-review-first-safety",
-  scheduledExternalResearchAllowed: true,
+  scheduledExternalResearchAllowed: false,
+  scheduledInternalLearningAllowed: true,
   scheduledDraftingAllowed: false,
   scheduledSendingAllowed: false,
   scheduledLegacyEngineAllowed: false,
+  failClosedEntrypointRequired: true,
   errors,
 }, null, 2));
 

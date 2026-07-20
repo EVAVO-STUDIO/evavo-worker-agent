@@ -1,13 +1,8 @@
 import type { Env } from "../db";
-import { getAdminToken } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { runRelationshipGraphDiscovery } from "../core/sourceExpansionGraphDiscovery";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function boundedInteger(value: unknown, fallback: number, min: number, max: number) {
   const parsed = Number(value || fallback);
@@ -20,10 +15,12 @@ async function bodyJson(request: Request) {
 }
 
 export async function handleSourceExpansionPublicDirectoryScanAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
+  }
   if (pathname !== "/admin/opportunities/sources/expansion/public-directory-scan") return json({ ok: false, error: "Not found" }, { status: 404 });
-  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
 
   const body = await bodyJson(request);
   if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });

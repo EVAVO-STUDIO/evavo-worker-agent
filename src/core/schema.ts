@@ -3,18 +3,24 @@ import { Env } from "../db";
 interface SchemaRow {
   name: string;
   type: string;
-  sql: string | null;
+}
+
+interface SchemaObjectSummary {
+  name: string;
+  type: "table" | "index";
 }
 
 export async function buildSchemaReport(env: Env) {
   const { results } = (await env.DB.prepare(
-    `SELECT name, type, sql
+    `SELECT name, type
      FROM sqlite_master
      WHERE type IN ('table', 'index')
      ORDER BY type, name`
   ).all()) as { results?: SchemaRow[] };
 
-  const items = results || [];
+  const items = (results || [])
+    .filter((item): item is SchemaRow & { type: "table" | "index" } => item.type === "table" || item.type === "index")
+    .map<SchemaObjectSummary>((item) => ({ name: String(item.name), type: item.type }));
   const names = new Set(items.map((item) => item.name));
   const warnings: string[] = [];
 
@@ -56,8 +62,20 @@ export async function buildSchemaReport(env: Env) {
 
   return {
     ok: true,
+    contractVersion: "admin_schema_v2_names_only",
     tables: items.filter((item) => item.type === "table"),
     indexes: items.filter((item) => item.type === "index"),
     warnings,
+    safety: {
+      authenticated: true,
+      readOnly: true,
+      rawSqlExposed: false,
+      rowDataExposed: false,
+      secretsExposed: false,
+      executable: false,
+      callsNetwork: false,
+      callsAI: false,
+      externalStateChange: false,
+    },
   };
 }

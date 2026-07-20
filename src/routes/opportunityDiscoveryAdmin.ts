@@ -1,13 +1,9 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { extractOpportunityCandidates, summarizeOpportunityPreview } from "../core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "../core/opportunityPersistence";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
   const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1").bind(tableName).first<any>();
@@ -36,6 +32,10 @@ function parseSourceAction(pathname: string): { id: string; action: string } | n
   const action = parts[1];
   if (!["test", "preview", "commit-preview"].includes(action)) return null;
   return { id: decodeURIComponent(parts[0]), action };
+}
+
+function confirmed(body: any): boolean {
+  return body?.confirm === true || body?.confirm === "true" || body?.confirm === 1 || body?.confirm === "1";
 }
 
 async function testSource(env: Env, id: string) {
@@ -98,15 +98,11 @@ async function previewSource(env: Env, id: string, requestUrl: URL) {
   };
 }
 
-async function commitPreview(env: Env, id: string, request: Request) {
+async function commitPreview(env: Env, id: string, body: any) {
   const source = await getSource(env, id);
   if (!source || !(await tableExists(env, "opportunities"))) {
     return { ok: false, error: "source_or_opportunities_table_missing", requiredMigration: "0004_opportunity_intelligence.sql" };
   }
-
-  const body = await request.json().catch(() => ({}));
-  const confirmed = body?.confirm === true || body?.confirm === "true" || body?.confirm === 1 || body?.confirm === "1";
-  if (!confirmed) return { ok: false, error: "confirm_required", expected: { confirm: true } };
 
   const minScore = Math.max(1, Math.min(100, Number(body?.minScore || 45)));
   const limit = Math.max(1, Math.min(100, Number(body?.limit || 50)));
@@ -147,16 +143,27 @@ async function commitPreview(env: Env, id: string, request: Request) {
 }
 
 export async function handleOpportunityDiscoveryAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
+  }
+  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
 
   const parsed = parseSourceAction(pathname);
   if (!parsed) return json({ ok: false, error: "Not found" }, { status: 404 });
-  const requestUrl = new URL(request.url);
 
+  const body = await request.json().catch(() => ({}));
+  if (!confirmed(body)) {
+    return json({
+      ok: false,
+      error: "confirm_required",
+      reason: "Opportunity source tests, previews and preview commits require explicit confirmation before network access or internal state changes.",
+    }, { status: 400 });
+  }
+
+  const requestUrl = new URL(request.url);
   if (parsed.action === "test") return json(await testSource(env, parsed.id));
   if (parsed.action === "preview") return json(await previewSource(env, parsed.id, requestUrl));
-  if (parsed.action === "commit-preview") return json(await commitPreview(env, parsed.id, request));
+  if (parsed.action === "commit-preview") return json(await commitPreview(env, parsed.id, body));
   return json({ ok: false, error: "Not found" }, { status: 404 });
 }

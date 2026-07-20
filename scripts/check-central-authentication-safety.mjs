@@ -12,6 +12,7 @@ const read = (relativePath) => {
 
 const auth = read("src/core/adminAuthentication.ts");
 const index = read("src/index.ts");
+const plannerWrapper = read("src/routes/plannerAdminProtected.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 const protectedHandlers = [
   "src/routes/admin.ts",
@@ -26,11 +27,12 @@ const protectedHandlers = [
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/draftReviewAdmin.ts",
+  "src/routes/plannerAdminProtected.ts",
   "src/routes/plannerRoutesAdmin.ts",
   "src/routes/growthCapabilitiesAdmin.ts",
 ];
 
-for (const [name, content] of [["authentication helper", auth], ["Worker dispatcher", index]]) {
+for (const [name, content] of [["authentication helper", auth], ["Worker dispatcher", index], ["protected planner wrapper", plannerWrapper]]) {
   if (!content) errors.push(`Missing ${name}`);
 }
 
@@ -48,6 +50,7 @@ for (const token of [
 
 for (const token of [
   'import { isAdminRequestAuthorized } from "./core/adminAuthentication"',
+  'import { handlePlannerAdmin } from "./routes/plannerAdminProtected"',
   'matchesWorkerRouteFamily("admin", pathname)',
   'matchesWorkerRouteFamily("tools", pathname)',
   'if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))',
@@ -55,6 +58,31 @@ for (const token of [
   "status: 401",
 ]) {
   if (!index.includes(token)) errors.push(`Worker dispatcher is missing central authentication token: ${token}`);
+}
+if (index.includes('from "./routes/plannerAdmin"')) {
+  errors.push("Worker dispatcher must not import the legacy planner implementation directly");
+}
+
+for (const token of [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  'import { handlePlannerAdmin as handlePlannerAdminImplementation } from "./plannerAdmin"',
+  'await isAdminRequestAuthorized(request, env)',
+  'request.method === "OPTIONS"',
+  'status: 405',
+  'return handlePlannerAdminImplementation(request, env, pathname, json)',
+]) {
+  if (!plannerWrapper.includes(token)) errors.push(`Protected planner wrapper is missing: ${token}`);
+}
+const plannerWrapperAuthPosition = plannerWrapper.indexOf("await isAdminRequestAuthorized(request, env)");
+const plannerWrapperOptionsPosition = plannerWrapper.indexOf('request.method === "OPTIONS"');
+const plannerWrapperDelegatePosition = plannerWrapper.indexOf("return handlePlannerAdminImplementation(request, env, pathname, json)");
+if (
+  plannerWrapperAuthPosition < 0 ||
+  plannerWrapperOptionsPosition < 0 ||
+  plannerWrapperDelegatePosition < 0 ||
+  !(plannerWrapperAuthPosition < plannerWrapperOptionsPosition && plannerWrapperOptionsPosition < plannerWrapperDelegatePosition)
+) {
+  errors.push("Protected planner wrapper must authenticate before OPTIONS handling and delegate only afterward");
 }
 
 const healthPosition = index.indexOf('matchesWorkerRouteFamily("health", pathname)');
@@ -157,6 +185,8 @@ console.log(JSON.stringify({
   strictBearerParsing: true,
   constantTimeDigestComparison: true,
   centralAuthenticationBeforeProtectedDispatch: true,
+  plannerRuntimeUsesProtectedWrapper: true,
+  directPlannerImplementationImportAllowed: false,
   publicRoutesRequireAdminToken: false,
   protectedHandlersUsingSharedAuthentication: protectedHandlers,
   draftReviewRequiresConfirmation: true,

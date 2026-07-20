@@ -8,7 +8,7 @@ import { handleTools } from "./routes/tools";
 import { handleDraftReviewAdmin } from "./routes/draftReviewAdmin";
 import { handleSourcesAdmin } from "./routes/sourcesAdmin";
 import { handleSourceBatchAdmin } from "./routes/sourceBatchAdmin";
-import { handlePlannerAdmin } from "./routes/plannerAdmin";
+import { handlePlannerAdmin } from "./routes/plannerAdminProtected";
 import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
 import { handleGrowthAdmin } from "./routes/growthAdmin";
 import { handleGrowthCapabilitiesAdmin } from "./routes/growthCapabilitiesAdmin";

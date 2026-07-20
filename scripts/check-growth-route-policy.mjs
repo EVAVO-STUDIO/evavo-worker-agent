@@ -24,7 +24,9 @@ const expectedHandlers = [
 ];
 
 for (const handlerId of expectedHandlers) {
-  const count = policy.split(`handlerId: "${handlerId}"`).length - 1;
+  const exactHelperCount = policy.split(`exact("${handlerId}",`).length - 1;
+  const literalCount = policy.split(`handlerId: "${handlerId}"`).length - 1;
+  const count = exactHelperCount + literalCount;
   if (count !== 1) errors.push(`Growth handler policy must appear exactly once: ${handlerId} (${count})`);
   const switchCount = index.split(`case "${handlerId}":`).length - 1;
   if (switchCount !== 1) errors.push(`Growth dispatcher case must appear exactly once: ${handlerId} (${switchCount})`);
@@ -81,11 +83,14 @@ for (const routePath of expectedPaths) {
   if (count !== 1) errors.push(`Growth route path must have one typed owner: ${routePath} (${count})`);
 }
 
-const priorities = [...policy.matchAll(/priority:\s*(\d+)/g)].map((match) => Number(match[1]));
+const helperPriorities = [...policy.matchAll(/exact\("[^"]+",\s*(\d+)/g)].map((match) => Number(match[1]));
+const literalPriorities = [...policy.matchAll(/handlerId:\s*"[^"]+"[\s\S]{0,120}?priority:\s*(\d+)/g)].map((match) => Number(match[1]));
+const priorities = [...helperPriorities, ...literalPriorities];
 if (priorities.length !== expectedHandlers.length) errors.push(`Expected ${expectedHandlers.length} Growth priorities, found ${priorities.length}`);
 if (new Set(priorities).size !== priorities.length) errors.push("Growth route priorities must be unique");
-for (let indexValue = 1; indexValue < priorities.length; indexValue += 1) {
-  if (priorities[indexValue] <= priorities[indexValue - 1]) errors.push("Growth route priorities must be strictly increasing");
+const sortedPriorities = [...priorities].sort((left, right) => left - right);
+for (let indexValue = 1; indexValue < sortedPriorities.length; indexValue += 1) {
+  if (sortedPriorities[indexValue] <= sortedPriorities[indexValue - 1]) errors.push("Growth route priorities must be strictly increasing");
 }
 
 const forbiddenIndexTokens = [

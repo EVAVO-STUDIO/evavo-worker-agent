@@ -1,4 +1,5 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { analyzeGrowthCampaign, summarizeGrowthOperatorReadiness } from "../core/growthCampaignAnalysis";
 import { planGrowthOperatorLoop } from "../core/growthOperatorLoop";
 import { buildGrowthOperatorCycle } from "../core/growthOperatorCycle";
@@ -27,11 +28,6 @@ type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 const readSafety = { readOnly: true, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
 const writeSafety = { readOnly: false, internalMetadataOnly: true, externalStateChange: false, callsAI: false, callsNetwork: false, canSendEmail: false, canPostSocial: false, canSubmitForms: false };
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
   const value = Number(url.searchParams.get(key));
@@ -87,8 +83,10 @@ async function loadGrowthCycleState(env: Env, url: URL) {
 }
 
 export async function handleGrowthCampaignIntelligenceAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   const url = new URL(request.url);
 

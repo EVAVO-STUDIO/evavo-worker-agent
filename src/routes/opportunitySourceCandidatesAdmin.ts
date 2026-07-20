@@ -1,12 +1,8 @@
-import { Env, getAdminToken } from "../db";
+import { Env } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { previewOpportunitySourceCandidates, saveOpportunitySourceCandidates } from "../core/opportunitySourceDiscovery";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 function numberParam(value: string | null, fallback: number, min: number, max: number) {
   const parsed = Number(value || fallback);
@@ -24,11 +20,13 @@ async function readJson(request: Request) {
 }
 
 export async function handleOpportunitySourceCandidatesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
+  }
 
   if (pathname === "/admin/opportunities/sources/candidates/preview") {
-    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "GET") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET" } });
     const url = new URL(request.url);
     const country = url.searchParams.get("country") || undefined;
     const category = url.searchParams.get("category") || undefined;
@@ -38,7 +36,7 @@ export async function handleOpportunitySourceCandidatesAdmin(request: Request, e
   }
 
   if (pathname === "/admin/opportunities/sources/candidates/commit") {
-    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await readJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
     const urls = stringArray(body?.urls);

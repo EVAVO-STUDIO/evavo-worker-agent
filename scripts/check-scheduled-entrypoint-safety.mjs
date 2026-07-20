@@ -64,7 +64,7 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run schedu
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "scheduled-entrypoint-fail-closed",
+  contract: "scheduled-worker-entrypoint-safety",
   directUnhandledWaitUntilAllowed: false,
   alternateExecutionFallbackAllowed: false,
   automaticRetryAllowed: false,

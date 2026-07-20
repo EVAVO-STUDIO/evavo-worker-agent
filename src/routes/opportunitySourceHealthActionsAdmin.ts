@@ -1,13 +1,9 @@
-import { Env, getAdminToken, logEvent } from "../db";
+import { Env, logEvent } from "../db";
+import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 type SourceHealthAction = "pause" | "activate" | "lower_priority" | "raise_priority" | "reset_error";
-
-function authorized(request: Request, env: Env): boolean {
-  const token = getAdminToken(env);
-  return Boolean(token && (request.headers.get("authorization") || "") === `Bearer ${token}`);
-}
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
   const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1").bind(tableName).first<any>();
@@ -111,9 +107,11 @@ async function performAction(env: Env, sourceId: string, body: any) {
 }
 
 export async function handleOpportunitySourceHealthActionsAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
-  if (request.method === "OPTIONS") return json({ ok: true });
-  if (!authorized(request, env)) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+  if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.method === "OPTIONS") {
+    return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
+  }
+  if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
 
   const sourceId = parseSourceId(pathname);
   if (!sourceId) return json({ ok: false, error: "invalid_source_health_action_path" }, { status: 404 });

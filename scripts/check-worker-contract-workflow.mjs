@@ -8,17 +8,20 @@ const workflowPath = path.join(root, ".github", "workflows", "worker-contract.ym
 const packagePath = path.join(root, "package.json");
 const indexPath = path.join(root, "src", "index.ts");
 const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtected.ts");
+const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
 const errors = [];
 
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
 if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
 if (!fs.existsSync(indexPath)) errors.push("Missing Worker dispatcher");
 if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
+if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
 const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
+const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -43,21 +46,30 @@ if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_
 
 for (const token of [
   'import { handlePlannerAdmin } from "./routes/plannerAdminProtected"',
+  'import { handleGrowthAdmin } from "./routes/growthAdminProtected"',
   'case "planner":',
+  'case "growth-fallback":',
   "return await handlePlannerAdmin(req, env, pathname, jsonResponse)",
+  "return await handleGrowthAdmin(req, env, pathname, jsonResponse)",
 ]) {
-  if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected planner routing token: ${token}`);
+  if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected wrapper routing token: ${token}`);
 }
 if (index.includes('from "./routes/plannerAdmin"')) errors.push("Worker dispatcher must not import the legacy planner implementation directly");
+if (index.includes('from "./routes/growthAdmin"')) errors.push("Worker dispatcher must not import the legacy Growth fallback implementation directly");
 
-for (const token of [
-  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-  'await isAdminRequestAuthorized(request, env)',
-  'request.method === "OPTIONS"',
-  'status: 405',
-  'return handlePlannerAdminImplementation(request, env, pathname, json)',
+for (const [label, content, delegateCall] of [
+  ["Protected planner wrapper", plannerWrapper, 'return handlePlannerAdminImplementation(request, env, pathname, json)'],
+  ["Protected Growth wrapper", growthWrapper, 'return handleGrowthAdminImplementation(request, env, pathname, json)'],
 ]) {
-  if (!plannerWrapper.includes(token)) errors.push(`Protected planner wrapper is missing: ${token}`);
+  for (const token of [
+    'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+    'await isAdminRequestAuthorized(request, env)',
+    'request.method === "OPTIONS"',
+    'status: 405',
+    delegateCall,
+  ]) {
+    if (!content.includes(token)) errors.push(`${label} is missing: ${token}`);
+  }
 }
 
 const expectedScripts = {
@@ -117,6 +129,9 @@ console.log(JSON.stringify({
   plannerRuntimeUsesProtectedWrapper: true,
   directPlannerImplementationImportAllowed: false,
   unauthenticatedPlannerPreflightAllowed: false,
+  growthFallbackRuntimeUsesProtectedWrapper: true,
+  directGrowthFallbackImplementationImportAllowed: false,
+  unauthenticatedGrowthFallbackPreflightAllowed: false,
   publicRoutesRequireAdminToken: false,
   legacyCredentialAliasesAllowed: false,
   publicControlCredentialAllowed: false,

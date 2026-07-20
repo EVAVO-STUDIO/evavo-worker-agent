@@ -6,15 +6,18 @@ import path from "node:path";
 const root = process.cwd();
 const readmePath = path.join(root, "README.md");
 const architecturePath = path.join(root, "docs", "growth-autonomous-discovery-architecture.md");
+const runbookPath = path.join(root, "docs", "growth-zero-source-research-runbook.md");
 const packagePath = path.join(root, "package.json");
 const errors = [];
 
 const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : "";
 const architecture = fs.existsSync(architecturePath) ? fs.readFileSync(architecturePath, "utf8") : "";
+const runbook = fs.existsSync(runbookPath) ? fs.readFileSync(runbookPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
 
 if (!readme) errors.push("Missing README.md");
 if (!architecture) errors.push("Missing Growth discovery architecture document");
+if (!runbook) errors.push("Missing zero-source research runbook");
 
 for (const token of [
   "# EVAVO Growth Research Worker",
@@ -45,6 +48,20 @@ for (const token of [
   if (!architecture.includes(token)) errors.push(`Growth discovery architecture posture is missing: ${token}`);
 }
 
+for (const token of [
+  "The active Worker does not perform autonomous or scheduled network research.",
+  "manual, authenticated, explicitly confirmed and bounded workflow",
+  "saved as internal review metadata only",
+  "Scheduled processing must not fetch pages, discover opportunities, expand sources or enqueue network work.",
+  "There is no autonomous or scheduled fetch queue in the active Worker.",
+  "shared authentication succeeded",
+  "explicit confirmation is present",
+  "no candidate was automatically promoted",
+  "scheduled external research remained disabled",
+]) {
+  if (!runbook.includes(token)) errors.push(`Zero-source runbook posture is missing: ${token}`);
+}
+
 for (const forbidden of [
   "Scheduled work is limited to bounded research",
   "scheduled bounded research",
@@ -70,6 +87,17 @@ for (const forbidden of [
   }
 }
 
+for (const forbidden of [
+  "autonomous research / supervised action boundary",
+  "Fetch work must be queued and bounded.",
+  "queued_for_research",
+  "Queue fetch work",
+]) {
+  if (runbook.includes(forbidden)) {
+    errors.push(`Zero-source runbook contains stale execution instruction: ${forbidden}`);
+  }
+}
+
 const expectedCommand = "node scripts/check-readme-operating-posture.mjs";
 if (packageJson.scripts?.["docs:operating-posture:check"] !== expectedCommand) {
   errors.push(`package.json must expose docs:operating-posture:check as ${expectedCommand}`);
@@ -84,6 +112,7 @@ console.log(JSON.stringify({
   contract: "repository-operating-posture",
   readmePostureEnforced: true,
   discoveryArchitectureMarkedFutureState: true,
+  zeroSourceRunbookManualOnly: true,
   scheduledExternalResearchDocumentedAsDisabled: true,
   manualResearchAuthenticationDocumented: true,
   manualResearchConfirmationDocumented: true,

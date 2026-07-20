@@ -12,6 +12,7 @@ const adminWrapperPath = path.join(root, "src", "routes", "adminProtected.ts");
 const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtected.ts");
 const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
 const healthPath = path.join(root, "src", "core", "health.ts");
+const schemaPath = path.join(root, "src", "core", "schema.ts");
 const errors = [];
 
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
@@ -22,6 +23,7 @@ if (!fs.existsSync(adminWrapperPath)) errors.push("Missing protected broad admin
 if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
 if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
 if (!fs.existsSync(healthPath)) errors.push("Missing admin health implementation");
+if (!fs.existsSync(schemaPath)) errors.push("Missing authenticated schema implementation");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
@@ -31,6 +33,7 @@ const adminWrapper = fs.existsSync(adminWrapperPath) ? fs.readFileSync(adminWrap
 const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
 const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
 const health = fs.existsSync(healthPath) ? fs.readFileSync(healthPath, "utf8") : "";
+const schema = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -151,6 +154,20 @@ for (const forbidden of [
   if (health.includes(forbidden)) errors.push(`Admin reporting must not contain stale execution token: ${forbidden}`);
 }
 
+for (const token of [
+  'contractVersion: "admin_schema_v2_names_only"',
+  "SELECT name, type",
+  "rawSqlExposed: false",
+  "rowDataExposed: false",
+  "secretsExposed: false",
+  "executable: false",
+]) {
+  if (!schema.includes(token)) errors.push(`Authenticated schema implementation is missing safe token: ${token}`);
+}
+for (const forbidden of ["SELECT name, type, sql", "item.sql", "rawSqlExposed: true", "rowDataExposed: true"]) {
+  if (schema.includes(forbidden)) errors.push(`Authenticated schema implementation contains unsafe token: ${forbidden}`);
+}
+
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
@@ -164,6 +181,7 @@ const expectedScripts = {
   "admin:broad-read-truthfulness:check": "node scripts/check-broad-admin-read-truthfulness.mjs",
   "admin:broad-write-safety:check": "node scripts/check-broad-admin-write-safety.mjs",
   "admin:reporting-truthfulness:check": "node scripts/check-admin-reporting-truthfulness.mjs",
+  "admin:schema-safety:check": "node scripts/check-admin-schema-safety.mjs",
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
@@ -212,6 +230,8 @@ console.log(JSON.stringify({
   adminReportingTruthfulnessRequired: true,
   adminHealthTreatsDisabledExecutionAsSafe: true,
   historicalAdminRecordsExecutable: false,
+  authenticatedSchemaSafetyRequired: true,
+  authenticatedSchemaRawSqlExposed: false,
   plannerRuntimeUsesProtectedWrapper: true,
   directPlannerImplementationImportAllowed: false,
   unauthenticatedPlannerPreflightAllowed: false,

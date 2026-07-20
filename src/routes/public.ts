@@ -17,11 +17,11 @@ function defaultJson(data: unknown, init: ResponseInit = {}) {
   });
 }
 
-function inferKind(lead: any): string {
+function inferKind(record: any): string {
   const hay = JSON.stringify({
-    website: lead.website_url || "",
-    category: lead.category || "",
-    signals_json: lead.signals_json || "",
+    website: record.website_url || "",
+    category: record.category || "",
+    signals_json: record.signals_json || "",
   }).toLowerCase();
 
   if (/(agency|studio|creative|branding|white label|partner|developers|software studio)/.test(hay)) return "agency";
@@ -73,7 +73,7 @@ function buildEmptyDiagnostics() {
   };
 }
 
-function buildFallbackRun(event: any, runMode: string, values: FallbackRunValues = {}) {
+function buildHistoricalRun(event: any, runMode: string, values: FallbackRunValues = {}) {
   return {
     runId: `derived:${event?.id || "event"}`,
     started_at_iso: event?.created_at_iso || null,
@@ -88,6 +88,8 @@ function buildFallbackRun(event: any, runMode: string, values: FallbackRunValues
     sent: 0,
     sendFailed: 0,
     runMode,
+    historicalOnly: true,
+    executable: false,
     derivedFromEvents: true,
   };
 }
@@ -100,13 +102,13 @@ function snapshotFromEvent(event: any) {
 
   if (lowerType === "tick_ok" || lowerType === "scan_ok") {
     if (scanMatch) {
-      return buildFallbackRun(event, lowerType === "tick_ok" ? "review_first_tick" : "bounded_research", {
+      return buildHistoricalRun(event, "historical_review_metadata", {
         scanned: scanMatch[1],
         expanded: scanMatch[2],
         failed: scanMatch[3],
       });
     }
-    return buildFallbackRun(event, lowerType === "tick_ok" ? "review_first_tick" : "bounded_research");
+    return buildHistoricalRun(event, "historical_review_metadata");
   }
 
   return null;
@@ -135,12 +137,14 @@ function sanitizeStoredRun(stored: any) {
     drafted: 0,
     sent: 0,
     sendFailed: 0,
-    runMode: "review_first",
+    runMode: "historical_review_metadata",
+    historicalOnly: true,
+    executable: false,
     derivedFromEvents: false,
   };
 }
 
-function resolveLastRun(lastRunRaw: any, events: any[]) {
+function resolveLastHistoricalRun(lastRunRaw: any, events: any[]) {
   const stored = sanitizeStoredRun(parseMaybeJson(lastRunRaw));
   const latestEvent = Array.isArray(events) && events.length ? events[0] : null;
   const derived = Array.isArray(events) ? events.map(snapshotFromEvent).find(Boolean) || null : null;
@@ -172,12 +176,12 @@ export async function handlePublic(
   }
 
   if (pathname === "/public/status" && request.method === "GET") {
-    const leads = await listLeads(env, { limit: 500 });
+    const historicalRecords = await listLeads(env, { limit: 500 });
     const events = await listEvents(env, 12);
     const segments: Record<string, number> = {};
-    for (const lead of leads) {
-      const signals = parseLeadSignals(lead) as any;
-      const key = signals.leadClass || inferKind(lead);
+    for (const record of historicalRecords) {
+      const signals = parseLeadSignals(record) as any;
+      const key = signals.leadClass || inferKind(record);
       segments[key] = (segments[key] || 0) + 1;
     }
 
@@ -187,7 +191,7 @@ export async function handlePublic(
       .map(([label, value]) => ({ label, value }));
 
     const latestEventISO = Array.isArray(events) && events.length ? events[0]?.created_at_iso || null : null;
-    const resolved = resolveLastRun(await getSetting(env, "last_engine_run"), events);
+    const resolved = resolveLastHistoricalRun(await getSetting(env, "last_engine_run"), events);
     const safeLastRun = resolved.lastRun || (latestEventISO ? {
       runId: `fallback:${latestEventISO}`,
       started_at_iso: latestEventISO,
@@ -201,47 +205,58 @@ export async function handlePublic(
       drafted: 0,
       sent: 0,
       sendFailed: 0,
-      runMode: "review_first",
+      runMode: "historical_review_metadata",
+      historicalOnly: true,
+      executable: false,
       derivedFromEvents: false,
       responseFallback: true,
     } : null);
 
     return json({
       ok: true,
-      contractVersion: "public_status_v2_review_first",
+      contractVersion: "public_status_v3_manual_research_only",
+      service: "EVAVO Growth Research Worker",
       nowISO: new Date().toISOString(),
-      engine: {
-        enabled: false,
-        scheduledResearchEnabled: true,
+      runtime: {
+        scheduledExecutionEnabled: false,
+        scheduledResearchEnabled: false,
+        manualResearchRequiresAuthentication: true,
+        manualResearchRequiresConfirmation: true,
+        manualResearchIsBounded: true,
+        manualResearchSavesReviewItemsOnly: true,
         sendingEnabled: false,
         aiDraftingEnabled: false,
         externalExecutionEnabled: false,
-        pausedReason: "review_first_external_execution_disabled",
-        lastRun: safeLastRun,
+        pausedReason: "scheduled_and_external_execution_disabled",
+        lastHistoricalRun: safeLastRun,
         snapshotLag: Boolean(resolved.snapshotLag || (!resolved.lastRun && latestEventISO)),
         derivedFromEvents: Boolean(resolved.derivedFromEvents && safeLastRun),
       },
-      budgets: {
+      historicalUsage: {
         research: {
-          usedToday: Number((await getSetting(env, "crawl_scanned_today")) || 0),
-          capPerDay: Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60),
+          recordedToday: Number((await getSetting(env, "crawl_scanned_today")) || 0),
+          configuredManualCap: Number((await getSetting(env, "crawl_cap_per_day")) || env.CAP_CRAWL_PER_DAY || 60),
+          scheduledUseEnabled: false,
         },
-        ai: { usedToday: 0, capPerDay: 0 },
-        send: { usedToday: 0, capPerDay: 0 },
+        ai: { recordedToday: 0, configuredCap: 0 },
+        send: { recordedToday: 0, configuredCap: 0 },
       },
-      stats: {
-        leadsNewToday: Number((await getSetting(env, "leads_new_today")) || 0),
+      aggregateStats: {
+        historicalRecordsNewToday: Number((await getSetting(env, "leads_new_today")) || 0),
         draftsCreatedToday: 0,
         approvalsToday: Number((await getSetting(env, "approvals_today")) || 0),
         sendsSentToday: 0,
-        qualifiedLeads: leads.filter((lead) => Number(lead.score_total || 0) >= 0.45).length,
+        qualifiedHistoricalRecords: historicalRecords.filter((record) => Number(record.score_total || 0) >= 0.45).length,
       },
       topSlices,
       latestEventISO,
       safety: {
+        aggregateOnly: true,
+        historicalRecordsExecutable: false,
         rawEventsExposed: false,
         contactDataExposed: false,
         URLsExposed: false,
+        scheduledExecutionEnabled: false,
         externalExecutionEnabled: false,
       },
     }, { headers: { "cache-control": "no-store" } });

@@ -2,7 +2,7 @@
 
 This repository contains the Cloudflare Worker backend for EVAVO Growth Autopilot and Business Autopilot.
 
-The active Worker is a governed, review-first opportunity-intelligence system. It supports bounded public-source research, source and opportunity review, internal scoring, strategy memory, audit metadata, approval records and private operational reporting.
+The active Worker is a governed, review-first opportunity-intelligence system. It supports bounded public-source research, source and opportunity review, internal scoring, strategy memory, audit metadata, historical review records and private operational reporting.
 
 It does **not** provide outbound execution.
 
@@ -22,6 +22,7 @@ It does **not** provide outbound execution.
 - Manual legacy execution routes return a fail-closed response.
 - All protected routes require server-side Worker authentication.
 - Confirmed write routes mutate internal D1 metadata only.
+- Historical draft-shaped and approval-shaped records are non-deliverable, non-executable and non-authoritative.
 - Public routes expose aggregate, non-sensitive status only.
 - The browser must never receive the Worker admin token.
 
@@ -34,7 +35,7 @@ The Worker is organised around typed route-policy registries:
 - Growth routes
 - Business Autopilot routes
 - planner and source routes
-- draft-review and strategy-score routes
+- historical review-record and strategy-score routes
 - autonomy and legacy-safety routes
 
 Each policy records authentication, mutation, confirmation, network and prohibited-capability posture. The Worker dispatcher delegates through those registries rather than maintaining an unstructured pathname chain.
@@ -83,7 +84,7 @@ They may not:
 - [`docs/growth-backend-validation.md`](docs/growth-backend-validation.md)
 - [`migrations/README.md`](migrations/README.md)
 
-Some historical architecture documents describe future governed execution concepts. They are not evidence that execution exists in the active Worker. The source policies, runtime contracts and safety checks are authoritative.
+Historical labels and schema families are retained only for data compatibility. They do not describe enabled drafting, approvals-to-execution, campaigns or external delivery. The source policies, runtime contracts and safety checks are authoritative.
 
 ## Important production note
 
@@ -179,8 +180,8 @@ When no approved source list exists:
 2. Create a bounded manual research plan.
 3. Authenticate and explicitly confirm each network-capable research action.
 4. Save source candidates rather than promoting them automatically.
-5. Review and promote candidates through explicit confirmation gates.
+5. Review candidate metadata through explicit confirmation gates.
 6. Run opportunity scoring and internal review from approved research metadata.
 7. Keep every scheduled external and outbound action disabled.
 
-The authoritative model is research-memory-first, metadata-first, review-first and approval-gated.
+The authoritative model is research-memory-first, metadata-first, review-first and non-executing.

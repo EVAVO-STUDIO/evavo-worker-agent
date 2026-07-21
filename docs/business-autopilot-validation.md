@@ -1,12 +1,12 @@
 # Business Autopilot validation workflow
 
-This document records the safe validation flow for the EVAVO Business Autopilot Worker layer.
+This document defines the safe validation flow for the EVAVO Business Autopilot Worker layer.
 
-Business Autopilot is currently an internal metadata, people memory, website/page memory, scoring, audit-pack and draft-only governance layer. It does not perform external execution.
+The active Business Autopilot is an authenticated, internal-metadata, scoring, website/page memory, audit and review system. It does not generate deliverable outreach, authorise execution or perform external actions.
 
 ## Hard safety posture
 
-The Business Autopilot foundation must not:
+The Business Autopilot must not:
 
 ```text
 send email
@@ -20,82 +20,81 @@ call AI from metadata routes
 call network from metadata routes
 bypass suppression
 bypass unsubscribe or consent requirements
+create approval-to-execution authority
 ```
+
+Historical draft-shaped and approval-shaped records remain readable for compatibility only. They are non-deliverable, non-executable and non-authoritative for execution.
 
 ## Core local checks
 
-Run from the Worker repo:
+Run from the Worker repository:
 
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
-git pull
+git pull origin main
+git rev-parse HEAD
+
+npm run business:draft-runtime-safety:check
+npm run business:historical-record-posture:check
 npm run business:autopilot:check
 npm run business:website-pages:docs:check
+npm run business:route-policy:check
+npm run safety:gates:check
 npm run typecheck
+npm run check:local
 ```
 
-The Business checker guards:
+These checks are read-only against repository files. They do not deploy, invoke Worker routes, apply migrations or change D1.
+
+## Guarded implementation areas
+
+The validation contracts cover:
 
 ```text
 business docs
-0021 migration
+0021 and 0022 migration presence
 Business safety helpers
 Business core types
 Business people records
 Business website/page records
-service matcher
+service matching
 opportunity scoring
-audit-pack builder
 audit-pack persistence
-draft-only action builder
-approval request builder
-draft-review bundle builder
+historical review-record builder
+non-authoritative approval compatibility builder
+review bundle with approval creation disabled
 Business admin routes
 Business people admin routes
 Business website/page admin routes
 Business route catalogue entries
 route-contract printer
 read-only verification printer
-package scripts
+package safety scripts
 ```
 
-The focused website/page docs checker guards:
+The website/page documentation checker continues to require:
 
 ```text
-docs/business-autopilot-data-model.md
-docs/business-autopilot-website-page-routes.md
-docs/business-autopilot-validation.md
 business_websites
 business_pages
 business_website_save
 business_page_save
-/admin/business/websites
-/admin/business/pages
+/admin/business/websites?limit=5
+/admin/business/pages?limit=5
 ```
 
-People route docs live in:
+## Active route catalogue
 
-```text
-docs/business-autopilot-people-routes.md
-```
-
-## Route catalogue wiring
-
-Run:
-
-```powershell
-npm run growth:route-catalogue:apply
-npm run growth:route-delegates:check
-npm run growth:route-safety-flags:check
-```
-
-Expected Business read route IDs:
+The active read route IDs are:
 
 ```text
 business_organizations
 business_people
 business_websites
 business_pages
+business_website_audit_runs
+business_audit_observations
+business_audit_observation_candidates
 business_signals
 business_opportunities
 business_service_matches
@@ -108,71 +107,79 @@ business_followups
 business_learning_events
 ```
 
-Expected Business confirm-required route IDs:
+`business_action_drafts` and `business_approval_requests` are authenticated historical reads. Their records are not deliverable and cannot authorise execution.
+
+The active confirm-required internal metadata route IDs are:
 
 ```text
 business_organization_save
 business_person_save
 business_website_save
 business_page_save
+business_website_audit_run_save
+business_audit_observation_save
 business_signal_save
 business_opportunity_save
 business_service_match_save
 business_audit_pack_save
 business_action_draft_build
-business_action_draft_save
-business_approval_request_save
 business_suppression_save
 business_content_idea_save
 business_followup_save
 business_learning_event_save
 ```
 
-## Remote route-contract smoke printer
+`business_action_draft_build` is a retained compatibility identifier. It saves one internal historical review record only. It does not create deliverable copy or an executable approval.
 
-Run:
+These disabled routes must not be advertised by the active catalogue:
+
+```text
+business_action_draft_save
+business_approval_request_save
+```
+
+Direct POST requests to their underlying paths return `410 Gone`.
+
+## Route-contract smoke printer
+
+Generate the optional remote verification commands with:
 
 ```powershell
 npm run business:route-contract:print
 ```
 
-Then copy the printed PowerShell after setting:
-
-```powershell
-$env:WORKER_URL="https://your-worker-url"
-$env:ADMIN_TOKEN="your-admin-token"
-```
-
-The route-contract smoke verifies:
+Only run the printed commands against an explicitly chosen Worker URL with `ADMIN_TOKEN` set. The printer verifies:
 
 ```text
-all Business route IDs are advertised
-people read routes return safe metadata payloads
-read routes are read-only
-confirm routes require confirm
-confirm routes are metadata-only
-website/page read routes return safe metadata payloads
-unconfirmed draft-builder writes are blocked
-read route safety is safe
+all active Business route IDs are advertised
+disabled direct draft and approval write IDs are absent
+read routes are read-only and non-executing
+confirm routes require explicit confirmation
+confirm routes call no network or AI
+no route advertises email, social or form capability
+historical draft and approval reads retain safe metadata posture
 ```
+
+The smoke printer does not itself call the Worker; it only prints PowerShell.
 
 ## Read-only verification printer
 
-Run:
+Generate authenticated read checks with:
 
 ```powershell
 npm run business:autopilot:readonly:print
 ```
 
-Then copy the printed PowerShell after setting the same environment variables.
-
-This reads all Business Autopilot read routes:
+The read routes include:
 
 ```text
 /admin/business/organizations?limit=5
 /admin/business/people?limit=5
 /admin/business/websites?limit=5
 /admin/business/pages?limit=5
+/admin/business/website-audit-runs?limit=5
+/admin/business/audit-observations?limit=5
+/admin/business/audit-observation-candidates?limit=5
 /admin/business/signals?limit=5
 /admin/business/opportunities?limit=5
 /admin/business/service-matches?limit=5
@@ -185,7 +192,7 @@ This reads all Business Autopilot read routes:
 /admin/business/learning?limit=5
 ```
 
-Each response must be:
+Each response must retain:
 
 ```text
 ok: true
@@ -199,49 +206,22 @@ safety.canPostSocial: false
 safety.canSubmitForms: false
 ```
 
-## Full Worker validation sequence
+Historical record responses must additionally remain non-executable and non-deliverable.
 
-```powershell
-cd C:\GitRepos\evavo-worker-agent
-git pull
-npm run db:migration:one -- 0021 --execute
+## Migration and generated-route safety
+
+Routine validation must not execute migrations or rewrite generated route files.
+
+Do not include these mutation commands in a normal validation run:
+
+```text
+npm run db:migration:one -- <migration> --execute
 npm run growth:wiring:apply
 npm run growth:route-catalogue:apply
-npm run business:autopilot:check
-npm run business:website-pages:docs:check
-npm run growth:backend:check:local
-npm run business:route-contract:print
-npm run business:autopilot:readonly:print
-npm run growth:backend:final:print
 ```
 
-## Next dashboard follow-up
+Migration execution requires a separate, explicit database-target decision and the repository migration-safety workflow. Generated-route application is a maintenance action, not a validation step.
 
-After Worker validation, open the Next Operations Hub:
+## Dashboard verification
 
-```text
-http://localhost:3000/ops/outbound-agent-config#business-autopilot
-```
-
-Confirm the panel shows:
-
-```text
-organizations
-people
-websites
-pages
-signals
-opportunities
-service matches
-audit packs
-draft records
-approval requests
-suppression
-content ideas
-follow-ups
-learning events
-execution blocked
-approvals Worker-only
-read-only proxy safety
-Worker payload safety
-```
+The Worker repository does not validate the Next dashboard by mutating it. Dashboard verification is read-only and should confirm that historical draft and approval records are labelled as non-executable, while all delivery controls remain absent.

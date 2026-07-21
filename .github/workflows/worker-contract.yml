@@ -6,6 +6,10 @@ on:
     paths:
       - "src/**"
       - "scripts/**"
+      - "docs/**"
+      - "migrations/**"
+      - "README.md"
+      - "**/*.ps1"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
@@ -16,6 +20,10 @@ on:
     paths:
       - "src/**"
       - "scripts/**"
+      - "docs/**"
+      - "migrations/**"
+      - "README.md"
+      - "**/*.ps1"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"

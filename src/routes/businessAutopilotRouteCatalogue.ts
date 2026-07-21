@@ -2,6 +2,7 @@ import { RouteCatalogueItem, route } from "./routeCatalogueTypes";
 
 const readDescription = "Reads stored Business Autopilot metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
 const writeDescription = "Confirm-saves Business Autopilot internal metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
+const historicalReviewDescription = "Confirm-saves one internal historical review record only. It does not create deliverable copy, approvals, external execution permission, network activity or third-party state changes.";
 
 function readRoute(id: string, path: string, label: string): RouteCatalogueItem {
   return route({
@@ -24,7 +25,7 @@ function readRoute(id: string, path: string, label: string): RouteCatalogueItem 
   });
 }
 
-function writeRoute(id: string, path: string, label: string, writesTables: string[]): RouteCatalogueItem {
+function writeRoute(id: string, path: string, label: string, writesTables: string[], description = writeDescription): RouteCatalogueItem {
   return route({
     id,
     method: "POST",
@@ -41,7 +42,7 @@ function writeRoute(id: string, path: string, label: string, writesTables: strin
     costRisk: "none",
     operatorFacing: true,
     operationsHubRecommended: true,
-    description: writeDescription,
+    description,
   });
 }
 
@@ -57,8 +58,8 @@ export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_opportunities", "/admin/business/opportunities?limit=25", "Business opportunities"),
   readRoute("business_service_matches", "/admin/business/service-matches?limit=25", "Business service matches"),
   readRoute("business_audit_packs", "/admin/business/audit-packs?limit=25", "Business audit packs"),
-  readRoute("business_action_drafts", "/admin/business/action-drafts?limit=25", "Business action drafts"),
-  readRoute("business_approval_requests", "/admin/business/approval-requests?limit=25", "Business approval requests"),
+  readRoute("business_action_drafts", "/admin/business/action-drafts?limit=25", "Historical Business review records"),
+  readRoute("business_approval_requests", "/admin/business/approval-requests?limit=25", "Historical Business approval-shaped records"),
   readRoute("business_suppression_list", "/admin/business/suppression?limit=25", "Business suppression list"),
   readRoute("business_content_ideas", "/admin/business/content-ideas?limit=25", "Business content ideas"),
   readRoute("business_followups", "/admin/business/followups?limit=25", "Business followups"),
@@ -73,9 +74,7 @@ export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   writeRoute("business_opportunity_save", "/admin/business/opportunities?confirm=1", "Save business opportunity", ["business_opportunities"]),
   writeRoute("business_service_match_save", "/admin/business/service-matches?confirm=1", "Save business service match", ["business_service_matches"]),
   writeRoute("business_audit_pack_save", "/admin/business/audit-packs?confirm=1", "Save business audit pack", ["business_audit_packs"]),
-  writeRoute("business_action_draft_build", "/admin/business/action-drafts/build?confirm=1", "Build draft-only business action", ["business_action_drafts"]),
-  writeRoute("business_action_draft_save", "/admin/business/action-drafts?confirm=1", "Save business action draft", ["business_action_drafts"]),
-  writeRoute("business_approval_request_save", "/admin/business/approval-requests?confirm=1", "Save business approval request", ["business_approval_requests"]),
+  writeRoute("business_action_draft_build", "/admin/business/action-drafts/build?confirm=1", "Save internal historical review record", ["business_action_drafts"], historicalReviewDescription),
   writeRoute("business_suppression_save", "/admin/business/suppression?confirm=1", "Save business suppression", ["business_suppression_list"]),
   writeRoute("business_content_idea_save", "/admin/business/content-ideas?confirm=1", "Save business content idea", ["business_content_ideas"]),
   writeRoute("business_followup_save", "/admin/business/followups?confirm=1", "Save business followup", ["business_followups"]),

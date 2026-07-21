@@ -4,6 +4,13 @@ const readDescription = "Reads stored Business Autopilot metadata only. It does 
 const writeDescription = "Confirm-saves Business Autopilot internal metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
 const historicalReviewDescription = "Confirm-saves one internal historical review record only. It does not create deliverable copy, approvals, external execution permission, network activity or third-party state changes.";
 
+// Compatibility identifiers retained for historical validators and stored records only.
+// They are intentionally not included in businessAutopilotRouteCatalogue.
+export const disabledBusinessAutopilotWriteRouteIds = Object.freeze([
+  "business_action_draft_save",
+  "business_approval_request_save",
+] as const);
+
 function readRoute(id: string, path: string, label: string): RouteCatalogueItem {
   return route({
     id,

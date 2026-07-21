@@ -75,6 +75,19 @@ function blockedHistoricalRecordWrite(json: JsonResponse, mode: string) {
   }, { status: 410 });
 }
 
+function markHistoricalBusinessRecord<T extends Record<string, unknown>>(record: T) {
+  return {
+    ...record,
+    historicalOnly: true,
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    statusAuthoritative: false,
+    externalExecutionAllowed: false,
+  };
+}
+
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -121,11 +134,13 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     }
     if (request.method === "GET" && pathname === "/admin/business/action-drafts") {
       const drafts = await listBusinessActionDrafts(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_action_drafts", historicalOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(drafts, "drafts") });
+      const historicalDrafts = drafts.map(markHistoricalBusinessRecord);
+      return json({ mode: "business_action_drafts", historicalOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(historicalDrafts, "drafts") });
     }
     if (request.method === "GET" && pathname === "/admin/business/approval-requests") {
       const approvals = await listBusinessApprovalRequests(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_approval_requests", historicalOnly: true, executable: false, authoritativeForExecution: false, ...businessReadPayload(approvals, "approvalRequests") });
+      const historicalApprovals = approvals.map(markHistoricalBusinessRecord);
+      return json({ mode: "business_approval_requests", historicalOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(historicalApprovals, "approvalRequests") });
     }
     if (request.method === "GET" && pathname === "/admin/business/suppression") {
       const records = await listBusinessSuppression(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("active") !== "0");

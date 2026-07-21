@@ -11,6 +11,7 @@ const files = {
   approval: 'src/core/businessAutopilotApprovalBuilder.ts',
   bundle: 'src/core/businessAutopilotDraftReviewBundle.ts',
   route: 'src/routes/businessAutopilotAdmin.ts',
+  catalogue: 'src/routes/businessAutopilotRouteCatalogue.ts',
   package: 'package.json',
 };
 
@@ -100,6 +101,22 @@ forbidTokens('route', source.route, [
   'mode: "business_approval_request_saved"',
 ]);
 
+requireTokens('route catalogue', source.catalogue, [
+  'disabledBusinessAutopilotWriteRouteIds',
+  '"business_action_draft_save"',
+  '"business_approval_request_save"',
+  'They are intentionally not included in businessAutopilotRouteCatalogue.',
+  'Save internal historical review record',
+  'does not create deliverable copy, approvals, external execution permission, network activity or third-party state changes',
+]);
+
+const catalogueBody = source.catalogue.split('export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [')[1]?.split('];')[0] || '';
+for (const disabledId of ['business_action_draft_save', 'business_approval_request_save']) {
+  if (catalogueBody.includes(`writeRoute("${disabledId}"`)) {
+    errors.push(`route catalogue advertises disabled write route ${disabledId}`);
+  }
+}
+
 const packageJson = source.package ? JSON.parse(source.package) : {};
 const expected = 'node scripts/check-business-draft-runtime-safety.mjs';
 if (packageJson.scripts?.['business:draft-runtime-safety:check'] !== expected) {
@@ -117,6 +134,7 @@ console.log(JSON.stringify({
   approvalBundleCreationDisabled: true,
   arbitraryDraftWritesDisabled: true,
   arbitraryApprovalWritesDisabled: true,
+  disabledWriteRoutesNotAdvertised: true,
   historicalReadsRemainAvailable: true,
   errors,
 }, null, 2));

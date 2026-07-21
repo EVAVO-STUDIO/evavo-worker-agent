@@ -211,8 +211,15 @@ if ((adminRoute.match(/historical_record_write_disabled/g) || []).length < 2) {
 requireTokens('scripts/print-business-autopilot-route-contract-check.mjs', [
   'EVAVO Business Autopilot route-contract smoke check',
   '$disabledBusinessWriteRouteIds',
+  '$disabledBusinessWritePaths',
   'Disabled direct draft and approval write routes are not advertised.',
   'All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture.',
+  'function Assert-DisabledBusinessWrite',
+  '-Method POST',
+  '-Body \'{"confirm":true}\'',
+  '$statusCode -ne 410',
+  'Disabled Business write correctly returned 410 Gone',
+  'Verify retired Business write endpoints fail closed',
 ]);
 
 requireTokens('package.json', [
@@ -244,10 +251,12 @@ forbidTokens('docs/business-autopilot-compliance-policy.md', [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: 'EVAVO-STUDIO/evavo-worker-agent',
-  contract: 'business-autopilot-foundation-v2-non-executing',
+  contract: 'business-autopilot-foundation-v3-deployed-retirement-check',
   activeReadRouteIds,
   activeConfirmRouteIds,
   disabledWriteRouteIds,
+  retiredWriteEndpointsExpectedStatus: 410,
+  deployedRetiredWriteChecksRequired: true,
   externalExecutionEnabled: false,
   deliverableDraftGenerationEnabled: false,
   approvalToExecutionEnabled: false,

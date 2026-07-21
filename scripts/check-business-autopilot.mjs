@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
+const errors = [];
 
 const tables = [
   'business_organizations',
@@ -24,128 +25,238 @@ const tables = [
   'business_learning_events',
 ];
 
-const websiteAuditTables = ['business_website_audit_runs', 'business_audit_observations'];
-
-const readRouteIds = [
-  'business_organizations', 'business_people', 'business_websites', 'business_pages',
-  'business_website_audit_runs', 'business_audit_observations', 'business_audit_observation_candidates',
-  'business_signals', 'business_opportunities', 'business_service_matches', 'business_audit_packs',
-  'business_action_drafts', 'business_approval_requests', 'business_suppression_list', 'business_content_ideas',
-  'business_followups', 'business_learning_events',
+const activeReadRouteIds = [
+  'business_organizations',
+  'business_people',
+  'business_websites',
+  'business_pages',
+  'business_website_audit_runs',
+  'business_audit_observations',
+  'business_audit_observation_candidates',
+  'business_signals',
+  'business_opportunities',
+  'business_service_matches',
+  'business_audit_packs',
+  'business_action_drafts',
+  'business_approval_requests',
+  'business_suppression_list',
+  'business_content_ideas',
+  'business_followups',
+  'business_learning_events',
 ];
 
-const confirmRouteIds = [
-  'business_organization_save', 'business_person_save', 'business_website_save', 'business_page_save',
-  'business_website_audit_run_save', 'business_audit_observation_save', 'business_signal_save',
-  'business_opportunity_save', 'business_service_match_save', 'business_audit_pack_save', 'business_action_draft_build',
-  'business_action_draft_save', 'business_approval_request_save', 'business_suppression_save', 'business_content_idea_save',
-  'business_followup_save', 'business_learning_event_save',
+const activeConfirmRouteIds = [
+  'business_organization_save',
+  'business_person_save',
+  'business_website_save',
+  'business_page_save',
+  'business_website_audit_run_save',
+  'business_audit_observation_save',
+  'business_signal_save',
+  'business_opportunity_save',
+  'business_service_match_save',
+  'business_audit_pack_save',
+  'business_action_draft_build',
+  'business_suppression_save',
+  'business_content_idea_save',
+  'business_followup_save',
+  'business_learning_event_save',
 ];
 
-const safetyTokens = [
-  'externalStateChange: false', 'callsAI: false', 'callsNetwork: false', 'canSendEmail: false',
-  'canPostSocial: false', 'canCommentSocial: false', 'canSubmitForms: false', 'canExecuteBrowserActions: false',
-  'canBuyAds: false', 'canMutateExternalSystems: false',
+const disabledWriteRouteIds = [
+  'business_action_draft_save',
+  'business_approval_request_save',
 ];
 
-const safeRouteText = 'does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems';
-
-const required = {
-  'README.md': ['EVAVO Business Autopilot', 'metadata, scoring, website/funnel audit, audit-observation, audit-pack, draft-only and approval-governance first', 'business analyst / sales strategist / BDM / growth manager / operator brain', 'Growth Operator and Business Autopilot read routes and confirmed metadata-write routes do not send, post, comment, submit forms, execute browser actions, browse, spend, mutate external systems, or call AI', 'docs/business-autopilot-validation.md', 'docs/business-autopilot-website-page-routes.md', 'Run-WorkerFinalGate.ps1'],
-  'docs/business-autopilot-architecture.md': ['EVAVO Business Autopilot architecture', 'Evidence-backed internal decisions and review metadata only.', 'Current runtime posture', 'Intelligence layer', 'Evaluation layer', 'Strategy layer', 'Review-output layer', 'Governance layer', 'Disabled execution layer', 'Level 0: authenticated internal intelligence and review metadata', 'There is no active execution layer.', 'No approval, policy, stored setting, budget profile or historical status may activate these capabilities.', ...tables],
-  'docs/business-autopilot-governance-policy.md': ['EVAVO Business Autopilot governance policy', 'Research manually when explicitly confirmed. Store internal review metadata. Never execute externally.', 'Current governance posture', 'send_email', 'post_social', 'comment_social', 'submit_form', 'mutate_external_system', 'execute_browser_action', 'generate_deliverable_draft', 'No approval record, historical status, budget profile, channel policy, operator preference or stored setting may activate a blocked action.', 'Suppression wins over all recommendations and review metadata.', 'The effective external-execution kill switch is permanently on.', 'The browser must never receive'],
-  'docs/business-autopilot-compliance-policy.md': ['EVAVO Business Autopilot compliance policy', 'The active Worker is internal, authenticated, review-first and non-executing.', 'Compliance metadata can block or classify internal work. It cannot enable a disabled capability.', 'Email sending is disabled.', 'Social publishing and commenting are disabled.', 'Contact-form submission is disabled.', 'Suppression records take priority over opportunity scores, recommendations, approvals and historical action statuses.', 'authoritativeForExecution: false', 'externalUseAllowed: false', 'The active Worker must not append a new external execution attempt.', 'Nothing in this policy is a checklist for enabling delivery.'],
-  'docs/business-autopilot-data-model.md': ['EVAVO Business Autopilot data model', 'business intelligence', 'opportunity scoring', 'website audit packs', 'service matching', 'action drafts', 'approval records', 'execution records', 'suppression records', 'migrations/0021_business_autopilot_foundation.sql', 'business_website_audit_runs', 'business_audit_observations', 'business_audit_observation_candidates', ...tables],
-  'docs/business-autopilot-draft-review-route-plan.md': ['Business Autopilot draft review route plan', 'buildBusinessDraftReviewBundle(input)', 'saveBusinessActionDraft(env, bundle.draftBuild.draft)', 'saveBusinessApprovalRequest(env', 'business_action_draft_review', 'external_use_not_allowed_by_this_record', 'no email sending', 'no social posting', 'no contact-form submission', 'no browser execution', 'createApprovalRequest: false'],
-  'docs/business-autopilot-validation.md': ['Business Autopilot validation workflow', 'npm run business:autopilot:check', 'npm run business:route-contract:print', 'npm run business:autopilot:readonly:print', 'business_websites', 'business_pages', 'business_website_save', 'business_page_save', 'safety.readOnly: true', 'safety.internalMetadataOnly: true', 'does not perform external execution'],
-  'docs/business-autopilot-website-page-routes.md': ['Business Autopilot website and page routes', 'business_websites', 'business_pages', 'business_website_audit_runs', 'business_audit_observations', 'business_audit_observation_candidates', 'business_website_save', 'business_page_save', 'GET /admin/business/websites?limit=25', 'GET /admin/business/pages?limit=25', 'GET /admin/business/audit-observation-candidates?limit=25', 'POST /admin/business/websites?confirm=1', 'POST /admin/business/pages?confirm=1', 'do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
-  'migrations/0021_business_autopilot_foundation.sql': ['Business Autopilot foundation metadata schema', 'does not enable email sending, social posting', ...tables.map((table) => `CREATE TABLE IF NOT EXISTS ${table}`), 'compliance_status TEXT NOT NULL DEFAULT', 'approval_status TEXT NOT NULL DEFAULT', 'execution_type TEXT NOT NULL', 'active INTEGER NOT NULL DEFAULT 1'],
-  'migrations/0022_business_website_audit_records.sql': ['Business website/funnel audit metadata schema', ...websiteAuditTables.map((table) => `CREATE TABLE IF NOT EXISTS ${table}`)],
-  'src/core/businessAutopilotSafety.ts': ['BusinessAutopilotSafety', 'BUSINESS_AUTOPILOT_BLOCKED_EXTERNAL_ACTIONS', 'BUSINESS_AUTOPILOT_EXECUTION_LEVELS', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety', 'assertBusinessAutopilotReadSafety', 'assertBusinessAutopilotMetadataWriteSafety', ...safetyTokens],
-  'src/core/businessAutopilotTypes.ts': ['BusinessOrganizationInput', 'BusinessOpportunityInput', 'BusinessActionDraftInput', 'BusinessApprovalRequestInput', 'BusinessSignalInput', 'BusinessServiceMatchInput', 'buildBusinessOrganization', 'buildBusinessSignal', 'buildBusinessOpportunity', 'buildBusinessServiceMatch', 'buildBusinessActionDraft', 'buildBusinessApprovalRequest', 'draft_only', 'needs_review', 'BUSINESS_AUTOPILOT_BLOCKED_EXTERNAL_ACTIONS'],
-  'src/core/businessAutopilotServiceMatcher.ts': ['BusinessServiceMatchSuggestion', 'listEvavoServiceDefinitions', 'matchEvavoServicesFromSignals', 'primaryServiceFromSignals', 'new Set<string>(definition.signals)', 'definitionSignals.has(signal.signalType)', 'website_rebuild', 'ux_ui', 'analytics_seo', 'ai_chatbot', 'automation', 'three_d_interactive', 'gamification', 'funnels', 'hotspot', 'ecommerce', 'performance_maintenance', 'content_strategy'],
-  'src/core/businessAutopilotOpportunityScoring.ts': ['BusinessOpportunityScoreInput', 'BusinessOpportunityScore', 'scoreBusinessOpportunity', 'fitScore', 'needScore', 'urgencyScore', 'budgetLikelihoodScore', 'contactabilityScore', 'evidenceQualityScore', 'riskScore', 'confidenceScore', 'recommendedService', 'recommendedAngle', 'Prepare an evidence-backed audit pack'],
-  'src/core/businessAutopilotAuditPacks.ts': ['BusinessAuditPackInput', 'BusinessAuditPack', 'buildBusinessAuditPack', 'opportunity_teardown', 'scoreBusinessOpportunity', 'matchEvavoServicesFromSignals', 'Governance requirement', 'send_email', 'post_social', 'comment_social', 'submit_form'],
-  'src/core/businessAutopilotActionDraftBuilder.ts': ['BusinessDraftBuildIntent', 'BusinessDraftBuildInput', 'BusinessDraftBuildResult', 'buildBusinessDraftOnlyAction', 'draft_only', 'approval_required', 'suppression_check_required', 'contactability_check_required', 'Do not send email from this route.', 'Do not post on social platforms from this route.', 'Do not submit contact forms from this route.', 'Get explicit operator approval before any external action.'],
-  'src/core/businessAutopilotApprovalBuilder.ts': ['BusinessApprovalBuildInput', 'BusinessApprovalBuildResult', 'buildBusinessActionDraftApproval', 'business_action_draft_review', 'external_use_not_allowed_by_this_record', 'This approval request does not send email.', 'This approval request does not post on social platforms.', 'This approval request does not submit forms.', 'This approval request does not execute browser actions.'],
-  'src/core/businessAutopilotDraftReviewBundle.ts': ['BusinessDraftReviewBundleInput', 'BusinessDraftReviewBundle', 'buildBusinessDraftReviewBundle', 'buildBusinessDraftOnlyAction', 'buildBusinessActionDraftApproval', 'externalExecutionAllowed: false', 'send_email', 'post_social', 'submit_form', 'execute_browser_action'],
-  'src/core/businessAutopilotPeopleRecords.ts': ['BusinessPersonInput', 'businessPeopleReadPayload', 'businessPersonWritePayload', 'listBusinessPeople', 'saveBusinessPerson', 'business_people', 'allowedUse', 'contactStatus', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
-  'src/core/businessAutopilotWebsiteRecords.ts': ['BusinessWebsiteInput', 'BusinessPageInput', 'BusinessWebsiteAuditRunInput', 'BusinessAuditObservationInput', 'listBusinessWebsites', 'saveBusinessWebsite', 'listBusinessPages', 'saveBusinessPage', 'record.contentHash', 'listBusinessWebsiteAuditRuns', 'saveBusinessWebsiteAuditRun', 'listBusinessAuditObservations', 'saveBusinessAuditObservation', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
-  'src/core/businessAutopilotAuditObservationCandidates.ts': ['BusinessAuditObservationCandidate', 'buildBusinessAuditObservationCandidates', 'businessAuditObservationCandidatePayload', 'internal_metadata', 'reviewOnly: true', 'businessAutopilotReadSafety', 'no fetch, crawl, AI call, send, post, form submission, browser automation or external mutation is performed'],
-  'src/core/businessAutopilotAuditPackRecords.ts': ['listBusinessAuditPacks', 'saveBusinessAuditPack', 'businessAuditPackReadPayload', 'business_audit_packs', 'buildBusinessAuditPack', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
-  'src/core/businessAutopilotRecords.ts': ['listBusinessOrganizations', 'saveBusinessOrganization', 'listBusinessSignals', 'saveBusinessSignal', 'listBusinessOpportunities', 'saveBusinessOpportunity', 'listBusinessServiceMatches', 'saveBusinessServiceMatch', 'listBusinessActionDrafts', 'saveBusinessActionDraft', 'listBusinessApprovalRequests', 'saveBusinessApprovalRequest', 'listBusinessSuppression', 'saveBusinessSuppression', 'listBusinessContentIdeas', 'saveBusinessContentIdea', 'listBusinessFollowups', 'saveBusinessFollowup', 'listBusinessLearningEvents', 'saveBusinessLearningEvent', 'businessAutopilotReadSafety', 'businessAutopilotMetadataWriteSafety'],
-  'src/routes/businessAutopilotRouteCatalogue.ts': ['businessAutopilotRouteCatalogue', 'businessAutopilotReadRouteIds', 'businessAutopilotConfirmRouteIds', ...readRouteIds, ...confirmRouteIds, 'safety: "read_only"', 'safety: "confirm_required"', 'callsNetwork: false', 'callsAI: false', 'canSendEmail: false', safeRouteText],
-  'src/routes/routeCatalogueTypes.ts': ['export type RouteSection', '"business_autopilot"', 'canPostSocial: boolean', 'canSubmitForms: boolean'],
-  'src/routes/businessAutopilotPeopleAdmin.ts': ['handleBusinessAutopilotPeopleAdmin', '/admin/business/people', 'business_people', 'Business people writes require confirmation', 'do not enrich contacts, scrape profiles, send email, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
-  'src/routes/businessAutopilotWebsiteAdmin.ts': ['handleBusinessAutopilotWebsiteAdmin', '/admin/business/websites', '/admin/business/pages', '/admin/business/website-audit-runs', '/admin/business/audit-observations', '/admin/business/audit-observation-candidates', 'business_website_audit_runs', 'business_audit_observations', 'buildBusinessAuditObservationCandidates', 'Business website/page/audit writes require confirmation', 'do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems'],
-  'src/routes/businessAutopilotAdmin.ts': ['handleBusinessAutopilotAdmin', 'buildBusinessDraftOnlyAction', 'business_action_draft_built', 'Business Autopilot writes require confirmation', '0021_business_autopilot_foundation.sql', '/admin/business/organizations', '/admin/business/signals', '/admin/business/opportunities', '/admin/business/service-matches', '/admin/business/audit-packs', '/admin/business/action-drafts/build', '/admin/business/action-drafts', '/admin/business/approval-requests', '/admin/business/suppression', '/admin/business/content-ideas', '/admin/business/followups', '/admin/business/learning', 'listBusinessAuditPacks', 'saveBusinessAuditPack'],
-  'src/index.ts': ['handleBusinessAutopilotAdmin', 'handleBusinessAutopilotWebsiteAdmin', 'handleBusinessAutopilotPeopleAdmin', 'pathname === "/admin/business/people"', 'audit-observation-candidates', 'pathname === "/admin/business" || pathname.startsWith("/admin/business/")'],
-  'scripts/apply-business-autopilot-route-catalogue.mjs': ['businessAutopilotRouteCatalogue', 'routeCataloguePlanner.ts', 'Applied Business Autopilot route catalogue wiring.', 'zero_source_route_map'],
-  'scripts/print-business-autopilot-route-contract-check.mjs': ['EVAVO Business Autopilot route-contract smoke check', 'Business Autopilot route contract is valid.', ...readRouteIds, ...confirmRouteIds, '/admin/business/organizations?limit=5', '/admin/business/people?limit=5', '/admin/business/websites?limit=5', '/admin/business/pages?limit=5', '/admin/business/audit-observation-candidates?limit=5', '/admin/business/audit-packs?limit=5', '/admin/business/learning?limit=5', 'Business Autopilot route has missing or unsafe read safety', safeRouteText],
-  'scripts/print-business-autopilot-readonly-verify-commands.mjs': ['EVAVO Business Autopilot read-only verification', 'Assert-BusinessRead', '/admin/business/organizations?limit=5', '/admin/business/people?limit=5', '/admin/business/websites?limit=5', '/admin/business/pages?limit=5', '/admin/business/audit-observation-candidates?limit=5', '/admin/business/audit-packs?limit=5', '/admin/business/learning?limit=5', 'Business Autopilot read-only verification complete.', safeRouteText],
-  'scripts/check-business-autopilot.mjs': ['Business Autopilot foundation check passed.', 'business_audit_observation_candidates', 'src/core/businessAutopilotAuditObservationCandidates.ts', '/admin/business/audit-observation-candidates?limit=5'],
-  'scripts/check-business-autopilot-raw-error-safety.mjs': ['Business Autopilot raw-error safety check passed.', 'Business website/page route failed before a safe response could be returned.', 'business_website_failed'],
-  'scripts/check-migrations-present.mjs': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql'],
-  'migrations/README.md': ['0021_business_autopilot_foundation.sql', '0022_business_website_audit_records.sql', 'Business Autopilot metadata foundation', 'Business website/funnel audit metadata', 'does not enable sending, social posting, commenting, contact-form submission, browser automation, AI calls, ad buying, or external execution'],
-  'package.json': ['business:autopilot:check', 'business:autopilot:raw-error-safety:check', 'business:autopilot:readonly:print', 'business:route-contract:print', 'node scripts/check-business-autopilot.mjs', 'node scripts/check-business-autopilot-raw-error-safety.mjs', 'node scripts/print-business-autopilot-readonly-verify-commands.mjs', 'node scripts/print-business-autopilot-route-contract-check.mjs', 'node scripts/apply-business-autopilot-route-catalogue.mjs'],
-};
-
-const forbiddenDocumentClaims = {
-  'docs/business-autopilot-architecture.md': [
-    'The system should autonomously research, organise, score, draft, monitor, and recommend.',
-    '### Level 1: Draft-only',
-    '### Level 2: Approval-required execution',
-    '### Level 4: Capped campaign mode',
-    'send approved email',
-    'publish approved owned social post',
-  ],
-  'docs/business-autopilot-governance-policy.md': [
-    'Research autonomously. Draft helpfully. Execute only under governed approval.',
-    'Any action that can change external state requires an approval request and execution record.',
-    'approved_to_send',
-    'External actions must support caps before execution is enabled',
-    'only read-only and draft-only actions may proceed',
-  ],
-  'docs/business-autopilot-compliance-policy.md': [
-    'The first implementation is metadata-only and draft-only.',
-    'Before any email send endpoint can be enabled',
-    'Owned social publishing requires:',
-    'Draft generation may occur without consent checks',
-    'Before enabling any send/post/submit endpoint',
-  ],
-};
-
-let failed = false;
-function fail(message) { failed = true; console.error(`FAIL ${message}`); }
-function pass(message) { console.log(`OK   ${message}`); }
-
-for (const [relativePath, tokens] of Object.entries(required)) {
+function read(relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(absolutePath)) {
-    fail(`${relativePath} is missing`);
-    continue;
+    errors.push(`${relativePath} is missing`);
+    return '';
   }
-  pass(`${relativePath} exists`);
-  const content = fs.readFileSync(absolutePath, 'utf8');
+  return fs.readFileSync(absolutePath, 'utf8');
+}
+
+function requireTokens(relativePath, tokens) {
+  const content = read(relativePath);
   for (const token of tokens) {
-    if (!content.includes(token)) fail(`${relativePath} missing ${token}`);
-    else pass(`${relativePath} contains ${token}`);
+    if (!content.includes(token)) errors.push(`${relativePath} missing ${token}`);
+  }
+  return content;
+}
+
+function forbidTokens(relativePath, tokens) {
+  const content = read(relativePath);
+  for (const token of tokens) {
+    if (content.includes(token)) errors.push(`${relativePath} contains stale or unsafe token ${token}`);
   }
 }
 
-for (const [relativePath, tokens] of Object.entries(forbiddenDocumentClaims)) {
-  const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) continue;
-  const content = fs.readFileSync(absolutePath, 'utf8');
-  for (const token of tokens) {
-    if (content.includes(token)) fail(`${relativePath} contains stale execution claim ${token}`);
-    else pass(`${relativePath} excludes stale execution claim ${token}`);
-  }
+requireTokens('README.md', [
+  'EVAVO Business Autopilot',
+  'Growth Operator and Business Autopilot read routes and confirmed metadata-write routes do not send, post, comment, submit forms, execute browser actions, browse, spend, mutate external systems, or call AI',
+  'docs/business-autopilot-validation.md',
+  'Run-WorkerFinalGate.ps1',
+]);
+
+requireTokens('docs/business-autopilot-architecture.md', [
+  'Evidence-backed internal decisions and review metadata only.',
+  'There is no active execution layer.',
+  'No approval, policy, stored setting, budget profile or historical status may activate these capabilities.',
+  ...tables,
+]);
+
+requireTokens('docs/business-autopilot-governance-policy.md', [
+  'Research manually when explicitly confirmed. Store internal review metadata. Never execute externally.',
+  'No approval record, historical status, budget profile, channel policy, operator preference or stored setting may activate a blocked action.',
+  'The effective external-execution kill switch is permanently on.',
+]);
+
+requireTokens('docs/business-autopilot-compliance-policy.md', [
+  'The active Worker is internal, authenticated, review-first and non-executing.',
+  'authoritativeForExecution: false',
+  'externalUseAllowed: false',
+  'Nothing in this policy is a checklist for enabling delivery.',
+]);
+
+requireTokens('docs/business-autopilot-draft-review-route-plan.md', [
+  'Business Autopilot historical review-record plan',
+  'It is not an active roadmap for drafting or delivery.',
+  'historicalOnly: true',
+  'executable: false',
+  'deliverable: false',
+  'authoritativeForExecution: false',
+  'No future implementation is authorised by this document.',
+]);
+
+requireTokens('migrations/0021_business_autopilot_foundation.sql', [
+  'Business Autopilot foundation metadata schema',
+  ...tables.map((table) => `CREATE TABLE IF NOT EXISTS ${table}`),
+]);
+
+requireTokens('migrations/0022_business_website_audit_records.sql', [
+  'Business website/funnel audit metadata schema',
+  'CREATE TABLE IF NOT EXISTS business_website_audit_runs',
+  'CREATE TABLE IF NOT EXISTS business_audit_observations',
+]);
+
+requireTokens('src/core/businessAutopilotSafety.ts', [
+  'businessAutopilotReadSafety',
+  'businessAutopilotMetadataWriteSafety',
+  'externalStateChange: false',
+  'callsAI: false',
+  'callsNetwork: false',
+  'canSendEmail: false',
+  'canPostSocial: false',
+  'canSubmitForms: false',
+]);
+
+requireTokens('src/core/businessAutopilotActionDraftBuilder.ts', [
+  'business_historical_review_record_v2',
+  "draftType: 'crm_note'",
+  "channel: 'internal'",
+  'historicalOnly: true',
+  'executable: false',
+  'deliverable: false',
+  'authoritativeForExecution: false',
+  'requiresApproval: false',
+]);
+
+requireTokens('src/core/businessAutopilotApprovalBuilder.ts', [
+  'business_historical_review_approval_v2',
+  'historicalOnly: true',
+  'executable: false',
+  'deliverable: false',
+  'authoritativeForExecution: false',
+  'externalExecutionAllowed: false',
+]);
+
+requireTokens('src/core/businessAutopilotDraftReviewBundle.ts', [
+  'approvalBuild: null',
+  'needsApproval: false',
+  'historicalOnly: true',
+  'deliverable: false',
+  'authoritativeForExecution: false',
+  'externalExecutionAllowed: false',
+]);
+
+const catalogue = requireTokens('src/routes/businessAutopilotRouteCatalogue.ts', [
+  'businessAutopilotRouteCatalogue',
+  'disabledBusinessAutopilotWriteRouteIds',
+  'Confirm-saves one internal historical review record only.',
+  'Historical Business review records',
+  'Historical Business approval-shaped records',
+  ...activeReadRouteIds.map((id) => `"${id}"`),
+  ...activeConfirmRouteIds.map((id) => `"${id}"`),
+]);
+
+for (const id of disabledWriteRouteIds) {
+  const activeRoutePattern = new RegExp(`(?:readRoute|writeRoute)\\(\\s*["']${id}["']`);
+  if (activeRoutePattern.test(catalogue)) errors.push(`Route catalogue must not advertise disabled route ${id}`);
 }
 
-if (failed) {
+const adminRoute = requireTokens('src/routes/businessAutopilotAdmin.ts', [
+  'historical_record_write_disabled',
+  'historical_record_write_disabled',
+  '{ status: 410 }',
+  'business_historical_review_record_saved',
+  'historicalOnly: true',
+  'deliverable: false',
+  'authoritativeForExecution: false',
+]);
+if ((adminRoute.match(/historical_record_write_disabled/g) || []).length < 2) {
+  errors.push('Business admin route must disable both direct draft and approval writes');
+}
+
+requireTokens('scripts/print-business-autopilot-route-contract-check.mjs', [
+  'EVAVO Business Autopilot route-contract smoke check',
+  '$disabledBusinessWriteRouteIds',
+  'Disabled direct draft and approval write routes are not advertised.',
+  'All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture.',
+]);
+
+requireTokens('package.json', [
+  'business:autopilot:check',
+  'business:draft-runtime-safety:check',
+  'business:historical-record-posture:check',
+  'business:route-contract:print',
+]);
+
+forbidTokens('docs/business-autopilot-architecture.md', [
+  '### Level 1: Draft-only',
+  '### Level 2: Approval-required execution',
+  '### Level 4: Capped campaign mode',
+  'send approved email',
+]);
+
+forbidTokens('docs/business-autopilot-governance-policy.md', [
+  'Research autonomously. Draft helpfully. Execute only under governed approval.',
+  'approved_to_send',
+  'External actions must support caps before execution is enabled',
+]);
+
+forbidTokens('docs/business-autopilot-compliance-policy.md', [
+  'Before any email send endpoint can be enabled',
+  'Owned social publishing requires:',
+  'Draft generation may occur without consent checks',
+]);
+
+console.log(JSON.stringify({
+  passed: errors.length === 0,
+  activeRepository: 'EVAVO-STUDIO/evavo-worker-agent',
+  contract: 'business-autopilot-foundation-v2-non-executing',
+  activeReadRouteIds,
+  activeConfirmRouteIds,
+  disabledWriteRouteIds,
+  externalExecutionEnabled: false,
+  deliverableDraftGenerationEnabled: false,
+  approvalToExecutionEnabled: false,
+  errors,
+}, null, 2));
+
+if (errors.length) {
   console.error('Business Autopilot foundation check failed.');
-  process.exit(1);
+  process.exitCode = 1;
+} else {
+  console.log('Business Autopilot foundation check passed.');
 }
-
-console.log('Business Autopilot foundation check passed.');

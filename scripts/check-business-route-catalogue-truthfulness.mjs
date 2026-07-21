@@ -15,11 +15,21 @@ function read(relativePath) {
   return fs.readFileSync(absolutePath, "utf8");
 }
 
+function count(source, token) {
+  return source.split(token).length - 1;
+}
+
 const catalogue = read("src/routes/businessAutopilotRouteCatalogue.ts");
 const plannerCatalogue = read("src/routes/routeCataloguePlanner.ts");
+const catalogueApplyScript = read("scripts/apply-business-autopilot-route-catalogue.mjs");
 const adminRoute = read("src/routes/businessAutopilotAdmin.ts");
 const smokePrinter = read("scripts/print-business-autopilot-route-contract-check.mjs");
 const packageJson = JSON.parse(read("package.json") || "{}");
+
+const disabledRouteIds = [
+  "business_action_draft_save",
+  "business_approval_request_save",
+];
 
 const requiredCatalogueTokens = [
   "disabledBusinessAutopilotWriteRouteIds",
@@ -40,7 +50,7 @@ for (const token of requiredCatalogueTokens) {
   if (!catalogue.includes(token)) errors.push(`Business route catalogue missing: ${token}`);
 }
 
-for (const disabledId of ["business_action_draft_save", "business_approval_request_save"]) {
+for (const disabledId of disabledRouteIds) {
   const activePattern = new RegExp(`(?:readRoute|writeRoute)\\(\\s*["']${disabledId}["']`);
   if (activePattern.test(catalogue)) {
     errors.push(`Disabled Business route is still actively advertised: ${disabledId}`);
@@ -48,13 +58,28 @@ for (const disabledId of ["business_action_draft_save", "business_approval_reque
   if (plannerCatalogue.includes(`id: "${disabledId}"`) || plannerCatalogue.includes(`id: '${disabledId}'`)) {
     errors.push(`Planner catalogue duplicates disabled Business route: ${disabledId}`);
   }
+  if (catalogueApplyScript.includes(disabledId)) {
+    errors.push(`Business catalogue apply script must not contain disabled route id: ${disabledId}`);
+  }
+}
+
+const authoritativeImport = 'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue";';
+const authoritativeSpread = "...businessAutopilotRouteCatalogue";
+if (count(plannerCatalogue, authoritativeImport) !== 1) {
+  errors.push("Planner catalogue must import the authoritative Business catalogue exactly once");
+}
+if (count(plannerCatalogue, authoritativeSpread) !== 1) {
+  errors.push("Planner catalogue must spread the authoritative Business catalogue exactly once");
 }
 
 for (const token of [
-  'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue"',
-  "...businessAutopilotRouteCatalogue",
+  "const importLine = 'import { businessAutopilotRouteCatalogue } from \"./businessAutopilotRouteCatalogue\";'",
+  "const spreadLine = '  ...businessAutopilotRouteCatalogue,'",
+  "if (!content.includes(importLine))",
+  "if (!content.includes(spreadLine))",
+  "Applied Business Autopilot route catalogue wiring.",
 ]) {
-  if (!plannerCatalogue.includes(token)) errors.push(`Planner catalogue missing authoritative Business wiring: ${token}`);
+  if (!catalogueApplyScript.includes(token)) errors.push(`Business catalogue apply script missing idempotency guard: ${token}`);
 }
 
 for (const token of [
@@ -95,8 +120,11 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v2-deployed-retirement-check",
+  contract: "business-route-catalogue-truthfulness-v3-idempotent-retirement-check",
   plannerUsesAuthoritativeBusinessCatalogue: true,
+  plannerBusinessImportCountExpected: 1,
+  plannerBusinessSpreadCountExpected: 1,
+  catalogueApplyScriptIdempotent: true,
   disabledDirectDraftWriteAdvertised: false,
   disabledApprovalWriteAdvertised: false,
   retiredWriteEndpointsExpectedStatus: 410,

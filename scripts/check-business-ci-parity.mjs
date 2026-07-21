@@ -19,10 +19,12 @@ const workflow = read(".github/workflows/worker-contract.yml");
 const packageJson = JSON.parse(read("package.json") || "{}");
 const generalParity = read("scripts/check-worker-contract-workflow.mjs");
 const routeCatalogueTruthfulness = read("scripts/check-business-route-catalogue-truthfulness.mjs");
+const approvalIsolation = read("scripts/check-business-approval-isolation.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
 const requiredBusinessContracts = {
+  "business:approval-isolation:check": "node scripts/check-business-approval-isolation.mjs",
   "business:autopilot:check": "node scripts/check-business-autopilot.mjs",
   "business:draft-runtime-safety:check": "node scripts/check-business-draft-runtime-safety.mjs",
   "business:execution-level-truthfulness:check": "node scripts/check-business-execution-level-truthfulness.mjs",
@@ -84,6 +86,18 @@ for (const token of [
   }
 }
 
+for (const token of [
+  'contract: "business-approval-storage-isolation-v1"',
+  'runtimeImportsAllowed: false',
+  'directApprovalWriteRouteEnabled: false',
+  'retiredRouteExpectedStatus: 410',
+  'externalExecutionEnabled: false',
+]) {
+  if (!approvalIsolation.includes(token)) {
+    errors.push(`Business approval-isolation checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -95,12 +109,13 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v3-idempotent-route-retirement",
+  contract: "business-worker-ci-parity-v4-approval-storage-isolation",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
   readmeChangesTriggerWorkflow: true,
   powershellRunnerChangesTriggerWorkflow: true,
+  businessApprovalIsolationRequired: true,
   businessDraftRuntimeSafetyRequired: true,
   businessExecutionLevelTruthfulnessRequired: true,
   businessHistoricalRecordPostureRequired: true,

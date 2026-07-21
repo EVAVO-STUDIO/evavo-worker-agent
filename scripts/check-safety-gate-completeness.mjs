@@ -19,6 +19,7 @@ const checkLocal = String(scripts["check:local"] || "");
 
 const requiredSafetyCommands = {
   "docs:operating-posture:check": "node scripts/check-readme-operating-posture.mjs",
+  "business:ci-parity:check": "node scripts/check-business-ci-parity.mjs",
   "business:draft-runtime-safety:check": "node scripts/check-business-draft-runtime-safety.mjs",
   "business:historical-record-posture:check": "node scripts/check-business-historical-record-posture.mjs",
   "business:validation-workflow-safety:check": "node scripts/check-business-validation-workflow-safety.mjs",
@@ -45,6 +46,7 @@ for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommand
 
 for (const relativePath of [
   "scripts/check-readme-operating-posture.mjs",
+  "scripts/check-business-ci-parity.mjs",
   "scripts/check-business-draft-runtime-safety.mjs",
   "scripts/check-business-historical-record-posture.mjs",
   "scripts/check-business-validation-workflow-safety.mjs",
@@ -73,6 +75,7 @@ console.log(JSON.stringify({
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "safety-gate-completeness",
   readmeOperatingPostureRequired: true,
+  businessCiParityRequired: true,
   businessDraftRuntimeSafetyRequired: true,
   businessHistoricalRecordPostureRequired: true,
   businessValidationWorkflowSafetyRequired: true,

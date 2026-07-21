@@ -62,5 +62,8 @@ jobs:
       - name: Verify read-only health contract
         run: node scripts/check-worker-health-contract.mjs
 
+      - name: Verify README top-level truthfulness
+        run: npm run docs:readme-truthfulness:check
+
       - name: Run complete Worker local gate
         run: npm run check:local

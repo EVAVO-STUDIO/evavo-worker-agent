@@ -68,8 +68,17 @@ for (const token of [
 
 for (const token of [
   "$disabledBusinessWriteRouteIds",
+  "$disabledBusinessWritePaths",
+  '"/admin/business/action-drafts"',
+  '"/admin/business/approval-requests"',
   "Disabled direct draft and approval write routes are not advertised.",
   "All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture.",
+  "function Assert-DisabledBusinessWrite",
+  "-Method POST",
+  "-Body '{\"confirm\":true}'",
+  "$statusCode -ne 410",
+  "Disabled Business write correctly returned 410 Gone",
+  "Verify retired Business write endpoints fail closed",
 ]) {
   if (!smokePrinter.includes(token)) errors.push(`Business route smoke contract missing: ${token}`);
 }
@@ -86,10 +95,12 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v1",
+  contract: "business-route-catalogue-truthfulness-v2-deployed-retirement-check",
   plannerUsesAuthoritativeBusinessCatalogue: true,
   disabledDirectDraftWriteAdvertised: false,
   disabledApprovalWriteAdvertised: false,
+  retiredWriteEndpointsExpectedStatus: 410,
+  deployedRetiredWriteChecksRequired: true,
   historicalReadsRemainAdvertised: true,
   historicalReviewBuildIsInternalOnly: true,
   externalExecutionEnabled: false,

@@ -4,6 +4,8 @@ import {
   businessAutopilotReadSafety,
 } from './businessAutopilotSafety';
 
+// Historical values remain in these unions so existing D1 rows can be decoded.
+// Builders in the active Worker must not use approval or delivery-shaped values as authority.
 export type BusinessStatus = 'new' | 'active' | 'needs_review' | 'approved' | 'rejected' | 'blocked' | 'suppressed' | 'archived';
 export type BusinessPriority = 'A' | 'B' | 'C' | 'D';
 export type BusinessApprovalStatus = 'needs_review' | 'approved' | 'rejected' | 'expired';
@@ -110,6 +112,19 @@ function priorityFromScores(input: BusinessOpportunityInput): BusinessPriority {
   return 'D';
 }
 
+function historicalReviewMetadata(input?: Record<string, unknown>) {
+  return {
+    ...(input ?? {}),
+    contract: 'business_historical_record_v2',
+    historicalOnly: true,
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
+  };
+}
+
 export function buildBusinessOrganization(input: BusinessOrganizationInput) {
   return {
     id: `org_${crypto.randomUUID()}`,
@@ -196,16 +211,30 @@ export function buildBusinessActionDraft(input: BusinessActionDraftInput) {
     personId: input.personId || null,
     opportunityId: input.opportunityId || null,
     auditPackId: input.auditPackId || null,
-    draftType: input.draftType,
-    channel: clean(input.channel) || 'internal',
-    subject: clean(input.subject),
+    draftType: 'crm_note' as BusinessActionDraftType,
+    channel: 'internal',
+    subject: clean(input.subject) || 'Internal historical review record',
     body: clean(input.body),
-    payload: input.payload ?? {},
-    riskFlags: input.riskFlags ?? [],
-    complianceStatus: 'draft_only' as BusinessComplianceStatus,
+    payload: {
+      ...(input.payload ?? {}),
+      requestedDraftType: input.draftType,
+      requestedChannel: clean(input.channel),
+      historicalOnly: true,
+      executable: false,
+      deliverable: false,
+      authoritativeForExecution: false,
+    },
+    riskFlags: Array.from(new Set([
+      ...(input.riskFlags ?? []),
+      'historical_record_only',
+      'review_only',
+      'non_deliverable',
+      'external_use_not_allowed_by_this_record',
+    ])),
+    complianceStatus: 'not_required_internal' as BusinessComplianceStatus,
     approvalStatus: 'needs_review' as BusinessApprovalStatus,
-    status: 'draft' as BusinessStatus,
-    metadata: input.metadata ?? {},
+    status: 'needs_review' as BusinessStatus,
+    metadata: historicalReviewMetadata(input.metadata),
     safety: businessAutopilotMetadataWriteSafety(),
     blockedActions: [...BUSINESS_AUTOPILOT_BLOCKED_EXTERNAL_ACTIONS],
   };
@@ -215,15 +244,23 @@ export function buildBusinessApprovalRequest(input: BusinessApprovalRequestInput
   return {
     id: `approval_${crypto.randomUUID()}`,
     actionDraftId: input.actionDraftId || null,
-    requestType: clean(input.requestType) || 'action_draft',
+    requestType: clean(input.requestType) || 'historical_review',
     status: 'needs_review' as BusinessApprovalStatus,
     reviewChecklist: input.reviewChecklist ?? [],
-    riskFlags: input.riskFlags ?? [],
-    approvalReason: clean(input.approvalReason),
+    riskFlags: Array.from(new Set([
+      ...(input.riskFlags ?? []),
+      'historical_record_only',
+      'review_only',
+      'non_deliverable',
+      'approval_cannot_enable_execution',
+      'external_use_not_allowed_by_this_record',
+    ])),
+    approvalReason: clean(input.approvalReason) || 'Record an internal historical review disposition only.',
     approvedBy: null,
     approvedAt: null,
     expiresAt: clean(input.expiresAt),
-    metadata: input.metadata ?? {},
+    metadata: historicalReviewMetadata(input.metadata),
     safety: businessAutopilotMetadataWriteSafety(),
+    blockedActions: [...BUSINESS_AUTOPILOT_BLOCKED_EXTERNAL_ACTIONS],
   };
 }

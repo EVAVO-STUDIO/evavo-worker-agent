@@ -82,6 +82,10 @@ forbidTokens('bundle', source.bundle, [
 ]);
 
 requireTokens('route', source.route, [
+  'function markHistoricalBusinessRecord',
+  'statusAuthoritative: false',
+  'const historicalDrafts = drafts.map(markHistoricalBusinessRecord);',
+  'const historicalApprovals = approvals.map(markHistoricalBusinessRecord);',
   'historical_record_write_disabled',
   'business_action_draft_write_disabled',
   'business_approval_request_write_disabled',
@@ -99,6 +103,8 @@ forbidTokens('route', source.route, [
   'const approvalRequest = await saveBusinessApprovalRequest(env, body.approvalRequest || body);',
   'mode: "business_action_draft_saved"',
   'mode: "business_approval_request_saved"',
+  'businessReadPayload(drafts, "drafts")',
+  'businessReadPayload(approvals, "approvalRequests")',
 ]);
 
 requireTokens('route catalogue', source.catalogue, [
@@ -136,6 +142,7 @@ console.log(JSON.stringify({
   arbitraryApprovalWritesDisabled: true,
   disabledWriteRoutesNotAdvertised: true,
   historicalReadsRemainAvailable: true,
+  historicalRowsMarkedNonAuthoritative: true,
   errors,
 }, null, 2));
 

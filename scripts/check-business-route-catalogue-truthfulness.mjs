@@ -16,6 +16,7 @@ function read(relativePath) {
 }
 
 const catalogue = read("src/routes/businessAutopilotRouteCatalogue.ts");
+const plannerCatalogue = read("src/routes/routeCataloguePlanner.ts");
 const adminRoute = read("src/routes/businessAutopilotAdmin.ts");
 const smokePrinter = read("scripts/print-business-autopilot-route-contract-check.mjs");
 const packageJson = JSON.parse(read("package.json") || "{}");
@@ -44,6 +45,16 @@ for (const disabledId of ["business_action_draft_save", "business_approval_reque
   if (activePattern.test(catalogue)) {
     errors.push(`Disabled Business route is still actively advertised: ${disabledId}`);
   }
+  if (plannerCatalogue.includes(`id: "${disabledId}"`) || plannerCatalogue.includes(`id: '${disabledId}'`)) {
+    errors.push(`Planner catalogue duplicates disabled Business route: ${disabledId}`);
+  }
+}
+
+for (const token of [
+  'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue"',
+  "...businessAutopilotRouteCatalogue",
+]) {
+  if (!plannerCatalogue.includes(token)) errors.push(`Planner catalogue missing authoritative Business wiring: ${token}`);
 }
 
 for (const token of [
@@ -76,6 +87,7 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "business-route-catalogue-truthfulness-v1",
+  plannerUsesAuthoritativeBusinessCatalogue: true,
   disabledDirectDraftWriteAdvertised: false,
   disabledApprovalWriteAdvertised: false,
   historicalReadsRemainAdvertised: true,

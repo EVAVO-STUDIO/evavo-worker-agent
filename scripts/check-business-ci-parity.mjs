@@ -18,6 +18,7 @@ function read(relativePath) {
 const workflow = read(".github/workflows/worker-contract.yml");
 const packageJson = JSON.parse(read("package.json") || "{}");
 const generalParity = read("scripts/check-worker-contract-workflow.mjs");
+const routeCatalogueTruthfulness = read("scripts/check-business-route-catalogue-truthfulness.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -68,6 +69,21 @@ for (const token of [
   if (!generalParity.includes(token)) errors.push(`General Worker CI parity checker is missing: ${token}`);
 }
 
+for (const token of [
+  'contract: "business-route-catalogue-truthfulness-v3-idempotent-retirement-check"',
+  'plannerBusinessImportCountExpected: 1',
+  'plannerBusinessSpreadCountExpected: 1',
+  'catalogueApplyScriptIdempotent: true',
+  'disabledDirectDraftWriteAdvertised: false',
+  'disabledApprovalWriteAdvertised: false',
+  'retiredWriteEndpointsExpectedStatus: 410',
+  'deployedRetiredWriteChecksRequired: true',
+]) {
+  if (!routeCatalogueTruthfulness.includes(token)) {
+    errors.push(`Business route-catalogue truthfulness checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -79,7 +95,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v2",
+  contract: "business-worker-ci-parity-v3-idempotent-route-retirement",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -91,6 +107,10 @@ console.log(JSON.stringify({
   businessRecordBuilderSafetyRequired: true,
   businessValidationWorkflowSafetyRequired: true,
   businessRouteCatalogueTruthfulnessRequired: true,
+  businessRouteCatalogueImportCountExpected: 1,
+  businessRouteCatalogueSpreadCountExpected: 1,
+  businessRouteCatalogueGeneratorIdempotencyRequired: true,
+  retiredBusinessWritesExpectedStatus: 410,
   deploymentEnabled: false,
   credentialsRequired: false,
   errors,

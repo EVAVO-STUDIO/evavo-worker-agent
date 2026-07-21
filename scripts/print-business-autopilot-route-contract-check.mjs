@@ -58,6 +58,11 @@ $disabledBusinessWriteRouteIds = @(
   "business_approval_request_save"
 )
 
+$disabledBusinessWritePaths = @(
+  "/admin/business/action-drafts",
+  "/admin/business/approval-requests"
+)
+
 $businessReadPaths = @(
   "/admin/business/organizations?limit=5",
   "/admin/business/people?limit=5",
@@ -144,6 +149,32 @@ foreach ($path in $businessReadPaths) {
     $contractFailed = $true
     Write-Host "Business Autopilot route threw: $path" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
+  }
+}
+
+function Assert-DisabledBusinessWrite([string]$Path) {
+  try {
+    Invoke-WebRequest "$base$Path" -Method POST -Headers $headers -ContentType "application/json" -Body '{"confirm":true}' -ErrorAction Stop | Out-Null
+    Write-Host "Disabled Business write unexpectedly succeeded: $Path" -ForegroundColor Red
+    return $false
+  } catch {
+    $statusCode = 0
+    if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+      $statusCode = [int]$_.Exception.Response.StatusCode
+    }
+    if ($statusCode -ne 410) {
+      Write-Host "Disabled Business write returned $statusCode instead of 410: $Path" -ForegroundColor Red
+      return $false
+    }
+    Write-Host "Disabled Business write correctly returned 410 Gone: $Path" -ForegroundColor Green
+    return $true
+  }
+}
+
+Write-Host "Verify retired Business write endpoints fail closed" -ForegroundColor Cyan
+foreach ($path in $disabledBusinessWritePaths) {
+  if (-not (Assert-DisabledBusinessWrite $path)) {
+    $contractFailed = $true
   }
 }
 

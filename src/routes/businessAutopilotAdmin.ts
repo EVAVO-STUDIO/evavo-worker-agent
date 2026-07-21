@@ -2,6 +2,11 @@ import { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { buildBusinessDraftOnlyAction } from "../core/businessAutopilotActionDraftBuilder";
 import {
+  markBusinessInternalPlanningRecord,
+  normalizeBusinessContentIdeaInput,
+  normalizeBusinessFollowupInput,
+} from "../core/businessInternalPlanningSafety";
+import {
   businessReadPayload,
   businessWritePayload,
   listBusinessActionDrafts,
@@ -148,11 +153,13 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     }
     if (request.method === "GET" && pathname === "/admin/business/content-ideas") {
       const ideas = await listBusinessContentIdeas(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_content_ideas", ...businessReadPayload(ideas, "contentIdeas") });
+      const internalIdeas = ideas.map(markBusinessInternalPlanningRecord);
+      return json({ mode: "business_content_ideas", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(internalIdeas, "contentIdeas") });
     }
     if (request.method === "GET" && pathname === "/admin/business/followups") {
       const followups = await listBusinessFollowups(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_followups", ...businessReadPayload(followups, "followups") });
+      const internalFollowups = followups.map(markBusinessInternalPlanningRecord);
+      return json({ mode: "business_followups", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(internalFollowups, "followups") });
     }
     if (request.method === "GET" && pathname === "/admin/business/learning") {
       const learning = await listBusinessLearningEvents(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("entityType") || undefined);
@@ -226,14 +233,16 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     if (request.method === "POST" && pathname === "/admin/business/content-ideas") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const contentIdea = await saveBusinessContentIdea(env, body.contentIdea || body);
-      return json({ mode: "business_content_idea_saved", ...businessWritePayload(contentIdea, "contentIdea") });
+      const normalized = normalizeBusinessContentIdeaInput(body.contentIdea || body);
+      const contentIdea = markBusinessInternalPlanningRecord(await saveBusinessContentIdea(env, normalized));
+      return json({ mode: "business_content_idea_saved", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessWritePayload(contentIdea, "contentIdea") });
     }
     if (request.method === "POST" && pathname === "/admin/business/followups") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const followup = await saveBusinessFollowup(env, body.followup || body);
-      return json({ mode: "business_followup_saved", ...businessWritePayload(followup, "followup") });
+      const normalized = normalizeBusinessFollowupInput(body.followup || body);
+      const followup = markBusinessInternalPlanningRecord(await saveBusinessFollowup(env, normalized));
+      return json({ mode: "business_followup_saved", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessWritePayload(followup, "followup") });
     }
     if (request.method === "POST" && pathname === "/admin/business/learning") {
       const body = await parseBody(request);

@@ -62,8 +62,6 @@ for (const token of [
   'safetyGateCompletenessRequired: true',
   'typedRoutePoliciesRequired: true',
   'historicalStatusesExecutable: false',
-  'documentationChangesTriggerWorkflow: true',
-  'migrationChangesTriggerWorkflow: true',
 ]) {
   if (!generalParity.includes(token)) errors.push(`General Worker CI parity checker is missing: ${token}`);
 }

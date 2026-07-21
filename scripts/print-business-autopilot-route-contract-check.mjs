@@ -47,12 +47,15 @@ $businessConfirmRouteIds = @(
   "business_service_match_save",
   "business_audit_pack_save",
   "business_action_draft_build",
-  "business_action_draft_save",
-  "business_approval_request_save",
   "business_suppression_save",
   "business_content_idea_save",
   "business_followup_save",
   "business_learning_event_save"
+)
+
+$disabledBusinessWriteRouteIds = @(
+  "business_action_draft_save",
+  "business_approval_request_save"
 )
 
 $businessReadPaths = @(
@@ -88,6 +91,7 @@ $businessRoutes = $allRoutes | Where-Object { $expectedBusinessRouteIds -contain
 $readRoutes = $businessRoutes | Where-Object { $businessReadRouteIds -contains $_.id }
 $confirmRoutes = $businessRoutes | Where-Object { $businessConfirmRouteIds -contains $_.id }
 $missing = $expectedBusinessRouteIds | Where-Object { $id = $_; -not ($businessRoutes | Where-Object { $_.id -eq $id }) }
+$unexpectedDisabled = $allRoutes | Where-Object { $disabledBusinessWriteRouteIds -contains $_.id }
 $unsafeReads = $readRoutes | Where-Object { -not $_.readOnly -or $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.costRisk -ne "none" -or ($_.writesTables -and $_.writesTables.Count -gt 0) }
 $badConfirm = $confirmRoutes | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.callsAI -or $_.callsNetwork }
 $contractFailed = $false
@@ -98,6 +102,14 @@ if ($missing.Count -gt 0) {
   $missing
 } else {
   Write-Host "All expected Business Autopilot route ids are advertised by the Worker route catalogue." -ForegroundColor Green
+}
+
+if ($unexpectedDisabled.Count -gt 0) {
+  $contractFailed = $true
+  Write-Host "Disabled Business draft/approval write routes are still advertised:" -ForegroundColor Red
+  $unexpectedDisabled | Select-Object id,path,safety | Format-Table -AutoSize
+} else {
+  Write-Host "Disabled direct draft and approval write routes are not advertised." -ForegroundColor Green
 }
 
 if ($unsafeReads.Count -gt 0) {
@@ -113,7 +125,7 @@ if ($badConfirm.Count -gt 0) {
   Write-Host "Business Autopilot metadata-write routes missing confirm_required or safe metadata posture:" -ForegroundColor Red
   $badConfirm | Select-Object id,safety,readOnly,requiresConfirm,callsNetwork,callsAI,canSendEmail,canPostSocial,canSubmitForms | Format-Table -AutoSize
 } else {
-  Write-Host "All Business Autopilot metadata-write routes advertise confirm_required metadata-only posture." -ForegroundColor Green
+  Write-Host "All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture." -ForegroundColor Green
 }
 
 Write-Host "Read and verify Business Autopilot metadata route family" -ForegroundColor Cyan

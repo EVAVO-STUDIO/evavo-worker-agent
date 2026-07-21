@@ -24,6 +24,7 @@ const checkLocal = String(scripts["check:local"] || "");
 const requiredBusinessContracts = {
   "business:autopilot:check": "node scripts/check-business-autopilot.mjs",
   "business:draft-runtime-safety:check": "node scripts/check-business-draft-runtime-safety.mjs",
+  "business:execution-level-truthfulness:check": "node scripts/check-business-execution-level-truthfulness.mjs",
   "business:historical-record-posture:check": "node scripts/check-business-historical-record-posture.mjs",
   "business:validation-workflow-safety:check": "node scripts/check-business-validation-workflow-safety.mjs",
   "business:route-catalogue-truthfulness:check": "node scripts/check-business-route-catalogue-truthfulness.mjs",
@@ -84,6 +85,7 @@ console.log(JSON.stringify({
   readmeChangesTriggerWorkflow: true,
   powershellRunnerChangesTriggerWorkflow: true,
   businessDraftRuntimeSafetyRequired: true,
+  businessExecutionLevelTruthfulnessRequired: true,
   businessHistoricalRecordPostureRequired: true,
   businessValidationWorkflowSafetyRequired: true,
   businessRouteCatalogueTruthfulnessRequired: true,

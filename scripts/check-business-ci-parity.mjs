@@ -44,6 +44,10 @@ for (const token of [
   "npm run check:local",
   '      - "src/**"',
   '      - "scripts/**"',
+  '      - "docs/**"',
+  '      - "migrations/**"',
+  '      - "README.md"',
+  '      - "**/*.ps1"',
   '      - "package.json"',
   '      - "package-lock.json"',
 ]) {
@@ -58,6 +62,8 @@ for (const token of [
   'safetyGateCompletenessRequired: true',
   'typedRoutePoliciesRequired: true',
   'historicalStatusesExecutable: false',
+  'documentationChangesTriggerWorkflow: true',
+  'migrationChangesTriggerWorkflow: true',
 ]) {
   if (!generalParity.includes(token)) errors.push(`General Worker CI parity checker is missing: ${token}`);
 }
@@ -73,8 +79,12 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v1",
+  contract: "business-worker-ci-parity-v2",
   workflowRunsCompleteLocalGate: true,
+  documentationChangesTriggerWorkflow: true,
+  migrationChangesTriggerWorkflow: true,
+  readmeChangesTriggerWorkflow: true,
+  powershellRunnerChangesTriggerWorkflow: true,
   businessDraftRuntimeSafetyRequired: true,
   businessHistoricalRecordPostureRequired: true,
   businessValidationWorkflowSafetyRequired: true,

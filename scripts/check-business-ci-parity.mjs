@@ -20,6 +20,7 @@ const packageJson = JSON.parse(read("package.json") || "{}");
 const generalParity = read("scripts/check-worker-contract-workflow.mjs");
 const routeCatalogueTruthfulness = read("scripts/check-business-route-catalogue-truthfulness.mjs");
 const approvalIsolation = read("scripts/check-business-approval-isolation.mjs");
+const reviewRecordIsolation = read("scripts/check-business-review-record-storage-isolation.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -30,6 +31,7 @@ const requiredBusinessContracts = {
   "business:execution-level-truthfulness:check": "node scripts/check-business-execution-level-truthfulness.mjs",
   "business:historical-record-posture:check": "node scripts/check-business-historical-record-posture.mjs",
   "business:record-builder-safety:check": "node scripts/check-business-record-builder-safety.mjs",
+  "business:review-record-storage-isolation:check": "node scripts/check-business-review-record-storage-isolation.mjs",
   "business:validation-workflow-safety:check": "node scripts/check-business-validation-workflow-safety.mjs",
   "business:route-catalogue-truthfulness:check": "node scripts/check-business-route-catalogue-truthfulness.mjs",
   "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
@@ -98,6 +100,20 @@ for (const token of [
   }
 }
 
+for (const token of [
+  'contract: "business-review-record-storage-isolation-v1"',
+  'storageDefinitionAllowed: true',
+  'guardedCompatibilityRouteAllowed: true',
+  'otherRuntimeImportsAllowed: false',
+  'deliverableDraftGenerationEnabled: false',
+  'approvalToExecutionEnabled: false',
+  'externalExecutionEnabled: false',
+]) {
+  if (!reviewRecordIsolation.includes(token)) {
+    errors.push(`Business review-record isolation checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -109,13 +125,14 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v4-approval-storage-isolation",
+  contract: "business-worker-ci-parity-v5-review-record-storage-isolation",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
   readmeChangesTriggerWorkflow: true,
   powershellRunnerChangesTriggerWorkflow: true,
   businessApprovalIsolationRequired: true,
+  businessReviewRecordStorageIsolationRequired: true,
   businessDraftRuntimeSafetyRequired: true,
   businessExecutionLevelTruthfulnessRequired: true,
   businessHistoricalRecordPostureRequired: true,

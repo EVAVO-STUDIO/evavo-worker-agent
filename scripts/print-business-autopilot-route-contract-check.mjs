@@ -58,6 +58,10 @@ $businessConfirmRouteIds = @(
   "business_learning_event_save"
 )
 
+$historicalBusinessWriteRouteIds = @(
+  "business_action_draft_build"
+)
+
 $disabledBusinessWriteRouteIds = @(
   "business_action_draft_save",
   "business_approval_request_save"
@@ -101,6 +105,7 @@ $businessRoutes = $allRoutes | Where-Object { $expectedBusinessRouteIds -contain
 $readRoutes = $businessRoutes | Where-Object { $businessReadRouteIds -contains $_.id }
 $historicalReadRoutes = $businessRoutes | Where-Object { $historicalBusinessReadRouteIds -contains $_.id }
 $confirmRoutes = $businessRoutes | Where-Object { $businessConfirmRouteIds -contains $_.id }
+$historicalWriteRoutes = $businessRoutes | Where-Object { $historicalBusinessWriteRouteIds -contains $_.id }
 $missing = $expectedBusinessRouteIds | Where-Object { $id = $_; -not ($businessRoutes | Where-Object { $_.id -eq $id }) }
 $unexpectedDisabled = $allRoutes | Where-Object { $disabledBusinessWriteRouteIds -contains $_.id }
 $unsafeReads = $readRoutes | Where-Object { -not $_.readOnly -or $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.costRisk -ne "none" -or ($_.writesTables -and $_.writesTables.Count -gt 0) }
@@ -110,6 +115,13 @@ $unsafeHistoricalReads = $historicalReadRoutes | Where-Object {
   $_.description -notmatch "non-deliverable" -or
   $_.description -notmatch "non-executable" -or
   $_.description -notmatch "non-authoritative"
+}
+$unsafeHistoricalWrites = $historicalWriteRoutes | Where-Object {
+  $_.operationsHubRecommended -ne $false -or
+  $_.label -notmatch "internal historical review record" -or
+  $_.description -notmatch "historical review record" -or
+  $_.description -notmatch "does not create deliverable copy" -or
+  $_.description -notmatch "external execution permission"
 }
 $badConfirm = $confirmRoutes | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.callsAI -or $_.callsNetwork }
 $contractFailed = $false
@@ -144,6 +156,14 @@ if ($unsafeHistoricalReads.Count -gt 0 -or $historicalReadRoutes.Count -ne $hist
   $historicalReadRoutes | Select-Object id,label,operationsHubRecommended,description | Format-Table -Wrap
 } else {
   Write-Host "Historical Business read routes are clearly labelled and not recommended as ordinary Operations Hub actions." -ForegroundColor Green
+}
+
+if ($unsafeHistoricalWrites.Count -gt 0 -or $historicalWriteRoutes.Count -ne $historicalBusinessWriteRouteIds.Count) {
+  $contractFailed = $true
+  Write-Host "Historical Business review-write routes are missing explicit non-recommended catalogue posture:" -ForegroundColor Red
+  $historicalWriteRoutes | Select-Object id,label,operationsHubRecommended,description | Format-Table -Wrap
+} else {
+  Write-Host "Historical Business review-write routes are not recommended as ordinary Operations Hub actions." -ForegroundColor Green
 }
 
 if ($badConfirm.Count -gt 0) {

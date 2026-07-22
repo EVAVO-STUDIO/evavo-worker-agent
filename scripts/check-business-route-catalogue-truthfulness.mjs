@@ -38,12 +38,13 @@ const requiredCatalogueTokens = [
   "They are intentionally not included in businessAutopilotRouteCatalogue.",
   "historicalReadDescription",
   "function historicalReadRoute",
+  "function historicalReviewWriteRoute",
   "Records are non-deliverable, non-executable and non-authoritative for external action.",
   "operationsHubRecommended: false",
   "Confirm-saves one internal historical review record only.",
   'historicalReadRoute("business_action_drafts"',
   'historicalReadRoute("business_approval_requests"',
-  'writeRoute("business_action_draft_build"',
+  'historicalReviewWriteRoute("business_action_draft_build"',
   '"Save internal historical review record"',
   "callsNetwork: false",
   "callsAI: false",
@@ -55,7 +56,7 @@ for (const token of requiredCatalogueTokens) {
 }
 
 for (const disabledId of disabledRouteIds) {
-  const activePattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute)\\(\\s*["']${disabledId}["']`);
+  const activePattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute|historicalReviewWriteRoute)\\(\\s*["']${disabledId}["']`);
   if (activePattern.test(catalogue)) {
     errors.push(`Disabled Business route is still actively advertised: ${disabledId}`);
   }
@@ -65,6 +66,11 @@ for (const disabledId of disabledRouteIds) {
   if (catalogueApplyScript.includes(disabledId)) {
     errors.push(`Business catalogue apply script must not contain disabled route id: ${disabledId}`);
   }
+}
+
+const historicalReviewBuildPattern = /historicalReviewWriteRoute\(\s*["']business_action_draft_build["'][\s\S]*?["']business_action_drafts["']\s*\)/;
+if (!historicalReviewBuildPattern.test(catalogue)) {
+  errors.push("Historical Business review build must use historicalReviewWriteRoute");
 }
 
 const authoritativeImport = 'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue";';
@@ -97,12 +103,14 @@ for (const token of [
 
 for (const token of [
   "$historicalBusinessReadRouteIds",
+  "$historicalBusinessWriteRouteIds",
   "$disabledBusinessWriteRouteIds",
   "$disabledBusinessWritePaths",
   '"/admin/business/action-drafts"',
   '"/admin/business/approval-requests"',
   "Disabled direct draft and approval write routes are not advertised.",
   "Historical Business read routes are clearly labelled and not recommended as ordinary Operations Hub actions.",
+  "Historical Business review-write routes are not recommended as ordinary Operations Hub actions.",
   "All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture.",
   "function Assert-DisabledBusinessWrite",
   "-Method POST",
@@ -126,13 +134,15 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v4-historical-read-aware",
+  contract: "business-route-catalogue-truthfulness-v5-historical-write-aware",
   plannerUsesAuthoritativeBusinessCatalogue: true,
   plannerBusinessImportCountExpected: 1,
   plannerBusinessSpreadCountExpected: 1,
   catalogueApplyScriptIdempotent: true,
   historicalReadsUseDedicatedCataloguePosture: true,
   historicalReadsRecommendedInOperationsHub: false,
+  historicalReviewWriteUsesDedicatedCataloguePosture: true,
+  historicalReviewWriteRecommendedInOperationsHub: false,
   disabledDirectDraftWriteAdvertised: false,
   disabledApprovalWriteAdvertised: false,
   retiredWriteEndpointsExpectedStatus: 410,

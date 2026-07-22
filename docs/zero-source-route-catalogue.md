@@ -1,194 +1,131 @@
 # Zero-source route catalogue
 
-This document describes the safe route sequence for running the Opportunity Intelligence / Outbound Agent when no manual source list has been supplied.
+This document explains how the authenticated Worker route catalogue represents safe operation when no manual source list has been supplied.
 
-Zero-source startup is not a scraping mode. It is a candidate-memory-first recovery path that creates safe seed memory, runs tiny bounded public discovery, and routes all useful findings through review before they become live opportunity sources.
+Zero-source operation is manual-only. It is not a scheduled source-expansion mode, crawl queue, autonomous discovery loop or outbound workflow.
 
 ## Catalogue advertisement
 
-The Worker route catalogue advertises zero-source startup as read-only route-map metadata, not as a separate execution endpoint.
+The route catalogue advertises:
 
-Catalogue item:
+- read-only route-map metadata
+- confirmed internal D1 metadata writes
+- specifically classified bounded manual public-source research routes
+- disabled historical compatibility routes where required
 
-- `id: zero_source_route_map`
-- `label: Zero-source route map`
-- `method: GET`
-- `path: /admin/planner/routes`
-- `section: planner`
-- `safety: read_only`
-- `costRisk: none`
-- `callsNetwork: false`
-- `callsAI: false`
-- `canSendEmail: false`
+A route name does not grant capability. The route's current safety fields and dispatcher contract are authoritative.
 
-Purpose:
+The `zero_source_route_map` item remains read-only guidance:
 
-- let the Next Ops console, CLI tools, and operator workflows discover the zero-source backend sequence from the same route catalogue as all other safe actions
-- keep zero-source startup visible without inventing a fake backend action
-- make clear that the actual write/network steps remain the existing confirm-gated bootstrap, scan, sitemap, public-link, query-hint, candidate-save, and run-due routes
+```text
+id: zero_source_route_map
+method: GET
+path: /admin/planner/routes
+section: planner
+safety: read_only
+callsNetwork: false
+callsAI: false
+canSendEmail: false
+```
 
-## Route sequence
+The map itself performs no research and creates no state change.
 
-### 1. Read settings and policy
+## Authoritative runtime posture
 
-- `GET /admin/settings/autonomy`
+Expected current capability reporting is:
 
-Expected safe startup settings:
+```text
+scheduledExecutionEnabled: false
+scheduledExternalResearchEnabled: false
+manualResearchRequiresAuthentication: true
+manualResearchRequiresConfirmation: true
+manualResearchIsBounded: true
+manualResearchSavesReviewItemsOnly: true
+aiDraftingEnabled: false
+sendingEnabled: false
+externalExecutionEnabled: false
+```
 
-- `engineEnabled: true`
-- `freeSafeOnly: true`
-- `sourceExpansionEnabled: true`
-- `leadDiscoveryEnabled: false`
-- `aiDraftsEnabled: false`
-- `sendingEnabled: false`
-- `maxNetworkCallsPerRun > 0`
-- `maxExpansionFetchesPerRun > 0`
-- `maxExpansionCandidatesPerRun > 0`
+Historical fields such as `engineEnabled`, source-expansion settings or old run statuses are compatibility data only. They must not be used as permission to execute.
 
-If these checks fail, fix settings before running discovery.
+## Safe route sequence
 
-### 2. Bootstrap seed memory
+### 1. Read route and capability metadata
 
-- `POST /admin/opportunities/sources/expansion/bootstrap`
+Use authenticated read routes to inspect the current route catalogue, capability registry, source metadata and review state.
 
-Purpose:
+Verify that every route selected for network access explicitly advertises a bounded manual-research posture.
 
-- create durable default source-expansion seed memory
-- no network
-- no AI
-- no email
-- no live source creation
+### 2. Record seed or query-hint metadata
 
-This is the safest first step in a fresh or reset environment.
+A confirmed internal metadata route may save seed labels, query hints or operator notes without network access.
 
-### 3. Run bounded source expansion
+It must report:
 
-- `POST /admin/opportunities/sources/expansion/scan`
+```text
+callsNetwork: false
+callsAI: false
+externalStateChange: false
+internalMetadataOnly: true
+```
 
-Purpose:
+### 3. Run one bounded manual research request
 
-- fetch a small capped set of public seed pages
-- score ordinary public links into `source_expansion_candidates`
-- store candidate-source memory only
+A network-capable request must be:
 
-Important behaviour:
+- authenticated with `ADMIN_TOKEN`
+- POST-only
+- explicitly confirmed
+- classified as bounded manual research
+- GET-only against validated public targets
+- capped by request, byte, time and result limits
+- review-only in persistence
 
-- scan also ensures bootstrap seed memory before selecting due seeds
-- useful links remain candidates
-- saving to `opportunity_sources` requires a separate confirmed action
+The request must stop if any safety requirement is unavailable.
 
-### 4. Follow fallback guidance
+### 4. Review candidate evidence
 
-A scan may return or log states such as:
+Candidate, source-health and evidence records remain internal review metadata.
 
-- `no_due_seeds`
-- `all_fetches_failed`
-- `thin_seed_pages`
-- `links_without_candidates`
-- `known_or_duplicate_candidates`
-- `fresh_candidates_found`
+No candidate may be automatically promoted into:
 
-These states should route the next action:
+- a live autonomous source
+- a scheduled scan
+- an opportunity execution
+- a deliverable draft
+- an approval to act
+- an external campaign
 
-| State | Safe next action |
-| --- | --- |
-| `no_due_seeds` | bootstrap or rotate strategy |
-| `all_fetches_failed` | inspect source health, retry later, or try sitemap discovery |
-| `thin_seed_pages` | try sitemap/robots or public-link graph discovery |
-| `links_without_candidates` | try query hints or review filters/scoring |
-| `known_or_duplicate_candidates` | inspect candidate/source-origin state before spending more budget |
-| `fresh_candidates_found` | review candidates before source promotion |
+### 5. Record a manual internal disposition
 
-### 5. Try sitemap or public-link graph discovery
+A separate confirmed metadata write may record that the operator accepted, rejected, blocked or deferred an item.
 
-- `POST /admin/opportunities/sources/expansion/sitemap-scan`
-- `POST /admin/opportunities/sources/expansion/public-directory-scan`
+This decision does not schedule another request and does not authorise external action.
 
-Purpose:
+## Historical route names
 
-- rotate method before increasing scan depth
-- inspect public robots/sitemaps or ordinary public links
-- store candidate-source memory only
+Historical route names may still mention expansion, scans, drafts, approvals, campaigns or run-due processing. Their names are not authoritative.
 
-These routes remain confirm-required and capped.
+The active dispatcher, authentication boundary, confirmation requirement, route safety fields and current runtime contracts determine whether a route is available. Disabled compatibility routes must fail closed.
 
-### 6. Use query hints if source memory is exhausted
+## Hard boundaries
 
-- `GET /admin/opportunities/sources/expansion/query-hints?status=candidate&limit=80`
-- `POST /admin/opportunities/sources/expansion/query-hints/generate`
-- `POST /admin/opportunities/sources/expansion/query-hints/resolve`
+Zero-source operation must retain:
 
-Purpose:
-
-- generate source-hunting search patterns without searching automatically
-- let the operator manually inspect public search results
-- resolve human-reviewed URLs into candidate-source memory
-
-Resolver behaviour:
-
+- no scheduled public-source research
+- no autonomous fetch queue
+- no background crawling
+- no automatic retry executor
+- no private or authenticated third-party access
+- no access-control bypass
+- no AI drafting
+- no email, social posting or form submission
 - no browser automation
-- no automatic web search
-- no live source save
-- dedupe and score pasted public URLs into `source_expansion_candidates`
-
-### 7. Review candidate sources
-
-- `GET /admin/opportunities/sources/expansion/candidates?status=candidate&limit=50`
-- `GET /admin/opportunities/sources/candidates/preview`
-- `POST /admin/opportunities/sources/candidates/commit`
-
-Purpose:
-
-- inspect candidate evidence and duplicate status
-- promote only useful fresh candidates
-- preserve origin and operator reason
-
-Promotion must remain explicit and confirmation-gated.
-
-### 8. Test and monitor saved sources
-
-- `GET /admin/opportunities/sources?limit=50`
-- `POST /admin/opportunities/sources/:id/test`
-- `GET /admin/opportunities/sources/:id/preview`
-- `GET /admin/opportunities/sources/health?limit=50`
-- `POST /admin/opportunities/sources/:id/health-action`
-
-Purpose:
-
-- test saved sources before relying on them
-- inspect source health before spending more budget
-- pause, activate, lower priority, raise priority, or reset source error state through local metadata actions only
-
-### 9. Run opportunity discovery only after source memory exists
-
-- `POST /admin/opportunities/run-due`
-
-Purpose:
-
-- process due live opportunity sources
-- save high-score opportunities for review
-- record run audit history
-
-This remains governed by autonomy settings and policy gates.
-
-## Safety boundary
-
-Zero-source startup must keep the following hard boundaries:
-
-- public-source-only discovery
-- tiny bounded fetches
-- candidate-memory-first storage
-- origin preservation
-- no private/authenticated areas
-- no bypassing access controls
-- no paid AI by default
-- no email or outreach by default
-- no lead discovery in the startup path
-- no automatic source promotion
-- explicit confirmation for networked scans and source saves
+- no advertising spend
+- no third-party mutation
+- no automatic promotion
+- explicit authentication and confirmation for every bounded manual network request
 
 ## Operational rule
 
-When the system has no source-origin signals, route to zero-source startup before learning-first planning.
-
-Learning needs outcomes. A brand-new or reset environment first needs safe candidate-source memory.
+When no useful source-origin evidence exists, present safe manual research options to the operator. Do not start research automatically, do not queue follow-on work and do not infer permission from historical settings.

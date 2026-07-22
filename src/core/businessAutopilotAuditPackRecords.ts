@@ -25,6 +25,21 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function minimiseBusinessAuditPackResponse(pack: Record<string, unknown>) {
+  const metadataPresent = Boolean(pack.metadata && typeof pack.metadata === "object" && Object.keys(pack.metadata as object).length > 0);
+  const { metadata: _metadata, ...reviewContext } = pack;
+  return {
+    ...reviewContext,
+    metadata: {},
+    metadataPresent,
+    metadataRedacted: true,
+    internalReviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+  };
+}
+
 export async function listBusinessAuditPacks(env: Env, limit = 25, status?: string) {
   const params: unknown[] = [];
   let where = "";
@@ -91,11 +106,18 @@ export async function saveBusinessAuditPack(env: Env, input: BusinessAuditPackIn
   return { ...record, id, opportunityId: input.opportunityId || null, createdAt: now, updatedAt: now, safety: businessAutopilotMetadataWriteSafety() };
 }
 
-export function businessAuditPackReadPayload(packs: unknown[]) {
+export function businessAuditPackReadPayload(packs: Record<string, unknown>[]) {
+  const minimizedPacks = packs.map(minimiseBusinessAuditPackResponse);
   return {
     ok: true,
-    auditPacks: packs,
-    count: packs.length,
+    contract: "business_audit_pack_reads_v2_minimized",
+    auditPacks: minimizedPacks,
+    count: minimizedPacks.length,
+    metadataRedacted: true,
+    internalReviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
     safety: businessAutopilotReadSafety(),
   };
 }

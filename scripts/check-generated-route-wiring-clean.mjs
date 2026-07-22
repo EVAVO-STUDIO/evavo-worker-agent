@@ -11,6 +11,14 @@ const generatedFiles = [
   'src/routes/routeCataloguePlanner.ts',
 ];
 
+const plannerPath = path.join(repoRoot, 'src/routes/routeCataloguePlanner.ts');
+const businessImport = 'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue";';
+const businessSpread = '...businessAutopilotRouteCatalogue,';
+const retiredBusinessRouteIds = [
+  'business_action_draft_save',
+  'business_approval_request_save',
+];
+
 let failed = false;
 const fail = (message) => { failed = true; console.error(`FAIL ${message}`); };
 const pass = (message) => console.log(`OK   ${message}`);
@@ -19,6 +27,29 @@ for (const relativePath of generatedFiles) {
   const absolutePath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(absolutePath)) fail(`${relativePath} is missing`);
   else pass(`${relativePath} exists`);
+}
+
+if (fs.existsSync(plannerPath)) {
+  const planner = fs.readFileSync(plannerPath, 'utf8');
+  const importCount = planner.split(businessImport).length - 1;
+  const spreadCount = planner.split(businessSpread).length - 1;
+
+  if (importCount !== 1) fail(`routeCataloguePlanner.ts must contain exactly one Business catalogue import; found ${importCount}`);
+  else pass('Business catalogue import exists exactly once');
+
+  if (spreadCount !== 1) fail(`routeCataloguePlanner.ts must contain exactly one Business catalogue spread; found ${spreadCount}`);
+  else pass('Business catalogue spread exists exactly once');
+
+  for (const routeId of retiredBusinessRouteIds) {
+    if (planner.includes(routeId)) fail(`routeCataloguePlanner.ts must not embed retired Business route id ${routeId}`);
+    else pass(`routeCataloguePlanner.ts excludes retired Business route id ${routeId}`);
+  }
+
+  if (!planner.includes('...growthAutonomousDiscoveryRouteCatalogue,')) {
+    fail('routeCataloguePlanner.ts is missing the Growth discovery catalogue spread');
+  } else {
+    pass('Growth discovery catalogue spread remains present');
+  }
 }
 
 const status = spawnSync('git', ['status', '--short', '--', ...generatedFiles], {
@@ -37,9 +68,19 @@ if (status.status !== 0) {
   }
 }
 
+console.log(JSON.stringify({
+  passed: !failed,
+  activeRepository: 'EVAVO-STUDIO/evavo-worker-agent',
+  contract: 'generated-route-wiring-v2-catalogue-integrity',
+  businessCatalogueImportCountRequired: 1,
+  businessCatalogueSpreadCountRequired: 1,
+  retiredBusinessRouteIdsForbiddenInPlanner: retiredBusinessRouteIds,
+  generatedFiles,
+}, null, 2));
+
 if (failed) {
   console.error('Generated route wiring clean check failed.');
-  process.exit(1);
+  process.exitCode = 1;
+} else {
+  console.log('Generated route wiring clean check passed.');
 }
-
-console.log('Generated route wiring clean check passed.');

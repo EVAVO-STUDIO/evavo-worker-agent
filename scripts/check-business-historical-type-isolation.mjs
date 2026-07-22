@@ -35,27 +35,49 @@ const route = read('src/routes/businessAutopilotAdmin.ts');
 const packageSource = read('package.json');
 
 requireTokens('Business type compatibility boundary', types, [
-  'Historical values remain in these unions so existing D1 rows can be decoded.',
-  'Builders in the active Worker must not use approval or delivery-shaped values as authority.',
-  "'approved_to_send'",
-  "'email'",
-  "'linkedin_dm'",
+  'export type BusinessActiveStatus =',
+  'export type BusinessActiveApprovalStatus =',
+  'export type BusinessActiveComplianceStatus =',
+  'export type BusinessHistoricalStatus = BusinessActiveStatus | \'approved\';',
+  'export type BusinessHistoricalApprovalStatus = BusinessActiveApprovalStatus | \'approved\';',
+  'export type BusinessHistoricalComplianceStatus =',
+  "| 'draft_only'",
+  "| 'consent_verified'",
+  "| 'approved_to_send';",
+  'Historical values remain decode-only so existing D1 rows and old clients can be read.',
+  'They are not valid authority for active builders, delivery, approval-to-execution or external action.',
+  'New builder code must use',
+  'the BusinessActive* types above for emitted status fields.',
+  "status: 'new' as BusinessActiveStatus",
+  "complianceStatus: 'not_required_internal' as BusinessActiveComplianceStatus",
+  "approvalStatus: 'needs_review' as BusinessActiveApprovalStatus",
+  "status: 'needs_review' as BusinessActiveStatus",
+  "status: 'needs_review' as BusinessActiveApprovalStatus",
   "draftType: 'crm_note' as BusinessActionDraftType",
   "channel: 'internal'",
-  "complianceStatus: 'not_required_internal' as BusinessComplianceStatus",
-  "approvalStatus: 'needs_review' as BusinessApprovalStatus",
   'historicalOnly: true',
   'executable: false',
   'deliverable: false',
   'authoritativeForExecution: false',
 ]);
 
+for (const unsafeActiveUnion of [
+  "export type BusinessActiveStatus = 'new' | 'active' | 'needs_review' | 'approved'",
+  "export type BusinessActiveApprovalStatus = 'needs_review' | 'approved'",
+  "export type BusinessActiveComplianceStatus = 'approved_to_send'",
+  "export type BusinessActiveComplianceStatus = 'draft_only'",
+]) {
+  if (types.includes(unsafeActiveUnion)) {
+    errors.push(`Active Business type must not include historical delivery value: ${unsafeActiveUnion}`);
+  }
+}
+
 forbidTokens('Active draft builder', draftBuilder, [
   "draftType: 'email'",
   "draftType: 'linkedin_dm'",
   "channel: 'email'",
   "channel: 'linkedin'",
-  "requiresApproval: true",
+  'requiresApproval: true',
   'approved_to_send',
 ]);
 requireTokens('Active draft builder', draftBuilder, [
@@ -111,8 +133,10 @@ if (!String(packageJson.scripts?.['check:local'] || '').includes('npm run busine
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: 'EVAVO-STUDIO/evavo-worker-agent',
-  contract: 'business-historical-type-isolation',
+  contract: 'business-historical-type-isolation-v2-active-unions',
   historicalEnumsDecodeOnly: true,
+  activeStatusUnionsExcludeApprovalAndDeliveryValues: true,
+  activeBuildersUseActiveStatusTypes: true,
   activeBuildersEmitInternalReviewMetadataOnly: true,
   approvalToExecutionDisabled: true,
   retiredDirectWritesExpectedStatus: 410,

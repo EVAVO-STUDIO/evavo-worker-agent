@@ -196,7 +196,7 @@ Direct approval-request writes are disabled.
 
 ### business_execution_records
 
-Historical execution-attempt compatibility records only. Current routes remain metadata-only and do not execute external delivery.
+Historical execution-attempt compatibility records only. The current routes remain metadata-only and do not execute external delivery.
 
 The active Worker must not append a new external execution attempt. Existing rows may be read for historical review, audit and migration compatibility only.
 

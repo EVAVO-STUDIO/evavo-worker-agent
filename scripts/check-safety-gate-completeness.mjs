@@ -18,6 +18,7 @@ const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
 const requiredSafetyCommands = {
+  "growth:generated-routes:check": "node scripts/check-generated-route-wiring-clean.mjs",
   "docs:operating-posture:check": "node scripts/check-readme-operating-posture.mjs",
   "docs:readme-truthfulness:check": "node scripts/check-readme-top-level-truthfulness.mjs",
   "business:approval-isolation:check": "node scripts/check-business-approval-isolation.mjs",
@@ -54,6 +55,7 @@ for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommand
 }
 
 for (const relativePath of [
+  "scripts/check-generated-route-wiring-clean.mjs",
   "scripts/check-readme-operating-posture.mjs",
   "scripts/check-readme-top-level-truthfulness.mjs",
   "scripts/check-business-approval-isolation.mjs",
@@ -92,6 +94,7 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "safety-gate-completeness",
+  generatedRouteIntegrityRequired: true,
   readmeOperatingPostureRequired: true,
   readmeTopLevelTruthfulnessRequired: true,
   businessApprovalIsolationRequired: true,

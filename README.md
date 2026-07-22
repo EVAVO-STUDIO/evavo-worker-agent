@@ -86,6 +86,8 @@ They may not:
 
 Historical labels and schema families are retained only for data compatibility. They do not describe enabled drafting, approvals-to-execution, campaigns or external delivery. The source policies, runtime contracts and safety checks are authoritative.
 
+The authoritative model is research-memory-first, metadata-first, review-first and non-executing.
+
 ## Important production note
 
 The remote D1 database contains live data. Do not blindly run `schema.sql` against the remote database unless intentionally rebuilding a fresh database.

@@ -26,7 +26,7 @@ export type BusinessAuditPack = {
   recommendations: Array<Record<string, unknown>>;
   riskFlags: string[];
   confidenceScore: number;
-  status: 'draft';
+  status: 'needs_review';
   metadata: Record<string, unknown>;
   safety: ReturnType<typeof businessAutopilotMetadataWriteSafety>;
 };
@@ -61,10 +61,10 @@ export function buildBusinessAuditPack(input: BusinessAuditPackInput): BusinessA
   const serviceMatches = matchEvavoServicesFromSignals(signals, 4);
   const primaryService = serviceMatches[0];
 
-  const title = `${input.organizationName.trim()} opportunity audit pack`;
+  const title = `${input.organizationName.trim()} internal opportunity audit pack`;
   const summary = primaryService
-    ? `${input.organizationName.trim()} looks like a ${score.priority}-priority opportunity for ${primaryService.label}. ${score.nextStep}`
-    : `${input.organizationName.trim()} has been reviewed, but stronger evidence is needed before recommending a specific EVAVO service.`;
+    ? `${input.organizationName.trim()} is classified as a ${score.priority}-priority internal review candidate for ${primaryService.label}. ${score.nextStep}`
+    : `${input.organizationName.trim()} has been reviewed, but stronger evidence is needed before assigning a specific EVAVO service recommendation.`;
 
   const findings = signals.length
     ? signals.map(signalFinding)
@@ -73,10 +73,12 @@ export function buildBusinessAuditPack(input: BusinessAuditPackInput): BusinessA
   const recommendations = [
     {
       id: 'recommendation_1',
-      type: 'next_step',
-      title: 'Recommended next step',
+      type: 'internal_review_step',
+      title: 'Internal review step',
       detail: score.nextStep,
       priority: score.priority,
+      executable: false,
+      externalActionAllowed: false,
     },
     ...serviceMatches.map((match, index) => ({
       id: `service_match_${index + 1}`,
@@ -86,13 +88,14 @@ export function buildBusinessAuditPack(input: BusinessAuditPackInput): BusinessA
       detail: match.reason,
       matchScore: match.matchScore,
       evidence: match.evidence,
+      advisoryOnly: true,
     })),
     {
       id: 'recommendation_compliance',
       type: 'governance',
       title: 'Governance requirement',
-      detail: 'Keep this as an internal review pack. Any email, social post, third-party comment or contact-form message must remain draft-only until approval, suppression and compliance checks exist.',
-      blockedExternalActions: ['send_email', 'post_social', 'comment_social', 'submit_form'],
+      detail: 'Keep this as internal review metadata only. Email, social posts, third-party comments, contact-form messages, deliverable drafts and all other external actions are disabled in this Worker; approval or confirmation cannot enable them.',
+      blockedExternalActions: ['send_email', 'post_social', 'comment_social', 'submit_form', 'generate_deliverable_draft', 'approve_for_delivery'],
     },
   ];
 
@@ -107,8 +110,9 @@ export function buildBusinessAuditPack(input: BusinessAuditPackInput): BusinessA
     recommendations,
     riskFlags,
     confidenceScore: score.confidenceScore,
-    status: 'draft',
+    status: 'needs_review',
     metadata: {
+      contract: 'business_audit_pack_v2_internal_review_only',
       organizationName: input.organizationName.trim(),
       domain: clean(input.domain),
       websiteUrl: clean(input.websiteUrl),
@@ -117,6 +121,11 @@ export function buildBusinessAuditPack(input: BusinessAuditPackInput): BusinessA
       notes: clean(input.notes),
       serviceMatches,
       scoreReasoning: score.reasoning,
+      reviewOnly: true,
+      executable: false,
+      deliverable: false,
+      authoritativeForExecution: false,
+      externalExecutionAllowed: false,
     },
     safety: businessAutopilotMetadataWriteSafety(),
   };

@@ -45,6 +45,11 @@ const activeReadRouteIds = [
   'business_learning_events',
 ];
 
+const historicalReadRouteIds = [
+  'business_action_drafts',
+  'business_approval_requests',
+];
+
 const activeConfirmRouteIds = [
   'business_organization_save',
   'business_person_save',
@@ -183,6 +188,10 @@ requireTokens('src/core/businessAutopilotDraftReviewBundle.ts', [
 const catalogue = requireTokens('src/routes/businessAutopilotRouteCatalogue.ts', [
   'businessAutopilotRouteCatalogue',
   'disabledBusinessAutopilotWriteRouteIds',
+  'historicalReadDescription',
+  'function historicalReadRoute',
+  'Records are non-deliverable, non-executable and non-authoritative for external action.',
+  'operationsHubRecommended: false',
   'Confirm-saves one internal historical review record only.',
   'Historical Business review records',
   'Historical Business approval-shaped records',
@@ -191,12 +200,15 @@ const catalogue = requireTokens('src/routes/businessAutopilotRouteCatalogue.ts',
 ]);
 
 for (const id of disabledWriteRouteIds) {
-  const activeRoutePattern = new RegExp(`(?:readRoute|writeRoute)\\(\\s*["']${id}["']`);
+  const activeRoutePattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute)\\(\\s*["']${id}["']`);
   if (activeRoutePattern.test(catalogue)) errors.push(`Route catalogue must not advertise disabled route ${id}`);
+}
+for (const id of historicalReadRouteIds) {
+  const historicalPattern = new RegExp(`historicalReadRoute\\(\\s*["']${id}["']`);
+  if (!historicalPattern.test(catalogue)) errors.push(`Historical route ${id} must use historicalReadRoute`);
 }
 
 const adminRoute = requireTokens('src/routes/businessAutopilotAdmin.ts', [
-  'historical_record_write_disabled',
   'historical_record_write_disabled',
   '{ status: 410 }',
   'business_historical_review_record_saved',
@@ -210,6 +222,8 @@ if ((adminRoute.match(/historical_record_write_disabled/g) || []).length < 2) {
 
 requireTokens('scripts/print-business-autopilot-route-contract-check.mjs', [
   'EVAVO Business Autopilot route-contract smoke check',
+  '$historicalBusinessReadRouteIds',
+  'Historical Business read routes are clearly labelled and not recommended as ordinary Operations Hub actions.',
   '$disabledBusinessWriteRouteIds',
   '$disabledBusinessWritePaths',
   'Disabled direct draft and approval write routes are not advertised.',
@@ -251,10 +265,12 @@ forbidTokens('docs/business-autopilot-compliance-policy.md', [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: 'EVAVO-STUDIO/evavo-worker-agent',
-  contract: 'business-autopilot-foundation-v3-deployed-retirement-check',
+  contract: 'business-autopilot-foundation-v4-historical-read-catalogue',
   activeReadRouteIds,
+  historicalReadRouteIds,
   activeConfirmRouteIds,
   disabledWriteRouteIds,
+  historicalReadsRecommendedInOperationsHub: false,
   retiredWriteEndpointsExpectedStatus: 410,
   deployedRetiredWriteChecksRequired: true,
   externalExecutionEnabled: false,

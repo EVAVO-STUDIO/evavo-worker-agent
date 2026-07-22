@@ -75,6 +75,27 @@ function writeRoute(id: string, path: string, label: string, writesTables: strin
   });
 }
 
+function historicalReviewWriteRoute(id: string, path: string, label: string, writesTables: string[]): RouteCatalogueItem {
+  return route({
+    id,
+    method: "POST",
+    path,
+    label,
+    section: "business_autopilot",
+    safety: "confirm_required",
+    readOnly: false,
+    requiresConfirm: true,
+    writesTables,
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: false,
+    description: historicalReviewDescription,
+  });
+}
+
 export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_organizations", "/admin/business/organizations?limit=25", "Business organizations"),
   readRoute("business_people", "/admin/business/people?limit=25", "Business people"),
@@ -103,7 +124,7 @@ export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   writeRoute("business_opportunity_save", "/admin/business/opportunities?confirm=1", "Save business opportunity", ["business_opportunities"]),
   writeRoute("business_service_match_save", "/admin/business/service-matches?confirm=1", "Save business service match", ["business_service_matches"]),
   writeRoute("business_audit_pack_save", "/admin/business/audit-packs?confirm=1", "Save business audit pack", ["business_audit_packs"]),
-  writeRoute("business_action_draft_build", "/admin/business/action-drafts/build?confirm=1", "Save internal historical review record", ["business_action_drafts"], historicalReviewDescription),
+  historicalReviewWriteRoute("business_action_draft_build", "/admin/business/action-drafts/build?confirm=1", "Save internal historical review record", ["business_action_drafts"]),
   writeRoute("business_suppression_save", "/admin/business/suppression?confirm=1", "Save business suppression", ["business_suppression_list"]),
   writeRoute("business_content_idea_save", "/admin/business/content-ideas?confirm=1", "Save business content idea", ["business_content_ideas"]),
   writeRoute("business_followup_save", "/admin/business/followups?confirm=1", "Save business followup", ["business_followups"]),

@@ -7,6 +7,10 @@ import {
   normalizeBusinessFollowupInput,
 } from "../core/businessInternalPlanningSafety";
 import {
+  projectHistoricalBusinessApproval,
+  projectHistoricalBusinessDraft,
+} from "../core/businessHistoricalReadProjection";
+import {
   businessReadPayload,
   businessWritePayload,
   listBusinessActionDrafts,
@@ -36,7 +40,6 @@ export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 const schemaMissingMessage = "Business Autopilot schema is missing or unavailable.";
 const routeFailedMessage = "Business Autopilot route failed before a safe response could be returned.";
-const historicalContentRedaction = "[historical deliverable-looking content redacted]";
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
   const value = Number(url.searchParams.get(key));
@@ -79,24 +82,6 @@ function blockedHistoricalRecordWrite(json: JsonResponse, mode: string) {
     },
     safety: businessAutopilotMetadataWriteSafety(),
   }, { status: 410 });
-}
-
-function markHistoricalBusinessRecord<T extends Record<string, unknown>>(record: T) {
-  const legacySubjectPresent = typeof record.subject === "string" && record.subject.length > 0;
-  const legacyBodyPresent = typeof record.body === "string" && record.body.length > 0;
-  return {
-    ...record,
-    ...(legacySubjectPresent ? { subject: historicalContentRedaction } : {}),
-    ...(legacyBodyPresent ? { body: historicalContentRedaction } : {}),
-    historicalContentRedacted: legacySubjectPresent || legacyBodyPresent,
-    historicalOnly: true,
-    reviewOnly: true,
-    executable: false,
-    deliverable: false,
-    authoritativeForExecution: false,
-    statusAuthoritative: false,
-    externalExecutionAllowed: false,
-  };
 }
 
 function errorText(error: unknown) {
@@ -145,13 +130,32 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     }
     if (request.method === "GET" && pathname === "/admin/business/action-drafts") {
       const drafts = await listBusinessActionDrafts(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      const historicalDrafts = drafts.map(markHistoricalBusinessRecord);
-      return json({ mode: "business_action_drafts", historicalOnly: true, historicalContentRedacted: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(historicalDrafts, "drafts") });
+      const historicalDrafts = drafts.map((record) => projectHistoricalBusinessDraft(record));
+      return json({
+        mode: "business_action_drafts",
+        contract: "business_historical_draft_reads_v3_minimized",
+        historicalOnly: true,
+        historicalContentRedacted: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessReadPayload(historicalDrafts, "drafts"),
+      });
     }
     if (request.method === "GET" && pathname === "/admin/business/approval-requests") {
       const approvals = await listBusinessApprovalRequests(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      const historicalApprovals = approvals.map(markHistoricalBusinessRecord);
-      return json({ mode: "business_approval_requests", historicalOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(historicalApprovals, "approvalRequests") });
+      const historicalApprovals = approvals.map((record) => projectHistoricalBusinessApproval(record));
+      return json({
+        mode: "business_approval_requests",
+        contract: "business_historical_approval_reads_v3_minimized",
+        historicalOnly: true,
+        historicalContentRedacted: true,
+        historicalIdentityRedacted: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessReadPayload(historicalApprovals, "approvalRequests"),
+      });
     }
     if (request.method === "GET" && pathname === "/admin/business/suppression") {
       const records = await listBusinessSuppression(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("active") !== "0");

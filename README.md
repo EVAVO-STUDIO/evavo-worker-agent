@@ -121,8 +121,12 @@ npm run check:local
 Important focused checks include:
 
 ```powershell
+npm run safety:gates:check
+npm run docs:operating-posture:check
+npm run docs:readme-truthfulness:check
 npm run worker:health:check
 npm run worker:routes:check
+npm run worker:package-identity:check
 npm run scheduled:autonomy-safety:check
 npm run manual:execution-safety:check
 npm run legacy:engine-isolation:check
@@ -130,11 +134,19 @@ npm run public:surface-safety:check
 npm run runtime:capability-config:check
 npm run opportunities:route-policy:check
 npm run business:route-policy:check
+npm run business:route-catalogue-truthfulness:check
+npm run business:draft-runtime-safety:check
+npm run business:historical-type-isolation:check
+npm run business:review-record-storage-isolation:check
+npm run business:ci-parity:check
 npm run operations:route-policy:check
+npm run planner:catalogue-truthfulness:check
 npm run growth:route-policy:check
 npm run growth:negative-safety:check
 npm run typecheck
 ```
+
+The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.
 
 The GitHub Actions Worker contract workflow runs the authoritative `check:local` chain with read-only repository permissions. It does not deploy and does not request Worker credentials.
 
@@ -178,10 +190,8 @@ When no approved source list exists:
 
 1. Read the autonomy and runtime policy.
 2. Create a bounded manual research plan.
-3. Authenticate and explicitly confirm each network-capable research action.
-4. Save source candidates rather than promoting them automatically.
-5. Review candidate metadata through explicit confirmation gates.
-6. Run opportunity scoring and internal review from approved research metadata.
-7. Keep every scheduled external and outbound action disabled.
-
-The authoritative model is research-memory-first, metadata-first, review-first and non-executing.
+3. Review candidate domains and crawl policy.
+4. Run one authenticated, explicitly confirmed and bounded research action.
+5. Save findings as internal review metadata only.
+6. Review evidence and source health manually.
+7. Do not draft, send, post, submit or mutate external systems.

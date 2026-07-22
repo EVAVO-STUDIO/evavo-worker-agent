@@ -35,6 +35,11 @@ $businessReadRouteIds = @(
   "business_learning_events"
 )
 
+$historicalBusinessReadRouteIds = @(
+  "business_action_drafts",
+  "business_approval_requests"
+)
+
 $businessConfirmRouteIds = @(
   "business_organization_save",
   "business_person_save",
@@ -94,10 +99,18 @@ if ($routePayload.groups) {
 
 $businessRoutes = $allRoutes | Where-Object { $expectedBusinessRouteIds -contains $_.id }
 $readRoutes = $businessRoutes | Where-Object { $businessReadRouteIds -contains $_.id }
+$historicalReadRoutes = $businessRoutes | Where-Object { $historicalBusinessReadRouteIds -contains $_.id }
 $confirmRoutes = $businessRoutes | Where-Object { $businessConfirmRouteIds -contains $_.id }
 $missing = $expectedBusinessRouteIds | Where-Object { $id = $_; -not ($businessRoutes | Where-Object { $_.id -eq $id }) }
 $unexpectedDisabled = $allRoutes | Where-Object { $disabledBusinessWriteRouteIds -contains $_.id }
 $unsafeReads = $readRoutes | Where-Object { -not $_.readOnly -or $_.callsNetwork -or $_.callsAI -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.costRisk -ne "none" -or ($_.writesTables -and $_.writesTables.Count -gt 0) }
+$unsafeHistoricalReads = $historicalReadRoutes | Where-Object {
+  $_.operationsHubRecommended -ne $false -or
+  $_.label -notmatch "^Historical Business" -or
+  $_.description -notmatch "non-deliverable" -or
+  $_.description -notmatch "non-executable" -or
+  $_.description -notmatch "non-authoritative"
+}
 $badConfirm = $confirmRoutes | Where-Object { -not $_.requiresConfirm -or $_.readOnly -or $_.safety -ne "confirm_required" -or $_.canSendEmail -or $_.canPostSocial -or $_.canSubmitForms -or $_.callsAI -or $_.callsNetwork }
 $contractFailed = $false
 
@@ -123,6 +136,14 @@ if ($unsafeReads.Count -gt 0) {
   $unsafeReads | Select-Object id,readOnly,callsNetwork,callsAI,canSendEmail,canPostSocial,canSubmitForms,costRisk,writesTables | Format-Table -AutoSize
 } else {
   Write-Host "All Business Autopilot read routes advertise readOnly, no network, no AI, no email, no social posting, no form submission, cost none, and no write tables." -ForegroundColor Green
+}
+
+if ($unsafeHistoricalReads.Count -gt 0 -or $historicalReadRoutes.Count -ne $historicalBusinessReadRouteIds.Count) {
+  $contractFailed = $true
+  Write-Host "Historical Business read routes are missing explicit non-executing catalogue posture:" -ForegroundColor Red
+  $historicalReadRoutes | Select-Object id,label,operationsHubRecommended,description | Format-Table -Wrap
+} else {
+  Write-Host "Historical Business read routes are clearly labelled and not recommended as ordinary Operations Hub actions." -ForegroundColor Green
 }
 
 if ($badConfirm.Count -gt 0) {

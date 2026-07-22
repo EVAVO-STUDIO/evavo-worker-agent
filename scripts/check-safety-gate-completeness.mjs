@@ -47,6 +47,7 @@ const requiredSafetyCommands = {
   "opportunities:execution-boundary-safety:check": "node scripts/check-opportunity-execution-boundary-safety.mjs",
   "growth:subhandler-auth-safety:check": "node scripts/check-growth-subhandler-auth-safety.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
+  "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
 };
 
 for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommands)) {
@@ -88,6 +89,7 @@ for (const relativePath of [
   "scripts/check-opportunity-execution-boundary-safety.mjs",
   "scripts/check-growth-subhandler-auth-safety.mjs",
   "scripts/check-central-authentication-safety.mjs",
+  "scripts/check-package-service-identity.mjs",
 ]) {
   if (!fs.existsSync(path.join(root, relativePath))) {
     errors.push(`Missing safety contract: ${relativePath}`);
@@ -131,6 +133,7 @@ console.log(JSON.stringify({
   opportunityExecutionBoundarySafetyRequired: true,
   growthSubhandlerAuthenticationSafetyRequired: true,
   centralAuthenticationSafetyRequired: true,
+  packageServiceIdentityRequired: true,
   predeployUsesCompleteLocalGate: true,
   errors,
 }, null, 2));

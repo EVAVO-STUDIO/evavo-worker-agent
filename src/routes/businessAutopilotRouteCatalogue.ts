@@ -1,6 +1,7 @@
 import { RouteCatalogueItem, route } from "./routeCatalogueTypes";
 
 const readDescription = "Reads stored Business Autopilot metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
+const historicalReadDescription = "Reads historical Business review records only. Records are non-deliverable, non-executable and non-authoritative for external action. This route does not generate drafts, approve delivery or mutate external systems.";
 const writeDescription = "Confirm-saves Business Autopilot internal metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
 const historicalReviewDescription = "Confirm-saves one internal historical review record only. It does not create deliverable copy, approvals, external execution permission, network activity or third-party state changes.";
 
@@ -29,6 +30,27 @@ function readRoute(id: string, path: string, label: string): RouteCatalogueItem 
     operatorFacing: true,
     operationsHubRecommended: true,
     description: readDescription,
+  });
+}
+
+function historicalReadRoute(id: string, path: string, label: string): RouteCatalogueItem {
+  return route({
+    id,
+    method: "GET",
+    path,
+    label,
+    section: "business_autopilot",
+    safety: "read_only",
+    readOnly: true,
+    requiresConfirm: false,
+    writesTables: [],
+    callsNetwork: false,
+    callsAI: false,
+    canSendEmail: false,
+    costRisk: "none",
+    operatorFacing: true,
+    operationsHubRecommended: false,
+    description: historicalReadDescription,
   });
 }
 
@@ -65,8 +87,8 @@ export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_opportunities", "/admin/business/opportunities?limit=25", "Business opportunities"),
   readRoute("business_service_matches", "/admin/business/service-matches?limit=25", "Business service matches"),
   readRoute("business_audit_packs", "/admin/business/audit-packs?limit=25", "Business audit packs"),
-  readRoute("business_action_drafts", "/admin/business/action-drafts?limit=25", "Historical Business review records"),
-  readRoute("business_approval_requests", "/admin/business/approval-requests?limit=25", "Historical Business approval-shaped records"),
+  historicalReadRoute("business_action_drafts", "/admin/business/action-drafts?limit=25", "Historical Business review records"),
+  historicalReadRoute("business_approval_requests", "/admin/business/approval-requests?limit=25", "Historical Business approval-shaped records"),
   readRoute("business_suppression_list", "/admin/business/suppression?limit=25", "Business suppression list"),
   readRoute("business_content_ideas", "/admin/business/content-ideas?limit=25", "Business content ideas"),
   readRoute("business_followups", "/admin/business/followups?limit=25", "Business followups"),

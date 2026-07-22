@@ -36,6 +36,7 @@ export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 const schemaMissingMessage = "Business Autopilot schema is missing or unavailable.";
 const routeFailedMessage = "Business Autopilot route failed before a safe response could be returned.";
+const historicalContentRedaction = "[historical deliverable-looking content redacted]";
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
   const value = Number(url.searchParams.get(key));
@@ -81,8 +82,13 @@ function blockedHistoricalRecordWrite(json: JsonResponse, mode: string) {
 }
 
 function markHistoricalBusinessRecord<T extends Record<string, unknown>>(record: T) {
+  const legacySubjectPresent = typeof record.subject === "string" && record.subject.length > 0;
+  const legacyBodyPresent = typeof record.body === "string" && record.body.length > 0;
   return {
     ...record,
+    ...(legacySubjectPresent ? { subject: historicalContentRedaction } : {}),
+    ...(legacyBodyPresent ? { body: historicalContentRedaction } : {}),
+    historicalContentRedacted: legacySubjectPresent || legacyBodyPresent,
     historicalOnly: true,
     reviewOnly: true,
     executable: false,
@@ -140,7 +146,7 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     if (request.method === "GET" && pathname === "/admin/business/action-drafts") {
       const drafts = await listBusinessActionDrafts(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
       const historicalDrafts = drafts.map(markHistoricalBusinessRecord);
-      return json({ mode: "business_action_drafts", historicalOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(historicalDrafts, "drafts") });
+      return json({ mode: "business_action_drafts", historicalOnly: true, historicalContentRedacted: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(historicalDrafts, "drafts") });
     }
     if (request.method === "GET" && pathname === "/admin/business/approval-requests") {
       const approvals = await listBusinessApprovalRequests(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);

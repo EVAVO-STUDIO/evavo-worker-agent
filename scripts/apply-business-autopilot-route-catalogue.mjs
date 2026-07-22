@@ -5,10 +5,45 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const targetPath = path.join(repoRoot, 'src/routes/routeCataloguePlanner.ts');
+const cataloguePath = path.join(repoRoot, 'src/routes/businessAutopilotRouteCatalogue.ts');
 
-if (!fs.existsSync(targetPath)) {
-  console.error('Missing src/routes/routeCataloguePlanner.ts');
-  process.exit(1);
+for (const requiredPath of [targetPath, cataloguePath]) {
+  if (!fs.existsSync(requiredPath)) {
+    console.error(`Missing ${path.relative(repoRoot, requiredPath)}`);
+    process.exit(1);
+  }
+}
+
+const catalogue = fs.readFileSync(cataloguePath, 'utf8');
+const retiredRouteIds = [
+  'business_action_draft_save',
+  'business_approval_request_save',
+];
+
+for (const routeId of retiredRouteIds) {
+  const advertisedPattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute|historicalReviewWriteRoute)\\(\\s*["']${routeId}["']`);
+  if (advertisedPattern.test(catalogue)) {
+    console.error(`Refusing to wire retired Business route ${routeId}.`);
+    process.exit(1);
+  }
+}
+
+const requiredCataloguePosture = [
+  'disabledBusinessAutopilotWriteRouteIds',
+  'historicalReadDescription',
+  'historicalReviewDescription',
+  'operationsHubRecommended: false',
+  'historicalReadRoute("business_action_drafts"',
+  'historicalReadRoute("business_approval_requests"',
+  'historicalReviewWriteRoute("business_action_draft_build"',
+  'does not create deliverable copy, approvals, external execution permission, network activity or third-party state changes',
+];
+
+for (const token of requiredCataloguePosture) {
+  if (!catalogue.includes(token)) {
+    console.error(`Refusing to wire Business catalogue without required safety posture: ${token}`);
+    process.exit(1);
+  }
 }
 
 let content = fs.readFileSync(targetPath, 'utf8');
@@ -35,4 +70,4 @@ if (!content.includes(spreadLine)) {
 }
 
 fs.writeFileSync(targetPath, content);
-console.log('Applied Business Autopilot route catalogue wiring.');
+console.log('Applied Business Autopilot route catalogue wiring after fail-closed posture validation.');

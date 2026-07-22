@@ -20,8 +20,17 @@ if (!db) errors.push("Missing src/db.ts");
 if (!settings) errors.push("Missing src/core/settings.ts");
 
 for (const required of [
+  '# Historical Cloudflare deployment identifier retained to avoid renaming the live Worker.',
+  '# The active public service identity is EVAVO Growth Research Worker.',
+  'name = "evavo-outbound-agent"',
   'PUBLIC_ENGINE_NAME = "EVAVO Growth Research Worker"',
   'CAP_CRAWL_PER_DAY = "60"',
+  'Historical schedules retained for internal-only maintenance.',
+  'They must not fetch',
+  'public sources, discover opportunities, generate drafts or perform external actions.',
+  'Historical D1 resource name retained for compatibility with the live database.',
+  'This identifier does not describe an enabled outbound capability.',
+  'database_name = "evavo_outbound_agent"',
   "No email-provider secrets are used or accepted by the active Worker source.",
   "active route and scheduled contracts prohibit",
   "AI execution",
@@ -133,8 +142,14 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run runtim
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "review-first-runtime-capability-configuration",
+  contract: "review-first-runtime-capability-configuration-v2-resource-compatibility",
   canonicalCredential: "ADMIN_TOKEN",
+  activePublicServiceIdentity: "EVAVO Growth Research Worker",
+  historicalWorkerResourceIdentifierRetained: true,
+  historicalDatabaseResourceIdentifierRetained: true,
+  historicalResourceNamesAuthoritativeForCapability: false,
+  scheduledWorkInternalOnly: true,
+  scheduledExternalResearchEnabled: false,
   legacyCredentialAliasesAdvertised: false,
   publicControlCredentialAdvertised: false,
   outboundEmailModulePresent: fs.existsSync(path.join(root, "src/email.ts")),

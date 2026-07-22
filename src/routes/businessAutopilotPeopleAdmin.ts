@@ -27,6 +27,41 @@ function confirmed(url: URL, body: any): boolean {
   return url.searchParams.get("confirm") === "1" || body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
 }
 
+function minimiseBusinessPersonResponse<T extends Record<string, unknown>>(person: T) {
+  const emailPresent = typeof person.email === "string" && person.email.trim().length > 0;
+  const phonePresent = typeof person.phone === "string" && person.phone.trim().length > 0;
+  const profileUrlPresent = typeof person.profileUrl === "string" && person.profileUrl.trim().length > 0;
+  const sourceUrlPresent = typeof person.sourceUrl === "string" && person.sourceUrl.trim().length > 0;
+
+  const {
+    email: _email,
+    phone: _phone,
+    profileUrl: _profileUrl,
+    sourceUrl: _sourceUrl,
+    metadata: _metadata,
+    ...businessContext
+  } = person;
+
+  return {
+    ...businessContext,
+    email: null,
+    phone: null,
+    profileUrl: null,
+    sourceUrl: null,
+    metadata: {},
+    contactDetailsRedacted: true,
+    metadataRedacted: true,
+    emailPresent,
+    phonePresent,
+    profileUrlPresent,
+    sourceUrlPresent,
+    internalReviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+  };
+}
+
 function blockedWrite(json: JsonResponse) {
   return json({
     ok: false,
@@ -62,14 +97,34 @@ export async function handleBusinessAutopilotPeopleAdmin(request: Request, env: 
   try {
     if (request.method === "GET" && pathname === "/admin/business/people") {
       const people = await listBusinessPeople(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("contactStatus") || undefined);
-      return json({ mode: "business_people", ...businessPeopleReadPayload(people) });
+      const redactedPeople = people.map(minimiseBusinessPersonResponse);
+      return json({
+        mode: "business_people",
+        contactDetailsRedacted: true,
+        metadataRedacted: true,
+        internalReviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessPeopleReadPayload(redactedPeople),
+      });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/people") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
       const person = await saveBusinessPerson(env, body.person || body);
-      return json({ mode: "business_person_saved", ...businessPersonWritePayload(person) });
+      const redactedPerson = minimiseBusinessPersonResponse(person);
+      return json({
+        mode: "business_person_saved",
+        contactDetailsRedacted: true,
+        metadataRedacted: true,
+        internalReviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessPersonWritePayload(redactedPerson),
+      });
     }
 
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });

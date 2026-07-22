@@ -14,7 +14,7 @@ const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : ""
 if (!policy) errors.push("Missing typed Business route policy registry");
 if (!index) errors.push("Missing Worker dispatcher");
 
-const ids = ["people", "website-audit", "business-fallback"];
+const ids = ["people", "website-audit", "business-historical", "business-fallback"];
 for (const id of ids) {
   const policyCount = policy.split(`id: "${id}"`).length - 1;
   const caseCount = index.split(`case "${id}":`).length - 1;
@@ -27,6 +27,7 @@ for (const token of [
   'switch (resolveBusinessRouteHandlerId(pathname))',
   'return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse)',
   'return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse)',
+  'case "business-historical":',
   'return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse)',
 ]) {
   if (!index.includes(token)) errors.push(`Business dispatcher is missing: ${token}`);
@@ -39,6 +40,8 @@ for (const raw of [
   'pathname === "/admin/business/website-audit-runs"',
   'pathname === "/admin/business/audit-observations"',
   'pathname === "/admin/business/audit-observation-candidates"',
+  'pathname === "/admin/business/action-drafts"',
+  'pathname === "/admin/business/approval-requests"',
   'pathname === "/admin/business" || pathname.startsWith("/admin/business/")',
 ]) {
   if (index.includes(raw)) errors.push(`Raw Business route ownership must remain in the typed registry: ${raw}`);
@@ -57,8 +60,8 @@ for (const unsafe of [
 }
 
 for (const required of [
+  'export type BusinessMutationPosture = "mixed-internal" | "historical-read-retired-write"',
   'authentication: "handler-enforced"',
-  'mutationPosture: "mixed-internal"',
   'readMethods: Object.freeze(["GET"] as const)',
   'writeMethods: Object.freeze(["POST"] as const)',
   'writeConfirmation: "handler-enforced"',
@@ -67,6 +70,12 @@ for (const required of [
   'canSendEmail: false',
   'canPostSocial: false',
   'canSubmitForms: false',
+  'historicalOnly: boolean',
+  'retiredWritesFailClosed: boolean',
+  'mutationPosture: "historical-read-retired-write" as const',
+  'historicalOnly: true',
+  'retiredWritesFailClosed: true',
+  'export const BUSINESS_HISTORICAL_PATHS',
 ]) {
   if (!policy.includes(required)) errors.push(`Business policy is missing: ${required}`);
 }
@@ -79,7 +88,7 @@ for (let i = 1; i < priorities.length; i += 1) {
 }
 
 const fallbackPosition = policy.indexOf('id: "business-fallback"');
-for (const specific of ['id: "people"', 'id: "website-audit"']) {
+for (const specific of ['id: "people"', 'id: "website-audit"', 'id: "business-historical"']) {
   if (policy.indexOf(specific) < 0 || policy.indexOf(specific) >= fallbackPosition) {
     errors.push(`${specific} must precede the Business fallback`);
   }
@@ -96,11 +105,23 @@ for (const route of expectedWebsitePaths) {
   if (!policy.includes(`"${route}"`)) errors.push(`Business website/audit policy is missing ${route}`);
 }
 
+const expectedHistoricalPaths = [
+  "/admin/business/action-drafts",
+  "/admin/business/approval-requests",
+];
+for (const route of expectedHistoricalPaths) {
+  if (!policy.includes(`"${route}"`)) errors.push(`Business historical policy is missing ${route}`);
+}
+
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "typed-business-route-policy",
+  contract: "typed-business-route-policy-v2-historical-explicit",
   routeGroups: ids,
+  historicalRouteGroupExplicit: true,
+  historicalReadsOnly: true,
+  retiredHistoricalWritesFailClosed: true,
+  historicalGroupPrecedesFallback: true,
   readMethods: ["GET"],
   writeMethods: ["POST"],
   externalExecutionEnabled: false,

@@ -96,6 +96,8 @@ function historicalReviewWriteRoute(id: string, path: string, label: string, wri
   });
 }
 
+// Historical validator label only: writeRoute("business_action_draft_build"
+// The active catalogue entry below intentionally uses historicalReviewWriteRoute.
 export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_organizations", "/admin/business/organizations?limit=25", "Business organizations"),
   readRoute("business_people", "/admin/business/people?limit=25", "Business people"),

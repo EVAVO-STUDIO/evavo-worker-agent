@@ -136,15 +136,15 @@ export function scoreBusinessOpportunity(input: BusinessOpportunityScoreInput): 
   const recommendedService = primaryService?.serviceKey || null;
   const recommendedAngle = primaryService
     ? `${primaryService.label}: ${primaryService.reason}`
-    : 'Review manually and collect stronger website evidence before preparing outreach.';
+    : 'Review manually and collect stronger website evidence before assigning a service recommendation.';
 
   const nextStep = priority === 'A'
-    ? 'Prepare an evidence-backed audit pack and draft-only outreach for operator review.'
+    ? 'Prepare an evidence-backed audit pack for internal operator review and record a manual disposition.'
     : priority === 'B'
-      ? 'Research more evidence, then decide whether to prepare an audit pack.'
+      ? 'Collect more evidence, then decide whether an internal audit pack is justified.'
       : priority === 'C'
-        ? 'Monitor or deprioritise until stronger need or contactability signals appear.'
-        : 'Reject or archive unless the operator has a strategic reason to keep it.';
+        ? 'Monitor or deprioritise until stronger need or evidence signals appear.'
+        : 'Reject or archive unless the operator records a strategic reason to retain it.';
 
   const reasoning = [
     `Fit score ${fitScore} based on industry, website presence, location and signal density.`,
@@ -152,6 +152,7 @@ export function scoreBusinessOpportunity(input: BusinessOpportunityScoreInput): 
     `Urgency score ${urgencyScore} from ${urgencyCount} urgency signal(s).`,
     `Evidence quality score ${evidenceQualityScore} from ${signals.length} signal(s).`,
     `Risk score ${riskScore} from ${input.riskFlags?.length || 0} risk flag(s).`,
+    'The recommended next step is internal review metadata only and does not authorise drafting, outreach or external action.',
   ];
 
   return {

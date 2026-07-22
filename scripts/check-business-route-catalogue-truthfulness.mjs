@@ -63,8 +63,8 @@ for (const disabledId of disabledRouteIds) {
   if (plannerCatalogue.includes(`id: "${disabledId}"`) || plannerCatalogue.includes(`id: '${disabledId}'`)) {
     errors.push(`Planner catalogue duplicates disabled Business route: ${disabledId}`);
   }
-  if (catalogueApplyScript.includes(disabledId)) {
-    errors.push(`Business catalogue apply script must not contain disabled route id: ${disabledId}`);
+  if (!catalogueApplyScript.includes(`'${disabledId}'`) && !catalogueApplyScript.includes(`"${disabledId}"`)) {
+    errors.push(`Business catalogue apply script must explicitly block retired route id: ${disabledId}`);
   }
 }
 
@@ -83,13 +83,18 @@ if (count(plannerCatalogue, authoritativeSpread) !== 1) {
 }
 
 for (const token of [
+  "const cataloguePath = path.join(repoRoot, 'src/routes/businessAutopilotRouteCatalogue.ts')",
+  "const retiredRouteIds = [",
+  "const requiredCataloguePosture = [",
+  "Refusing to wire retired Business route",
+  "Refusing to wire Business catalogue without required safety posture",
   'const importLine = \'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue";\'',
-  'const spreadLine = "  ...businessAutopilotRouteCatalogue,"',
+  'const spreadLine = \'  ...businessAutopilotRouteCatalogue,\'',
   "if (!content.includes(importLine))",
   "if (!content.includes(spreadLine))",
-  "Applied Business Autopilot route catalogue wiring.",
+  "Applied Business Autopilot route catalogue wiring after fail-closed posture validation.",
 ]) {
-  if (!catalogueApplyScript.includes(token)) errors.push(`Business catalogue apply script missing idempotency guard: ${token}`);
+  if (!catalogueApplyScript.includes(token)) errors.push(`Business catalogue apply script missing fail-closed guard: ${token}`);
 }
 
 for (const token of [
@@ -134,11 +139,13 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v5-historical-write-aware",
+  contract: "business-route-catalogue-truthfulness-v6-fail-closed-wiring",
   plannerUsesAuthoritativeBusinessCatalogue: true,
   plannerBusinessImportCountExpected: 1,
   plannerBusinessSpreadCountExpected: 1,
   catalogueApplyScriptIdempotent: true,
+  catalogueApplyScriptValidatesPostureBeforeWrite: true,
+  catalogueApplyScriptBlocksRetiredRouteIds: true,
   historicalReadsUseDedicatedCataloguePosture: true,
   historicalReadsRecommendedInOperationsHub: false,
   historicalReviewWriteUsesDedicatedCataloguePosture: true,

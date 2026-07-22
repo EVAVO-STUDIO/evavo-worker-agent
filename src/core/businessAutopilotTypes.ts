@@ -205,6 +205,9 @@ export function buildBusinessServiceMatch(input: BusinessServiceMatchInput) {
 }
 
 export function buildBusinessActionDraft(input: BusinessActionDraftInput) {
+  const requestedSubjectPresent = Boolean(clean(input.subject));
+  const requestedBodyPresent = Boolean(clean(input.body));
+
   return {
     id: `draft_${crypto.randomUUID()}`,
     organizationId: input.organizationId || null,
@@ -213,12 +216,15 @@ export function buildBusinessActionDraft(input: BusinessActionDraftInput) {
     auditPackId: input.auditPackId || null,
     draftType: 'crm_note' as BusinessActionDraftType,
     channel: 'internal',
-    subject: clean(input.subject) || 'Internal historical review record',
-    body: clean(input.body),
+    subject: 'Internal historical review record',
+    body: 'Internal historical review metadata only. No deliverable content is stored by this builder.',
     payload: {
       ...(input.payload ?? {}),
       requestedDraftType: input.draftType,
       requestedChannel: clean(input.channel),
+      requestedSubjectPresent,
+      requestedBodyPresent,
+      requestedDeliverableContentDiscarded: requestedSubjectPresent || requestedBodyPresent,
       historicalOnly: true,
       executable: false,
       deliverable: false,

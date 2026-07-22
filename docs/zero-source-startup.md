@@ -1,101 +1,94 @@
 # Zero-source startup contract
 
-The Opportunity Intelligence / Outbound Agent must be able to begin safely even when the operator has not supplied any manual opportunity sources.
+This document defines the safe starting posture when the operator has not supplied any opportunity-source list.
 
-This is not a special case. It is the default resilience model for a new installation, a reset environment, or a source list that has become stale, duplicate-heavy, or low-yield.
+The active EVAVO Growth Research Worker is manual-research-only. Zero-source startup is not an autonomous recovery mode, scheduled discovery mode, crawl queue or execution pipeline.
+
+## Authoritative posture
+
+- Scheduled external research is disabled.
+- Cron must not fetch public pages, expand sources or discover opportunities.
+- Public-source research requires `ADMIN_TOKEN` authentication.
+- Every network-capable action requires an explicit confirmed POST request.
+- Each research action is bounded by route-specific request, byte, time and result limits.
+- Network access is GET-only against validated public targets.
+- Results are saved as internal review metadata only.
+- AI drafting, email, social posting, form submission, browser automation and external mutation are disabled.
+- Automatic source promotion and automatic opportunity execution are disabled.
+- Automatic retries and alternate executors are disabled.
 
 ## Safe startup order
 
-1. **Bootstrap durable source-expansion seeds**
-   - Route: `POST /admin/opportunities/sources/expansion/bootstrap`
-   - Writes local seed memory only.
-   - No network calls.
-   - No AI calls.
-   - No email or outreach.
-   - Requires explicit confirmation.
+### 1. Review the route catalogue
 
-2. **Run a tiny bounded source-expansion scan**
-   - Route: `POST /admin/opportunities/sources/expansion/scan`
-   - The scan path also calls seed bootstrap before selecting due seeds, so a scheduled or manual scan can recover from empty seed memory.
-   - Fetches only capped public seed pages.
-   - Stores candidate-source memory only.
-   - Does not save live opportunity sources.
+Read the authenticated planner route catalogue and identify routes explicitly classified as bounded manual research or confirmed internal metadata writes.
 
-3. **Use fallback guidance from the scan result**
-   - Manual scan responses include a `fallback` object with:
-     - `state`
-     - `nextMethod`
-     - `reason`
-     - `steps`
-     - `guardrail`
-   - Scheduled source-expansion ticks log equivalent fallback summaries into events.
+Do not infer capability from a historical route name, schema table, stored setting or old event record.
 
-4. **Rotate discovery method before increasing depth**
-   - If pages are thin: try sitemap/robots or public-link graph discovery.
-   - If links do not score: try query hints or filter review.
-   - If results are duplicates: review candidate/source-origin state before spending more budget.
-   - If fetches fail: review source health or cooldowns before retrying.
+### 2. Create or review seed metadata
 
-5. **Use query hints when memory is exhausted**
-   - Route: `POST /admin/opportunities/sources/expansion/query-hints/generate`
-   - Generates local search-pattern memory only.
-   - Does not search the web automatically.
-   - Operators can open searches manually, screen public result URLs, and resolve selected URLs.
+Seed and query-hint records may be created as confirmed internal D1 metadata only.
 
-6. **Resolve human-reviewed URLs into candidate memory**
-   - Route: `POST /admin/opportunities/sources/expansion/query-hints/resolve`
-   - Requires confirmation.
-   - Accepts capped, human-reviewed public URLs.
-   - Scores, filters, and dedupes into `source_expansion_candidates` only.
-   - Does not save live opportunity sources.
+This step:
 
-7. **Promote only through review gates**
-   - Candidate-source promotion remains separate and confirm-gated.
-   - Source-health judgement should be checked before spending more budget.
-   - Live opportunity-source creation must preserve origin.
+- makes no network request
+- calls no AI service
+- generates no draft
+- creates no external state change
+- grants no permission for a later action
 
-## Fallback states
+### 3. Select one manual research action
 
-The system should treat the following scan outcomes as structured guidance rather than failure:
+The operator may choose one advertised route that is explicitly classified as bounded manual public-source research.
 
-- `no_due_seeds`
-  - Next: bootstrap or rotate strategy.
-  - Guardrail: do not raise caps first.
+Before the request runs, verify:
 
-- `all_fetches_failed`
-  - Next: review source health or try sitemap discovery.
-  - Guardrail: do not keep retrying failing seeds without cooldown/health review.
+1. shared authentication succeeded
+2. explicit confirmation is present
+3. the route permits network access
+4. the target is public and passes SSRF and redirect validation
+5. GET-only behaviour is enforced
+6. request, byte, time and result limits are active
+7. persistence is review-only
+8. no fallback executor or automatic retry exists
 
-- `thin_seed_pages`
-  - Next: sitemap/robots or public-link graph discovery.
-  - Guardrail: rotate method before increasing depth.
+### 4. Save candidate evidence for review
 
-- `links_without_candidates`
-  - Next: query hints or filter/scoring review.
-  - Guardrail: avoid weak manual saves.
+A successful manual research action may save only internal candidate, evidence, source-health or review metadata.
 
-- `known_or_duplicate_candidates`
-  - Next: candidate review or origin rotation.
-  - Guardrail: do not treat duplicate rediscovery as new coverage.
+It must not:
 
-- `fresh_candidates_found`
-  - Next: candidate review.
-  - Guardrail: live source save still requires explicit confirmation.
+- create a deliverable message
+- create an executable approval
+- promote a candidate automatically
+- run opportunity discovery automatically
+- schedule another network action
+- contact or mutate a third party
 
-## Policy boundary
+### 5. Review manually
 
-Zero-source startup must never become uncontrolled scraping.
+The operator reviews evidence, duplicate state, source origin, risk flags and confidence before recording a separate confirmed internal disposition.
 
-The allowed behaviour is:
+A review decision remains internal metadata. It never authorises delivery or autonomous follow-on work.
 
-- public-source-only discovery
-- capped fetches
-- candidate-memory-first storage
-- origin preservation
-- no private/authenticated areas
-- no AI by default
-- no email by default
-- no automatic live source promotion
-- explicit confirmation before writes that promote sources or run networked scans
+## Safe outcomes
 
-The goal is for the agent to keep moving intelligently from zero without becoming noisy, unsafe, or opaque.
+A bounded manual action may report states such as:
+
+- no suitable public target selected
+- public target rejected by validation
+- request limit reached
+- fetch failed without retry
+- no useful evidence found
+- duplicate candidate found
+- new review candidate saved
+
+These are review outcomes, not instructions for automatic continuation.
+
+## Fail-closed rule
+
+When authentication, confirmation, public-target validation, bounds, D1 safety or route classification cannot be established, the action must stop without network access or fallback behaviour.
+
+## Current goal
+
+The goal is to help an operator move from zero supplied sources to a small, evidence-backed internal review set without scheduled research, autonomous crawling, drafting, delivery or external execution.

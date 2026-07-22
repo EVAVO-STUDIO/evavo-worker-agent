@@ -25,10 +25,31 @@ const required = [
   "Historical labels and schema families are retained only for data compatibility.",
   "They do not describe enabled drafting, approvals-to-execution, campaigns or external delivery.",
   "The authoritative model is research-memory-first, metadata-first, review-first and non-executing.",
+  "The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.",
 ];
 
 for (const token of required) {
   if (!readme.includes(token)) errors.push(`README missing truthful top-level posture: ${token}`);
+}
+
+const requiredFocusedChecks = [
+  "npm run safety:gates:check",
+  "npm run docs:operating-posture:check",
+  "npm run docs:readme-truthfulness:check",
+  "npm run worker:package-identity:check",
+  "npm run business:route-catalogue-truthfulness:check",
+  "npm run business:draft-runtime-safety:check",
+  "npm run business:historical-type-isolation:check",
+  "npm run business:review-record-storage-isolation:check",
+  "npm run business:ci-parity:check",
+  "npm run planner:catalogue-truthfulness:check",
+  "npm run typecheck",
+];
+
+for (const command of requiredFocusedChecks) {
+  if (!readme.includes(command)) errors.push(`README focused validation list is missing: ${command}`);
+  const scriptName = command.replace("npm run ", "");
+  if (!packageJson.scripts?.[scriptName]) errors.push(`README advertises missing package script: ${scriptName}`);
 }
 
 const forbidden = [
@@ -54,11 +75,14 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run docs:r
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "readme-top-level-truthfulness",
+  contract: "readme-top-level-truthfulness-v2-focused-validation",
   outboundExecutionDocumentedAsDisabled: true,
   historicalReviewRecordsDocumentedAsNonAuthoritative: true,
   approvalToExecutionDocumentedAsDisabled: true,
   authoritativeModelDocumentedAsNonExecuting: true,
+  authoritativeCompleteGateDocumented: true,
+  focusedSafetyChecksDocumented: true,
+  focusedCommandsBackedByPackageScripts: true,
   errors,
 }, null, 2));
 

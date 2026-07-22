@@ -21,6 +21,7 @@ const generalParity = read("scripts/check-worker-contract-workflow.mjs");
 const routeCatalogueTruthfulness = read("scripts/check-business-route-catalogue-truthfulness.mjs");
 const approvalIsolation = read("scripts/check-business-approval-isolation.mjs");
 const reviewRecordIsolation = read("scripts/check-business-review-record-storage-isolation.mjs");
+const opportunityReviewSafety = read("scripts/check-business-opportunity-review-safety.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -30,6 +31,7 @@ const requiredBusinessContracts = {
   "business:draft-runtime-safety:check": "node scripts/check-business-draft-runtime-safety.mjs",
   "business:execution-level-truthfulness:check": "node scripts/check-business-execution-level-truthfulness.mjs",
   "business:historical-record-posture:check": "node scripts/check-business-historical-record-posture.mjs",
+  "business:opportunity-review-safety:check": "node scripts/check-business-opportunity-review-safety.mjs",
   "business:record-builder-safety:check": "node scripts/check-business-record-builder-safety.mjs",
   "business:review-record-storage-isolation:check": "node scripts/check-business-review-record-storage-isolation.mjs",
   "business:validation-workflow-safety:check": "node scripts/check-business-validation-workflow-safety.mjs",
@@ -114,6 +116,20 @@ for (const token of [
   }
 }
 
+for (const token of [
+  'contract: "business-opportunity-review-safety-v1-internal-only"',
+  'opportunityRecommendationsInternalOnly: true',
+  'auditPackStatus: "needs_review"',
+  'auditPacksDeliverable: false',
+  'approvalCanEnableExternalAction: false',
+  'outreachRecommendationEnabled: false',
+  'externalExecutionEnabled: false',
+]) {
+  if (!opportunityReviewSafety.includes(token)) {
+    errors.push(`Business opportunity-review safety checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -125,7 +141,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v5-review-record-storage-isolation",
+  contract: "business-worker-ci-parity-v6-opportunity-review-safety",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -136,6 +152,7 @@ console.log(JSON.stringify({
   businessDraftRuntimeSafetyRequired: true,
   businessExecutionLevelTruthfulnessRequired: true,
   businessHistoricalRecordPostureRequired: true,
+  businessOpportunityReviewSafetyRequired: true,
   businessRecordBuilderSafetyRequired: true,
   businessValidationWorkflowSafetyRequired: true,
   businessRouteCatalogueTruthfulnessRequired: true,

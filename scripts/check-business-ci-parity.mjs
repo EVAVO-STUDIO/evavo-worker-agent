@@ -23,6 +23,7 @@ const approvalIsolation = read("scripts/check-business-approval-isolation.mjs");
 const reviewRecordIsolation = read("scripts/check-business-review-record-storage-isolation.mjs");
 const opportunityReviewSafety = read("scripts/check-business-opportunity-review-safety.mjs");
 const peopleResponseMinimisation = read("scripts/check-business-people-response-minimisation.mjs");
+const internalReadMinimisation = read("scripts/check-business-internal-read-minimisation.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -32,6 +33,7 @@ const requiredBusinessContracts = {
   "business:draft-runtime-safety:check": "node scripts/check-business-draft-runtime-safety.mjs",
   "business:execution-level-truthfulness:check": "node scripts/check-business-execution-level-truthfulness.mjs",
   "business:historical-record-posture:check": "node scripts/check-business-historical-record-posture.mjs",
+  "business:internal-read-minimisation:check": "node scripts/check-business-internal-read-minimisation.mjs",
   "business:opportunity-review-safety:check": "node scripts/check-business-opportunity-review-safety.mjs",
   "business:people-response-minimisation:check": "node scripts/check-business-people-response-minimisation.mjs",
   "business:record-builder-safety:check": "node scripts/check-business-record-builder-safety.mjs",
@@ -78,10 +80,12 @@ for (const token of [
 }
 
 for (const token of [
-  'contract: "business-route-catalogue-truthfulness-v3-idempotent-retirement-check"',
+  'contract: "business-route-catalogue-truthfulness-v5-historical-write-aware"',
   'plannerBusinessImportCountExpected: 1',
   'plannerBusinessSpreadCountExpected: 1',
   'catalogueApplyScriptIdempotent: true',
+  'historicalReviewWriteUsesDedicatedCataloguePosture: true',
+  'historicalReviewWriteRecommendedInOperationsHub: false',
   'disabledDirectDraftWriteAdvertised: false',
   'disabledApprovalWriteAdvertised: false',
   'retiredWriteEndpointsExpectedStatus: 410',
@@ -151,6 +155,22 @@ for (const token of [
   }
 }
 
+for (const token of [
+  'contract: "business-internal-read-minimisation-v1"',
+  'contentIdeaMetadataExposed: false',
+  'contentIdeaSourceIdsExposed: false',
+  'followupNotesExposed: false',
+  'followupPersonLinksExposed: false',
+  'followupDraftLinksExposed: false',
+  'learningNotesExposed: false',
+  'learningMetadataExposed: false',
+  'externalExecutionEnabled: false',
+]) {
+  if (!internalReadMinimisation.includes(token)) {
+    errors.push(`Business internal-read minimisation checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -162,7 +182,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v7-people-minimisation",
+  contract: "business-worker-ci-parity-v8-internal-read-minimisation",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -173,6 +193,7 @@ console.log(JSON.stringify({
   businessDraftRuntimeSafetyRequired: true,
   businessExecutionLevelTruthfulnessRequired: true,
   businessHistoricalRecordPostureRequired: true,
+  businessInternalReadMinimisationRequired: true,
   businessOpportunityReviewSafetyRequired: true,
   businessPeopleResponseMinimisationRequired: true,
   businessRecordBuilderSafetyRequired: true,

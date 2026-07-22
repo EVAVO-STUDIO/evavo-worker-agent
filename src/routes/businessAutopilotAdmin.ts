@@ -11,6 +11,11 @@ import {
   projectHistoricalBusinessDraft,
 } from "../core/businessHistoricalReadProjection";
 import {
+  projectInternalContentIdea,
+  projectInternalFollowup,
+  projectInternalLearningRecord,
+} from "../core/businessInternalReadProjection";
+import {
   businessReadPayload,
   businessWritePayload,
   listBusinessActionDrafts,
@@ -163,17 +168,46 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     }
     if (request.method === "GET" && pathname === "/admin/business/content-ideas") {
       const ideas = await listBusinessContentIdeas(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      const internalIdeas = ideas.map(markBusinessInternalPlanningRecord);
-      return json({ mode: "business_content_ideas", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(internalIdeas, "contentIdeas") });
+      const internalIdeas = ideas.map(projectInternalContentIdea);
+      return json({
+        mode: "business_content_ideas",
+        contract: "business_content_idea_reads_v2_minimized",
+        reviewOnly: true,
+        detailsRedacted: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessReadPayload(internalIdeas, "contentIdeas"),
+      });
     }
     if (request.method === "GET" && pathname === "/admin/business/followups") {
       const followups = await listBusinessFollowups(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      const internalFollowups = followups.map(markBusinessInternalPlanningRecord);
-      return json({ mode: "business_followups", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessReadPayload(internalFollowups, "followups") });
+      const internalFollowups = followups.map(projectInternalFollowup);
+      return json({
+        mode: "business_followups",
+        contract: "business_followup_reads_v2_minimized",
+        reviewOnly: true,
+        detailsRedacted: true,
+        identityLinksRedacted: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessReadPayload(internalFollowups, "followups"),
+      });
     }
     if (request.method === "GET" && pathname === "/admin/business/learning") {
       const learning = await listBusinessLearningEvents(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("entityType") || undefined);
-      return json({ mode: "business_learning_events", ...businessReadPayload(learning, "learningEvents") });
+      const internalLearning = learning.map(projectInternalLearningRecord);
+      return json({
+        mode: "business_learning_events",
+        contract: "business_learning_reads_v2_minimized",
+        reviewOnly: true,
+        detailsRedacted: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessReadPayload(internalLearning, "learningEvents"),
+      });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/organizations") {

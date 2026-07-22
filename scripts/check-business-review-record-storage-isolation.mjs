@@ -56,7 +56,7 @@ for (const token of [
 
 for (const token of [
   "const built = buildBusinessDraftOnlyAction(body.draftRequest || body)",
-  "const draft = await saveBusinessActionDraft(env, built.draft)",
+  "const reviewRecord = await saveBusinessActionDraft(env, built.draft)",
   'mode: "business_historical_review_record_saved"',
   "historicalOnly: true",
   "deliverable: false",
@@ -66,7 +66,17 @@ for (const token of [
 }
 
 for (const token of [
-  'writeRoute("business_action_draft_build"',
+  'const historicalContentRedaction = "[historical deliverable-looking content redacted]"',
+  'subject: historicalContentRedaction',
+  'body: historicalContentRedaction',
+  "historicalContentRedacted: legacySubjectPresent || legacyBodyPresent",
+  "historicalContentRedacted: true",
+]) {
+  if (!route.includes(token)) errors.push(`${routePath} missing historical content redaction posture: ${token}`);
+}
+
+for (const token of [
+  'historicalReviewWriteRoute("business_action_draft_build"',
   '"Save internal historical review record"',
   "Confirm-saves one internal historical review record only.",
 ]) {
@@ -111,10 +121,12 @@ if (!String(scripts["check:local"] || "").includes("npm run business:review-reco
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-review-record-storage-isolation-v1",
+  contract: "business-review-record-storage-isolation-v2-redacted-reads",
   storageDefinitionAllowed: true,
   guardedCompatibilityRouteAllowed: true,
   otherRuntimeImportsAllowed: false,
+  historicalDeliverableContentReturned: false,
+  historicalContentRedactionRequired: true,
   deliverableDraftGenerationEnabled: false,
   approvalToExecutionEnabled: false,
   externalExecutionEnabled: false,

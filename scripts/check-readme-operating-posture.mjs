@@ -8,6 +8,8 @@ const errors = [];
 
 const documents = {
   readme: "README.md",
+  zeroSourceStartup: "docs/zero-source-startup.md",
+  zeroSourceCatalogue: "docs/zero-source-route-catalogue.md",
   architecture: "docs/growth-autonomous-discovery-architecture.md",
   runbook: "docs/growth-zero-source-research-runbook.md",
   sourcePolicy: "docs/growth-source-discovery-safety-policy.md",
@@ -50,6 +52,28 @@ requireTokens("README", content.readme, [
   "Scheduled work is internal-only",
   "Scheduled work cannot fetch public sources, expand source candidates, discover opportunities, generate drafts or perform external actions.",
   "Public-source research is manual-only, authenticated, explicitly confirmed, bounded and review-only.",
+]);
+
+requireTokens("Zero-source startup", content.zeroSourceStartup, [
+  "The active EVAVO Growth Research Worker is manual-research-only.",
+  "Scheduled external research is disabled.",
+  "Cron must not fetch public pages, expand sources or discover opportunities.",
+  "Every network-capable action requires an explicit confirmed POST request.",
+  "Results are saved as internal review metadata only.",
+  "Automatic retries and alternate executors are disabled.",
+  "do not start research automatically",
+]);
+
+requireTokens("Zero-source route catalogue", content.zeroSourceCatalogue, [
+  "Zero-source operation is manual-only.",
+  "scheduledExecutionEnabled: false",
+  "scheduledExternalResearchEnabled: false",
+  "manualResearchRequiresAuthentication: true",
+  "manualResearchRequiresConfirmation: true",
+  "manualResearchIsBounded: true",
+  "manualResearchSavesReviewItemsOnly: true",
+  "Historical fields such as `engineEnabled`, source-expansion settings or old run statuses are compatibility data only.",
+  "Disabled compatibility routes must fail closed.",
 ]);
 
 requireTokens("Discovery architecture", content.architecture, [
@@ -171,6 +195,22 @@ forbidTokens("README", content.readme, [
   "draft generation is enabled",
 ]);
 
+forbidTokens("Zero-source startup", content.zeroSourceStartup, [
+  "a scheduled or manual scan can recover",
+  "Scheduled source-expansion ticks",
+  "The goal is for the agent to keep moving intelligently from zero",
+  "no email by default",
+]);
+
+forbidTokens("Zero-source route catalogue", content.zeroSourceCatalogue, [
+  "engineEnabled: true",
+  "sourceExpansionEnabled: true",
+  "Run opportunity discovery only after source memory exists",
+  "POST /admin/opportunities/run-due",
+  "no email or outreach by default",
+  "the actual write/network steps remain the existing confirm-gated bootstrap, scan",
+]);
+
 forbidTokens("Discovery architecture", content.architecture, [
   "Autonomous research, supervised action.",
   "The system may autonomously:",
@@ -271,6 +311,8 @@ console.log(JSON.stringify({
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "repository-operating-posture",
   documentsChecked: Object.values(documents),
+  zeroSourceStartupDocumentedAsManualOnly: true,
+  zeroSourceCatalogueDocumentedAsManualOnly: true,
   scheduledExternalResearchDocumentedAsDisabled: true,
   manualResearchAuthenticationDocumented: true,
   manualResearchConfirmationDocumented: true,

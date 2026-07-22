@@ -4,12 +4,34 @@ import {
   businessAutopilotReadSafety,
 } from './businessAutopilotSafety';
 
-// Historical values remain in these unions so existing D1 rows can be decoded.
-// Builders in the active Worker must not use approval or delivery-shaped values as authority.
-export type BusinessStatus = 'new' | 'active' | 'needs_review' | 'approved' | 'rejected' | 'blocked' | 'suppressed' | 'archived';
+// Active builders and routes may use only these internal, non-delivery statuses.
+export type BusinessActiveStatus = 'new' | 'active' | 'needs_review' | 'rejected' | 'blocked' | 'suppressed' | 'archived';
+export type BusinessActiveApprovalStatus = 'needs_review' | 'rejected' | 'expired';
+export type BusinessActiveComplianceStatus =
+  | 'not_required_internal'
+  | 'requires_consent'
+  | 'suppressed'
+  | 'unsubscribe_required'
+  | 'sender_identity_missing'
+  | 'approval_missing'
+  | 'blocked';
+
+// Historical values remain decode-only so existing D1 rows and old clients can be read.
+// They are not valid authority for active builders, delivery, approval-to-execution or external action.
+export type BusinessHistoricalStatus = BusinessActiveStatus | 'approved';
+export type BusinessHistoricalApprovalStatus = BusinessActiveApprovalStatus | 'approved';
+export type BusinessHistoricalComplianceStatus =
+  | BusinessActiveComplianceStatus
+  | 'draft_only'
+  | 'consent_verified'
+  | 'approved_to_send';
+
+// Compatibility aliases intentionally include historical decode values. New builder code must use
+// the BusinessActive* types above for emitted status fields.
+export type BusinessStatus = BusinessHistoricalStatus;
+export type BusinessApprovalStatus = BusinessHistoricalApprovalStatus;
+export type BusinessComplianceStatus = BusinessHistoricalComplianceStatus;
 export type BusinessPriority = 'A' | 'B' | 'C' | 'D';
-export type BusinessApprovalStatus = 'needs_review' | 'approved' | 'rejected' | 'expired';
-export type BusinessComplianceStatus = 'not_required_internal' | 'draft_only' | 'requires_consent' | 'consent_verified' | 'suppressed' | 'unsubscribe_required' | 'sender_identity_missing' | 'approval_missing' | 'approved_to_send' | 'blocked';
 export type BusinessActionDraftType = 'email' | 'linkedin_post' | 'linkedin_comment' | 'linkedin_dm' | 'contact_form_message' | 'proposal_intro' | 'audit_summary' | 'follow_up' | 'crm_note' | 'calendar_task' | 'internal_report';
 
 export type BusinessOrganizationInput = {
@@ -135,7 +157,7 @@ export function buildBusinessOrganization(input: BusinessOrganizationInput) {
     location: clean(input.location),
     sourceType: clean(input.sourceType) || 'operator',
     sourceUrl: clean(input.sourceUrl),
-    status: 'new' as BusinessStatus,
+    status: 'new' as BusinessActiveStatus,
     fitScore: 0,
     priorityScore: 0,
     riskScore: 0,
@@ -169,7 +191,7 @@ export function buildBusinessOpportunity(input: BusinessOpportunityInput) {
     id: `opp_${crypto.randomUUID()}`,
     organizationId: input.organizationId || null,
     opportunityType: clean(input.opportunityType) || 'general',
-    status: 'new' as BusinessStatus,
+    status: 'new' as BusinessActiveStatus,
     priority,
     fitScore: score(input.fitScore),
     needScore: score(input.needScore),
@@ -237,9 +259,9 @@ export function buildBusinessActionDraft(input: BusinessActionDraftInput) {
       'non_deliverable',
       'external_use_not_allowed_by_this_record',
     ])),
-    complianceStatus: 'not_required_internal' as BusinessComplianceStatus,
-    approvalStatus: 'needs_review' as BusinessApprovalStatus,
-    status: 'needs_review' as BusinessStatus,
+    complianceStatus: 'not_required_internal' as BusinessActiveComplianceStatus,
+    approvalStatus: 'needs_review' as BusinessActiveApprovalStatus,
+    status: 'needs_review' as BusinessActiveStatus,
     metadata: historicalReviewMetadata(input.metadata),
     safety: businessAutopilotMetadataWriteSafety(),
     blockedActions: [...BUSINESS_AUTOPILOT_BLOCKED_EXTERNAL_ACTIONS],
@@ -251,7 +273,7 @@ export function buildBusinessApprovalRequest(input: BusinessApprovalRequestInput
     id: `approval_${crypto.randomUUID()}`,
     actionDraftId: input.actionDraftId || null,
     requestType: clean(input.requestType) || 'historical_review',
-    status: 'needs_review' as BusinessApprovalStatus,
+    status: 'needs_review' as BusinessActiveApprovalStatus,
     reviewChecklist: input.reviewChecklist ?? [],
     riskFlags: Array.from(new Set([
       ...(input.riskFlags ?? []),

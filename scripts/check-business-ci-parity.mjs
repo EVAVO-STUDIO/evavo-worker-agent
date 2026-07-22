@@ -18,6 +18,7 @@ function read(relativePath) {
 const workflow = read(".github/workflows/worker-contract.yml");
 const packageJson = JSON.parse(read("package.json") || "{}");
 const generalParity = read("scripts/check-worker-contract-workflow.mjs");
+const routePolicy = read("scripts/check-business-route-policy.mjs");
 const routeCatalogueTruthfulness = read("scripts/check-business-route-catalogue-truthfulness.mjs");
 const approvalIsolation = read("scripts/check-business-approval-isolation.mjs");
 const reviewRecordIsolation = read("scripts/check-business-review-record-storage-isolation.mjs");
@@ -82,6 +83,19 @@ for (const token of [
   'historicalStatusesExecutable: false',
 ]) {
   if (!generalParity.includes(token)) errors.push(`General Worker CI parity checker is missing: ${token}`);
+}
+
+for (const token of [
+  'contract: "typed-business-route-policy-v2-historical-explicit"',
+  'historicalRouteGroupExplicit: true',
+  'historicalReadsOnly: true',
+  'retiredHistoricalWritesFailClosed: true',
+  'historicalGroupPrecedesFallback: true',
+  'externalExecutionEnabled: false',
+]) {
+  if (!routePolicy.includes(token)) {
+    errors.push(`Business route-policy checker is missing CI-required posture: ${token}`);
+  }
 }
 
 for (const token of [
@@ -187,7 +201,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v9-complete-business-safety-set",
+  contract: "business-worker-ci-parity-v10-explicit-historical-route-policy",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -202,6 +216,10 @@ console.log(JSON.stringify({
   businessHistoricalReadMinimisationRequired: true,
   businessHistoricalRecordPostureRequired: true,
   businessHistoricalTypeIsolationRequired: true,
+  businessHistoricalRoutePolicyRequired: true,
+  historicalRouteGroupExplicit: true,
+  historicalGroupPrecedesFallback: true,
+  retiredHistoricalWritesFailClosed: true,
   businessInternalPlanningSafetyRequired: true,
   businessInternalReadMinimisationRequired: true,
   businessOpportunityReviewSafetyRequired: true,

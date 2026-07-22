@@ -2,6 +2,13 @@
   "name": "evavo-outbound-agent",
   "private": true,
   "version": "1.0.0",
+  "description": "EVAVO Growth Research Worker. Historical npm package identifier retained for lockfile and deployment compatibility.",
+  "evavoServiceIdentity": {
+    "activeName": "EVAVO Growth Research Worker",
+    "historicalPackageIdentifier": "evavo-outbound-agent",
+    "historicalIdentifierAuthoritative": false,
+    "outboundExecutionEnabled": false
+  },
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",

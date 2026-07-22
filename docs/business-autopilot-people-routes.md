@@ -4,27 +4,28 @@ This document records the Worker-side Business Autopilot people metadata route l
 
 ## Purpose
 
-Business people records provide internal contact-context metadata for the agency intelligence flow:
+Business people records provide internal business-context metadata for review:
 
 ```text
 organization
-→ person
+→ person identity and role
 → allowed-use review
-→ contactability check
+→ contactability classification
 → signal / opportunity context
-→ draft-only action
-→ approval request
+→ manual internal review
 ```
 
 These routes are metadata-only. They do not enrich contacts, scrape profiles, send email, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.
 
-## Table
+## Storage and response boundary
+
+The durable compatibility table remains:
 
 ```text
 business_people
 ```
 
-Important fields:
+Stored fields may include:
 
 ```text
 organization_id
@@ -40,6 +41,30 @@ contact_status
 confidence_score
 metadata_json
 ```
+
+Storage does not grant permission to contact, enrich or act on a person.
+
+Worker HTTP responses apply data minimisation. Raw contact details and arbitrary metadata are not returned by the people routes. Both read and confirmed-write responses set:
+
+```text
+email: null
+phone: null
+profileUrl: null
+sourceUrl: null
+metadata: {}
+contactDetailsRedacted: true
+metadataRedacted: true
+emailPresent: boolean
+phonePresent: boolean
+profileUrlPresent: boolean
+sourceUrlPresent: boolean
+internalReviewOnly: true
+executable: false
+deliverable: false
+authoritativeForExecution: false
+```
+
+Presence flags indicate only whether a value exists in storage. They do not reveal the value and do not authorise outreach.
 
 ## Core files
 
@@ -73,6 +98,8 @@ callsNetwork: false
 canSendEmail: false
 canPostSocial: false
 canSubmitForms: false
+contactDetailsRedacted: true
+metadataRedacted: true
 ```
 
 ## Confirm metadata-write route
@@ -89,6 +116,8 @@ business_person_save
 
 Unconfirmed writes must return `confirm_required`.
 
+A confirmed write stores internal metadata only. Its response is also redacted and must not echo raw contact details or arbitrary metadata.
+
 Confirm route safety:
 
 ```text
@@ -104,6 +133,8 @@ canSubmitForms: false
 canExecuteBrowserActions: false
 canBuyAds: false
 canMutateExternalSystems: false
+contactDetailsRedacted: true
+metadataRedacted: true
 ```
 
 ## Validation
@@ -113,6 +144,8 @@ Run from the Worker repo:
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
 git pull
+npm run business:people-response-minimisation:check
+npm run business:people:docs:check
 npm run business:autopilot:check
 npm run business:route-contract:print
 npm run business:autopilot:readonly:print

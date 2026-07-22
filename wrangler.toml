@@ -1,3 +1,5 @@
+# Historical Cloudflare deployment identifier retained to avoid renaming the live Worker.
+# The active public service identity is EVAVO Growth Research Worker.
 name = "evavo-outbound-agent"
 main = "src/index.ts"
 compatibility_date = "2026-02-27"
@@ -12,7 +14,10 @@ preview_urls = false
 # CRON SCHEDULE
 #################################################
 
-# Runs hourly plus once daily.
+# Historical schedules retained for internal-only maintenance.
+# Scheduled handlers may synchronise defensive settings, learn from existing
+# D1 review metadata and record internal audit events only. They must not fetch
+# public sources, discover opportunities, generate drafts or perform external actions.
 # Times are UTC.
 # 02:15 UTC is approximately 1:15pm Melbourne during AEDT.
 triggers = { crons = ["0 * * * *", "15 2 * * *"] }
@@ -23,6 +28,8 @@ triggers = { crons = ["0 * * * *", "15 2 * * *"] }
 
 [[d1_databases]]
 binding = "DB"
+# Historical D1 resource name retained for compatibility with the live database.
+# This identifier does not describe an enabled outbound capability.
 database_name = "evavo_outbound_agent"
 database_id = "45de1891-75df-44ae-9b7e-9a17f139c426"
 

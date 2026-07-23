@@ -25,6 +25,7 @@ const reviewRecordIsolation = read("scripts/check-business-review-record-storage
 const opportunityReviewSafety = read("scripts/check-business-opportunity-review-safety.mjs");
 const peopleResponseMinimisation = read("scripts/check-business-people-response-minimisation.mjs");
 const internalReadMinimisation = read("scripts/check-business-internal-read-minimisation.mjs");
+const learningEventSafety = read("scripts/check-business-learning-event-safety.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -40,6 +41,7 @@ const requiredBusinessContracts = {
   "business:historical-type-isolation:check": "node scripts/check-business-historical-type-isolation.mjs",
   "business:internal-planning-safety:check": "node scripts/check-business-internal-planning-safety.mjs",
   "business:internal-read-minimisation:check": "node scripts/check-business-internal-read-minimisation.mjs",
+  "business:learning-event-safety:check": "node scripts/check-business-learning-event-safety.mjs",
   "business:opportunity-review-safety:check": "node scripts/check-business-opportunity-review-safety.mjs",
   "business:people-response-minimisation:check": "node scripts/check-business-people-response-minimisation.mjs",
   "business:record-builder-safety:check": "node scripts/check-business-record-builder-safety.mjs",
@@ -99,10 +101,12 @@ for (const token of [
 }
 
 for (const token of [
-  'contract: "business-route-catalogue-truthfulness-v5-historical-write-aware"',
+  'contract: "business-route-catalogue-truthfulness-v6-fail-closed-wiring"',
   'plannerBusinessImportCountExpected: 1',
   'plannerBusinessSpreadCountExpected: 1',
   'catalogueApplyScriptIdempotent: true',
+  'catalogueApplyScriptValidatesPostureBeforeWrite: true',
+  'catalogueApplyScriptBlocksRetiredRouteIds: true',
   'historicalReviewWriteUsesDedicatedCataloguePosture: true',
   'historicalReviewWriteRecommendedInOperationsHub: false',
   'disabledDirectDraftWriteAdvertised: false',
@@ -190,6 +194,22 @@ for (const token of [
   }
 }
 
+for (const token of [
+  "contract: 'business-learning-event-safety-v1'",
+  'eventTypeForcedToOperatorFeedback: true',
+  'entityTypesAllowlisted: true',
+  'outcomesAllowlisted: true',
+  'scoreDeltaMinimum: -10',
+  'scoreDeltaMaximum: 10',
+  'callerRequestedValuesNonAuthoritative: true',
+  'reviewOnly: true',
+  'externalExecutionEnabled: false',
+]) {
+  if (!learningEventSafety.includes(token)) {
+    errors.push(`Business learning-event safety checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -201,7 +221,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v10-explicit-historical-route-policy",
+  contract: "business-worker-ci-parity-v11-learning-event-safety",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -222,6 +242,7 @@ console.log(JSON.stringify({
   retiredHistoricalWritesFailClosed: true,
   businessInternalPlanningSafetyRequired: true,
   businessInternalReadMinimisationRequired: true,
+  businessLearningEventSafetyRequired: true,
   businessOpportunityReviewSafetyRequired: true,
   businessPeopleResponseMinimisationRequired: true,
   businessRecordBuilderSafetyRequired: true,

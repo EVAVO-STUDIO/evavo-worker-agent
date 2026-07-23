@@ -7,6 +7,10 @@ import {
   normalizeBusinessFollowupInput,
 } from "../core/businessInternalPlanningSafety";
 import {
+  markBusinessLearningEventRecord,
+  normalizeBusinessLearningEventInput,
+} from "../core/businessLearningEventSafety";
+import {
   projectHistoricalBusinessApproval,
   projectHistoricalBusinessDraft,
 } from "../core/businessHistoricalReadProjection";
@@ -291,8 +295,18 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     if (request.method === "POST" && pathname === "/admin/business/learning") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const learningEvent = await saveBusinessLearningEvent(env, body.learningEvent || body);
-      return json({ mode: "business_learning_event_saved", ...businessWritePayload(learningEvent, "learningEvent") });
+      const normalized = normalizeBusinessLearningEventInput(body.learningEvent || body);
+      const learningEvent = markBusinessLearningEventRecord(await saveBusinessLearningEvent(env, normalized));
+      return json({
+        mode: "business_learning_event_saved",
+        contract: "business_internal_learning_event_v2",
+        reviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        externalExecutionAllowed: false,
+        ...businessWritePayload(learningEvent, "learningEvent"),
+      });
     }
 
     return json({ ok: false, error: "not_found", path: pathname, method: request.method }, { status: 404 });

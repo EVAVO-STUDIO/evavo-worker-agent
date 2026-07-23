@@ -51,6 +51,7 @@ const requiredSafetyCommands = {
   "growth:subhandler-auth-safety:check": "node scripts/check-growth-subhandler-auth-safety.mjs",
   "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
+  "worker:dependabot-config:check": "node scripts/check-dependabot-config.mjs",
   "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
   "worker:workflow-action-pinning:check": "node scripts/check-workflow-action-pinning.mjs",
 };
@@ -98,6 +99,7 @@ for (const relativePath of [
   "scripts/check-growth-subhandler-auth-safety.mjs",
   "scripts/check-runtime-capability-config.mjs",
   "scripts/check-central-authentication-safety.mjs",
+  "scripts/check-dependabot-config.mjs",
   "scripts/check-package-service-identity.mjs",
   "scripts/check-workflow-action-pinning.mjs",
 ]) {
@@ -148,6 +150,7 @@ console.log(JSON.stringify({
   runtimeCapabilityConfigurationRequired: true,
   dormantAiBindingRequired: true,
   centralAuthenticationSafetyRequired: true,
+  dependabotConfigurationRequired: true,
   packageServiceIdentityRequired: true,
   workflowActionPinningRequired: true,
   predeployUsesCompleteLocalGate: true,

@@ -11,6 +11,10 @@ import {
   normalizeBusinessLearningEventInput,
 } from "../core/businessLearningEventSafety";
 import {
+  markBusinessSuppressionRecord,
+  normalizeBusinessSuppressionInput,
+} from "../core/businessSuppressionSafety";
+import {
   projectHistoricalBusinessApproval,
   projectHistoricalBusinessDraft,
 } from "../core/businessHistoricalReadProjection";
@@ -168,7 +172,15 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     }
     if (request.method === "GET" && pathname === "/admin/business/suppression") {
       const records = await listBusinessSuppression(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("active") !== "0");
-      return json({ mode: "business_suppression_list", ...businessReadPayload(records, "suppression") });
+      return json({
+        mode: "business_suppression_list",
+        contract: "business_suppression_reads_v2",
+        safetyCritical: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...businessReadPayload(records, "suppression"),
+      });
     }
     if (request.method === "GET" && pathname === "/admin/business/content-ideas") {
       const ideas = await listBusinessContentIdeas(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
@@ -275,8 +287,20 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     if (request.method === "POST" && pathname === "/admin/business/suppression") {
       const body = await parseBody(request);
       if (!confirmed(url, body)) return blockedWrite(json);
-      const suppression = await saveBusinessSuppression(env, body.suppression || body);
-      return json({ mode: "business_suppression_saved", ...businessWritePayload(suppression, "suppression") });
+      const normalized = normalizeBusinessSuppressionInput(body.suppression || body);
+      const suppression = markBusinessSuppressionRecord(await saveBusinessSuppression(env, normalized));
+      return json({
+        mode: "business_suppression_saved",
+        contract: "business_suppression_integrity_v2",
+        safetyCritical: true,
+        forcedActive: true,
+        automaticExpiryAllowed: false,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        externalExecutionAllowed: false,
+        ...businessWritePayload(suppression, "suppression"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/content-ideas") {
       const body = await parseBody(request);

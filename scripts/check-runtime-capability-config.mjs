@@ -116,18 +116,30 @@ const sourceFiles = fs.existsSync(srcRoot)
   ? walk(srcRoot).filter((file) => /\.(ts|tsx)$/.test(file))
   : [];
 
+const forbiddenRuntimeTokens = [
+  "PUBLIC_CONTROL_KEY",
+  "OUTBOUND_AGENT_ADMIN_TOKEN",
+  "api.mailchannels.net",
+  "sendEmail(",
+  'from "./email"',
+  'from "../email"',
+];
+
+const forbiddenAiBindingPatterns = [
+  { label: "direct AI binding access", pattern: /\benv\s*\.\s*AI\b/ },
+  { label: "indexed AI binding access", pattern: /\benv\s*\[\s*["']AI["']\s*\]/ },
+  { label: "Cloudflare AI run invocation", pattern: /\bAI\s*\.\s*run\s*\(/ },
+  { label: "destructured AI binding", pattern: /\b(?:const|let|var)\s*\{[^}]*\bAI\b[^}]*\}\s*=\s*env\b/ },
+];
+
 for (const absolute of sourceFiles) {
   const relative = path.relative(root, absolute).replaceAll("\\", "/");
   const content = fs.readFileSync(absolute, "utf8");
-  for (const forbidden of [
-    "PUBLIC_CONTROL_KEY",
-    "OUTBOUND_AGENT_ADMIN_TOKEN",
-    "api.mailchannels.net",
-    "sendEmail(",
-    'from "./email"',
-    'from "../email"',
-  ]) {
+  for (const forbidden of forbiddenRuntimeTokens) {
     if (content.includes(forbidden)) errors.push(`${relative} contains forbidden runtime token: ${forbidden}`);
+  }
+  for (const { label, pattern } of forbiddenAiBindingPatterns) {
+    if (pattern.test(content)) errors.push(`${relative} contains forbidden ${label}; the compatibility AI binding must remain dormant`);
   }
 }
 
@@ -142,7 +154,7 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run runtim
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "review-first-runtime-capability-configuration-v2-resource-compatibility",
+  contract: "review-first-runtime-capability-configuration-v3-dormant-ai-binding",
   canonicalCredential: "ADMIN_TOKEN",
   activePublicServiceIdentity: "EVAVO Growth Research Worker",
   historicalWorkerResourceIdentifierRetained: true,
@@ -150,6 +162,9 @@ console.log(JSON.stringify({
   historicalResourceNamesAuthoritativeForCapability: false,
   scheduledWorkInternalOnly: true,
   scheduledExternalResearchEnabled: false,
+  compatibilityAiBindingProvisioned: wrangler.includes('[ai]') && wrangler.includes('binding = "AI"'),
+  compatibilityAiBindingUsedBySource: false,
+  aiExecutionEnabled: false,
   legacyCredentialAliasesAdvertised: false,
   publicControlCredentialAdvertised: false,
   outboundEmailModulePresent: fs.existsSync(path.join(root, "src/email.ts")),

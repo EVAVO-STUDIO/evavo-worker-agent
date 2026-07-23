@@ -51,6 +51,7 @@ const requiredSafetyCommands = {
   "growth:subhandler-auth-safety:check": "node scripts/check-growth-subhandler-auth-safety.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
   "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
+  "worker:workflow-action-pinning:check": "node scripts/check-workflow-action-pinning.mjs",
 };
 
 for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommands)) {
@@ -96,6 +97,7 @@ for (const relativePath of [
   "scripts/check-growth-subhandler-auth-safety.mjs",
   "scripts/check-central-authentication-safety.mjs",
   "scripts/check-package-service-identity.mjs",
+  "scripts/check-workflow-action-pinning.mjs",
 ]) {
   if (!fs.existsSync(path.join(root, relativePath))) {
     errors.push(`Missing safety contract: ${relativePath}`);
@@ -143,6 +145,7 @@ console.log(JSON.stringify({
   growthSubhandlerAuthenticationSafetyRequired: true,
   centralAuthenticationSafetyRequired: true,
   packageServiceIdentityRequired: true,
+  workflowActionPinningRequired: true,
   predeployUsesCompleteLocalGate: true,
   errors,
 }, null, 2));

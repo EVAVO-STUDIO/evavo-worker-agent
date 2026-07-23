@@ -26,6 +26,7 @@ const opportunityReviewSafety = read("scripts/check-business-opportunity-review-
 const peopleResponseMinimisation = read("scripts/check-business-people-response-minimisation.mjs");
 const internalReadMinimisation = read("scripts/check-business-internal-read-minimisation.mjs");
 const learningEventSafety = read("scripts/check-business-learning-event-safety.mjs");
+const suppressionIntegrity = read("scripts/check-business-suppression-integrity.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -46,6 +47,7 @@ const requiredBusinessContracts = {
   "business:people-response-minimisation:check": "node scripts/check-business-people-response-minimisation.mjs",
   "business:record-builder-safety:check": "node scripts/check-business-record-builder-safety.mjs",
   "business:review-record-storage-isolation:check": "node scripts/check-business-review-record-storage-isolation.mjs",
+  "business:suppression-integrity:check": "node scripts/check-business-suppression-integrity.mjs",
   "business:validation-workflow-safety:check": "node scripts/check-business-validation-workflow-safety.mjs",
   "business:route-catalogue-truthfulness:check": "node scripts/check-business-route-catalogue-truthfulness.mjs",
   "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
@@ -210,6 +212,19 @@ for (const token of [
   }
 }
 
+for (const token of [
+  "contract: 'business-suppression-integrity-v2'",
+  'suppressionWritesForcedActive: true',
+  'automaticSuppressionExpiryAllowed: false',
+  'arbitrarySuppressionScopeAllowed: false',
+  'arbitrarySuppressionReasonAllowed: false',
+  'outboundExecutionEnabled: false',
+]) {
+  if (!suppressionIntegrity.includes(token)) {
+    errors.push(`Business suppression-integrity checker is missing CI-required posture: ${token}`);
+  }
+}
+
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
 if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
   errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
@@ -221,7 +236,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v11-learning-event-safety",
+  contract: "business-worker-ci-parity-v12-suppression-integrity",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -246,6 +261,7 @@ console.log(JSON.stringify({
   businessOpportunityReviewSafetyRequired: true,
   businessPeopleResponseMinimisationRequired: true,
   businessRecordBuilderSafetyRequired: true,
+  businessSuppressionIntegrityRequired: true,
   businessValidationWorkflowSafetyRequired: true,
   businessRouteCatalogueTruthfulnessRequired: true,
   businessRouteCatalogueImportCountExpected: 1,

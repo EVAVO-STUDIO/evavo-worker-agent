@@ -25,6 +25,10 @@ const required = [
   "Historical labels and schema families are retained only for data compatibility.",
   "They do not describe enabled drafting, approvals-to-execution, campaigns or external delivery.",
   "The authoritative model is research-memory-first, metadata-first, review-first and non-executing.",
+  "Opportunity extraction is deterministic, boundary-aware and evidence-quality-scored.",
+  "Missing deadlines, values, currencies, eligibility and scope remain missing rather than being inferred.",
+  "Historical source and review learning may calibrate grounded evidence but cannot promote weak evidence into high confidence.",
+  "Persisted opportunity candidates are internal review records only and cannot become drafts, approvals or external actions.",
   "The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.",
 ];
 
@@ -37,6 +41,9 @@ const requiredFocusedChecks = [
   "npm run docs:operating-posture:check",
   "npm run docs:readme-truthfulness:check",
   "npm run worker:package-identity:check",
+  "npm run research:public-fetch-safety:check",
+  "npm run opportunities:evidence-quality:check",
+  "npm run opportunities:execution-boundary-safety:check",
   "npm run business:route-catalogue-truthfulness:check",
   "npm run business:draft-runtime-safety:check",
   "npm run business:historical-type-isolation:check",
@@ -58,6 +65,9 @@ const forbidden = [
   "Some historical architecture documents describe future governed execution concepts.",
   "Review and promote candidates through explicit confirmation gates.",
   "The authoritative model is research-memory-first, metadata-first, review-first and approval-gated.",
+  "Learning may promote weak evidence into high confidence.",
+  "Missing opportunity facts may be inferred from source context.",
+  "shortlist and prepare response",
 ];
 
 for (const token of forbidden) {
@@ -75,11 +85,15 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run docs:r
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "readme-top-level-truthfulness-v2-focused-validation",
+  contract: "readme-top-level-truthfulness-v3-evidence-quality",
   outboundExecutionDocumentedAsDisabled: true,
   historicalReviewRecordsDocumentedAsNonAuthoritative: true,
   approvalToExecutionDocumentedAsDisabled: true,
   authoritativeModelDocumentedAsNonExecuting: true,
+  deterministicEvidenceQualityDocumented: true,
+  missingFactsRemainMissing: true,
+  weakEvidenceLearningPromotionAllowed: false,
+  opportunityCandidatesExecutable: false,
   authoritativeCompleteGateDocumented: true,
   focusedSafetyChecksDocumented: true,
   focusedCommandsBackedByPackageScripts: true,

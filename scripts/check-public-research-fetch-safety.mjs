@@ -29,6 +29,8 @@ function forbidTokens(label, source, tokens) {
 
 const helper = read("src/core/publicResearchFetch.ts");
 const wrangler = read("wrangler.toml");
+const readme = read("README.md");
+const boundaryDoc = read("docs/public-research-fetch-boundary.md");
 const packageJson = JSON.parse(read("package.json") || "{}");
 const safetyGate = read("scripts/check-safety-gate-completeness.mjs");
 
@@ -81,10 +83,7 @@ const guardedFetchFiles = [
 
 for (const relativePath of guardedFetchFiles) {
   const source = read(relativePath);
-  requireTokens(relativePath, source, [
-    "publicResearchFetch",
-    "public_research_fetch_v1",
-  ]);
+  requireTokens(relativePath, source, ["publicResearchFetch"]);
   if (/\bfetch\s*\(/.test(source)) errors.push(`${relativePath} must not call global fetch directly`);
   forbidTokens(relativePath, source, [
     'redirect: "follow"',
@@ -102,6 +101,17 @@ requireTokens("source admin provenance", sourcesAdmin, [
   "profileFetch: profileReceipt",
   "source_run_id",
   "bodySha256",
+  'fetchContract: "public_research_fetch_v1"',
+]);
+
+const opportunityDiscovery = read("src/routes/opportunityDiscoveryAdmin.ts");
+requireTokens("opportunity discovery receipts", opportunityDiscovery, [
+  "fetchPublicResearchHtml(source.url)",
+  "contract: fetched.contract",
+  "finalUrl: fetched.finalUrl",
+  "bodySha256: fetched.bodySha256",
+  "boundedResponse: true",
+  "publicWebOnly: true",
 ]);
 
 const opportunityRunner = read("src/opportunityAutonomy.ts");
@@ -110,6 +120,7 @@ requireTokens("manual opportunity runner", opportunityRunner, [
   'discoveredBy: "manual-confirmed-run-due"',
   'runType: "manual_confirmed"',
   "sourceFetch: sourceReceipt",
+  'fetchContract: "public_research_fetch_v1"',
 ]);
 forbidTokens("manual opportunity runner", opportunityRunner, [
   'startOpportunityRun(env, "scheduled"',
@@ -126,6 +137,26 @@ requireTokens("query hint URL resolver", queryResolver, [
 
 requireTokens("Cloudflare runtime configuration", wrangler, [
   'compatibility_flags = ["global_fetch_strictly_public"]',
+  "Enforce public-only subrequests at the Cloudflare runtime boundary.",
+]);
+
+requireTokens("README public research boundary", readme, [
+  "Public research URLs and every redirect are validated against the shared public-only network policy.",
+  "Public response bodies are timeout-bounded, byte-bounded and hashed for evidence receipts.",
+  "global_fetch_strictly_public",
+  "SHA-256 body hash",
+  "docs/public-research-fetch-boundary.md",
+  "npm run research:public-fetch-safety:check",
+]);
+
+requireTokens("public research boundary document", boundaryDoc, [
+  "# Public research fetch boundary",
+  "public_research_fetch_v1",
+  "Automatic redirect following is disabled.",
+  "Bodies are read as streams.",
+  'compatibility_flags = ["global_fetch_strictly_public"]',
+  "bodySha256",
+  "Confirmation authorises only the bounded manual research action",
 ]);
 
 const expectedCommand = "node scripts/check-public-research-fetch-safety.mjs";
@@ -145,7 +176,7 @@ requireTokens("safety gate completeness", safetyGate, [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "public-research-fetch-safety-v1",
+  contract: "public-research-fetch-safety-v2-documented-boundary",
   publicHttpOnly: true,
   privateAndReservedHostsRejected: true,
   urlCredentialsRejected: true,
@@ -159,6 +190,7 @@ console.log(JSON.stringify({
   directResearchFetchCallsOutsideBoundaryAllowed: false,
   sourceRunProvenanceRequired: true,
   manualOpportunityRunsLabelledScheduled: false,
+  boundaryDocumentationRequired: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

@@ -15,6 +15,7 @@ export type PublicResearchFetchOptions = {
   timeoutMs?: number;
   accept?: string;
   acceptLanguage?: string;
+  contentKind?: "html" | "text";
 };
 
 export type PublicResearchFetchResult = {
@@ -52,6 +53,8 @@ const BLOCKED_EXACT_HOSTS = new Set([
 ]);
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const HTML_CONTENT_TYPE_PATTERN = /text\/html|application\/xhtml\+xml/i;
+const PUBLIC_TEXT_CONTENT_TYPE_PATTERN = /text\/|application\/(?:xml|xhtml\+xml|rss\+xml|atom\+xml|json)/i;
 
 function normalizedHostname(url: URL): string {
   return url.hostname.replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "").toLowerCase();
@@ -72,7 +75,6 @@ function isBlockedIpv4(octets: number[]): boolean {
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
   if (a === 192 && b === 0) return true;
-  if (a === 192 && b === 0 && octets[2] === 2) return true;
   if (a === 198 && (b === 18 || b === 19)) return true;
   if (a === 198 && b === 51 && octets[2] === 100) return true;
   if (a === 203 && b === 0 && octets[2] === 113) return true;
@@ -207,7 +209,14 @@ function failedResult(
   };
 }
 
-export async function fetchPublicResearchHtml(rawUrl: unknown, options: PublicResearchFetchOptions = {}): Promise<PublicResearchFetchResult> {
+function contentTypeAllowed(contentType: string, contentKind: "html" | "text"): boolean {
+  if (!contentType) return true;
+  return contentKind === "html"
+    ? HTML_CONTENT_TYPE_PATTERN.test(contentType)
+    : PUBLIC_TEXT_CONTENT_TYPE_PATTERN.test(contentType);
+}
+
+async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResearchFetchOptions): Promise<PublicResearchFetchResult> {
   const startedAt = Date.now();
   const initial = validatePublicResearchUrl(rawUrl);
   if (!initial.ok || !initial.url) return failedResult(null, null, 0, startedAt, initial.error || "invalid_research_url");
@@ -215,6 +224,7 @@ export async function fetchPublicResearchHtml(rawUrl: unknown, options: PublicRe
   const maxBytes = boundedInteger(options.maxBytes, DEFAULT_PUBLIC_RESEARCH_MAX_BYTES, 16_384, 5_242_880);
   const maxRedirects = boundedInteger(options.maxRedirects, DEFAULT_PUBLIC_RESEARCH_MAX_REDIRECTS, 0, 8);
   const timeoutMs = boundedInteger(options.timeoutMs, DEFAULT_PUBLIC_RESEARCH_TIMEOUT_MS, 1_000, 30_000);
+  const contentKind = options.contentKind || "html";
   const requestedUrl = initial.url;
   let currentUrl = initial.url;
   let redirectCount = 0;
@@ -234,7 +244,7 @@ export async function fetchPublicResearchHtml(rawUrl: unknown, options: PublicRe
         redirect: "manual",
         signal: controller.signal,
         headers: {
-          accept: options.accept || "text/html,application/xhtml+xml;q=0.9",
+          accept: options.accept || (contentKind === "html" ? "text/html,application/xhtml+xml;q=0.9" : "text/plain,application/xml,text/xml,application/json;q=0.9"),
           "accept-language": options.acceptLanguage || "en-AU,en;q=0.9",
           "user-agent": "EVAVO-Growth-Research-Worker/1.0 (+https://evavo.com.au)",
         },
@@ -261,9 +271,9 @@ export async function fetchPublicResearchHtml(rawUrl: unknown, options: PublicRe
     }
 
     const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    if (contentType && !/text\/html|application\/xhtml\+xml/.test(contentType)) {
+    if (!contentTypeAllowed(contentType, contentKind)) {
       await response.body?.cancel().catch(() => undefined);
-      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "non_html_response", response.status, contentType);
+      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "unsupported_content_type", response.status, contentType);
     }
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
@@ -290,4 +300,12 @@ export async function fetchPublicResearchHtml(rawUrl: unknown, options: PublicRe
       error: body.trim() ? null : "empty_response",
     };
   }
+}
+
+export async function fetchPublicResearchHtml(rawUrl: unknown, options: PublicResearchFetchOptions = {}): Promise<PublicResearchFetchResult> {
+  return fetchPublicResearchContent(rawUrl, { ...options, contentKind: "html" });
+}
+
+export async function fetchPublicResearchText(rawUrl: unknown, options: PublicResearchFetchOptions = {}): Promise<PublicResearchFetchResult> {
+  return fetchPublicResearchContent(rawUrl, { ...options, contentKind: "text" });
 }

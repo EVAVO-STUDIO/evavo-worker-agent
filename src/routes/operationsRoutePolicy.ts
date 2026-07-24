@@ -16,7 +16,7 @@ export type OperationsRoutePolicy = Readonly<{
   authentication: "handler-enforced";
   readMethods: readonly ("GET")[];
   writeMethods: readonly ("POST")[];
-  writeConfirmation: "not-applicable" | "handler-enforced" | "handler-defined";
+  writeConfirmation: "not-applicable" | "handler-enforced";
   mutationPosture: "read-only" | "mixed-internal";
   networkPosture: OperationsNetworkPosture;
   callsAI: false;
@@ -111,7 +111,7 @@ const policies: readonly OperationsRoutePolicy[] = Object.freeze([
     authentication: "handler-enforced",
     readMethods: Object.freeze(["GET"] as const),
     writeMethods: Object.freeze(["POST"] as const),
-    writeConfirmation: "handler-defined",
+    writeConfirmation: "handler-enforced",
     mutationPosture: "mixed-internal",
     networkPosture: "read-only-research",
     callsAI: false,
@@ -126,7 +126,7 @@ const policies: readonly OperationsRoutePolicy[] = Object.freeze([
     authentication: "handler-enforced",
     readMethods: Object.freeze([] as const),
     writeMethods: Object.freeze(["POST"] as const),
-    writeConfirmation: "handler-defined",
+    writeConfirmation: "handler-enforced",
     mutationPosture: "mixed-internal",
     networkPosture: "none",
     callsAI: false,

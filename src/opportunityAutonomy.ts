@@ -3,6 +3,7 @@ import { logEvent } from "./db";
 import { extractOpportunityCandidates } from "./core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "./core/opportunityPersistence";
 import { finishOpportunityRun, recordCandidateRejection, recordSourceRunResult, startOpportunityRun, type OpportunityRunSummary } from "./core/opportunityRuns";
+import { fetchPublicResearchHtml } from "./core/publicResearchFetch";
 
 type OpportunityAutonomySettings = {
   opportunityDiscoveryEnabled: boolean;
@@ -40,19 +41,6 @@ async function dueSources(env: Env, limit: number): Promise<OpportunitySource[]>
   return rows.results || [];
 }
 
-async function fetchHtml(url: string) {
-  const started = Date.now();
-  const response = await fetch(url, {
-    headers: {
-      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "user-agent": "Mozilla/5.0 (compatible; EVAVO-Opportunity-Agent/1.0; +https://evavo.com.au)",
-    },
-  });
-  const contentType = response.headers.get("content-type") || "";
-  const body = response.ok ? await response.text() : "";
-  return { ok: response.ok, status: response.status, contentType, body, elapsedMs: Date.now() - started };
-}
-
 async function updateSourceRun(env: Env, sourceId: string, ok: boolean, error: string | null) {
   const now = new Date().toISOString();
   const nextHours = ok ? 24 : 6;
@@ -66,33 +54,33 @@ async function updateSourceRun(env: Env, sourceId: string, ok: boolean, error: s
 
 export async function runOpportunityAutonomy(env: Env, settings: OpportunityAutonomySettings) {
   const summary: OpportunityRunSummary = { sourcesChecked: 0, candidatesFound: 0, saved: 0, duplicates: 0, failed: 0, skipped: 0, rejected: 0 };
-  const runId = await startOpportunityRun(env, "scheduled", settings);
+  const runId = await startOpportunityRun(env, "manual_confirmed", { ...settings, researchFetchContract: "public_research_fetch_v1" });
 
   try {
     if (!settings.opportunityDiscoveryEnabled) {
-      await logEvent(env, "opportunity_tick_skip", "Opportunity discovery disabled by autonomy settings.");
+      await logEvent(env, "opportunity_tick_skip", "Confirmed manual opportunity run skipped because opportunity discovery is disabled.");
       await finishOpportunityRun(env, runId, "skipped", summary, "opportunity_discovery_disabled");
-      return { ...summary, runId };
+      return { ...summary, runId, runType: "manual_confirmed" };
     }
 
     if (!(await tableExists(env, "opportunity_sources")) || !(await tableExists(env, "opportunities"))) {
       await logEvent(env, "opportunity_tick_skip", "Opportunity tables missing. Apply migration 0004_opportunity_intelligence.sql.");
       await finishOpportunityRun(env, runId, "skipped", summary, "missing_opportunity_tables");
-      return { ...summary, runId };
+      return { ...summary, runId, runType: "manual_confirmed" };
     }
 
     const limit = Math.max(0, Math.min(settings.dailySourceLimit, settings.maxNetworkCallsPerRun));
     if (limit <= 0) {
-      await logEvent(env, "opportunity_tick_skip", "Opportunity runner blocked by zero source/network limit.");
+      await logEvent(env, "opportunity_tick_skip", "Confirmed manual opportunity run blocked by zero source/network limit.");
       await finishOpportunityRun(env, runId, "skipped", summary, "zero_source_or_network_limit");
-      return { ...summary, runId };
+      return { ...summary, runId, runType: "manual_confirmed" };
     }
 
     const sources = await dueSources(env, limit);
     if (!sources.length) {
-      await logEvent(env, "opportunity_tick_skip", "No due opportunity sources.");
+      await logEvent(env, "opportunity_tick_skip", "No due opportunity sources for confirmed manual review.");
       await finishOpportunityRun(env, runId, "skipped", summary, "no_due_sources");
-      return { ...summary, runId };
+      return { ...summary, runId, runType: "manual_confirmed" };
     }
 
     for (const source of sources) {
@@ -103,9 +91,9 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
       let duplicates = 0;
 
       try {
-        const fetched = await fetchHtml(source.url);
-        if (!fetched.ok || !fetched.body || (fetched.contentType && !fetched.contentType.includes("html"))) {
-          const error = fetched.ok ? "non_html_response" : `http_${fetched.status}`;
+        const fetched = await fetchPublicResearchHtml(source.url);
+        if (!fetched.ok || !fetched.body) {
+          const error = fetched.error || "source_fetch_failed";
           summary.failed += 1;
           await updateSourceRun(env, source.id, false, error);
           await recordSourceRunResult(env, {
@@ -115,20 +103,38 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
             fetchStatus: fetched.status,
             contentType: fetched.contentType,
             elapsedMs: fetched.elapsedMs,
-            bytes: fetched.body.length,
+            bytes: fetched.bytes,
             error,
           });
           continue;
         }
 
-        const candidates = extractOpportunityCandidates(fetched.body, source.url, 50);
+        const sourceReceipt = {
+          contract: fetched.contract,
+          requestedUrl: fetched.requestedUrl,
+          finalUrl: fetched.finalUrl,
+          status: fetched.status,
+          contentType: fetched.contentType,
+          bytes: fetched.bytes,
+          bodySha256: fetched.bodySha256,
+          redirectCount: fetched.redirectCount,
+          fetchedAtISO: fetched.fetchedAtISO,
+        };
+        const candidates = extractOpportunityCandidates(fetched.body, fetched.finalUrl || source.url, 50);
         candidatesFound = candidates.length;
         summary.candidatesFound += candidates.length;
 
         for (const candidate of candidates.slice(0, 10)) {
-          const result = await saveOpportunityCandidate(env, source, candidate, {
+          const candidateWithReceipt = {
+            ...candidate,
+            evidence: {
+              ...(candidate.evidence || {}),
+              sourceFetch: sourceReceipt,
+            },
+          };
+          const result = await saveOpportunityCandidate(env, source, candidateWithReceipt, {
             minScore: settings.minOpportunityScore,
-            discoveredBy: "scheduled",
+            discoveredBy: "manual-confirmed-run-due",
           });
           if (result.saved) {
             summary.saved += 1;
@@ -148,7 +154,7 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
               candidateTitle: result.normalizedTitle || candidate.title,
               score: result.score ?? candidate.score,
               reason: result.reason,
-              evidence: candidate.evidence || { signals: candidate.signals || [] },
+              evidence: candidateWithReceipt.evidence,
             });
           }
         }
@@ -161,14 +167,14 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
           fetchStatus: fetched.status,
           contentType: fetched.contentType,
           elapsedMs: fetched.elapsedMs,
-          bytes: fetched.body.length,
+          bytes: fetched.bytes,
           candidatesFound,
           candidatesSaved,
           candidatesRejected,
           duplicates,
         });
-      } catch (err: any) {
-        const error = String(err?.message || err);
+      } catch {
+        const error = "manual_opportunity_source_processing_failed";
         summary.failed += 1;
         await updateSourceRun(env, source.id, false, error);
         await recordSourceRunResult(env, {
@@ -184,13 +190,13 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
       }
     }
 
-    await logEvent(env, "opportunity_tick_ok", `Opportunity autonomy checked ${summary.sourcesChecked} sources | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | rejected ${summary.rejected} | failed ${summary.failed} | run ${runId || "audit_disabled"}`);
+    await logEvent(env, "opportunity_tick_ok", `Confirmed manual opportunity run checked ${summary.sourcesChecked} sources | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | rejected ${summary.rejected} | failed ${summary.failed} | run ${runId || "audit_disabled"}`);
     await finishOpportunityRun(env, runId, "completed", summary);
-    return { ...summary, runId };
-  } catch (err: any) {
-    const error = String(err?.message || err);
+    return { ...summary, runId, runType: "manual_confirmed", fetchContract: "public_research_fetch_v1" };
+  } catch {
+    const error = "manual_opportunity_run_failed";
     summary.failed += 1;
     await finishOpportunityRun(env, runId, "failed", summary, error);
-    throw err;
+    throw new Error(error);
   }
 }

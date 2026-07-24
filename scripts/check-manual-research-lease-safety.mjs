@@ -31,8 +31,10 @@ const helper = read("src/core/manualResearchLease.ts");
 const runDue = read("src/routes/opportunityRunDueAdmin.ts");
 const expansion = read("src/routes/sourceExpansionAdmin.ts");
 const relationshipGraph = read("src/routes/sourceExpansionPublicDirectoryScanAdmin.ts");
+const queryHintResolver = read("src/routes/sourceExpansionQueryHintResolverAdmin.ts");
 const sourceBatch = read("src/routes/sourceBatchAdmin.ts");
 const opportunityDiscovery = read("src/routes/opportunityDiscoveryAdmin.ts");
+const sourcesAdmin = read("src/routes/sourcesAdmin.ts");
 const doc = read("docs/manual-research-concurrency.md");
 const workflow = read(".github/workflows/worker-contract.yml");
 const safetyGate = read("scripts/check-safety-gate-completeness.mjs");
@@ -68,72 +70,119 @@ forbidTokens("manual research lease helper", helper, [
 ]);
 
 const routeContracts = [
-  ["manual opportunity run", runDue, [
-    'MANUAL_OPPORTUNITY_RUN_LEASE = "opportunity-run-due"',
-    "acquireManualResearchLease(env, MANUAL_OPPORTUNITY_RUN_LEASE, 900)",
-    "manualResearchLeaseConflict(MANUAL_OPPORTUNITY_RUN_LEASE)",
-    "status: 409",
-    "finally {",
-    "releaseManualResearchLease(env, lease)",
-    "concurrentDuplicateRunAllowed: false",
-  ]],
-  ["source expansion routes", expansion, [
-    "async function withResearchLease",
-    '"source-expansion-scan"',
-    '"source-expansion-sitemap-scan"',
-    "acquireManualResearchLease(env, actionKey, 900)",
-    "manualResearchLeaseConflict(actionKey)",
-    "status: 409",
-    "finally {",
-    "releaseManualResearchLease(env, lease)",
-  ]],
-  ["relationship graph route", relationshipGraph, [
-    'const actionKey = "source-expansion-relationship-graph"',
-    "acquireManualResearchLease(env, actionKey, 900)",
-    "manualResearchLeaseConflict(actionKey)",
-    "status: 409",
-    "finally {",
-    "releaseManualResearchLease(env, lease)",
-  ]],
-  ["tiny source batch", sourceBatch, [
-    'const actionKey = "sources-run-tiny"',
-    "acquireManualResearchLease(env, actionKey, 600)",
-    "manualResearchLeaseConflict(actionKey)",
-    "status: 409",
-    "finally {",
-    "releaseManualResearchLease(env, lease)",
-    "concurrentDuplicateRunAllowed: false",
-  ]],
-  ["opportunity source actions", opportunityDiscovery, [
-    "async function withSourceLease",
-    'const actionKey = `opportunity-source:${sourceId}`',
-    "acquireManualResearchLease(env, actionKey, 600)",
-    "manualResearchLeaseConflict(actionKey)",
-    "status: 409",
-    "finally {",
-    "releaseManualResearchLease(env, lease)",
-    "return withSourceLease(env, json, parsed.id",
-  ]],
+  {
+    label: "manual opportunity run",
+    source: runDue,
+    gateToken: "const lease = await acquireManualResearchLease(env, MANUAL_OPPORTUNITY_RUN_LEASE, 900)",
+    tokens: [
+      'MANUAL_OPPORTUNITY_RUN_LEASE = "opportunity-run-due"',
+      "manualResearchLeaseConflict(MANUAL_OPPORTUNITY_RUN_LEASE)",
+      "releaseManualResearchLease(env, lease)",
+      "concurrentDuplicateRunAllowed: false",
+    ],
+  },
+  {
+    label: "source expansion routes",
+    source: expansion,
+    gateToken: "return withResearchLease(env, json, \"source-expansion-scan\"",
+    tokens: [
+      "async function withResearchLease",
+      '"source-expansion-scan"',
+      '"source-expansion-sitemap-scan"',
+      "const lease = await acquireManualResearchLease(env, actionKey, 900)",
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+    ],
+  },
+  {
+    label: "relationship graph route",
+    source: relationshipGraph,
+    gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 900)",
+    tokens: [
+      'const actionKey = "source-expansion-relationship-graph"',
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+    ],
+  },
+  {
+    label: "query hint resolver",
+    source: queryHintResolver,
+    gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 300)",
+    tokens: [
+      'const actionKey = `query-hint-resolve:${hintId}`',
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+      "hintId,",
+    ],
+  },
+  {
+    label: "tiny source batch",
+    source: sourceBatch,
+    gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 600)",
+    tokens: [
+      'const actionKey = "sources-run-tiny"',
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+      "concurrentDuplicateRunAllowed: false",
+    ],
+  },
+  {
+    label: "opportunity source actions",
+    source: opportunityDiscovery,
+    gateToken: "return withSourceLease(env, json, sourceAction.id",
+    tokens: [
+      "async function withSourceLease",
+      'const actionKey = `opportunity-source:${sourceId}`',
+      "const lease = await acquireManualResearchLease(env, actionKey, 600)",
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+    ],
+  },
+  {
+    label: "legacy source actions",
+    source: sourcesAdmin,
+    gateToken: "return withSourceLease(env, json, sourceId",
+    tokens: [
+      "async function withSourceLease",
+      'const actionKey = `legacy-source:${sourceId}`',
+      "const lease = await acquireManualResearchLease(env, actionKey, 600)",
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+    ],
+  },
 ];
 
-for (const [label, source, tokens] of routeContracts) {
+for (const { label, source, gateToken, tokens } of routeContracts) {
   requireTokens(label, source, [
     'from "../core/manualResearchLease"',
+    'from "../core/boundedJsonRequest"',
+    "readBoundedJsonObject",
+    "isExplicitJsonConfirmation",
+    'error: "confirm_required"',
+    "confirmationCoercionAllowed: false",
+    "requestReceipt",
+    "status: 409",
+    "finally {",
+    gateToken,
     ...tokens,
   ]);
   const confirmPosition = source.indexOf('error: "confirm_required"');
-  const acquirePosition = source.indexOf("acquireManualResearchLease");
-  if (confirmPosition < 0 || acquirePosition < 0 || confirmPosition >= acquirePosition) {
-    errors.push(`${label} must require confirmation before acquiring a research lease`);
+  const gatePosition = source.indexOf(gateToken);
+  if (confirmPosition < 0 || gatePosition < 0 || confirmPosition >= gatePosition) {
+    errors.push(`${label} must require exact bounded confirmation before entering the lease-protected action`);
   }
 }
 
-for (const [label, source] of routeContracts) {
+for (const { label, source } of routeContracts) {
   forbidTokens(label, source, [
     "setTimeout(",
     "waitUntil(",
     "automaticRetryAllowed: true",
     "scheduledFallbackAllowed: true",
+    "request.json()",
+    'body?.confirm === 1',
+    'body?.confirm === "1"',
+    'searchParams.get("confirm")',
   ]);
 }
 
@@ -145,6 +194,8 @@ requireTokens("manual research concurrency document", doc, [
   "An expired holder cannot delete a newer lease",
   "research_action_in_progress",
   "automaticRetryAllowed: false",
+  "query-hint",
+  "legacy source",
   "It does not authorise an automatic retry executor.",
 ]);
 
@@ -171,11 +222,12 @@ if (workflow.includes("wrangler deploy")) errors.push("Manual research lease val
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "manual-research-lease-safety-v1",
+  contract: "manual-research-lease-safety-v2-complete-route-coverage",
   atomicSingleStatementAcquisitionRequired: true,
   readThenWriteAcquisitionAllowed: false,
   boundedLeaseTtlRequired: true,
   staleHolderCanReleaseNewLease: false,
+  confirmationBeforeLeaseRequired: true,
   conflictStatus: 409,
   automaticRetryAllowed: false,
   scheduledFallbackAllowed: false,
@@ -183,8 +235,10 @@ console.log(JSON.stringify({
   sourceExpansionLeaseRequired: true,
   sitemapLeaseRequired: true,
   relationshipGraphLeaseRequired: true,
+  queryHintResolutionLeaseRequired: true,
   tinySourceBatchLeaseRequired: true,
   perOpportunitySourceLeaseRequired: true,
+  perLegacySourceLeaseRequired: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

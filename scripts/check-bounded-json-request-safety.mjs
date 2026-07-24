@@ -56,7 +56,7 @@ requireTokens("bounded JSON helper", helper, [
   "new TextDecoder(\"utf-8\", { fatal: true })",
   'crypto.subtle.digest("SHA-256", bytes)',
   "isExplicitJsonConfirmation",
-  '(value as JsonObject).confirm === true',
+  "(value as JsonObject).confirm === true",
   "boundedJsonFailurePayload",
   "maxDepth",
   "maxNodes",
@@ -80,6 +80,7 @@ const boundedRoutes = [
   "src/routes/sourceExpansionQueryHintResolverAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/opportunityDiscoveryAdmin.ts",
+  "src/routes/opportunitySourceHealthActionsAdmin.ts",
   "src/routes/sourcesAdmin.ts",
 ];
 
@@ -118,6 +119,7 @@ const requestReceiptRoutes = [
   "src/routes/sourceExpansionQueryHintResolverAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
   "src/routes/opportunityDiscoveryAdmin.ts",
+  "src/routes/opportunitySourceHealthActionsAdmin.ts",
   "src/routes/sourcesAdmin.ts",
 ];
 for (const relativePath of requestReceiptRoutes) {
@@ -127,6 +129,21 @@ for (const relativePath of requestReceiptRoutes) {
     "bytes",
   ]);
 }
+
+const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
+requireTokens("source health bounded body", sourceHealthActions, [
+  "readBoundedJsonObject<SourceHealthActionBody>(request",
+  "maxBytes: 4_096",
+  "maxDepth: 4",
+  "maxNodes: 32",
+  "maxArrayLength: 4",
+  "maxStringLength: 512",
+  "maxKeyLength: 64",
+  "if (!isExplicitJsonConfirmation(parsed.value))",
+  'error: "confirm_required"',
+  "confirmationCoercionAllowed: false",
+  "requestBodySha256: parsed.bodySha256",
+]);
 
 requireTokens("bounded JSON behavioral tests", tests, [
   'from "../src/core/boundedJsonRequest.ts"',
@@ -198,6 +215,7 @@ console.log(JSON.stringify({
   queryStringConfirmationAllowed: false,
   confirmationCoercionAllowed: false,
   requestFingerprintRequired: true,
+  sourceHealthActionsBounded: true,
   rawRequestBodyLoggedOrReturned: false,
   behavioralTestsRequired: true,
   focusedCiGateRequired: true,

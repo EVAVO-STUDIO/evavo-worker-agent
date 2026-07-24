@@ -35,6 +35,8 @@ const legacyDraftRoute = read("src/routes/legacyExecutionSafetyAdmin.ts");
 const opportunityRoute = read("src/routes/opportunityReviewAdmin.ts");
 const opportunityCore = read("src/core/opportunityReview.ts");
 const candidateRoute = read("src/routes/opportunitySourceCandidatesAdmin.ts");
+const candidateCore = read("src/core/opportunitySourceDiscovery.ts");
+const candidateTests = read("tests/opportunitySourceCandidateSaveSource.test.ts");
 const doc = read("docs/review-mutation-boundary.md");
 const workflow = read(".github/workflows/worker-contract.yml");
 const packageJson = JSON.parse(read("package.json") || "{}");
@@ -165,7 +167,8 @@ requireTokens("opportunity review route", opportunityRoute, [
   'boundedReviewText(parsed.value.reason, "reason", 500)',
   "boundedReviewRating",
   'const opportunityActionKey = `opportunity-review:${opportunityId}`',
-  'reviewLeaseKey(\n      "opportunity-strategy"',
+  "reviewLeaseKey(",
+  '"opportunity-strategy"',
   "releaseManualResearchLease(env, strategyLease)",
   "releaseManualResearchLease(env, opportunityLease)",
   "concurrentDuplicateReviewAllowed: false",
@@ -208,10 +211,39 @@ requireTokens("source candidate commit route", candidateRoute, [
   'parsed.protocol !== "https:"',
   'SOURCE_CANDIDATE_COMMIT_LEASE = "opportunity-source-candidates-commit"',
   "const lease = await acquireManualResearchLease",
+  "requestBodySha256: parsed.bodySha256",
   "concurrentDuplicateCommitAllowed: false",
   "publicHttpsCandidateUrlsOnly: true",
   "maximumCandidateCount: 25",
   "externalExecutionAllowed: false",
+]);
+requireTokens("source candidate application service", candidateCore, [
+  'SOURCE_CANDIDATE_SAVE_CONTRACT = "opportunity_source_candidate_save_v2_atomic"',
+  "const statements: D1PreparedStatement[] = []",
+  "INSERT INTO opportunity_sources",
+  "UPDATE source_expansion_candidates",
+  "INSERT INTO events",
+  "requestBodySha256: options.requestBodySha256 || null",
+  "await env.DB.batch(statements)",
+  "sourceRecordsExpansionMarkersAndAuditAtomic: true",
+  "reviewOnly: true",
+  "executable: false",
+  "externalExecutionAllowed: false",
+]);
+forbidTokens("source candidate application service", candidateCore, [
+  "logEvent(",
+  "await env.DB.prepare(`INSERT INTO opportunity_sources",
+  "await env.DB.prepare(`UPDATE source_expansion_candidates",
+  "fetch(",
+  "sendEmail(",
+  "waitUntil(",
+]);
+requireTokens("source candidate atomic source tests", candidateTests, [
+  'test("reviewed source candidates commit source rows, markers and audit atomically"',
+  'test("source candidate save has no sequential helper writes or external execution"',
+  'test("source candidate route binds the audit to the bounded request receipt"',
+  "sourceRecordsExpansionMarkersAndAuditAtomic: true",
+  "requestBodySha256: parsed.bodySha256",
 ]);
 
 requireTokens("review mutation boundary document", doc, [
@@ -243,8 +275,8 @@ if (workflow.includes("wrangler deploy")) errors.push("Review mutation validatio
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "review-mutation-boundary-safety-v2-legacy-compatibility",
-  previous_contract: "review-mutation-boundary-safety-v1",
+  contract: "review-mutation-boundary-safety-v3-source-candidate-atomicity",
+  previous_contract: "review-mutation-boundary-safety-v2-legacy-compatibility",
   exactBooleanConfirmationRequired: true,
   boundedRequestBodyRequired: true,
   requestFingerprintRequired: true,
@@ -255,6 +287,8 @@ console.log(JSON.stringify({
   legacyDraftReviewWritesAtomic: true,
   opportunityReviewWritesAtomic: true,
   sourceCandidateCommitLeaseRequired: true,
+  sourceCandidateWritesAtomic: true,
+  sourceCandidateBehavioralSourceTestsRequired: true,
   callsNetwork: false,
   callsAI: false,
   sendsEmail: false,

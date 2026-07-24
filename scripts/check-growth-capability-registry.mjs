@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
 const registryPath = path.join(repoRoot, 'src/core/growthCapabilities.ts');
+const bridgePath = path.join(repoRoot, 'src/core/growthBridgeReadiness.ts');
 const routePath = path.join(repoRoot, 'src/routes/growthCapabilitiesAdmin.ts');
 const indexPath = path.join(repoRoot, 'src/index.ts');
 const docPath = path.join(repoRoot, 'docs/growth-capability-registry.md');
@@ -54,6 +55,7 @@ function mustContain(label, content, token) {
 }
 
 const registry = read('src/core/growthCapabilities.ts', registryPath);
+const bridge = read('src/core/growthBridgeReadiness.ts', bridgePath);
 const route = read('src/routes/growthCapabilitiesAdmin.ts', routePath);
 const index = read('src/index.ts', indexPath);
 const doc = read('docs/growth-capability-registry.md', docPath);
@@ -73,9 +75,32 @@ for (const token of [
   'browserExecutionEnabled: false',
   'externalDeliveryEnabled: false',
   'autonomousCampaignsEnabled: false',
+  'bridgeReadiness: growthBridgeReadiness',
   'executesCapabilities: false',
   'touchesExternalChannel: false',
 ]) mustContain('capability registry', registry, token);
+
+for (const token of [
+  'growth_worker_bridge_v1',
+  'sourceSystem: "evavo-worker-agent"',
+  'canonicalTarget: "next-website:supabase:growth_*"',
+  'workerRole: "discovery_candidate_research_memory"',
+  'transport: "server_to_server_only"',
+  'promotionMode: "proposal_only"',
+  'bridgeEnabled: false',
+  'routeInventoryComplete: false',
+  'clientBrowserAccess: false',
+  'adminTokenBrowserExposure: false',
+  'draftingEnabled: false',
+  'externalExecutionEnabled: false',
+  'ownerApprovalRequired: true',
+  'idempotencyRequired: true',
+  'auditRequired: true',
+  'worker_post_route_inventory_pending',
+  'next_website_ingestion_endpoint_not_implemented',
+  'cross_repo_contract_tests_not_implemented',
+  'canonical_auto_promotion',
+]) mustContain('bridge readiness contract', bridge, token);
 
 for (const forbidden of [
   'growth_capabilities_v1_autonomy_execution_contract',
@@ -85,6 +110,23 @@ for (const forbidden of [
   if (registry.includes(forbidden)) {
     failed = true;
     console.error(`FAIL capability registry contains stale execution posture: ${forbidden}`);
+  }
+}
+
+for (const forbidden of [
+  'ADMIN_TOKEN',
+  'providerToken',
+  'accessToken',
+  'refreshToken',
+  'serviceRoleKey',
+  'bridgeEnabled: true',
+  'routeInventoryComplete: true',
+  'clientBrowserAccess: true',
+  'externalExecutionEnabled: true',
+]) {
+  if (bridge.includes(forbidden)) {
+    failed = true;
+    console.error(`FAIL bridge readiness contract contains unsafe or premature posture: ${forbidden}`);
   }
 }
 
@@ -108,3 +150,5 @@ if (failed) {
 }
 
 console.log('Growth capability registry check passed.');
+console.log('- protected capability metadata now includes explicit cross-repo bridge readiness');
+console.log('- bridge remains disabled until route inventory, ingestion and cross-repo contract tests exist');

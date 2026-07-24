@@ -142,7 +142,11 @@ export async function handleOpportunitySourceCandidatesAdmin(
       reason: reason.value,
       actor: actor.value,
     });
-    const status = result.ok ? undefined : result.error === "missing_migration" ? 503 : 400;
+    const resultError = "error" in result ? result.error : null;
+    const inheritedSafety = "safety" in result && result.safety && typeof result.safety === "object"
+      ? result.safety
+      : {};
+    const status = result.ok ? undefined : resultError === "missing_migration" ? 503 : 400;
     return json({
       ...result,
       requestReceipt,
@@ -156,7 +160,7 @@ export async function handleOpportunitySourceCandidatesAdmin(
       authoritativeForExecution: false,
       externalExecutionAllowed: false,
       safety: {
-        ...result.safety,
+        ...inheritedSafety,
         publicHttpsCandidateUrlsOnly: true,
         maximumCandidateCount: 25,
         concurrentDuplicateCommitAllowed: false,

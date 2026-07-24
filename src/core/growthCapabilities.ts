@@ -1,3 +1,5 @@
+import { growthBridgeReadiness } from "./growthBridgeReadiness";
+
 export type GrowthCapabilityCategory = "research" | "analysis" | "drafting" | "browser" | "external_delivery" | "internal_ops" | "reporting";
 export type GrowthAutonomyLevel = 0 | 1 | 2 | 3 | 4 | 5;
 export type GrowthRiskLevel = "none" | "low" | "medium" | "high";
@@ -70,6 +72,7 @@ export function listGrowthCapabilities() {
       externalDeliveryEnabled: false,
       autonomousCampaignsEnabled: false,
     },
+    bridgeReadiness: growthBridgeReadiness,
     autonomyLevels: growthAutonomyLevels,
     capabilities: growthCapabilities,
     count: growthCapabilities.length,

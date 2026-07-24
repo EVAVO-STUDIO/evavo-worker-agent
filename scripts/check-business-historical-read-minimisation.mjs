@@ -44,16 +44,24 @@ requireTokens("Business admin route", route, [
   'from "../core/businessHistoricalReadProjection"',
   "projectHistoricalBusinessDraft(record)",
   "projectHistoricalBusinessApproval(record)",
-  'contract: "business_historical_draft_reads_v3_minimized"',
-  'contract: "business_historical_approval_reads_v3_minimized"',
+  'contract: "business_historical_draft_reads_v4_full_posture"',
+  'contract: "business_historical_approval_reads_v4_full_posture"',
+  "historicalOnly: true",
+  "reviewOnly: true",
   "historicalIdentityRedacted: true",
+  "executable: false",
+  "deliverable: false",
+  "authoritativeForExecution: false",
+  "externalExecutionAllowed: false",
 ]);
 
 for (const stale of [
   "drafts.map(markHistoricalBusinessRecord)",
   "approvals.map(markHistoricalBusinessRecord)",
+  'contract: "business_historical_draft_reads_v3_minimized"',
+  'contract: "business_historical_approval_reads_v3_minimized"',
 ]) {
-  if (route.includes(stale)) errors.push(`Business admin route contains stale broad projection ${stale}`);
+  if (route.includes(stale)) errors.push(`Business admin route contains stale broad or incomplete historical read contract ${stale}`);
 }
 
 const expectedCommand = "node scripts/check-business-historical-read-minimisation.mjs";
@@ -67,10 +75,15 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run busine
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-historical-read-minimisation-v1",
+  contract: "business-historical-read-minimisation-v2-full-posture",
   historicalDraftPayloadRedacted: true,
   historicalApprovalIdentityRedacted: true,
   historicalApprovalFreeTextRedacted: true,
+  historicalReadsReviewOnly: true,
+  historicalReadsExecutable: false,
+  historicalReadsDeliverable: false,
+  historicalReadsAuthoritativeForExecution: false,
+  historicalReadsExternalExecutionAllowed: false,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

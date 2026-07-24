@@ -31,6 +31,7 @@ const helper = read("src/core/reviewMutationSafety.ts");
 const helperTests = read("tests/reviewMutationSafety.test.ts");
 const draftRoute = read("src/routes/draftReviewAdmin.ts");
 const draftCore = read("src/core/draftReview.ts");
+const legacyDraftRoute = read("src/routes/legacyExecutionSafetyAdmin.ts");
 const opportunityRoute = read("src/routes/opportunityReviewAdmin.ts");
 const opportunityCore = read("src/core/opportunityReview.ts");
 const candidateRoute = read("src/routes/opportunitySourceCandidatesAdmin.ts");
@@ -47,7 +48,6 @@ requireTokens("review mutation helper", helper, [
   'crypto.subtle.digest("SHA-256"',
   "FORBIDDEN_TEXT_CONTROL",
 ]);
-
 requireTokens("review mutation helper tests", helperTests, [
   'test("review record identifiers are narrow and path safe"',
   'test("review text is bounded, typed and control-character safe"',
@@ -56,7 +56,8 @@ requireTokens("review mutation helper tests", helperTests, [
 ]);
 
 for (const [label, source] of [
-  ["draft review route", draftRoute],
+  ["modern draft review route", draftRoute],
+  ["legacy draft compatibility route", legacyDraftRoute],
   ["opportunity review route", opportunityRoute],
   ["source candidate commit route", candidateRoute],
 ]) {
@@ -85,10 +86,10 @@ for (const [label, source] of [
   ]);
 }
 
-requireTokens("draft review route", draftRoute, [
+requireTokens("modern draft review route", draftRoute, [
   "validReviewRecordId(draftId)",
-  "boundedReviewText(parsed.value.reason, \"reason\", 500)",
-  "boundedReviewText(parsed.value.notes, \"notes\", 4_000",
+  'boundedReviewText(parsed.value.reason, "reason", 500)',
+  'boundedReviewText(parsed.value.notes, "notes", 4_000',
   'const draftActionKey = `draft-review:${draftId}`',
   'reviewLeaseKey("draft-strategy", [strategyKey])',
   "releaseManualResearchLease(env, strategyLease)",
@@ -96,24 +97,17 @@ requireTokens("draft review route", draftRoute, [
   "concurrentDuplicateReviewAllowed: false",
   "concurrentStrategyScoreMutationAllowed: false",
 ]);
-
 const draftConfirmPosition = draftRoute.indexOf("if (!isExplicitJsonConfirmation(parsed.value))");
 const draftRecordLeasePosition = draftRoute.indexOf("const draftLease = await acquireManualResearchLease");
 const draftStrategyLeasePosition = draftRoute.indexOf("strategyLease = await acquireManualResearchLease");
 const draftMutationPosition = draftRoute.indexOf("const result = await reviewDraft");
-if (
-  draftConfirmPosition < 0 ||
-  draftRecordLeasePosition < 0 ||
-  draftStrategyLeasePosition < 0 ||
-  draftMutationPosition < 0 ||
-  !(draftConfirmPosition < draftRecordLeasePosition
-    && draftRecordLeasePosition < draftStrategyLeasePosition
-    && draftStrategyLeasePosition < draftMutationPosition)
-) {
-  errors.push("Draft confirmation and both exclusion scopes must precede the review mutation");
+if (!(draftConfirmPosition < draftRecordLeasePosition
+  && draftRecordLeasePosition < draftStrategyLeasePosition
+  && draftStrategyLeasePosition < draftMutationPosition)) {
+  errors.push("Modern draft confirmation and both exclusion scopes must precede the review mutation");
 }
 
-requireTokens("draft review application service", draftCore, [
+requireTokens("modern draft review application service", draftCore, [
   "DRAFT_REVIEW_DECISIONS",
   "normalizeDraftStrategyKey",
   "await env.DB.batch(statements)",
@@ -127,7 +121,7 @@ requireTokens("draft review application service", draftCore, [
   "executable: false",
   "externalExecutionAllowed: false",
 ]);
-forbidTokens("draft review application service", draftCore, [
+forbidTokens("modern draft review application service", draftCore, [
   "logEvent(",
   "updateDraft(",
   "updateLead(",
@@ -135,9 +129,40 @@ forbidTokens("draft review application service", draftCore, [
   "fetch(",
 ]);
 
+requireTokens("legacy draft compatibility route", legacyDraftRoute, [
+  "readBoundedJsonObject<LegacyDraftDecisionBody>(request",
+  "validReviewRecordId(draftId)",
+  'const actionKey = `draft-review:${draftId}`',
+  "const lease = await acquireManualResearchLease(env, actionKey, 600)",
+  "await env.DB.batch([",
+  "UPDATE leads SET status",
+  "UPDATE drafts SET status",
+  "VALUES (?, 'legacy_draft_review', ?, ?, ?)",
+  "reviewStateAndAuditAtomic: true",
+  "concurrentDuplicateReviewAllowed: false",
+  "reviewOnly: true",
+  "executable: false",
+  "deliverable: false",
+  "externalExecutionAllowed: false",
+]);
+forbidTokens("legacy draft compatibility route", legacyDraftRoute, [
+  "updateLead(",
+  "logEvent(",
+  "sendEmail(",
+]);
+const legacyFunctionPosition = legacyDraftRoute.indexOf("async function updateDraftDecision");
+const legacyConfirmPosition = legacyDraftRoute.indexOf("if (!isExplicitJsonConfirmation(parsed.value))", legacyFunctionPosition);
+const legacyLeasePosition = legacyDraftRoute.indexOf("const lease = await acquireManualResearchLease(env, actionKey, 600)", legacyFunctionPosition);
+const legacyBatchPosition = legacyDraftRoute.indexOf("await env.DB.batch([", legacyFunctionPosition);
+if (!(legacyFunctionPosition < legacyConfirmPosition
+  && legacyConfirmPosition < legacyLeasePosition
+  && legacyLeasePosition < legacyBatchPosition)) {
+  errors.push("Legacy draft confirmation and shared draft lease must precede its atomic review mutation");
+}
+
 requireTokens("opportunity review route", opportunityRoute, [
   "validReviewRecordId(opportunityId)",
-  "boundedReviewText(parsed.value.reason, \"reason\", 500)",
+  'boundedReviewText(parsed.value.reason, "reason", 500)',
   "boundedReviewRating",
   'const opportunityActionKey = `opportunity-review:${opportunityId}`',
   'reviewLeaseKey(\n      "opportunity-strategy"',
@@ -146,20 +171,13 @@ requireTokens("opportunity review route", opportunityRoute, [
   "concurrentDuplicateReviewAllowed: false",
   "concurrentStrategyScoreMutationAllowed: false",
 ]);
-
 const opportunityConfirmPosition = opportunityRoute.indexOf("if (!isExplicitJsonConfirmation(parsed.value))");
 const opportunityRecordLeasePosition = opportunityRoute.indexOf("const opportunityLease = await acquireManualResearchLease");
 const opportunityStrategyLeasePosition = opportunityRoute.indexOf("strategyLease = await acquireManualResearchLease");
 const opportunityMutationPosition = opportunityRoute.indexOf("const result = await applyOpportunityReview");
-if (
-  opportunityConfirmPosition < 0 ||
-  opportunityRecordLeasePosition < 0 ||
-  opportunityStrategyLeasePosition < 0 ||
-  opportunityMutationPosition < 0 ||
-  !(opportunityConfirmPosition < opportunityRecordLeasePosition
-    && opportunityRecordLeasePosition < opportunityStrategyLeasePosition
-    && opportunityStrategyLeasePosition < opportunityMutationPosition)
-) {
+if (!(opportunityConfirmPosition < opportunityRecordLeasePosition
+  && opportunityRecordLeasePosition < opportunityStrategyLeasePosition
+  && opportunityStrategyLeasePosition < opportunityMutationPosition)) {
   errors.push("Opportunity confirmation and both exclusion scopes must precede the review mutation");
 }
 
@@ -201,7 +219,9 @@ requireTokens("review mutation boundary document", doc, [
   "exact JSON boolean `confirm: true`",
   "per-record D1 lease",
   "hashed learning-scope lease",
-  "one D1 batch",
+  "legacy `/admin/drafts/:id/approve`",
+  "same `draft-review:<draft-id>` lease",
+  "legacy draft compatibility decision commits its lead status, draft status and audit event in one D1 batch",
   "do not call AI",
   "do not send email",
   "do not apply for opportunities",
@@ -223,13 +243,16 @@ if (workflow.includes("wrangler deploy")) errors.push("Review mutation validatio
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "review-mutation-boundary-safety-v1",
+  contract: "review-mutation-boundary-safety-v2-legacy-compatibility",
+  previous_contract: "review-mutation-boundary-safety-v1",
   exactBooleanConfirmationRequired: true,
   boundedRequestBodyRequired: true,
   requestFingerprintRequired: true,
   perRecordLeaseRequired: true,
   sharedLearningScopeLeaseRequired: true,
-  draftReviewWritesAtomic: true,
+  modernDraftReviewWritesAtomic: true,
+  legacyDraftReviewUsesSharedLease: true,
+  legacyDraftReviewWritesAtomic: true,
   opportunityReviewWritesAtomic: true,
   sourceCandidateCommitLeaseRequired: true,
   callsNetwork: false,

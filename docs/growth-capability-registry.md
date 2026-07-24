@@ -105,6 +105,10 @@ Its current posture is intentionally fail-closed:
 ```text
 bridgeEnabled: false
 routeInventoryComplete: false
+routeInventoryVersion: growth_business_route_inventory_v1
+routeInventoryScope: growth_and_business_admin_route_policies
+routeInventoryCompleteForScope: true
+routeInventoryCompleteForAllWorkerPostRoutes: false
 clientBrowserAccess: false
 adminTokenBrowserExposure: false
 draftingEnabled: false
@@ -116,7 +120,15 @@ transport: server_to_server_only
 promotionMode: proposal_only
 ```
 
-This does not create a Worker-to-Growth data bridge. It provides a machine-readable statement of what is and is not ready.
+The bridge-readiness payload also names the currently unclassified POST route groups:
+
+```text
+opportunity_route_policies
+operations_route_policies
+admin_fallback_posts
+```
+
+This does not create a Worker-to-Growth data bridge. It provides a machine-readable statement of what is and is not ready, including the concrete route families that still prevent bridge eligibility.
 
 ## Scoped Growth/Business route inventory
 
@@ -142,9 +154,20 @@ scope: growth_and_business_admin_route_policies
 completeForScope: true
 completeForAllWorkerPostRoutes: false
 bridgeEligible: false
+unclassifiedPostRouteGroups: 3
 ```
 
-`completeForScope: true` means the typed Growth and Business policy groups are represented. It does not mean every POST route in the Worker has been inventoried. The cross-repository bridge must remain disabled until all relevant Worker POST families are classified and guarded.
+`completeForScope: true` means the typed Growth and Business policy groups are represented. It does not mean every POST route in the Worker has been inventoried. The cross-repository bridge must remain disabled until the Opportunity policies, Operations policies and top-level admin fallback writes are classified and guarded.
+
+The exact outstanding groups are:
+
+```text
+opportunity_route_policies
+operations_route_policies
+admin_fallback_posts
+```
+
+These identifiers are part of the machine-readable contract. An empty gap list while `completeForAllWorkerPostRoutes` is false is invalid because it would leave operators unable to see what still blocks the bridge.
 
 Current inventory safety posture:
 

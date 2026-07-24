@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { runRelationshipGraphDiscovery } from "../core/sourceExpansionGraphDiscovery";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -25,10 +26,19 @@ export async function handleSourceExpansionPublicDirectoryScanAdmin(request: Req
   const body = await bodyJson(request);
   if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
 
-  return json(await runRelationshipGraphDiscovery(env, {
-    limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
-    maxFetches: boundedInteger(body?.maxFetches, 3, 1, 10),
-    maxLinksPerSeed: boundedInteger(body?.maxLinksPerSeed, 50, 10, 100),
-    maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
-  }));
+  const actionKey = "source-expansion-relationship-graph";
+  const lease = await acquireManualResearchLease(env, actionKey, 900);
+  if (!lease) return json(manualResearchLeaseConflict(actionKey), { status: 409 });
+
+  try {
+    const result = await runRelationshipGraphDiscovery(env, {
+      limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
+      maxFetches: boundedInteger(body?.maxFetches, 3, 1, 10),
+      maxLinksPerSeed: boundedInteger(body?.maxLinksPerSeed, 50, 10, 100),
+      maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
+    });
+    return json({ ...result, leaseContract: lease.contract });
+  } finally {
+    await releaseManualResearchLease(env, lease).catch(() => false);
+  }
 }

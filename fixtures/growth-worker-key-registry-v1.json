@@ -1,0 +1,32 @@
+{
+  "contractVersion": "growth_worker_key_registry_v1",
+  "keys": [
+    {
+      "keyId": "worker-primary-2026-07",
+      "secret": "test-only-growth-worker-bridge-secret-000000000000000001",
+      "organisationId": "00000000-0000-4000-8000-000000000101",
+      "workspaceId": "00000000-0000-4000-8000-000000000201",
+      "state": "active",
+      "notBefore": "2026-07-01T00:00:00.000Z",
+      "expiresAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "keyId": "worker-retiring-2026-06",
+      "secret": "test-only-growth-worker-retiring-secret-000000000000000001",
+      "organisationId": "00000000-0000-4000-8000-000000000101",
+      "workspaceId": "00000000-0000-4000-8000-000000000201",
+      "state": "retiring",
+      "notBefore": "2026-06-01T00:00:00.000Z",
+      "expiresAt": "2026-07-27T04:00:00.000Z"
+    },
+    {
+      "keyId": "worker-secondary-2026-07",
+      "secret": "test-only-growth-worker-secondary-secret-000000000000000001",
+      "organisationId": "00000000-0000-4000-8000-000000000102",
+      "workspaceId": "00000000-0000-4000-8000-000000000202",
+      "state": "active",
+      "notBefore": "2026-07-01T00:00:00.000Z",
+      "expiresAt": "2026-08-31T00:00:00.000Z"
+    }
+  ]
+}

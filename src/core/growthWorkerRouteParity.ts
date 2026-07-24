@@ -14,6 +14,15 @@ export const GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS = Object.freeze([
   "cross_repo_contract_tests_not_implemented",
 ] as const);
 
+export const GROWTH_WORKER_ROUTE_BLOCKERS_BY_PAGE_STATE = Object.freeze({
+  absent: GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS,
+  present: GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS,
+} as const);
+
+export const GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE = "absent" as const;
+export const GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS =
+  GROWTH_WORKER_ROUTE_BLOCKERS_BY_PAGE_STATE[GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE];
+
 const ROUTE_PARITY_KEYS = Object.freeze([
   "contractVersion",
   "websiteRepository",
@@ -31,7 +40,7 @@ const ROUTE_PARITY_KEYS = Object.freeze([
   "blockers",
 ] as const);
 
-export type GrowthWorkerRoutePageState = "absent" | "present";
+export type GrowthWorkerRoutePageState = keyof typeof GROWTH_WORKER_ROUTE_BLOCKERS_BY_PAGE_STATE;
 export type GrowthWorkerRouteBlockingReason =
   | (typeof GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS)[number]
   | (typeof GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS)[number];
@@ -108,9 +117,9 @@ function pageStateValue(record: UnknownRecord): GrowthWorkerRoutePageState {
 export function growthWorkerRouteBlockersForPageState(
   pageState: GrowthWorkerRoutePageState,
 ): readonly GrowthWorkerRouteBlockingReason[] {
-  if (pageState === "absent") return GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS;
-  if (pageState === "present") return GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS;
-  fail("GROWTH_WORKER_ROUTE_PARITY_PAGE_STATE_INVALID");
+  const blockers = GROWTH_WORKER_ROUTE_BLOCKERS_BY_PAGE_STATE[pageState];
+  if (!blockers) fail("GROWTH_WORKER_ROUTE_PARITY_PAGE_STATE_INVALID");
+  return blockers;
 }
 
 function exactBlockers(

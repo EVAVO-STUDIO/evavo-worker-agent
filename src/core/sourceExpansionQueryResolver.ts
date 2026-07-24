@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
+import { validatePublicResearchUrl } from "./publicResearchFetch";
 
 const SOURCE_URL_PATTERN = /(tender|tenders|procurement|supplier|suppliers|contract|contracts|grant|grants|funding|funds|investment|opportunit|rfp|eoi|panel|marketplace|creative|screen|innovation|digital|business-support|program)/i;
 const NOISE_URL_PATTERN = /(login|signin|register|cart|privacy|terms|policy|cookie|facebook|instagram|linkedin|twitter|x\.com|youtube|tiktok|\.pdf$|\.jpg$|\.png$|\.zip$|mailto:|tel:)/i;
@@ -22,14 +23,8 @@ type ResolveOptions = {
 };
 
 function normalizeUrl(raw: string) {
-  try {
-    const url = new URL(raw.trim());
-    if (!["http:", "https:"].includes(url.protocol)) return null;
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  const decision = validatePublicResearchUrl(raw);
+  return decision.ok && decision.url ? decision.url.replace(/\/+$/, "") : null;
 }
 
 function domainOf(raw: string) {
@@ -69,7 +64,7 @@ async function getHint(env: Env, id: string): Promise<QueryHintRow | null> {
 function scoreResolvedUrl(url: string, hint: QueryHintRow) {
   const lower = url.toLowerCase();
   if (NOISE_URL_PATTERN.test(lower)) return null;
-  const reasons: string[] = ["query_hint:resolved_by_operator", `query_strategy:${hint.strategy}`];
+  const reasons: string[] = ["query_hint:resolved_by_operator", `query_strategy:${hint.strategy}`, "url_policy:public_research_fetch_v1"];
   let score = 35 + Math.round((Number(hint.score || 50) - 50) * 0.25);
   let sourceType = "query_hint_resolved_source";
   let category = hint.category || "opportunities";
@@ -112,13 +107,26 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
   }
   const hint = await getHint(env, options.hintId);
   if (!hint) return { ok: false, error: "query_hint_not_found" };
-  const uniqueUrls = Array.from(new Set((options.urls || []).map((url) => normalizeUrl(url)).filter(Boolean) as string[])).slice(0, 25);
+
+  const submittedUrls = Array.from(new Set((options.urls || []).map((url) => String(url || "").trim()).filter(Boolean))).slice(0, 25);
+  const uniqueUrls: string[] = [];
+  const results: any[] = [];
+  let rejected = 0;
+  for (const rawUrl of submittedUrls) {
+    const decision = validatePublicResearchUrl(rawUrl);
+    if (!decision.ok || !decision.url) {
+      rejected += 1;
+      results.push({ url: rawUrl, status: "rejected", reason: decision.error || "invalid_research_url" });
+      continue;
+    }
+    const normalized = normalizeUrl(decision.url);
+    if (normalized && !uniqueUrls.includes(normalized)) uniqueUrls.push(normalized);
+  }
+
   const existing = await existingDomains(env);
   const now = nowISO();
   let saved = 0;
   let duplicate = 0;
-  let rejected = 0;
-  const results: any[] = [];
 
   for (const url of uniqueUrls) {
     const scored = scoreResolvedUrl(url, hint);
@@ -158,7 +166,7 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
       scored.confidence,
       hint.id,
       JSON.stringify(scored.reasons),
-      JSON.stringify({ queryHintId: hint.id, queryText: hint.query_text, note: options.note || null, resolvedAtISO: now }),
+      JSON.stringify({ queryHintId: hint.id, queryText: hint.query_text, note: options.note || null, resolvedAtISO: now, urlPolicyContract: "public_research_fetch_v1" }),
       now,
       now,
       now,
@@ -180,5 +188,17 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
   ).bind(saved + duplicate, now, now, options.note || "Resolved into source expansion candidate URLs", hint.id).run();
 
   await logEvent(env, "source_expansion_query_hint_resolved", `Resolved query hint ${hint.id}: ${saved} candidate(s), ${duplicate} duplicate(s), ${rejected} rejected.`);
-  return { ok: true, mode: "source_expansion_query_hint_resolved", hintId: hint.id, queryText: hint.query_text, submitted: uniqueUrls.length, saved, duplicate, rejected, results };
+  return {
+    ok: true,
+    mode: "source_expansion_query_hint_resolved",
+    urlPolicyContract: "public_research_fetch_v1",
+    hintId: hint.id,
+    queryText: hint.query_text,
+    submitted: submittedUrls.length,
+    publicUrlsAccepted: uniqueUrls.length,
+    saved,
+    duplicate,
+    rejected,
+    results,
+  };
 }

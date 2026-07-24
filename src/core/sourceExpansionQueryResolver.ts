@@ -1,6 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
-import { validatePublicResearchUrl } from "./publicResearchFetch";
+import { PUBLIC_RESEARCH_FETCH_CONTRACT, validatePublicResearchUrl } from "./publicResearchFetch";
 
 const SOURCE_URL_PATTERN = /(tender|tenders|procurement|supplier|suppliers|contract|contracts|grant|grants|funding|funds|investment|opportunit|rfp|eoi|panel|marketplace|creative|screen|innovation|digital|business-support|program)/i;
 const NOISE_URL_PATTERN = /(login|signin|register|cart|privacy|terms|policy|cookie|facebook|instagram|linkedin|twitter|x\.com|youtube|tiktok|\.pdf$|\.jpg$|\.png$|\.zip$|mailto:|tel:)/i;
@@ -64,7 +64,7 @@ async function getHint(env: Env, id: string): Promise<QueryHintRow | null> {
 function scoreResolvedUrl(url: string, hint: QueryHintRow) {
   const lower = url.toLowerCase();
   if (NOISE_URL_PATTERN.test(lower)) return null;
-  const reasons: string[] = ["query_hint:resolved_by_operator", `query_strategy:${hint.strategy}`, "url_policy:public_research_fetch_v1"];
+  const reasons: string[] = ["query_hint:resolved_by_operator", `query_strategy:${hint.strategy}`, `url_policy:${PUBLIC_RESEARCH_FETCH_CONTRACT}`];
   let score = 35 + Math.round((Number(hint.score || 50) - 50) * 0.25);
   let sourceType = "query_hint_resolved_source";
   let category = hint.category || "opportunities";
@@ -125,6 +125,8 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
 
   const existing = await existingDomains(env);
   const now = nowISO();
+  const note = typeof options.note === "string" && options.note.trim() ? options.note.replace(/\s+/g, " ").trim().slice(0, 500) : null;
+  const statements: D1PreparedStatement[] = [];
   let saved = 0;
   let duplicate = 0;
 
@@ -136,7 +138,7 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
       continue;
     }
     const status = existing.has(scored.domain) ? "duplicate_existing_source" : "candidate";
-    await env.DB.prepare(
+    statements.push(env.DB.prepare(
       `INSERT INTO source_expansion_candidates (id, url, domain, label, source_type, country, region, category, status, score, confidence, strategy, seed_id, discovery_depth, reasons_json, evidence_json, first_seen_at_iso, last_seen_at_iso, next_review_at_iso, quality_score)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'query_hint_resolved', ?, 1, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(url) DO UPDATE SET
@@ -166,18 +168,29 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
       scored.confidence,
       hint.id,
       JSON.stringify(scored.reasons),
-      JSON.stringify({ queryHintId: hint.id, queryText: hint.query_text, note: options.note || null, resolvedAtISO: now, urlPolicyContract: "public_research_fetch_v1" }),
+      JSON.stringify({
+        queryHintId: hint.id,
+        queryText: hint.query_text,
+        note,
+        resolvedAtISO: now,
+        urlPolicyContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
+        reviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        externalExecutionAllowed: false,
+      }),
       now,
       now,
       now,
       scored.score,
-    ).run();
+    ));
     if (status === "duplicate_existing_source") duplicate += 1;
     else saved += 1;
-    results.push({ url, status, score: scored.score, reasons: scored.reasons });
+    results.push({ url, status, score: scored.score, reasons: scored.reasons, reviewOnly: true, executable: false });
   }
 
-  await env.DB.prepare(
+  statements.push(env.DB.prepare(
     `UPDATE source_expansion_query_hints SET
        used_count = used_count + 1,
        result_count = result_count + ?,
@@ -185,13 +198,14 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
        updated_at_iso = ?,
        notes = ?
      WHERE id = ?`
-  ).bind(saved + duplicate, now, now, options.note || "Resolved into source expansion candidate URLs", hint.id).run();
+  ).bind(saved + duplicate, now, now, note || "Resolved into source expansion candidate URLs", hint.id));
 
+  await env.DB.batch(statements);
   await logEvent(env, "source_expansion_query_hint_resolved", `Resolved query hint ${hint.id}: ${saved} candidate(s), ${duplicate} duplicate(s), ${rejected} rejected.`);
   return {
     ok: true,
     mode: "source_expansion_query_hint_resolved",
-    urlPolicyContract: "public_research_fetch_v1",
+    urlPolicyContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
     hintId: hint.id,
     queryText: hint.query_text,
     submitted: submittedUrls.length,
@@ -200,5 +214,11 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
     duplicate,
     rejected,
     results,
+    candidateAndHintUpdateAtomic: true,
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
   };
 }

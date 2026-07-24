@@ -1,5 +1,6 @@
 import { Env, getSetting, logEvent, nowISO, uuid } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { fetchPublicResearchHtml } from "../core/publicResearchFetch";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
@@ -118,48 +119,57 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
       return json({ ok: false, error: "confirm_required" }, { status: 400 });
     }
 
-    const perTickLimit = Math.max(1, Math.min(10, await numberSetting(env, "per_tick_source_page_limit", 2)));
-    const requestedLimit = Math.max(1, Math.min(10, Number(body?.limit || 1)));
-    const limit = Math.min(perTickLimit, requestedLimit, 3);
+    const actionKey = "sources-run-tiny";
+    const lease = await acquireManualResearchLease(env, actionKey, 600);
+    if (!lease) return json(manualResearchLeaseConflict(actionKey), { status: 409 });
 
-    const candidateRows = await env.DB.prepare(
-      "SELECT * FROM sources WHERE status IN ('active', 'cooldown') ORDER BY COALESCE(next_run_at_iso, created_at_iso), updated_at_iso LIMIT 25"
-    ).all<any>();
+    try {
+      const perTickLimit = Math.max(1, Math.min(10, await numberSetting(env, "per_tick_source_page_limit", 2)));
+      const requestedLimit = Math.max(1, Math.min(10, Number(body?.limit || 1)));
+      const limit = Math.min(perTickLimit, requestedLimit, 3);
 
-    const candidates = candidateRows.results || [];
-    const skipped: Array<{ sourceId: string; url: string; reason: string }> = [];
-    const runnable = [];
+      const candidateRows = await env.DB.prepare(
+        "SELECT * FROM sources WHERE status IN ('active', 'cooldown') ORDER BY COALESCE(next_run_at_iso, created_at_iso), updated_at_iso LIMIT 25"
+      ).all<any>();
 
-    for (const source of candidates) {
-      if (runnable.length >= limit) break;
-      if (String(source.status) === "cooldown" && isFutureIso(source.cooldown_until_iso)) {
-        skipped.push({ sourceId: source.id, url: source.url, reason: "cooldown_until_future" });
-        continue;
+      const candidates = candidateRows.results || [];
+      const skipped: Array<{ sourceId: string; url: string; reason: string }> = [];
+      const runnable = [];
+
+      for (const source of candidates) {
+        if (runnable.length >= limit) break;
+        if (String(source.status) === "cooldown" && isFutureIso(source.cooldown_until_iso)) {
+          skipped.push({ sourceId: source.id, url: source.url, reason: "cooldown_until_future" });
+          continue;
+        }
+        if (source.next_run_at_iso && isFutureIso(source.next_run_at_iso)) {
+          skipped.push({ sourceId: source.id, url: source.url, reason: "next_run_in_future" });
+          continue;
+        }
+        runnable.push(source);
       }
-      if (source.next_run_at_iso && isFutureIso(source.next_run_at_iso)) {
-        skipped.push({ sourceId: source.id, url: source.url, reason: "next_run_in_future" });
-        continue;
-      }
-      runnable.push(source);
+
+      const results = [];
+      for (const source of runnable) results.push(await runOneSource(env, source));
+
+      await logEvent(env, "source_run_tiny", `Ran confirmed tiny source batch over ${results.length} source(s), skipped ${skipped.length}.`);
+      return json({
+        ok: true,
+        mode: "tiny_source_batch",
+        fetchContract: "public_research_fetch_v1",
+        leaseContract: lease.contract,
+        requested: requestedLimit,
+        perTickLimit,
+        effectiveLimit: limit,
+        considered: candidates.length,
+        processed: results.length,
+        skipped,
+        results,
+        safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true, callsAI: false, sendsEmail: false, externalStateChange: false, concurrentDuplicateRunAllowed: false },
+      });
+    } finally {
+      await releaseManualResearchLease(env, lease).catch(() => false);
     }
-
-    const results = [];
-    for (const source of runnable) results.push(await runOneSource(env, source));
-
-    await logEvent(env, "source_run_tiny", `Ran confirmed tiny source batch over ${results.length} source(s), skipped ${skipped.length}.`);
-    return json({
-      ok: true,
-      mode: "tiny_source_batch",
-      fetchContract: "public_research_fetch_v1",
-      requested: requestedLimit,
-      perTickLimit,
-      effectiveLimit: limit,
-      considered: candidates.length,
-      processed: results.length,
-      skipped,
-      results,
-      safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true, callsAI: false, sendsEmail: false, externalStateChange: false },
-    });
   }
 
   return json({ ok: false, error: "Not found" }, { status: 404 });

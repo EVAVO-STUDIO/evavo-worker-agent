@@ -30,6 +30,23 @@ Source-candidate commits use one broad commit lease because they may add several
 
 A conflict returns HTTP `409` with `research_action_in_progress`. It does not enqueue, wait, retry automatically or switch to a scheduled executor.
 
+## Source-candidate admission
+
+A source-candidate commit accepts at most 25 reviewed URLs. Each URL must be HTTPS and must pass the same `public_research_fetch_v2` URL-admission policy used by bounded manual research.
+
+The route and application service independently reject:
+
+- private, loopback, link-local, reserved, internal, onion and single-label hosts;
+- embedded URL credentials;
+- non-standard ports;
+- sensitive query parameters such as access tokens, API keys, passwords, sessions and request signatures;
+- malformed or non-HTTPS URLs;
+- URLs outside the reviewed deterministic or expansion-candidate set.
+
+Validation does not fetch the URL. Source-candidate commits remain network-free internal metadata writes.
+
+When selected candidates have expansion evidence, their metadata is loaded with one parameterised D1 `WHERE url IN (...)` query rather than one query per selected URL. This keeps the bounded 25-item commit predictable and avoids an unnecessary N+1 read pattern.
+
 ## Atomic writes
 
 A modern draft review commits its review row, strategy score, draft status, applicable lead status and audit event in one D1 batch.
@@ -37,6 +54,8 @@ A modern draft review commits its review row, strategy score, draft status, appl
 A legacy draft compatibility decision commits its lead status, draft status and audit event in one D1 batch while the shared draft lease is held.
 
 An opportunity review commits its review row, opportunity status, strategy score and audit event in one D1 batch.
+
+A source-candidate commit places all accepted `opportunity_sources` inserts, applicable `source_expansion_candidates` marker updates and one audit event in the same D1 batch. A failure therefore does not leave only part of the reviewed selection saved.
 
 The audit event records a request-body fingerprint and a review-only, non-executable posture. It never stores the administrator token or raw request body.
 

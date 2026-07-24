@@ -23,6 +23,10 @@ It does **not** provide outbound execution.
 - Public response bodies are full-operation-timeout-bounded, byte-bounded and hashed for evidence receipts.
 - Unsafe rejected URL inputs are redacted rather than reflected in route responses or audit metadata.
 - Research runs distinguish attempts from successful fetches and report skipped, failed, partial and completed outcomes truthfully.
+- Opportunity extraction is deterministic, boundary-aware and evidence-quality-scored.
+- Missing deadlines, values, currencies, eligibility and scope remain missing rather than being inferred.
+- Historical source and review learning may calibrate grounded evidence but cannot promote weak evidence into high confidence.
+- Persisted opportunity candidates are internal review records only and cannot become drafts, approvals or external actions.
 - Manual legacy execution routes return a fail-closed response.
 - All protected routes require server-side Worker authentication.
 - Confirmed write routes mutate internal D1 metadata only.
@@ -78,9 +82,22 @@ They may not:
 
 The authoritative detailed contract is [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md).
 
+## Opportunity evidence quality
+
+Opportunity extraction uses canonical public URLs and boundary-aware term matching so short signals such as `ai`, `ar`, `ui`, `eoi`, `rfp` and `rft` do not match inside unrelated words. Tracking parameters are removed before deduplication.
+
+Deadlines are normalised only when a complete supported date, including the year, is present. Monetary values are parsed only when marked with `AUD`, `NZD` or a dollar sign. The Worker does not guess years, timezones, currencies, budgets, eligibility or scope.
+
+Each candidate reports an evidence-quality score, evidence strength, missing facts and review flags. Confidence requires both a useful opportunity score and sufficient evidence quality. Positive historical learning is blocked for weak evidence and tightly capped for limited evidence.
+
+Candidates can be persisted only with explicit review-only, non-executable and non-deliverable posture. Operator-facing recommendations are internal review instructions such as shortlisting for eligibility review or inspecting the source evidence. They are not response-preparation or execution instructions.
+
+The authoritative detailed contract is [`docs/opportunity-evidence-quality.md`](docs/opportunity-evidence-quality.md).
+
 ## Current operating documents
 
 - [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md)
+- [`docs/opportunity-evidence-quality.md`](docs/opportunity-evidence-quality.md)
 - [`docs/zero-source-startup.md`](docs/zero-source-startup.md)
 - [`docs/zero-source-route-catalogue.md`](docs/zero-source-route-catalogue.md)
 - [`docs/growth-autonomous-discovery-architecture.md`](docs/growth-autonomous-discovery-architecture.md)
@@ -149,8 +166,9 @@ npm run manual:execution-safety:check
 npm run legacy:engine-isolation:check
 npm run public:surface-safety:check
 npm run research:public-fetch-safety:check
-npm run runtime:capability-config:check
+npm run opportunities:evidence-quality:check
 npm run opportunities:execution-boundary-safety:check
+npm run runtime:capability-config:check
 npm run opportunities:route-policy:check
 npm run business:route-policy:check
 npm run business:route-catalogue-truthfulness:check
@@ -213,5 +231,5 @@ When no approved source list exists:
 3. Review candidate domains and crawl policy.
 4. Run one authenticated, explicitly confirmed and bounded research action.
 5. Save findings as internal review metadata only.
-6. Review evidence receipts, run status and source health manually.
+6. Review evidence receipts, run status, evidence quality, missing facts and source health manually.
 7. Do not draft, send, post, submit or mutate external systems.

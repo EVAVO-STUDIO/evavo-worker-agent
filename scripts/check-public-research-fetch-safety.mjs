@@ -27,15 +27,24 @@ function forbidTokens(label, source, tokens) {
   }
 }
 
+function walk(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolute = path.join(directory, entry.name);
+    return entry.isDirectory() ? walk(absolute) : [absolute];
+  });
+}
+
 const helper = read("src/core/publicResearchFetch.ts");
 const sourceExpansion = read("src/core/sourceExpansionEngine.ts");
 const relationshipGraph = read("src/core/sourceExpansionGraphDiscovery.ts");
 const sitemapExpansion = read("src/core/sourceExpansionSitemap.ts");
 const opportunityRunner = read("src/opportunityAutonomy.ts");
+const opportunityRuns = read("src/core/opportunityRuns.ts");
 const opportunityDiscovery = read("src/routes/opportunityDiscoveryAdmin.ts");
 const sourcesAdmin = read("src/routes/sourcesAdmin.ts");
 const sourceBatch = read("src/routes/sourceBatchAdmin.ts");
 const queryResolver = read("src/core/sourceExpansionQueryResolver.ts");
+const tests = read("tests/publicResearchFetch.test.ts");
 const wrangler = read("wrangler.toml");
 const workflow = read(".github/workflows/worker-contract.yml");
 const readme = read("README.md");
@@ -44,7 +53,7 @@ const packageJson = JSON.parse(read("package.json") || "{}");
 const safetyGate = read("scripts/check-safety-gate-completeness.mjs");
 
 requireTokens("public research fetch helper", helper, [
-  'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v1"',
+  'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v2"',
   "DEFAULT_PUBLIC_RESEARCH_MAX_BYTES = 1_048_576",
   "DEFAULT_PUBLIC_RESEARCH_MAX_REDIRECTS = 4",
   "DEFAULT_PUBLIC_RESEARCH_TIMEOUT_MS = 12_000",
@@ -52,23 +61,30 @@ requireTokens("public research fetch helper", helper, [
   "url.username || url.password",
   'error: "non_public_research_host"',
   'error: "non_standard_port_not_allowed"',
+  'error: "sensitive_query_parameter_not_allowed"',
   '"metadata.google.internal"',
   '".localhost"',
   '".internal"',
   '".onion"',
+  "SENSITIVE_QUERY_KEYS",
+  '"x-amz-signature"',
+  '"x-goog-signature"',
   "isBlockedIpv4",
   "isBlockedIpv6",
   'redirect: "manual"',
   "validatePublicResearchUrl(location, currentUrl)",
   '"redirect_loop"',
   '"too_many_redirects"',
+  "redirectChain.push",
   "new AbortController()",
   '"research_fetch_timeout"',
   '"response_too_large"',
+  '"binary_response_rejected"',
   "readBodyBounded",
+  "isProbablyBinary",
   "bodySha256",
   'crypto.subtle.digest("SHA-256", bytes)',
-  '"EVAVO-Growth-Research-Worker/1.0 (+https://evavo.com.au)"',
+  '"EVAVO-Growth-Research-Worker/2.0 (+https://evavo.com.au)"',
   "fetchPublicResearchHtml",
   "fetchPublicResearchText",
   "const deadlineAt = startedAt + timeoutMs",
@@ -79,6 +95,11 @@ requireTokens("public research fetch helper", helper, [
   "controller.signal.aborted",
   "finally {",
   "clearTimeout(timeout)",
+  "contentLength",
+  "etag",
+  "lastModified",
+  "contentLanguage",
+  "transport?: PublicResearchTransport",
 ]);
 
 const boundedReadPosition = helper.indexOf("const bounded = await readBodyBounded(response, maxBytes)");
@@ -115,18 +136,35 @@ for (const [relativePath, source] of guardedFetchFiles) {
   ]);
 }
 
+const sourceRoot = path.join(root, "src");
+if (fs.existsSync(sourceRoot)) {
+  for (const absolute of walk(sourceRoot).filter((file) => /\.(ts|tsx)$/.test(file))) {
+    const source = fs.readFileSync(absolute, "utf8");
+    if (source.includes("public_research_fetch_v1")) {
+      errors.push(`${path.relative(root, absolute).replaceAll("\\", "/")} contains stale active fetch contract public_research_fetch_v1`);
+    }
+  }
+}
+
 requireTokens("source expansion run truthfulness", sourceExpansion, [
+  "PUBLIC_RESEARCH_FETCH_CONTRACT",
   "normalizeExpansionFailure",
   "ALLOWED_EXPANSION_FAILURES",
+  '"sensitive_query_parameter_not_allowed"',
+  '"binary_response_rejected"',
   "let fetchAttempts = 0",
   "fetchAttempts += 1",
   "pagesFetched += 1",
-  'const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed"',
+  'const runStatus = fetchAttempts === 0 ? "skipped"',
+  '? "partial" : "completed"',
   '`partial_source_failures:${failed}`',
   "error: runError",
   "fetchAttempts,",
+  "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
   "fullOperationTimeout: true",
+  "reviewOnly: true",
+  "externalExecutionAllowed: false",
 ]);
 const fetchFailurePosition = sourceExpansion.indexOf('if (!fetched.ok) throw new Error(fetched.error || "research_fetch_failed")');
 const successfulPagePosition = sourceExpansion.indexOf("pagesFetched += 1", fetchFailurePosition);
@@ -135,54 +173,77 @@ if (fetchFailurePosition < 0 || successfulPagePosition < 0 || successfulPagePosi
 }
 
 requireTokens("relationship graph run truthfulness", relationshipGraph, [
+  "PUBLIC_RESEARCH_FETCH_CONTRACT",
   "let fetchAttempts = 0",
   "fetchAttempts += 1",
   "pagesFetched += 1",
-  'const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed"',
+  'const runStatus = fetchAttempts === 0 ? "skipped"',
+  '? "partial" : "completed"',
   '`partial_source_failures:${failed}`',
+  "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
   "fullOperationTimeout: true",
+  "ok: runStatus !== \"failed\"",
 ]);
 
-requireTokens("sitemap run truthfulness", sitemapExpansion, [
+requireTokens("sitemap run truthfulness and index traversal", sitemapExpansion, [
+  "PUBLIC_RESEARCH_FETCH_CONTRACT",
+  "SitemapQueueItem",
+  "function isSitemapIndex",
+  "const sitemapQueue: SitemapQueueItem[] = []",
+  "childSitemapsQueued",
+  "sitemapDocumentsFetched",
+  "next.depth < 2",
+  "maxSitemapDepth: 2",
   "let successfulFetches = 0",
   "successfulFetches += 1",
   'const runStatus = seeds.length === 0',
-  '"skipped"',
-  '"failed"',
+  '? "partial"',
   '`partial_source_failures:${failures}`',
+  "redirectChain: result.redirectChain",
   "timeoutScope: result.timeoutScope",
   "fullOperationTimeout: true",
+  "ok: runStatus !== \"failed\"",
 ]);
 
 requireTokens("manual opportunity run truthfulness", opportunityRunner, [
+  "PUBLIC_RESEARCH_FETCH_CONTRACT",
   'startOpportunityRun(env, "manual_confirmed"',
   'discoveredBy: "manual-confirmed-run-due"',
   'runType: "manual_confirmed"',
   "let successfulSources = 0",
   "successfulSources += 1",
-  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : "completed"',
+  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : summary.failed > 0 ? "partial" : "completed"',
   '`partial_source_failures:${summary.failed}`',
   "sourceFetch: sourceReceipt",
+  "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
   "fullOperationTimeout: true",
-  'fetchContract: "public_research_fetch_v1"',
+  "sourceHealthAndAuditAtomic: true",
 ]);
 forbidTokens("manual opportunity runner", opportunityRunner, [
   'startOpportunityRun(env, "scheduled"',
   'discoveredBy: "scheduled"',
 ]);
 
-requireTokens("source admin provenance and input redaction", sourcesAdmin, [
+requireTokens("opportunity audit transaction support", opportunityRuns, [
+  'OpportunityRunStatus = "running" | "completed" | "partial" | "failed" | "skipped"',
+  "prepareSourceRunResult",
+]);
+
+requireTokens("source admin provenance and atomicity", sourcesAdmin, [
   "validatePublicResearchUrl(rawUrl)",
   "sourceRunId = uuid()",
-  "sourceFetch: fetchReceipt(sourceResult)",
+  "const sourceFetch = fetchReceipt(sourceResult)",
   "profileFetch: profileReceipt",
   "source_run_id",
   "bodySha256",
+  "redirectChain: result.redirectChain",
   "timeoutScope: result.timeoutScope",
   "inputRedacted: true",
-  'fetchContract: "public_research_fetch_v1"',
+  'fetchContract: "public_research_fetch_v2"',
+  "env.DB.batch([runInsert, sourceUpdate])",
+  "auditAndSourceUpdateAtomic: true",
 ]);
 forbidTokens("source admin input redaction", sourcesAdmin, [
   'input: String(rawUrl || "")',
@@ -194,6 +255,9 @@ requireTokens("opportunity discovery receipts", opportunityDiscovery, [
   "contract: fetched.contract",
   "finalUrl: fetched.finalUrl",
   "bodySha256: fetched.bodySha256",
+  "redirectChain: fetched.redirectChain",
+  "etag: fetched.etag",
+  "lastModified: fetched.lastModified",
   "timeoutScope: fetched.timeoutScope",
   "sourceFetch,",
   "fullOperationTimeout: true",
@@ -201,21 +265,39 @@ requireTokens("opportunity discovery receipts", opportunityDiscovery, [
   "publicWebOnly: true",
 ]);
 
-requireTokens("tiny source batch receipts", sourceBatch, [
+requireTokens("tiny source batch receipts and atomicity", sourceBatch, [
+  "redirectChain: result.redirectChain",
   "timeoutScope: result.timeoutScope",
   "fullOperationTimeout: true",
-  'fetchContract: "public_research_fetch_v1"',
+  'fetchContract: "public_research_fetch_v2"',
+  "env.DB.batch([runInsert, sourceUpdate])",
+  "auditAndSourceUpdateAtomic: true",
+  'runStatus = results.length === 0 ? "skipped"',
 ]);
 
 requireTokens("query hint URL resolver", queryResolver, [
-  'from "./publicResearchFetch"',
+  "PUBLIC_RESEARCH_FETCH_CONTRACT",
   "validatePublicResearchUrl(rawUrl)",
   'reason: decision.error || "invalid_research_url"',
   "inputRedacted: true",
-  'urlPolicyContract: "public_research_fetch_v1"',
+  "env.DB.batch(statements)",
+  "candidateAndHintUpdateAtomic: true",
+  "externalExecutionAllowed: false",
 ]);
 forbidTokens("query hint input redaction", queryResolver, [
   "results.push({ url: rawUrl",
+]);
+
+requireTokens("public research behavioral tests", tests, [
+  'from "../src/core/publicResearchFetch.ts"',
+  'test("public URL validation rejects non-public and credential-bearing targets"',
+  'test("manual redirects are validated and recorded before the next request"',
+  'test("an unsafe redirect is rejected before a second transport call"',
+  'test("bounded reads reject oversized and binary responses"',
+  'test("HTML research rejects a non-HTML declared media type"',
+  '"sensitive_query_parameter_not_allowed"',
+  '"binary_response_rejected"',
+  '"public_research_fetch_v2"',
 ]);
 
 requireTokens("Cloudflare runtime configuration", wrangler, [
@@ -226,6 +308,8 @@ requireTokens("Cloudflare runtime configuration", wrangler, [
 requireTokens("Worker contract workflow", workflow, [
   "Verify public research fetch boundary",
   "npm run research:public-fetch-safety:check",
+  "Run deterministic core tests",
+  "npm run test:core",
   "npm run check:local",
 ]);
 if (workflow.includes("wrangler deploy")) errors.push("Worker contract workflow must not deploy while validating public research safety");
@@ -235,17 +319,22 @@ requireTokens("README public research boundary", readme, [
   "Public response bodies are full-operation-timeout-bounded, byte-bounded and hashed for evidence receipts.",
   "Unsafe rejected URL inputs are redacted rather than reflected in route responses or audit metadata.",
   "Research runs distinguish attempts from successful fetches and report skipped, failed, partial and completed outcomes truthfully.",
-  "default full-operation timeout is 12 seconds",
-  "timeoutScope: full_operation",
-  "global_fetch_strictly_public",
-  "SHA-256 body hash",
-  "docs/public-research-fetch-boundary.md",
+  "public_research_fetch_v2",
+  "redirect chain",
+  "sitemap indexes",
   "npm run research:public-fetch-safety:check",
+  "npm run test:core",
 ]);
 
 requireTokens("public research boundary document", boundaryDoc, [
   "# Public research fetch boundary",
-  "public_research_fetch_v1",
+  "public_research_fetch_v2",
+  "sensitive query parameter",
+  "binary",
+  "redirectChain",
+  "ETag",
+  "Last-Modified",
+  "Sitemap indexes",
   "Rejected unsafe URL input is not echoed back",
   "Automatic redirect following is disabled.",
   "maximum full operation time: 12,000 milliseconds",
@@ -262,8 +351,10 @@ const expectedCommand = "node scripts/check-public-research-fetch-safety.mjs";
 if (packageJson.scripts?.["research:public-fetch-safety:check"] !== expectedCommand) {
   errors.push(`package.json must expose research:public-fetch-safety:check as ${expectedCommand}`);
 }
-if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run research:public-fetch-safety:check")) {
-  errors.push("check:local must include research:public-fetch-safety:check");
+if (packageJson.scripts?.["test:core"] !== "node --test") errors.push("package.json must expose test:core as node --test");
+const checkLocal = String(packageJson.scripts?.["check:local"] || "");
+for (const command of ["npm run research:public-fetch-safety:check", "npm run test:core"]) {
+  if (!checkLocal.includes(command)) errors.push(`check:local must include ${command}`);
 }
 
 requireTokens("safety gate completeness", safetyGate, [
@@ -275,27 +366,35 @@ requireTokens("safety gate completeness", safetyGate, [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "public-research-fetch-safety-v5-truthful-redacted-evidence",
+  contract: "public-research-fetch-safety-v6-fetch-v2-behavioral",
+  activeFetchContract: "public_research_fetch_v2",
   publicHttpOnly: true,
   privateAndReservedHostsRejected: true,
   urlCredentialsRejected: true,
+  sensitiveQueryParametersRejected: true,
   nonStandardPortsRejected: true,
   redirectsValidatedManually: true,
+  redirectChainEvidenceRequired: true,
   redirectLoopsBlocked: true,
   responseBytesBounded: true,
+  binaryResponsesRejected: true,
   fetchTimeoutRequired: true,
   timeoutCoversRedirectsAndBody: true,
   responseHashRequired: true,
+  cacheValidatorEvidenceRequired: true,
   strictPublicCloudflareFetchRequired: true,
   directResearchFetchCallsOutsideBoundaryAllowed: false,
   rejectedUnsafeInputsEchoed: false,
   sourceRunProvenanceRequired: true,
   sourceExpansionRunTruthfulnessRequired: true,
   relationshipGraphRunTruthfulnessRequired: true,
-  sitemapRunTruthfulnessRequired: true,
+  sitemapIndexTraversalRequired: true,
   manualOpportunityRunTruthfulnessRequired: true,
+  sourceHealthAuditAtomicityRequired: true,
+  queryHintResolutionAtomicityRequired: true,
   manualOpportunityRunsLabelledScheduled: false,
   boundaryDocumentationRequired: true,
+  behavioralTestsRequired: true,
   focusedCiGateRequired: true,
   externalExecutionEnabled: false,
   errors,

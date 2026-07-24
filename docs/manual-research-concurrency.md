@@ -4,7 +4,7 @@
 
 Authenticated confirmation authorises one bounded manual research action. It does not imply that the same action may safely run multiple times concurrently.
 
-The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs and conflicting per-source research actions.
+The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source research actions and duplicate query-hint resolution writes.
 
 This control does not create background work, scheduled retries or external execution.
 
@@ -40,9 +40,25 @@ There is no read-then-write acquisition path. Two concurrent requests cannot bot
 
 No migration or remote D1 mutation is required merely to introduce the lease code. A lease row is created only when an authenticated, explicitly confirmed route is actually invoked.
 
+## Confirmation ordering
+
+A route authenticates and validates its bounded JSON body before entering a lease-protected action.
+
+Exact `confirm: true` is required before the lease is acquired. Invalid media types, oversized bodies, malformed JSON and coerced confirmation values fail without creating a lease row.
+
+A lease is an exclusion primitive only. It is not confirmation and cannot replace confirmation.
+
 ## Expiry
 
-Lease time-to-live values are bounded between 30 and 1,800 seconds. Current broad manual research routes use 600- or 900-second leases.
+Lease time-to-live values are bounded between 30 and 1,800 seconds.
+
+Current route TTLs are:
+
+```text
+query-hint resolution: 300 seconds
+per-source actions and tiny batches: 600 seconds
+broad opportunity, source-expansion and sitemap scans: 900 seconds
+```
 
 Expiry is a recovery boundary for interrupted requests. It is not a scheduler and does not trigger a retry.
 
@@ -68,7 +84,21 @@ opportunity-source:<source-id>
 
 That shared key prevents a source test and a source commit from racing each other.
 
-Metadata-only reads, query-hint generation and internal learning do not acquire public-research network leases unless they invoke the bounded public fetch boundary.
+The historical source-management family uses a separate per-source key:
+
+```text
+legacy-source:<source-id>
+```
+
+This prevents a legacy source test, expansion commit, cooldown, retirement or activation from overwriting the same source concurrently.
+
+Query-hint URL resolution uses a per-hint key:
+
+```text
+query-hint-resolve:<hint-id>
+```
+
+The candidate upserts and hint usage counters then commit in one D1 transaction. Query-hint generation and internal learning remain metadata-only and do not acquire a public-research network lease.
 
 ## Conflict response
 
@@ -94,7 +124,7 @@ The lease system must never:
 - enqueue a retry;
 - trigger scheduled research;
 - create a background crawler;
-- bypass route authentication or confirmation;
+- bypass route authentication, bounded-body validation or confirmation;
 - expose lease tokens;
 - act as approval for drafting, sending, posting or external mutation;
 - permit a stale holder to release a newer lease;

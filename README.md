@@ -19,10 +19,14 @@ It does **not** provide outbound execution.
 - Scheduled work is internal-only and may synchronise defensive flags, refresh learning from existing D1 review metadata and record internal audit events.
 - Scheduled work cannot fetch public sources, expand source candidates, discover opportunities, generate drafts or perform external actions.
 - Public-source research is manual-only, authenticated, explicitly confirmed, bounded and review-only.
+- Confirmation is the exact JSON boolean `true`; query-string, numeric and string coercions are rejected.
+- Confirmed research and source-management JSON bodies are media-type checked, stream-bounded, structure-bounded and SHA-256 fingerprinted.
 - Public research URLs and every redirect are validated against the shared public-only network policy.
 - Public response bodies are full-operation-timeout-bounded, byte-bounded and hashed for evidence receipts.
+- Sensitive query credentials and binary response bodies are rejected.
 - Unsafe rejected URL inputs are redacted rather than reflected in route responses or audit metadata.
 - Research runs distinguish attempts from successful fetches and report skipped, failed, partial and completed outcomes truthfully.
+- Paired source-health and source-run audit updates use a D1 transaction.
 - Opportunity extraction is deterministic, boundary-aware and evidence-quality-scored.
 - Missing deadlines, values, currencies, eligibility and scope remain missing rather than being inferred.
 - Historical source and review learning may calibrate grounded evidence but cannot promote weak evidence into high confidence.
@@ -48,21 +52,37 @@ The Worker is organised around typed route-policy registries:
 
 Each policy records authentication, mutation, confirmation, network and prohibited-capability posture. The Worker dispatcher delegates through those registries rather than maintaining an unstructured pathname chain.
 
+## Bounded request boundary
+
+Manual research and source-management handlers use `src/core/boundedJsonRequest.ts` with contract:
+
+```text
+bounded_admin_json_request_v1
+```
+
+The default request-body cap is 65,536 bytes. The boundary checks declared and observed byte counts, validates strict UTF-8 JSON, requires an object root and limits nesting, node count, array size, string length and key length. Prototype-pollution keys are rejected.
+
+A valid body produces a compact request receipt containing its contract, byte count and SHA-256 body hash. The full body is not logged or echoed. This lets operators correlate the exact confirmed request without retaining sensitive raw input.
+
+The authoritative detailed contract is [`docs/bounded-admin-json-boundary.md`](docs/bounded-admin-json-boundary.md).
+
 ## Research boundary
 
 Allowed network activity is read-only public research through explicitly classified, authenticated, confirmation-gated and bounded manual source or opportunity handlers.
 
-All active research handlers use `src/core/publicResearchFetch.ts`. The boundary rejects non-public hosts, embedded URL credentials, unsafe protocols and non-standard ports. Redirects are followed manually only after the next target passes the same public URL policy. Cloudflare runtime configuration also enables `global_fetch_strictly_public`.
+All active research handlers use `src/core/publicResearchFetch.ts` with contract `public_research_fetch_v2`. The boundary rejects non-public hosts, embedded URL credentials, sensitive query parameters, unsafe protocols and non-standard ports. Redirects are followed manually only after the next target passes the same public URL policy. Cloudflare runtime configuration also enables `global_fetch_strictly_public`.
 
-The default response limit is 1,048,576 bytes, the default redirect limit is four and the default full-operation timeout is 12 seconds. One deadline covers the redirect chain, response headers and streamed body read. Bodies are cancelled when the configured byte or time limit is exceeded.
+The default response limit is 1,048,576 bytes, the default redirect limit is four and the default full-operation timeout is 12 seconds. One deadline covers the redirect chain, response headers and streamed body read. Bodies are cancelled when the configured byte or time limit is exceeded. Binary bodies are rejected even if the server omits or misstates its content type.
 
-Each completed fetch returns an evidence receipt containing the requested URL, final URL, status, content type, redirect count, byte count, SHA-256 body hash, elapsed time, fetch timestamp and `timeoutScope: full_operation`. Source expansion and opportunity candidates retain relevant receipt data, and inserted lead discoveries retain the source-run identifier.
+Each completed fetch returns an evidence receipt containing the requested URL, final URL, status, content type, content length, language, ETag, Last-Modified value, redirect count, redirect chain, byte count, SHA-256 body hash, elapsed time, fetch timestamp and `timeoutScope: full_operation`. Source expansion and opportunity candidates retain relevant receipt data, and inserted lead discoveries retain the source-run identifier.
 
-Research summaries keep network attempts separate from successful pages. A run is skipped when no eligible source exists, failed when every attempted source fails, completed with a bounded partial-failure code when only some sources fail, and completed without an error when every attempted source succeeds.
+Research summaries keep network attempts separate from successful pages. A run is `skipped` when no eligible source exists, `failed` when every attempted source fails, `partial` when only some sources fail and `completed` when all attempted sources succeed.
+
+Sitemap research traverses sitemap indexes to a maximum depth of two while remaining inside the caller’s existing fetch and candidate caps. Sitemap indexes do not create a crawler: discovered page URLs are saved only as internal review candidates and are not fetched by the sitemap engine.
 
 Manual research handlers may:
 
-- fetch public HTML, robots files and sitemap XML with GET requests
+- fetch public HTML, robots files, sitemap XML and bounded sitemap indexes with GET requests
 - inspect public directory or business pages
 - save source candidates and research evidence
 - update source health and cooldown metadata
@@ -96,8 +116,10 @@ The authoritative detailed contract is [`docs/opportunity-evidence-quality.md`](
 
 ## Current operating documents
 
+- [`docs/bounded-admin-json-boundary.md`](docs/bounded-admin-json-boundary.md)
 - [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md)
 - [`docs/opportunity-evidence-quality.md`](docs/opportunity-evidence-quality.md)
+- [`docs/manual-research-concurrency.md`](docs/manual-research-concurrency.md)
 - [`docs/zero-source-startup.md`](docs/zero-source-startup.md)
 - [`docs/zero-source-route-catalogue.md`](docs/zero-source-route-catalogue.md)
 - [`docs/growth-autonomous-discovery-architecture.md`](docs/growth-autonomous-discovery-architecture.md)
@@ -165,7 +187,9 @@ npm run scheduled:autonomy-safety:check
 npm run manual:execution-safety:check
 npm run legacy:engine-isolation:check
 npm run public:surface-safety:check
+npm run research:bounded-json-safety:check
 npm run research:public-fetch-safety:check
+npm run research:manual-lease-safety:check
 npm run opportunities:evidence-quality:check
 npm run opportunities:execution-boundary-safety:check
 npm run runtime:capability-config:check
@@ -180,12 +204,13 @@ npm run operations:route-policy:check
 npm run planner:catalogue-truthfulness:check
 npm run growth:route-policy:check
 npm run growth:negative-safety:check
+npm run test:core
 npm run typecheck
 ```
 
 The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.
 
-The GitHub Actions Worker contract workflow runs the authoritative `check:local` chain with read-only repository permissions. It does not deploy and does not request Worker credentials.
+The GitHub Actions Worker contract workflow runs focused request, fetch and evidence checks, deterministic Node tests and the authoritative `check:local` chain with read-only repository permissions. It does not deploy and does not request Worker credentials.
 
 ## Deployment
 
@@ -229,7 +254,8 @@ When no approved source list exists:
 1. Read the autonomy and runtime policy.
 2. Create a bounded manual research plan.
 3. Review candidate domains and crawl policy.
-4. Run one authenticated, explicitly confirmed and bounded research action.
-5. Save findings as internal review metadata only.
-6. Review evidence receipts, run status, evidence quality, missing facts and source health manually.
-7. Do not draft, send, post, submit or mutate external systems.
+4. Send an authenticated request with `Content-Type: application/json` and exact `confirm: true`.
+5. Run one bounded manual research action.
+6. Save findings as internal review metadata only.
+7. Review the request receipt, fetch receipts, redirect chain, run status, evidence quality, missing facts and source health manually.
+8. Do not draft, send, post, submit or mutate external systems.

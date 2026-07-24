@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "../core/boundedJsonRequest";
 import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { bootstrapSourceExpansionSeeds, listSourceExpansionCandidates, runSourceExpansion } from "../core/sourceExpansionEngine";
 import { learnSourceExpansionQuality, listSourceExpansionStrategyScores } from "../core/sourceExpansionLearning";
@@ -7,25 +8,58 @@ import { runSitemapSourceExpansion } from "../core/sourceExpansionSitemap";
 import { listQueryHints, saveQueryHints } from "../core/sourceExpansionQueryHints";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
+type RequestReceipt = { contract: string; bytes: number; bodySha256: string };
+type ConfirmedBodyResult =
+  | { ok: true; body: Record<string, unknown>; requestReceipt: RequestReceipt }
+  | { ok: false; response: Response };
 
 function boundedInteger(value: unknown, fallback: number, min: number, max: number) {
-  const parsed = Number(value || fallback);
+  const parsed = Number(value ?? fallback);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.round(parsed)));
 }
 
-async function bodyJson(request: Request) {
-  return request.json().catch(() => ({}));
+function boundedStrategy(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return /^[a-z0-9:_-]{1,80}$/.test(normalized) ? normalized : undefined;
+}
+
+async function confirmedBody(request: Request, json: JsonResponse): Promise<ConfirmedBodyResult> {
+  const parsed = await readBoundedJsonObject(request);
+  if (!parsed.ok) return { ok: false, response: json(boundedJsonFailurePayload(parsed), { status: parsed.status }) };
+  if (!isExplicitJsonConfirmation(parsed.value)) {
+    return {
+      ok: false,
+      response: json({
+        ok: false,
+        error: "confirm_required",
+        requiredPayload: { confirm: true },
+        confirmationCoercionAllowed: false,
+        requestBodyContract: parsed.contract,
+      }, { status: 400 }),
+    };
+  }
+  return {
+    ok: true,
+    body: parsed.value,
+    requestReceipt: {
+      contract: parsed.contract,
+      bytes: parsed.bytes,
+      bodySha256: parsed.bodySha256,
+    },
+  };
 }
 
 async function withResearchLease(
   env: Env,
   json: JsonResponse,
   actionKey: string,
+  requestReceipt: RequestReceipt,
   run: () => Promise<Response>,
 ): Promise<Response> {
   const lease = await acquireManualResearchLease(env, actionKey, 900);
-  if (!lease) return json(manualResearchLeaseConflict(actionKey), { status: 409 });
+  if (!lease) return json({ ...manualResearchLeaseConflict(actionKey), requestReceipt }, { status: 409 });
   try {
     return await run();
   } finally {
@@ -118,50 +152,54 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
 
   if (pathname === "/admin/opportunities/sources/expansion/bootstrap") {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
-    const body = await bodyJson(request);
-    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    return json(await bootstrapSourceExpansionSeeds(env));
+    const confirmed = await confirmedBody(request, json);
+    if (!confirmed.ok) return confirmed.response;
+    return json({ ...(await bootstrapSourceExpansionSeeds(env)), requestReceipt: confirmed.requestReceipt });
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/scan") {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
-    const body = await bodyJson(request);
-    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    return withResearchLease(env, json, "source-expansion-scan", async () => {
+    const confirmed = await confirmedBody(request, json);
+    if (!confirmed.ok) return confirmed.response;
+    const body = confirmed.body;
+    return withResearchLease(env, json, "source-expansion-scan", confirmed.requestReceipt, async () => {
       const result = await runSourceExpansion(env, {
-        strategy: typeof body?.strategy === "string" ? body.strategy : undefined,
-        limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
-        maxFetches: boundedInteger(body?.maxFetches, 3, 1, 10),
-        maxLinksPerSeed: boundedInteger(body?.maxLinksPerSeed, 40, 5, 80),
-        maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
+        strategy: boundedStrategy(body.strategy),
+        limitSeeds: boundedInteger(body.limitSeeds, 3, 1, 10),
+        maxFetches: boundedInteger(body.maxFetches, 3, 1, 10),
+        maxLinksPerSeed: boundedInteger(body.maxLinksPerSeed, 40, 5, 80),
+        maxCandidates: boundedInteger(body.maxCandidates, 40, 5, 100),
       });
-      return json({ ...result, leaseContract: "manual_research_lease_v1", fallback: sourceExpansionFallback(result) });
+      return json({ ...result, leaseContract: "manual_research_lease_v1", requestReceipt: confirmed.requestReceipt, fallback: sourceExpansionFallback(result) });
     });
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/sitemap-scan") {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
-    const body = await bodyJson(request);
-    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    return withResearchLease(env, json, "source-expansion-sitemap-scan", async () => json({
+    const confirmed = await confirmedBody(request, json);
+    if (!confirmed.ok) return confirmed.response;
+    const body = confirmed.body;
+    return withResearchLease(env, json, "source-expansion-sitemap-scan", confirmed.requestReceipt, async () => json({
       ...(await runSitemapSourceExpansion(env, {
-        limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
-        maxFetches: boundedInteger(body?.maxFetches, 4, 1, 10),
-        maxSitemapUrls: boundedInteger(body?.maxSitemapUrls, 50, 5, 100),
-        maxCandidates: boundedInteger(body?.maxCandidates, 30, 5, 100),
+        limitSeeds: boundedInteger(body.limitSeeds, 3, 1, 10),
+        maxFetches: boundedInteger(body.maxFetches, 4, 1, 10),
+        maxSitemapUrls: boundedInteger(body.maxSitemapUrls, 50, 5, 100),
+        maxCandidates: boundedInteger(body.maxCandidates, 30, 5, 100),
       })),
       leaseContract: "manual_research_lease_v1",
+      requestReceipt: confirmed.requestReceipt,
     }));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/query-hints/generate") {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
-    const body = await bodyJson(request);
-    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    return json(await saveQueryHints(env, {
-      limit: boundedInteger(body?.limit, 80, 1, 150),
-      strategy: typeof body?.strategy === "string" ? body.strategy : undefined,
-    }));
+    const confirmed = await confirmedBody(request, json);
+    if (!confirmed.ok) return confirmed.response;
+    const result = await saveQueryHints(env, {
+      limit: boundedInteger(confirmed.body.limit, 80, 1, 150),
+      strategy: boundedStrategy(confirmed.body.strategy),
+    });
+    return json({ ...result, requestReceipt: confirmed.requestReceipt });
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/query-hints") {
@@ -169,16 +207,16 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
     const url = new URL(request.url);
     return json(await listQueryHints(env, {
       status: url.searchParams.get("status") || "candidate",
-      strategy: url.searchParams.get("strategy") || undefined,
+      strategy: boundedStrategy(url.searchParams.get("strategy")),
       limit: boundedInteger(url.searchParams.get("limit"), 80, 1, 150),
     }));
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/learn") {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
-    const body = await bodyJson(request);
-    if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    return json(await learnSourceExpansionQuality(env));
+    const confirmed = await confirmedBody(request, json);
+    if (!confirmed.ok) return confirmed.response;
+    return json({ ...(await learnSourceExpansionQuality(env)), requestReceipt: confirmed.requestReceipt });
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/strategies") {

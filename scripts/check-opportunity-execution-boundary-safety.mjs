@@ -150,19 +150,27 @@ for (const forbidden of ["request.json()", 'body?.confirm !== true', 'body?.conf
 }
 
 for (const token of [
+  'from "./core/manualResearchLease"',
   'startOpportunityRun(env, "manual_confirmed"',
   'discoveredBy: "manual-confirmed-run-due"',
   "PUBLIC_RESEARCH_FETCH_CONTRACT",
   "let successfulSources = 0",
+  "let sourceLeaseConflicts = 0",
   "successfulSources += 1",
-  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : summary.failed > 0 ? "partial" : "completed"',
-  '`partial_source_failures:${summary.failed}`',
+  "sourceLeaseConflicts += 1",
+  'const sourceActionKey = `opportunity-source:${source.id}`',
+  "const sourceLease = await acquireManualResearchLease(env, sourceActionKey, 600)",
+  "releaseManualResearchLease(env, sourceLease)",
+  "successfulSources === 0 && summary.failed === 0",
+  '"all_selected_sources_busy"',
+  '`partial_source_outcomes:failed:${summary.failed}:busy:${sourceLeaseConflicts}`',
   "sourceFetch: sourceReceipt",
   "bodySha256: fetched.bodySha256",
   "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
   "fullOperationTimeout: true",
   "sourceHealthAndAuditAtomic: true",
+  "overlappingPerSourceActionAllowed: false",
   "commitSourceOutcome",
   "env.DB.batch([sourceUpdate, prepareSourceRunResult(env, result)])",
   "finishOpportunityRun(env, runId, runStatus, summary, runError)",
@@ -175,6 +183,7 @@ for (const forbidden of [
   'startOpportunityRun(env, "scheduled"',
   'discoveredBy: "scheduled"',
   'finishOpportunityRun(env, runId, "completed", summary)',
+  '`partial_source_failures:${summary.failed}`',
 ]) {
   if (opportunityRunner.includes(forbidden)) errors.push(`Confirmed manual opportunity runner contains stale posture: ${forbidden}`);
 }
@@ -273,7 +282,7 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run opport
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "opportunity-execution-boundary-safety-v4-bounded-fetch-v2",
+  contract: "opportunity-execution-boundary-safety-v5-hierarchical-source-exclusion",
   sourceExpansionUsesSharedAuthentication: true,
   sourceExpansionRequiresExactBoundedConfirmation: true,
   sourceExpansionExecutionIsBounded: true,
@@ -283,6 +292,9 @@ console.log(JSON.stringify({
   opportunityRunAuditTypeManualConfirmed: true,
   opportunityRunAllFailedStatusFailed: true,
   opportunityRunPartialStatusExplicit: true,
+  opportunityRunAllBusyStatusSkipped: true,
+  broadOpportunityPerSourceLeaseRequired: true,
+  overlappingBroadAndPerSourceOpportunityActionsAllowed: false,
   opportunitySourceHealthAndAuditAtomic: true,
   opportunityEvidenceReceiptsV2Required: true,
   sourceHealthActionsUseSharedAuthentication: true,

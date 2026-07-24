@@ -4,7 +4,7 @@
 
 Authenticated confirmation authorises one bounded manual research action. It does not imply that the same action may safely run multiple times concurrently.
 
-The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source research actions and duplicate query-hint resolution writes.
+The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source research and source-health actions, and duplicate query-hint resolution writes.
 
 This control does not create background work, scheduled retries or external execution.
 
@@ -76,13 +76,20 @@ source-expansion-relationship-graph
 sources-run-tiny
 ```
 
-Opportunity source test, preview and commit-preview routes share a key based on the source identifier:
+Opportunity source test, preview, commit-preview and source-health routes share a key based on the source identifier:
 
 ```text
 opportunity-source:<source-id>
 ```
 
-That shared key prevents a source test and a source commit from racing each other.
+That shared key prevents:
+
+- a source test from racing a preview or commit;
+- a source-health pause, activation, priority change or error reset from racing research on the same source;
+- a broad confirmed opportunity run from updating source health while an operator is changing the same source;
+- two source-health writes from producing inconsistent audit history.
+
+A confirmed source-health action batches the `opportunity_sources` mutation and its `events` audit record in one D1 transaction. The audit uses `lead_id = NULL`; source review metadata is stored in the bounded event message rather than overloading the historical lead relationship.
 
 The historical source-management family uses a separate per-source key:
 

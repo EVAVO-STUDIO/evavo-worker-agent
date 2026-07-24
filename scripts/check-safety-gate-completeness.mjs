@@ -17,6 +17,7 @@ const checkLocal = String(scripts["check:local"] || "");
 
 const requiredSafetyCommands = {
   "growth:generated-routes:check": "node scripts/check-generated-route-wiring-clean.mjs",
+  "growth:route-parity:check": "node scripts/check-growth-route-parity.mjs",
   "docs:operating-posture:check": "node scripts/check-readme-operating-posture.mjs",
   "docs:readme-truthfulness:check": "node scripts/check-readme-top-level-truthfulness.mjs",
   "business:approval-isolation:check": "node scripts/check-business-approval-isolation.mjs",
@@ -70,6 +71,7 @@ for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommand
 
 for (const relativePath of [
   "scripts/check-generated-route-wiring-clean.mjs",
+  "scripts/check-growth-route-parity.mjs",
   "scripts/check-readme-operating-posture.mjs",
   "scripts/check-readme-top-level-truthfulness.mjs",
   "scripts/check-business-approval-isolation.mjs",
@@ -118,8 +120,12 @@ for (const relativePath of [
   "tests/publicResearchFetch.test.ts",
   "tests/reviewMutationSafety.test.ts",
   "tests/opportunitySourceCandidateSaveSource.test.ts",
+  "tests/growthRouteParity.test.ts",
+  "tests/growthRouteParitySource.test.ts",
+  "fixtures/growth-worker-route-parity-v1.json",
   "docs/admin-token-security.md",
   "docs/review-mutation-boundary.md",
+  "docs/growth-route-parity.md",
 ]) {
   if (!fs.existsSync(path.join(root, relativePath))) errors.push(`Missing safety contract or behavioral test: ${relativePath}`);
 }
@@ -131,8 +137,9 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "safety-gate-completeness-v6-source-candidate-atomicity",
+  contract: "safety-gate-completeness-v7-growth-route-parity",
   generatedRouteIntegrityRequired: true,
+  growthRouteParityRequired: true,
   readmeOperatingPostureRequired: true,
   readmeTopLevelTruthfulnessRequired: true,
   businessApprovalIsolationRequired: true,

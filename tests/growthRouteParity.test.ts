@@ -1,46 +1,41 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS,
+  GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS,
+  assertGrowthWorkerRouteParityPageState,
+  growthWorkerRouteBlockersForPageState,
+  parseGrowthWorkerRouteParityContract,
+  parseGrowthWorkerRouteParityJson,
+  type GrowthWorkerRouteParityContract,
+} from "../src/core/growthWorkerRouteParity";
+
 const root = process.cwd();
 const fixturePath = path.join(root, "fixtures", "growth-worker-route-parity-v1.json");
-
-const EXPECTED_KEYS = Object.freeze([
-  "contractVersion",
-  "websiteRepository",
-  "workerRepository",
-  "path",
-  "proposalVersion",
-  "requestVersion",
-  "bridgeVersion",
-  "inventoryVersion",
-  "nextApiAdapterVersion",
-  "pageHandlerVersion",
-  "pageState",
-  "bridgeEnabled",
-  "deliveryEnabled",
-  "blockers",
-] as const);
-const EXPECTED_BLOCKERS = Object.freeze([
-  "next_website_ingestion_endpoint_not_implemented",
-  "cross_repo_contract_tests_not_implemented",
-] as const);
 const MAX_FILES = 800;
 const MAX_TOTAL_BYTES = 12_000_000;
 const MAX_FILE_BYTES = 500_000;
 
-type UnknownRecord = Record<string, unknown>;
-
-function assert(condition: boolean, label: string): asserts condition {
+function assert(condition: unknown, label: string): asserts condition {
   if (!condition) throw new Error(`ASSERTION_FAILED:${label}`);
 }
 
-function objectValue(value: unknown, label: string): UnknownRecord {
-  assert(Boolean(value) && typeof value === "object" && !Array.isArray(value), label);
-  return value as UnknownRecord;
+function expectError(label: string, run: () => unknown, expected: string): void {
+  let observed = "";
+  try {
+    run();
+  } catch (error) {
+    observed = error instanceof Error ? error.message : String(error);
+  }
+  assert(observed === expected, `${label}-${observed || "none"}`);
 }
 
-function exactString(record: UnknownRecord, key: string, expected: string): void {
-  assert(record[key] === expected, `fixture-${key}`);
+function withChanges(
+  contract: GrowthWorkerRouteParityContract,
+  changes: Partial<Record<keyof GrowthWorkerRouteParityContract | "unexpected", unknown>>,
+): Record<string, unknown> {
+  return { ...contract, ...changes };
 }
 
 function boundedCorpus(directory: string): string {
@@ -80,37 +75,80 @@ function boundedCorpus(directory: string): string {
 }
 
 const fixtureRaw = fs.readFileSync(fixturePath, "utf8");
-const fixture = objectValue(JSON.parse(fixtureRaw) as unknown, "fixture-object");
-const actualKeys = Object.keys(fixture).sort();
-const expectedKeys = [...EXPECTED_KEYS].sort();
+const fixture = parseGrowthWorkerRouteParityJson(fixtureRaw);
+assert(Object.isFrozen(fixture), "fixture-frozen");
+assert(Object.isFrozen(fixture.blockers), "fixture-blockers-frozen");
+assert(fixture.pageState === "absent", "fixture-currently-absent");
 assert(
-  actualKeys.length === expectedKeys.length && actualKeys.every((key, index) => key === expectedKeys[index]),
-  "fixture-exact-field-set",
+  fixture.blockers.join(",") === GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS.join(","),
+  "fixture-absent-blockers",
+);
+assert(
+  growthWorkerRouteBlockersForPageState("absent") === GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS,
+  "absent-blocker-identity",
+);
+assert(
+  growthWorkerRouteBlockersForPageState("present") === GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS,
+  "present-blocker-identity",
 );
 
-exactString(fixture, "contractVersion", "growth_worker_route_parity_v1");
-exactString(fixture, "websiteRepository", "EVAVO-STUDIO/next-website");
-exactString(fixture, "workerRepository", "EVAVO-STUDIO/evavo-worker-agent");
-exactString(fixture, "path", "/api/private/growth/worker-proposals");
-exactString(fixture, "proposalVersion", "growth_worker_proposal_v1");
-exactString(fixture, "requestVersion", "growth_worker_request_v1");
-exactString(fixture, "bridgeVersion", "growth_worker_bridge_v2");
-exactString(fixture, "inventoryVersion", "growth_worker_route_inventory_v2");
-exactString(fixture, "nextApiAdapterVersion", "growth_worker_next_api_adapter_v1");
-exactString(fixture, "pageHandlerVersion", "growth_worker_proposal_page_handler_v1");
-assert(fixture.pageState === "absent" || fixture.pageState === "present", "fixture-page-state");
-assert(fixture.bridgeEnabled === false, "fixture-bridge-disabled");
-assert(fixture.deliveryEnabled === false, "fixture-delivery-disabled");
-assert(Array.isArray(fixture.blockers), "fixture-blockers-array");
-const blockers = fixture.blockers as unknown[];
+const present = parseGrowthWorkerRouteParityContract(withChanges(fixture, {
+  pageState: "present",
+  blockers: [...GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS],
+}));
+assert(present.pageState === "present", "present-state-accepted");
 assert(
-  blockers.length === EXPECTED_BLOCKERS.length && blockers.every((value, index) => value === EXPECTED_BLOCKERS[index]),
-  "fixture-exact-blockers",
+  present.blockers.join(",") === GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS.join(","),
+  "present-blockers-accepted",
 );
-assert(`${JSON.stringify(fixture, null, 2)}\n` === fixtureRaw, "fixture-canonical-json");
+assert(!present.blockers.includes("next_website_ingestion_endpoint_not_implemented"), "present-removes-endpoint-blocker");
+assert(present.blockers.includes("worker_proposal_delivery_not_implemented"), "present-adds-delivery-blocker");
+assert(Object.isFrozen(present) && Object.isFrozen(present.blockers), "present-frozen");
+
+expectError(
+  "absent-with-present-blockers",
+  () => parseGrowthWorkerRouteParityContract(withChanges(fixture, {
+    blockers: [...GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS],
+  })),
+  "GROWTH_WORKER_ROUTE_PARITY_BLOCKERS_INVALID",
+);
+expectError(
+  "present-with-absent-blockers",
+  () => parseGrowthWorkerRouteParityContract(withChanges(fixture, {
+    pageState: "present",
+    blockers: [...GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS],
+  })),
+  "GROWTH_WORKER_ROUTE_PARITY_BLOCKERS_INVALID",
+);
+expectError(
+  "premature-bridge",
+  () => parseGrowthWorkerRouteParityContract(withChanges(fixture, { bridgeEnabled: true })),
+  "GROWTH_WORKER_ROUTE_PARITY_BRIDGE_PREMATURELY_ENABLED",
+);
+expectError(
+  "premature-delivery",
+  () => parseGrowthWorkerRouteParityContract(withChanges(fixture, { deliveryEnabled: true })),
+  "GROWTH_WORKER_ROUTE_PARITY_DELIVERY_PREMATURELY_ENABLED",
+);
+expectError(
+  "unknown-field",
+  () => parseGrowthWorkerRouteParityContract(withChanges(fixture, { unexpected: true })),
+  "GROWTH_WORKER_ROUTE_PARITY_FIELDS_INVALID",
+);
+expectError(
+  "noncanonical-json",
+  () => parseGrowthWorkerRouteParityJson(JSON.stringify(fixture)),
+  "GROWTH_WORKER_ROUTE_PARITY_JSON_NOT_CANONICAL",
+);
+expectError(
+  "page-state-mismatch",
+  () => assertGrowthWorkerRouteParityPageState(fixture, "present"),
+  "GROWTH_WORKER_ROUTE_PARITY_PAGE_STATE_MISMATCH",
+);
 
 const sourceCorpus = boundedCorpus(path.join(root, "src"));
 for (const token of [
+  "growth_worker_route_parity_v1",
   "growth_worker_proposal_v1",
   "growth_worker_request_v1",
   "growth_worker_bridge_v2",
@@ -120,6 +158,7 @@ for (const token of [
   "externalExecutionEnabled: false",
   "canonicalGrowthPromotionEnabled: false",
   "next_website_ingestion_endpoint_not_implemented",
+  "worker_proposal_delivery_not_implemented",
   "cross_repo_contract_tests_not_implemented",
 ]) {
   assert(sourceCorpus.includes(token), `source-${token}`);
@@ -162,16 +201,27 @@ if (fs.existsSync(websiteFixturePath)) {
     "worker-proposals.ts",
   );
   const actualPageState = fs.existsSync(websitePagePath) ? "present" : "absent";
-  assert(fixture.pageState === actualPageState, "sibling-page-state-parity");
+  assertGrowthWorkerRouteParityPageState(fixture, actualPageState);
+
+  const websiteParserPath = path.join(
+    websiteRoot,
+    "src",
+    "server",
+    "growth-autopilot",
+    "growthWorkerRouteParity.ts",
+  );
+  assert(fs.existsSync(websiteParserPath), "sibling-parser-present");
+  assert(
+    fs.readFileSync(websiteParserPath, "utf8") ===
+      fs.readFileSync(path.join(root, "src", "core", "growthWorkerRouteParity.ts"), "utf8"),
+    "sibling-parser-byte-parity",
+  );
 } else if (configuredWebsitePath) {
   throw new Error(`ASSERTION_FAILED:configured-website-fixture-missing:${websiteFixturePath}`);
 }
 
-Object.freeze(fixture);
-assert(Object.isFrozen(fixture), "fixture-frozen-after-validation");
-
 console.log("Growth route parity contract passed.");
-console.log("- Worker fixture pins the reserved path, packet/request/readiness versions and exact blocker order");
-console.log("- Worker source keeps bridge delivery, canonical promotion and external execution disabled");
-console.log("- sibling website fixture and page state are checked when the website checkout is available");
-console.log("- static route parity does not clear the live cross-repository smoke blocker");
+console.log("- one pure parser owns exact route fields, canonical JSON, frozen output and bridge-disabled posture");
+console.log("- absent pages require the endpoint blocker while present pages require the Worker delivery blocker");
+console.log("- the approved present state is reachable without retaining a contradictory endpoint-not-implemented blocker");
+console.log("- sibling website fixture, parser bytes and actual page state are checked when the checkout is available");

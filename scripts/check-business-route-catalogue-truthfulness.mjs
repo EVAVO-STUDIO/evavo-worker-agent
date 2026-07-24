@@ -58,9 +58,7 @@ for (const token of requiredCatalogueTokens) {
 
 for (const disabledId of disabledRouteIds) {
   const activePattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute|historicalReviewWriteRoute)\\(\\s*["']${disabledId}["']`);
-  if (activePattern.test(catalogue)) {
-    errors.push(`Disabled Business route is still actively advertised: ${disabledId}`);
-  }
+  if (activePattern.test(catalogue)) errors.push(`Disabled Business route is still actively advertised: ${disabledId}`);
   if (plannerCatalogue.includes(`id: "${disabledId}"`) || plannerCatalogue.includes(`id: '${disabledId}'`)) {
     errors.push(`Planner catalogue duplicates disabled Business route: ${disabledId}`);
   }
@@ -70,18 +68,12 @@ for (const disabledId of disabledRouteIds) {
 }
 
 const historicalReviewBuildPattern = /historicalReviewWriteRoute\(\s*["']business_action_draft_build["'][\s\S]*?["']business_action_drafts["']\s*\)/;
-if (!historicalReviewBuildPattern.test(catalogue)) {
-  errors.push("Historical Business review build must use historicalReviewWriteRoute");
-}
+if (!historicalReviewBuildPattern.test(catalogue)) errors.push("Historical Business review build must use historicalReviewWriteRoute");
 
 const authoritativeImport = 'import { businessAutopilotRouteCatalogue } from "./businessAutopilotRouteCatalogue";';
 const authoritativeSpread = "...businessAutopilotRouteCatalogue";
-if (count(plannerCatalogue, authoritativeImport) !== 1) {
-  errors.push("Planner catalogue must import the authoritative Business catalogue exactly once");
-}
-if (count(plannerCatalogue, authoritativeSpread) !== 1) {
-  errors.push("Planner catalogue must spread the authoritative Business catalogue exactly once");
-}
+if (count(plannerCatalogue, authoritativeImport) !== 1) errors.push("Planner catalogue must import the authoritative Business catalogue exactly once");
+if (count(plannerCatalogue, authoritativeSpread) !== 1) errors.push("Planner catalogue must spread the authoritative Business catalogue exactly once");
 
 for (const token of [
   "const cataloguePath = path.join(repoRoot, 'src/routes/businessAutopilotRouteCatalogue.ts')",
@@ -99,12 +91,20 @@ for (const token of [
 }
 
 for (const token of [
+  'contract: "business_historical_draft_reads_v4_full_posture"',
+  'contract: "business_historical_approval_reads_v4_full_posture"',
   'pathname === "/admin/business/action-drafts"',
   'pathname === "/admin/business/approval-requests"',
   'error: "historical_record_write_disabled"',
+  "historicalOnly: true",
+  "reviewOnly: true",
+  "executable: false",
+  "deliverable: false",
+  "authoritativeForExecution: false",
+  "externalExecutionAllowed: false",
   "{ status: 410 }",
 ]) {
-  if (!adminRoute.includes(token)) errors.push(`Business admin route missing disabled-write posture: ${token}`);
+  if (!adminRoute.includes(token)) errors.push(`Business admin route missing historical posture: ${token}`);
 }
 
 for (const token of [
@@ -119,12 +119,14 @@ for (const token of [
   "Historical Business read routes are clearly labelled and not recommended as ordinary Operations Hub actions.",
   "Historical Business review-write routes are not recommended as ordinary Operations Hub actions.",
   "All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture.",
-  "Verify historical Business read responses remain non-executable",
+  "Verify historical Business read responses remain review-only and non-executable",
   "$payload.historicalOnly -ne $true",
+  "$payload.reviewOnly -ne $true",
   "$payload.executable -ne $false",
   "$payload.deliverable -ne $false",
   "$payload.authoritativeForExecution -ne $false",
-  "Historical Business read response is missing required non-execution flags",
+  "$payload.externalExecutionAllowed -ne $false",
+  "Historical Business read response is missing required review-only non-execution flags",
   "function Assert-DisabledBusinessWrite",
   "-Method POST",
   "-Body '{\"confirm\":true}'",
@@ -138,9 +140,11 @@ for (const token of [
 for (const token of [
   "function Assert-BusinessRead([string]$Path, [bool]$HistoricalOnly = $false)",
   "$payload.historicalOnly -ne $true",
+  "$payload.reviewOnly -ne $true",
   "$payload.executable -ne $false",
   "$payload.deliverable -ne $false",
   "$payload.authoritativeForExecution -ne $false",
+  "$payload.externalExecutionAllowed -ne $false",
   "$historicalPaths = @(",
   '"/admin/business/action-drafts?limit=5"',
   '"/admin/business/approval-requests?limit=5"',
@@ -161,7 +165,7 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v9-historical-read-smoke-gated",
+  contract: "business-route-catalogue-truthfulness-v10-full-historical-posture",
   plannerUsesAuthoritativeBusinessCatalogue: true,
   plannerBusinessImportCountExpected: 1,
   plannerBusinessSpreadCountExpected: 1,
@@ -170,8 +174,8 @@ console.log(JSON.stringify({
   catalogueApplyScriptBlocksRetiredRouteIds: true,
   historicalReadsUseDedicatedCataloguePosture: true,
   historicalReadsRecommendedInOperationsHub: false,
-  historicalReadVerificationChecksRequiredNonExecutionFlags: true,
-  historicalReadSmokeChecksRequiredNonExecutionFlags: true,
+  historicalReadVerificationChecksCompletePosture: true,
+  historicalReadSmokeChecksCompletePosture: true,
   historicalReviewWriteUsesDedicatedCataloguePosture: true,
   historicalReviewWriteRecommendedInOperationsHub: false,
   disabledDirectDraftWriteAdvertised: false,

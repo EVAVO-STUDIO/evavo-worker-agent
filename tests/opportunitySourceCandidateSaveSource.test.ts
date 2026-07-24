@@ -58,3 +58,30 @@ test("source candidate route binds the audit to the bounded request receipt", ()
   assert.equal(route.includes("request.json()"), false);
   assert.equal(route.includes("body?.confirm === 1"), false);
 });
+
+test("source candidates use the public URL policy and one metadata lookup", () => {
+  for (const token of [
+    'from "../core/publicResearchFetch"',
+    "validatePublicResearchUrl(raw.trim())",
+    'parsed.protocol !== "https:"',
+    "publicResearchUrlPolicyRequired: true",
+    "sensitiveQueryParametersRejected: true",
+  ]) {
+    assert.ok(route.includes(token), `missing route public-policy token: ${token}`);
+  }
+
+  for (const token of [
+    'from "./publicResearchFetch"',
+    "function normalizePublicHttpsCandidateUrl",
+    "validatePublicResearchUrl(raw)",
+    "WHERE url IN (${placeholders})",
+    ".bind(...uniqueUrls).all<ExpansionCandidateMeta>()",
+    "candidateMetadataLookupBatched: true",
+    "publicResearchUrlPolicyRequired: true",
+  ]) {
+    assert.ok(core.includes(token), `missing core candidate-policy token: ${token}`);
+  }
+
+  assert.equal(core.includes("for (const url of uniqueUrls)"), false);
+  assert.equal(core.includes(".bind(url).first<ExpansionCandidateMeta>()"), false);
+});

@@ -12,6 +12,7 @@ import {
   canonicalGrowthProposalRequest,
   createGrowthProposalRequestNonce,
   signGrowthProposalRequest,
+  type SignedGrowthProposalRequest,
 } from "../src/core/growthProposalRequestSignature.ts";
 
 const NOW = new Date("2026-07-24T04:00:00.000Z");
@@ -20,10 +21,13 @@ const KEY_ID = "worker-primary-2026-07";
 const REQUEST_ID = "worker-request:proposal:000000000001";
 const SECRET = "test-only-growth-worker-bridge-secret-000000000000000001";
 const NONCE = Buffer.alloc(32, 7).toString("base64url");
-const fixture = JSON.parse(fs.readFileSync(
+const proposalFixture = JSON.parse(fs.readFileSync(
   path.join(process.cwd(), "fixtures/growth-worker-proposal-v1.json"),
   "utf8",
 )) as GrowthProposalPacket;
+const signedFixturePath = path.join(process.cwd(), "fixtures/growth-worker-request-v1.json");
+const signedFixtureText = fs.readFileSync(signedFixturePath, "utf8");
+const signedFixture = JSON.parse(signedFixtureText) as SignedGrowthProposalRequest;
 
 async function expectError(label: string, run: () => unknown | Promise<unknown>, expected: string): Promise<void> {
   let observed = "";
@@ -37,7 +41,7 @@ async function expectError(label: string, run: () => unknown | Promise<unknown>,
 
 function sign(overrides: Partial<Parameters<typeof signGrowthProposalRequest>[0]> = {}) {
   return signGrowthProposalRequest({
-    packet: fixture,
+    packet: proposalFixture,
     keyId: KEY_ID,
     secret: SECRET,
     requestId: REQUEST_ID,
@@ -48,9 +52,9 @@ function sign(overrides: Partial<Parameters<typeof signGrowthProposalRequest>[0]
   });
 }
 
-test("signed Growth proposal request matches independent HMAC-SHA256 computation", async () => {
+test("signed Growth proposal request matches independent HMAC and canonical cross-repository fixture", async () => {
   const signed = await sign();
-  const expectedBody = JSON.stringify(fixture);
+  const expectedBody = JSON.stringify(proposalFixture);
   const expectedBodyHash = createHash("sha256").update(expectedBody, "utf8").digest("hex");
   const expectedCanonical = [
     "version:growth_worker_request_v1",
@@ -95,6 +99,11 @@ test("signed Growth proposal request matches independent HMAC-SHA256 computation
     [GROWTH_PROPOSAL_REQUEST_HEADERS.bodySha256]: expectedBodyHash,
     [GROWTH_PROPOSAL_REQUEST_HEADERS.signature]: `sha256=${expectedSignature}`,
   });
+  assert.deepEqual(signed, signedFixture);
+  assert.equal(`${JSON.stringify(signedFixture, null, 2)}\n`, signedFixtureText);
+  assert.equal(signedFixture.body, expectedBody);
+  assert.equal(signedFixture.bodySha256, expectedBodyHash);
+  assert.equal(signedFixture.headers[GROWTH_PROPOSAL_REQUEST_HEADERS.signature], `sha256=${expectedSignature}`);
   assert.equal(Object.isFrozen(signed), true);
   assert.equal(Object.isFrozen(signed.headers), true);
   assert.equal(signed.body.includes(SECRET), false);
@@ -116,18 +125,18 @@ test("signer rejects noncanonical or execution-requesting packets", async (t) =>
   await t.test("unknown packet field", async () => {
     await expectError(
       "unknown packet field",
-      () => sign({ packet: { ...fixture, unexpected: true } as GrowthProposalPacket }),
+      () => sign({ packet: { ...proposalFixture, unexpected: true } as GrowthProposalPacket }),
       "GROWTH_PROPOSAL_REQUEST_PACKET_FIELDS_INVALID",
     );
   });
   await t.test("unknown evidence field", async () => {
-    const firstEvidence = fixture.evidenceItems[0];
+    const firstEvidence = proposalFixture.evidenceItems[0];
     assert.ok(firstEvidence);
     await expectError(
       "unknown evidence field",
       () => sign({
         packet: {
-          ...fixture,
+          ...proposalFixture,
           evidenceItems: [{ ...firstEvidence, rawProviderPayload: true }],
         } as GrowthProposalPacket,
       }),
@@ -135,11 +144,11 @@ test("signer rejects noncanonical or execution-requesting packets", async (t) =>
     );
   });
   for (const [label, packet] of [
-    ["execution flag", { ...fixture, externalExecutionRequested: true }],
-    ["promotion flag", { ...fixture, canonicalPromotionRequested: true }],
-    ["execution mode", { ...fixture, proposalMode: "execute" }],
-    ["wrong version", { ...fixture, contractVersion: "growth_worker_proposal_v2" }],
-    ["wrong source", { ...fixture, sourceSystem: "unknown-worker" }],
+    ["execution flag", { ...proposalFixture, externalExecutionRequested: true }],
+    ["promotion flag", { ...proposalFixture, canonicalPromotionRequested: true }],
+    ["execution mode", { ...proposalFixture, proposalMode: "execute" }],
+    ["wrong version", { ...proposalFixture, contractVersion: "growth_worker_proposal_v2" }],
+    ["wrong source", { ...proposalFixture, sourceSystem: "unknown-worker" }],
   ] as const) {
     await t.test(label, async () => {
       await expectError(
@@ -150,7 +159,7 @@ test("signer rejects noncanonical or execution-requesting packets", async (t) =>
     });
   }
   await t.test("reordered packet", async () => {
-    const reordered = Object.fromEntries(Object.entries(fixture).reverse()) as unknown as GrowthProposalPacket;
+    const reordered = Object.fromEntries(Object.entries(proposalFixture).reverse()) as unknown as GrowthProposalPacket;
     await expectError(
       "reordered packet",
       () => sign({ packet: reordered }),
@@ -183,7 +192,7 @@ test("signer rejects unsafe credential, identifier, nonce and timestamp inputs",
 });
 
 test("canonical request builder rejects malformed values independently", async () => {
-  const bodyHash = createHash("sha256").update(JSON.stringify(fixture), "utf8").digest("hex");
+  const bodyHash = createHash("sha256").update(JSON.stringify(proposalFixture), "utf8").digest("hex");
   await expectError(
     "uppercase body hash",
     () => canonicalGrowthProposalRequest({

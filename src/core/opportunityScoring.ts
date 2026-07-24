@@ -15,6 +15,12 @@ export type ScoreCalibration = {
   adjustment: number;
   reasons: string[];
   guardrails: string[];
+  evidenceQuality: {
+    score: number;
+    strength: "weak" | "moderate" | "strong";
+    missingFacts: string[];
+    reviewFlags: string[];
+  };
   sourceHealth?: {
     runCount: number;
     saved: number;
@@ -115,24 +121,44 @@ async function getReviewLearningSignal(env: Env, source: SourceLike, candidate: 
   return null;
 }
 
+function evidenceQualityFor(candidate: OpportunityCandidate) {
+  const score = clampInt(candidate.evidence?.evidenceQualityScore, 0, 0, 100);
+  const strength = candidate.evidence?.evidenceStrength === "strong" || candidate.evidence?.evidenceStrength === "moderate"
+    ? candidate.evidence.evidenceStrength
+    : "weak";
+  const missingFacts = Array.isArray(candidate.evidence?.missingFacts) ? candidate.evidence.missingFacts.slice(0, 12) : [];
+  const reviewFlags = Array.isArray(candidate.evidence?.reviewFlags) ? candidate.evidence.reviewFlags.slice(0, 12) : [];
+  return { score, strength, missingFacts, reviewFlags } as const;
+}
+
 function candidateHasStrongReviewSignals(candidate: OpportunityCandidate): boolean {
   const signals = Array.isArray(candidate.signals) ? candidate.signals : [];
   const breakdown = candidate.scoreBreakdown;
+  const quality = evidenceQualityFor(candidate);
   const hasFitSignal = signals.some((signal) => String(signal).startsWith("evavo_fit:"));
   const hasIntentSignal = signals.some((signal) => String(signal).startsWith("intent:"));
   const fitScore = Number(breakdown?.evavoFitScore || 0);
   const urgencyScore = Number(breakdown?.urgencyScore || 0);
   const valueScore = Number(breakdown?.valueScore || 0);
-  return hasFitSignal || hasIntentSignal || fitScore >= 8 || urgencyScore >= 8 || valueScore >= 10;
+  return quality.score >= 38 && (hasFitSignal || hasIntentSignal || fitScore >= 8 || urgencyScore >= 8 || valueScore >= 8);
 }
 
 function applyGuardrails(rawScore: number, candidate: OpportunityCandidate, proposedAdjustment: number, reasons: string[]) {
   const guardrails: string[] = [];
   const confidence = candidate.confidence || "low";
   const strongSignals = candidateHasStrongReviewSignals(candidate);
+  const quality = evidenceQualityFor(candidate);
 
   let boundedAdjustment = clampInt(proposedAdjustment, 0, -18, 18);
   if (boundedAdjustment !== Math.round(proposedAdjustment)) guardrails.push("guardrail:adjustment_cap_18");
+
+  if (quality.score < 25 && boundedAdjustment > 0) {
+    boundedAdjustment = 0;
+    guardrails.push("guardrail:weak_evidence_no_positive_learning_boost");
+  } else if (quality.score < 38 && boundedAdjustment > 4) {
+    boundedAdjustment = 4;
+    guardrails.push("guardrail:limited_evidence_boost_cap_4");
+  }
 
   if (confidence === "low" && boundedAdjustment > 6) {
     boundedAdjustment = 6;
@@ -145,6 +171,14 @@ function applyGuardrails(rawScore: number, candidate: OpportunityCandidate, prop
   }
 
   let calibratedScore = clampInt(rawScore + boundedAdjustment, rawScore, 0, 100);
+
+  if (quality.score < 25 && calibratedScore > 45) {
+    calibratedScore = 45;
+    guardrails.push("guardrail:weak_evidence_ceiling_45");
+  } else if (quality.score < 38 && calibratedScore > 60) {
+    calibratedScore = 60;
+    guardrails.push("guardrail:limited_evidence_ceiling_60");
+  }
 
   if (confidence === "low" && !strongSignals && calibratedScore > 55) {
     calibratedScore = Math.min(calibratedScore, 55);
@@ -161,9 +195,9 @@ function applyGuardrails(rawScore: number, candidate: OpportunityCandidate, prop
     guardrails.push("guardrail:strong_signal_review_floor_40");
   }
 
-  if (strongSignals && rawScore >= 60 && calibratedScore < 55) {
+  if (strongSignals && rawScore >= 60 && quality.score >= 60 && calibratedScore < 55) {
     calibratedScore = 55;
-    guardrails.push("guardrail:strong_signal_review_floor_55");
+    guardrails.push("guardrail:strong_evidence_review_floor_55");
   }
 
   if (guardrails.length) reasons.push(...guardrails);
@@ -172,6 +206,7 @@ function applyGuardrails(rawScore: number, candidate: OpportunityCandidate, prop
     calibratedScore,
     adjustment: calibratedScore - rawScore,
     guardrails,
+    evidenceQuality: quality,
   };
 }
 
@@ -223,6 +258,7 @@ export async function calibrateOpportunityScore(env: Env, source: SourceLike, ca
     adjustment: guarded.adjustment,
     reasons,
     guardrails: guarded.guardrails,
+    evidenceQuality: guarded.evidenceQuality,
     sourceHealth: sourceHealth
       ? {
           runCount: sourceHealth.runCount,

@@ -97,6 +97,8 @@ requireTokens("src/core/publicResearchFetch.ts", [
   "bodySha256",
   "fetchPublicResearchHtml",
   "fetchPublicResearchText",
+  "const deadlineAt = startedAt + timeoutMs",
+  'timeoutScope: "full_operation"',
 ]);
 requireTokens("src/index.ts", [
   'headers.set("cache-control", "no-store")',
@@ -234,9 +236,15 @@ requireTokens("scripts/check-scheduled-entrypoint-safety.mjs", [
   "alternateExecutionFallbackAllowed: false",
 ]);
 requireTokens("scripts/check-public-research-fetch-safety.mjs", [
-  'contract: "public-research-fetch-safety-v2-documented-boundary"',
+  'contract: "public-research-fetch-safety-v5-truthful-redacted-evidence"',
   "strictPublicCloudflareFetchRequired: true",
+  "timeoutCoversRedirectsAndBody: true",
+  "rejectedUnsafeInputsEchoed: false",
   "sourceRunProvenanceRequired: true",
+  "sourceExpansionRunTruthfulnessRequired: true",
+  "relationshipGraphRunTruthfulnessRequired: true",
+  "sitemapRunTruthfulnessRequired: true",
+  "manualOpportunityRunTruthfulnessRequired: true",
   "boundaryDocumentationRequired: true",
 ]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
@@ -341,7 +349,7 @@ if (fs.existsSync(packagePath)) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v2-public-research",
+  contract: "dynamic-helper-and-gate-validation-v3-research-truthfulness",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -351,6 +359,8 @@ console.log(JSON.stringify({
   protectedResponseSafetyRequired: true,
   scheduledEntrypointSafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
+  publicResearchInputRedactionRequired: true,
+  publicResearchRunTruthfulnessRequired: true,
   errors,
 }, null, 2));
 

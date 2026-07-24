@@ -27,6 +27,7 @@ const peopleResponseMinimisation = read("scripts/check-business-people-response-
 const internalReadMinimisation = read("scripts/check-business-internal-read-minimisation.mjs");
 const learningEventSafety = read("scripts/check-business-learning-event-safety.mjs");
 const suppressionIntegrity = read("scripts/check-business-suppression-integrity.mjs");
+const historicalReadMinimisation = read("scripts/check-business-historical-read-minimisation.mjs");
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -54,12 +55,8 @@ const requiredBusinessContracts = {
 };
 
 for (const [scriptName, expectedCommand] of Object.entries(requiredBusinessContracts)) {
-  if (scripts[scriptName] !== expectedCommand) {
-    errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
-  }
-  if (!checkLocal.includes(`npm run ${scriptName}`)) {
-    errors.push(`check:local must include ${scriptName}`);
-  }
+  if (scripts[scriptName] !== expectedCommand) errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
+  if (!checkLocal.includes(`npm run ${scriptName}`)) errors.push(`check:local must include ${scriptName}`);
 }
 
 for (const token of [
@@ -97,13 +94,11 @@ for (const token of [
   'historicalGroupPrecedesFallback: true',
   'externalExecutionEnabled: false',
 ]) {
-  if (!routePolicy.includes(token)) {
-    errors.push(`Business route-policy checker is missing CI-required posture: ${token}`);
-  }
+  if (!routePolicy.includes(token)) errors.push(`Business route-policy checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
-  'contract: "business-route-catalogue-truthfulness-v9-historical-read-smoke-gated"',
+  'contract: "business-route-catalogue-truthfulness-v10-full-historical-posture"',
   'plannerBusinessImportCountExpected: 1',
   'plannerBusinessSpreadCountExpected: 1',
   'catalogueApplyScriptIdempotent: true',
@@ -111,8 +106,8 @@ for (const token of [
   'catalogueApplyScriptBlocksRetiredRouteIds: true',
   'historicalReadsUseDedicatedCataloguePosture: true',
   'historicalReadsRecommendedInOperationsHub: false',
-  'historicalReadVerificationChecksRequiredNonExecutionFlags: true',
-  'historicalReadSmokeChecksRequiredNonExecutionFlags: true',
+  'historicalReadVerificationChecksCompletePosture: true',
+  'historicalReadSmokeChecksCompletePosture: true',
   'historicalReviewWriteUsesDedicatedCataloguePosture: true',
   'historicalReviewWriteRecommendedInOperationsHub: false',
   'disabledDirectDraftWriteAdvertised: false',
@@ -120,9 +115,18 @@ for (const token of [
   'retiredWriteEndpointsExpectedStatus: 410',
   'deployedRetiredWriteChecksRequired: true',
 ]) {
-  if (!routeCatalogueTruthfulness.includes(token)) {
-    errors.push(`Business route-catalogue truthfulness checker is missing CI-required posture: ${token}`);
-  }
+  if (!routeCatalogueTruthfulness.includes(token)) errors.push(`Business route-catalogue truthfulness checker is missing CI-required posture: ${token}`);
+}
+
+for (const token of [
+  'contract: "business-historical-read-minimisation-v2-full-posture"',
+  'historicalReadsReviewOnly: true',
+  'historicalReadsExecutable: false',
+  'historicalReadsDeliverable: false',
+  'historicalReadsAuthoritativeForExecution: false',
+  'historicalReadsExternalExecutionAllowed: false',
+]) {
+  if (!historicalReadMinimisation.includes(token)) errors.push(`Business historical-read minimisation checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -132,9 +136,7 @@ for (const token of [
   'retiredRouteExpectedStatus: 410',
   'externalExecutionEnabled: false',
 ]) {
-  if (!approvalIsolation.includes(token)) {
-    errors.push(`Business approval-isolation checker is missing CI-required posture: ${token}`);
-  }
+  if (!approvalIsolation.includes(token)) errors.push(`Business approval-isolation checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -148,9 +150,7 @@ for (const token of [
   'approvalToExecutionEnabled: false',
   'externalExecutionEnabled: false',
 ]) {
-  if (!reviewRecordIsolation.includes(token)) {
-    errors.push(`Business review-record isolation checker is missing CI-required posture: ${token}`);
-  }
+  if (!reviewRecordIsolation.includes(token)) errors.push(`Business review-record isolation checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -162,9 +162,7 @@ for (const token of [
   'outreachRecommendationEnabled: false',
   'externalExecutionEnabled: false',
 ]) {
-  if (!opportunityReviewSafety.includes(token)) {
-    errors.push(`Business opportunity-review safety checker is missing CI-required posture: ${token}`);
-  }
+  if (!opportunityReviewSafety.includes(token)) errors.push(`Business opportunity-review safety checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -179,9 +177,7 @@ for (const token of [
   'internalReviewOnly: true',
   'externalExecutionEnabled: false',
 ]) {
-  if (!peopleResponseMinimisation.includes(token)) {
-    errors.push(`Business people-response minimisation checker is missing CI-required posture: ${token}`);
-  }
+  if (!peopleResponseMinimisation.includes(token)) errors.push(`Business people-response minimisation checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -195,9 +191,7 @@ for (const token of [
   'learningMetadataExposed: false',
   'externalExecutionEnabled: false',
 ]) {
-  if (!internalReadMinimisation.includes(token)) {
-    errors.push(`Business internal-read minimisation checker is missing CI-required posture: ${token}`);
-  }
+  if (!internalReadMinimisation.includes(token)) errors.push(`Business internal-read minimisation checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -211,9 +205,7 @@ for (const token of [
   'reviewOnly: true',
   'externalExecutionEnabled: false',
 ]) {
-  if (!learningEventSafety.includes(token)) {
-    errors.push(`Business learning-event safety checker is missing CI-required posture: ${token}`);
-  }
+  if (!learningEventSafety.includes(token)) errors.push(`Business learning-event safety checker is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -224,23 +216,17 @@ for (const token of [
   'arbitrarySuppressionReasonAllowed: false',
   'outboundExecutionEnabled: false',
 ]) {
-  if (!suppressionIntegrity.includes(token)) {
-    errors.push(`Business suppression-integrity checker is missing CI-required posture: ${token}`);
-  }
+  if (!suppressionIntegrity.includes(token)) errors.push(`Business suppression-integrity checker is missing CI-required posture: ${token}`);
 }
 
 const expectedSelfCommand = "node scripts/check-business-ci-parity.mjs";
-if (scripts["business:ci-parity:check"] !== expectedSelfCommand) {
-  errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
-}
-if (!checkLocal.includes("npm run business:ci-parity:check")) {
-  errors.push("check:local must include business:ci-parity:check");
-}
+if (scripts["business:ci-parity:check"] !== expectedSelfCommand) errors.push(`package.json must expose business:ci-parity:check as ${expectedSelfCommand}`);
+if (!checkLocal.includes("npm run business:ci-parity:check")) errors.push("check:local must include business:ci-parity:check");
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v13-route-truthfulness-v9",
+  contract: "business-worker-ci-parity-v14-full-historical-posture",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -271,7 +257,7 @@ console.log(JSON.stringify({
   businessRouteCatalogueImportCountExpected: 1,
   businessRouteCatalogueSpreadCountExpected: 1,
   businessRouteCatalogueGeneratorIdempotencyRequired: true,
-  historicalReadResponseVerificationRequired: true,
+  historicalReadCompletePostureRequired: true,
   retiredBusinessWritesExpectedStatus: 410,
   deploymentEnabled: false,
   credentialsRequired: false,

@@ -103,6 +103,11 @@ for (const token of [
   'promotionMode: "proposal_only"',
   'bridgeEnabled: false',
   'routeInventoryComplete: false',
+  'routeInventoryVersion: GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION',
+  'routeInventoryScope: "growth_and_business_admin_route_policies"',
+  'routeInventoryCompleteForScope: true',
+  'routeInventoryCompleteForAllWorkerPostRoutes: false',
+  'unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS',
   'clientBrowserAccess: false',
   'adminTokenBrowserExposure: false',
   'draftingEnabled: false',
@@ -118,12 +123,18 @@ for (const token of [
 
 for (const token of [
   'growth_business_route_inventory_v1',
+  'GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS',
+  'opportunity_route_policies',
+  'operations_route_policies',
+  'admin_fallback_posts',
   'scope: "growth_and_business_admin_route_policies"',
   '"src/routes/growthRoutePolicy.ts"',
   '"src/routes/businessRoutePolicy.ts"',
   'completeForScope: true',
   'completeForAllWorkerPostRoutes: false',
   'bridgeEligible: false',
+  'unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS',
+  'unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS.length',
   'postClassification: readOnly ? "not-supported" : "internal-mutation"',
   'postClassification: retired ? "retired-write-fail-closed" : "internal-mutation"',
   'browserCallable: false',
@@ -171,6 +182,7 @@ for (const forbidden of [
   'serviceRoleKey',
   'bridgeEnabled: true',
   'routeInventoryComplete: true',
+  'routeInventoryCompleteForAllWorkerPostRoutes: true',
   'clientBrowserAccess: true',
   'externalExecutionEnabled: true',
 ]) mustNotContain('bridge readiness unsafe or premature posture', bridge, forbidden);
@@ -183,6 +195,7 @@ for (const forbidden of [
   'serviceRoleKey',
   'completeForAllWorkerPostRoutes: true',
   'bridgeEligible: true',
+  'unclassifiedPostRouteGroups: Object.freeze([]',
   'browserCallable: true',
   'canonicalGrowthPromotion: true',
   'exposesAdminToken: true',
@@ -199,6 +212,9 @@ mustContain('capability docs', doc, 'GET /admin/growth/capabilities');
 mustContain('capability docs', doc, 'Scheduled external execution is disabled');
 mustContain('capability docs', doc, 'Draft generation is disabled');
 mustContain('capability docs', doc, 'External delivery is blocked');
+mustContain('capability docs', doc, 'opportunity_route_policies');
+mustContain('capability docs', doc, 'operations_route_policies');
+mustContain('capability docs', doc, 'admin_fallback_posts');
 
 if (index.includes('handleGrowthCapabilitiesAdmin') && index.includes('/admin/growth/capabilities')) {
   console.log('OK   src/index.ts wires the Growth capabilities route');
@@ -216,4 +232,5 @@ console.log('Growth capability registry check passed.');
 console.log('- protected capability metadata includes explicit cross-repo bridge readiness');
 console.log('- protected capability metadata includes typed Growth/Business route-policy inventory');
 console.log('- scoped inventory is complete for typed Growth/Business policies but not all Worker POST routes');
+console.log('- readiness and inventory enumerate Opportunity, Operations and admin-fallback POST coverage gaps');
 console.log('- bridge remains disabled until all-Worker route inventory, ingestion and cross-repo contract tests exist');

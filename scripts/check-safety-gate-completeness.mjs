@@ -117,6 +117,7 @@ for (const relativePath of [
   "tests/boundedJsonRequest.test.ts",
   "tests/publicResearchFetch.test.ts",
   "tests/reviewMutationSafety.test.ts",
+  "tests/opportunitySourceCandidateSaveSource.test.ts",
   "docs/admin-token-security.md",
   "docs/review-mutation-boundary.md",
 ]) {
@@ -130,7 +131,7 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "safety-gate-completeness-v5-review-and-credential-behavior",
+  contract: "safety-gate-completeness-v6-source-candidate-atomicity",
   generatedRouteIntegrityRequired: true,
   readmeOperatingPostureRequired: true,
   readmeTopLevelTruthfulnessRequired: true,
@@ -166,6 +167,7 @@ console.log(JSON.stringify({
   manualResearchLeaseSafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
   reviewMutationSafetyRequired: true,
+  sourceCandidateAtomicityBehaviorRequired: true,
   opportunityEvidenceQualityRequired: true,
   opportunityExecutionBoundarySafetyRequired: true,
   growthSubhandlerAuthenticationSafetyRequired: true,

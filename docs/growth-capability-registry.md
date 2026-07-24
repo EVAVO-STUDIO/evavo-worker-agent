@@ -9,6 +9,7 @@ The registry is a control-plane and reporting feature. It describes available in
 ```text
 src/core/growthCapabilities.ts
 src/core/growthBridgeReadiness.ts
+src/core/growthWorkerRouteParity.ts
 src/core/growthBusinessRouteInventory.ts
 src/routes/workerRoutePolicy.ts
 src/routes/growthRoutePolicy.ts
@@ -101,14 +102,14 @@ transport: server_to_server_only
 promotionMode: proposal_only
 ```
 
-Inventory completion does **not** enable the bridge. The remaining blockers are:
+Inventory completion does **not** enable the bridge. The exact next-website proposal page is present, but Worker proposal delivery is not implemented. The remaining blockers are:
 
 ```text
-next_website_ingestion_endpoint_not_implemented
+worker_proposal_delivery_not_implemented
 cross_repo_contract_tests_not_implemented
 ```
 
-Candidate ingestion, canonical promotion and external execution remain unavailable.
+Candidate delivery, canonical promotion and external execution remain unavailable.
 
 ## Complete protected POST-owner inventory
 

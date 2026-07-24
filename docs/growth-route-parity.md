@@ -1,6 +1,6 @@
 # Growth Route Parity
 
-Date: 2026-07-24
+Date: 2026-07-25
 
 This document defines the Worker side of the static route-parity contract shared with `EVAVO-STUDIO/next-website`.
 
@@ -48,7 +48,7 @@ The parser accepts unknown input, requires exact fields and canonical JSON, free
 
 ## Conditional blocker posture
 
-### Current page-absent state
+### Page-absent state
 
 ```text
 pageState: absent
@@ -59,7 +59,7 @@ blockers:
   - cross_repo_contract_tests_not_implemented
 ```
 
-### Approved page-present state before delivery
+### Current page-present state before delivery
 
 ```text
 pageState: present
@@ -72,7 +72,7 @@ blockers:
 
 The present state must not retain `next_website_ingestion_endpoint_not_implemented`. This fixes the previous contradictory shape where `pageState: present` was nominally allowed but the validator still required the absent-page blocker.
 
-The Worker still performs no proposal HTTP delivery.
+The exact next-website proposal page is present. The Worker still performs no proposal HTTP delivery.
 
 The following remain disabled:
 
@@ -115,17 +115,15 @@ node scripts/check-growth-route-parity.mjs
 
 ## Transition rule
 
-The Worker readiness blocker must change only in the same reviewed sequence that adds the exact website page.
+The Worker readiness blocker changed only in the same reviewed sequence that added the exact website page:
 
-After the page exists:
-
-- set both mirrored fixtures to `pageState: present`;
-- remove `next_website_ingestion_endpoint_not_implemented`;
-- add `worker_proposal_delivery_not_implemented`;
-- make the same blocker replacement in Worker and website readiness parsing;
-- keep `bridgeEnabled: false`;
-- keep delivery absent and unscheduled;
-- preserve `cross_repo_contract_tests_not_implemented` until live HTTP acceptance, safe replay, replay rejection and authentication smoke exists;
-- keep canonical promotion and external execution disabled.
+- both mirrored fixtures use `pageState: present`;
+- `next_website_ingestion_endpoint_not_implemented` was removed from the current blocker set;
+- `worker_proposal_delivery_not_implemented` was added;
+- Worker and website readiness consume the same blocker set;
+- `bridgeEnabled: false` remains fixed;
+- delivery remains absent and unscheduled;
+- `cross_repo_contract_tests_not_implemented` remains until live HTTP acceptance, safe replay, replay rejection and authentication smoke exists;
+- canonical promotion and external execution remain disabled.
 
 Static fixture and parser parity are not live bridge evidence.

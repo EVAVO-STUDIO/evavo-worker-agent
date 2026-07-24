@@ -38,6 +38,16 @@ for (const token of [
   "next_website_ingestion_endpoint_not_implemented",
   "cross_repo_contract_tests_not_implemented",
   "absent pages require the endpoint blocker; present pages require the Worker proposal delivery blocker",
+  'const packageSource = readRequired("package.json")',
+  'scripts["growth:route-parity:check"] !== "node scripts/check-growth-route-parity.mjs"',
+  'String(scripts["check:local"] || "").includes("npm run growth:route-parity:check")',
+  'const safetyGate = readRequired("scripts/check-safety-gate-completeness.mjs")',
+  'const helperValidation = readRequired("scripts/check-helper-scripts.mjs")',
+  'const workflowParity = readRequired("scripts/check-worker-contract-workflow.mjs")',
+  'const workflow = readRequired(".github/workflows/worker-contract.yml")',
+  "Verify Growth route parity",
+  "npm run growth:route-parity:check",
+  "Worker workflow must run route parity before deterministic tests and the complete local gate.",
   "Growth route parity check passed.",
 ]) {
   assert(guard.includes(token), `guard-${token}`);
@@ -147,6 +157,7 @@ for (const token of [
 
 console.log("Growth route parity source contract passed.");
 console.log("- Worker guard uses bounded local source scanning and optional sibling verification only");
+console.log("- npm, check:local, safety completeness, helper parsing and read-only workflow wiring are source-tested");
 console.log("- one pure parser owns exact fields, canonical JSON, frozen output and conditional blocker sets");
 console.log("- behavioral fixtures prove both absent and present states while keeping bridge and delivery disabled");
 console.log("- static fixture and parser parity remain distinct from live HTTP delivery and end-to-end smoke");

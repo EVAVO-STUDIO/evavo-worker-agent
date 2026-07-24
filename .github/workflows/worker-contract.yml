@@ -6,6 +6,7 @@ on:
     paths:
       - "src/**"
       - "scripts/**"
+      - "tests/**"
       - "docs/**"
       - "migrations/**"
       - "README.md"
@@ -21,6 +22,7 @@ on:
     paths:
       - "src/**"
       - "scripts/**"
+      - "tests/**"
       - "docs/**"
       - "migrations/**"
       - "README.md"
@@ -69,11 +71,20 @@ jobs:
       - name: Verify README top-level truthfulness
         run: npm run docs:readme-truthfulness:check
 
+      - name: Verify bounded admin JSON requests
+        run: npm run research:bounded-json-safety:check
+
+      - name: Verify manual research concurrency leases
+        run: npm run research:manual-lease-safety:check
+
       - name: Verify public research fetch boundary
         run: npm run research:public-fetch-safety:check
 
       - name: Verify deterministic opportunity evidence quality
         run: npm run opportunities:evidence-quality:check
+
+      - name: Run deterministic core tests
+        run: npm run test:core
 
       - name: Run complete Worker local gate
         run: npm run check:local

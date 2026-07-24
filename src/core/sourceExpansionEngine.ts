@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
+import { fetchPublicResearchHtml, validatePublicResearchUrl } from "./publicResearchFetch";
 
 type ExpansionSeed = {
   id: string;
@@ -65,14 +66,8 @@ const STRATEGY_PATTERNS = [
 const BAD_URL_PATTERN = /(login|signin|register|cart|privacy|terms|facebook|instagram|linkedin|twitter|x\.com|youtube|tiktok|\.pdf$|\.jpg$|\.png$|\.zip$|mailto:|tel:)/i;
 
 function normalizeUrl(raw: string, base?: string) {
-  try {
-    const url = new URL(raw.trim(), base);
-    if (!["http:", "https:"].includes(url.protocol)) return null;
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  const decision = validatePublicResearchUrl(raw.trim(), base);
+  return decision.ok && decision.url ? decision.url.replace(/\/+$/, "") : null;
 }
 
 function domainOf(raw: string) {
@@ -304,7 +299,7 @@ async function startRun(env: Env, options: ExpansionOptions, seeds: ExpansionSee
   await env.DB.prepare(
     `INSERT INTO source_expansion_runs (id, run_type, strategy, started_at_iso, status, settings_json)
      VALUES (?, 'source_expansion', ?, ?, 'running', ?)`
-  ).bind(id, options.strategy || null, now, JSON.stringify({ ...options, selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })) })).run();
+  ).bind(id, options.strategy || null, now, JSON.stringify({ ...options, researchFetchContract: "public_research_fetch_v1", selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })) })).run();
   return id;
 }
 
@@ -355,13 +350,14 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
   const runId = await startRun(env, { ...options, maxFetches, maxLinksPerSeed, maxCandidates }, seeds);
   const existingDomains = await existingSourceDomains(env);
   const seenCandidates: ExpansionCandidate[] = [];
+  const fetchReceipts: Array<Record<string, unknown>> = [];
   let pagesFetched = 0;
   let linksFound = 0;
   let candidatesFound = 0;
   let candidatesNew = 0;
   let candidatesUpdated = 0;
   let candidatesRejected = 0;
-  let skipped = 0;
+  const skipped = 0;
   let failed = 0;
 
   for (const seed of seeds) {
@@ -379,16 +375,28 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     let error: string | null = null;
 
     try {
-      const response = await fetch(seed.url, { headers: { "user-agent": "EVAVO Opportunity Intelligence Source Discovery/1.0" } });
-      fetchStatus = response.status;
-      contentType = response.headers.get("content-type");
-      const html = await response.text();
-      bytes = html.length;
+      const fetched = await fetchPublicResearchHtml(seed.url);
       pagesFetched += 1;
-      if (!response.ok) throw new Error(`fetch_status_${response.status}`);
-      if (contentType && !/html|text/i.test(contentType)) throw new Error(`unsupported_content_type_${contentType}`);
+      fetchStatus = fetched.status;
+      contentType = fetched.contentType;
+      bytes = fetched.bytes;
+      const receipt = {
+        contract: fetched.contract,
+        requestedUrl: fetched.requestedUrl,
+        finalUrl: fetched.finalUrl,
+        status: fetched.status,
+        contentType: fetched.contentType,
+        bytes: fetched.bytes,
+        bodySha256: fetched.bodySha256,
+        redirectCount: fetched.redirectCount,
+        elapsedMs: fetched.elapsedMs,
+        fetchedAtISO: fetched.fetchedAtISO,
+        error: fetched.error,
+      };
+      fetchReceipts.push({ seedId: seed.id, ...receipt });
+      if (!fetched.ok) throw new Error(fetched.error || "research_fetch_failed");
 
-      const links = extractLinks(html, seed.url, maxLinksPerSeed);
+      const links = extractLinks(fetched.body, fetched.finalUrl || seed.url, maxLinksPerSeed);
       linksFound += links.length;
       seedLinksFound = links.length;
       for (const link of links) {
@@ -399,6 +407,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
           seedCandidatesRejected += 1;
           continue;
         }
+        candidate.evidence = { ...candidate.evidence, sourceFetch: receipt };
         candidatesFound += 1;
         seedCandidatesFound += 1;
         const result = await upsertCandidate(env, candidate, seed, existingDomains);
@@ -423,9 +432,9 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
            updated_at_iso = ?
          WHERE id = ?`
       ).bind(nowISO(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), seedCandidatesFound, seedCandidatesFound ? 3 : 0, `Last selected: ${seed.selection_reason}`, nowISO(), seed.id).run();
-    } catch (err) {
+    } catch (caught) {
       failed += 1;
-      error = err instanceof Error ? err.message : String(err);
+      error = caught instanceof Error ? caught.message : "source_expansion_processing_failed";
       await env.DB.prepare(
         `UPDATE source_expansion_seeds SET
            last_run_at_iso = ?,
@@ -442,7 +451,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     await env.DB.prepare(
       `INSERT INTO source_expansion_attempts (id, run_id, seed_id, seed_url, strategy, fetch_status, content_type, elapsed_ms, bytes, links_found, candidates_found, candidates_new, candidates_updated, candidates_rejected, error, created_at_iso)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(attemptId, runId, seed.id, seed.url, `${seed.strategy}|${seed.selection_reason || "selection_reason:unknown"}`, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
+    ).bind(attemptId, runId, seed.id, seed.url, `${seed.strategy}|${seed.selection_reason || "selection_reason:unknown"}|fetch:public_research_fetch_v1`, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
   }
 
   await finishRun(env, runId, {
@@ -458,11 +467,12 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     failed,
   });
 
-  await logEvent(env, "source_expansion_run", `Source expansion run checked ${seeds.length} seed(s), found ${candidatesFound} candidate(s), new ${candidatesNew}.`);
+  await logEvent(env, "source_expansion_run", `Confirmed source expansion run checked ${seeds.length} seed(s), found ${candidatesFound} candidate(s), new ${candidatesNew}.`);
 
   return {
     ok: true,
     mode: "source_expansion_run",
+    fetchContract: "public_research_fetch_v1",
     runId,
     seedsChecked: seeds.length,
     selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })),
@@ -474,9 +484,13 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     candidatesRejected,
     skipped,
     failed,
+    fetchReceipts: fetchReceipts.slice(0, 10),
     preview: seenCandidates.slice(0, 25),
     safety: {
       bounded: true,
+      publicWebOnly: true,
+      redirectsValidated: true,
+      responseBytesBounded: true,
       maxFetches,
       maxLinksPerSeed,
       maxCandidates,

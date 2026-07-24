@@ -28,14 +28,6 @@ function forbidTokens(label, source, tokens) {
 }
 
 const helper = read("src/core/manualResearchLease.ts");
-const runDue = read("src/routes/opportunityRunDueAdmin.ts");
-const expansion = read("src/routes/sourceExpansionAdmin.ts");
-const relationshipGraph = read("src/routes/sourceExpansionPublicDirectoryScanAdmin.ts");
-const queryHintResolver = read("src/routes/sourceExpansionQueryHintResolverAdmin.ts");
-const sourceBatch = read("src/routes/sourceBatchAdmin.ts");
-const opportunityDiscovery = read("src/routes/opportunityDiscoveryAdmin.ts");
-const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
-const sourcesAdmin = read("src/routes/sourcesAdmin.ts");
 const doc = read("docs/manual-research-concurrency.md");
 const workflow = read(".github/workflows/worker-contract.yml");
 const safetyGate = read("scripts/check-safety-gate-completeness.mjs");
@@ -59,7 +51,6 @@ requireTokens("manual research lease helper", helper, [
   "scheduledFallbackAllowed: false",
   "externalExecutionAllowed: false",
 ]);
-
 forbidTokens("manual research lease helper", helper, [
   "getSetting(",
   "setSetting(",
@@ -73,7 +64,7 @@ forbidTokens("manual research lease helper", helper, [
 const routeContracts = [
   {
     label: "manual opportunity run",
-    source: runDue,
+    path: "src/routes/opportunityRunDueAdmin.ts",
     gateToken: "const lease = await acquireManualResearchLease(env, MANUAL_OPPORTUNITY_RUN_LEASE, 900)",
     tokens: [
       'MANUAL_OPPORTUNITY_RUN_LEASE = "opportunity-run-due"',
@@ -84,8 +75,8 @@ const routeContracts = [
   },
   {
     label: "source expansion routes",
-    source: expansion,
-    gateToken: "return withResearchLease(env, json, \"source-expansion-scan\"",
+    path: "src/routes/sourceExpansionAdmin.ts",
+    gateToken: 'return withResearchLease(env, json, "source-expansion-scan"',
     tokens: [
       "async function withResearchLease",
       '"source-expansion-scan"',
@@ -97,7 +88,7 @@ const routeContracts = [
   },
   {
     label: "relationship graph route",
-    source: relationshipGraph,
+    path: "src/routes/sourceExpansionPublicDirectoryScanAdmin.ts",
     gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 900)",
     tokens: [
       'const actionKey = "source-expansion-relationship-graph"',
@@ -107,18 +98,17 @@ const routeContracts = [
   },
   {
     label: "query hint resolver",
-    source: queryHintResolver,
+    path: "src/routes/sourceExpansionQueryHintResolverAdmin.ts",
     gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 300)",
     tokens: [
       'const actionKey = `query-hint-resolve:${hintId}`',
       "manualResearchLeaseConflict(actionKey)",
       "releaseManualResearchLease(env, lease)",
-      "hintId,",
     ],
   },
   {
     label: "tiny source batch",
-    source: sourceBatch,
+    path: "src/routes/sourceBatchAdmin.ts",
     gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 600)",
     tokens: [
       'const actionKey = "sources-run-tiny"',
@@ -129,7 +119,7 @@ const routeContracts = [
   },
   {
     label: "opportunity source research actions",
-    source: opportunityDiscovery,
+    path: "src/routes/opportunityDiscoveryAdmin.ts",
     gateToken: "return withSourceLease(env, json, sourceAction.id",
     tokens: [
       "async function withSourceLease",
@@ -141,7 +131,7 @@ const routeContracts = [
   },
   {
     label: "opportunity source health actions",
-    source: sourceHealthActions,
+    path: "src/routes/opportunitySourceHealthActionsAdmin.ts",
     gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 600)",
     tokens: [
       'const actionKey = `opportunity-source:${sourceId}`',
@@ -154,7 +144,7 @@ const routeContracts = [
   },
   {
     label: "legacy source actions",
-    source: sourcesAdmin,
+    path: "src/routes/sourcesAdmin.ts",
     gateToken: "return withSourceLease(env, json, sourceId",
     tokens: [
       "async function withSourceLease",
@@ -164,10 +154,50 @@ const routeContracts = [
       "releaseManualResearchLease(env, lease)",
     ],
   },
+  {
+    label: "draft review actions",
+    path: "src/routes/draftReviewAdmin.ts",
+    gateToken: "const draftLease = await acquireManualResearchLease(env, draftActionKey, 600)",
+    tokens: [
+      'const draftActionKey = `draft-review:${draftId}`',
+      'reviewLeaseKey("draft-strategy", [strategyKey])',
+      "strategyLease = await acquireManualResearchLease(env, strategyActionKey, 600)",
+      "releaseManualResearchLease(env, strategyLease)",
+      "releaseManualResearchLease(env, draftLease)",
+      "concurrentDuplicateReviewAllowed: false",
+      "concurrentStrategyScoreMutationAllowed: false",
+    ],
+  },
+  {
+    label: "opportunity review actions",
+    path: "src/routes/opportunityReviewAdmin.ts",
+    gateToken: "const opportunityLease = await acquireManualResearchLease(env, opportunityActionKey, 600)",
+    tokens: [
+      'const opportunityActionKey = `opportunity-review:${opportunityId}`',
+      'reviewLeaseKey(\n      "opportunity-strategy"',
+      "strategyLease = await acquireManualResearchLease(env, strategyActionKey, 600)",
+      "releaseManualResearchLease(env, strategyLease)",
+      "releaseManualResearchLease(env, opportunityLease)",
+      "concurrentDuplicateReviewAllowed: false",
+      "concurrentStrategyScoreMutationAllowed: false",
+    ],
+  },
+  {
+    label: "source candidate commit",
+    path: "src/routes/opportunitySourceCandidatesAdmin.ts",
+    gateToken: "const lease = await acquireManualResearchLease(env, SOURCE_CANDIDATE_COMMIT_LEASE, 600)",
+    tokens: [
+      'SOURCE_CANDIDATE_COMMIT_LEASE = "opportunity-source-candidates-commit"',
+      "manualResearchLeaseConflict(SOURCE_CANDIDATE_COMMIT_LEASE)",
+      "releaseManualResearchLease(env, lease)",
+      "concurrentDuplicateCommitAllowed: false",
+    ],
+  },
 ];
 
-for (const { label, source, gateToken, tokens } of routeContracts) {
-  requireTokens(label, source, [
+for (const contract of routeContracts) {
+  const source = read(contract.path);
+  requireTokens(contract.label, source, [
     'from "../core/manualResearchLease"',
     'from "../core/boundedJsonRequest"',
     "readBoundedJsonObject",
@@ -177,18 +207,15 @@ for (const { label, source, gateToken, tokens } of routeContracts) {
     "requestReceipt",
     "status: 409",
     "finally {",
-    gateToken,
-    ...tokens,
+    contract.gateToken,
+    ...contract.tokens,
   ]);
-  const confirmPosition = source.indexOf('error: "confirm_required"');
-  const gatePosition = source.indexOf(gateToken);
+  const confirmPosition = source.indexOf("if (!isExplicitJsonConfirmation(parsed.value))");
+  const gatePosition = source.indexOf(contract.gateToken);
   if (confirmPosition < 0 || gatePosition < 0 || confirmPosition >= gatePosition) {
-    errors.push(`${label} must require exact bounded confirmation before entering the lease-protected action`);
+    errors.push(`${contract.label} must require exact bounded confirmation before entering the lease-protected action`);
   }
-}
-
-for (const { label, source } of routeContracts) {
-  forbidTokens(label, source, [
+  forbidTokens(contract.label, source, [
     "setTimeout(",
     "waitUntil(",
     "automaticRetryAllowed: true",
@@ -211,6 +238,11 @@ requireTokens("manual research concurrency document", doc, [
   "query-hint",
   "legacy source",
   "source-health",
+  "opportunity-source-candidates-commit",
+  "draft-review:<draft-id>",
+  "opportunity-review:<opportunity-id>",
+  "hashed `draft-strategy:` lease",
+  "hashed `opportunity-strategy:` lease",
   "It does not authorise an automatic retry executor.",
 ]);
 
@@ -227,7 +259,6 @@ requireTokens("safety gate completeness", safetyGate, [
   '"scripts/check-manual-research-lease-safety.mjs"',
   "manualResearchLeaseSafetyRequired: true",
 ]);
-
 requireTokens("Worker contract workflow", workflow, [
   "Verify manual research concurrency leases",
   "npm run research:manual-lease-safety:check",
@@ -237,8 +268,8 @@ if (workflow.includes("wrangler deploy")) errors.push("Manual research lease val
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "manual-research-lease-safety-v2-complete-route-coverage",
-  previous_contract: "manual-research-lease-safety-v1",
+  contract: "manual-research-lease-safety-v3-review-and-candidate-coverage",
+  previousContract: "manual-research-lease-safety-v2-complete-route-coverage",
   atomicSingleStatementAcquisitionRequired: true,
   readThenWriteAcquisitionAllowed: false,
   boundedLeaseTtlRequired: true,
@@ -256,6 +287,9 @@ console.log(JSON.stringify({
   perOpportunitySourceLeaseRequired: true,
   perOpportunitySourceHealthLeaseRequired: true,
   perLegacySourceLeaseRequired: true,
+  sourceCandidateCommitLeaseRequired: true,
+  draftRecordAndStrategyLeasesRequired: true,
+  opportunityRecordAndStrategyLeasesRequired: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

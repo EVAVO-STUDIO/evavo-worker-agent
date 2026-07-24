@@ -70,6 +70,7 @@ const requiredFiles = [
   "src/core/opportunityDiscovery.ts",
   "src/core/opportunityPersistence.ts",
   "src/core/opportunityScoring.ts",
+  "src/core/opportunitySourceDiscovery.ts",
   "src/routes/admin.ts",
   "src/routes/adminProtected.ts",
   "src/routes/autonomySettingsAdmin.ts",
@@ -101,6 +102,7 @@ const requiredFiles = [
   "tests/boundedJsonRequest.test.ts",
   "tests/publicResearchFetch.test.ts",
   "tests/reviewMutationSafety.test.ts",
+  "tests/opportunitySourceCandidateSaveSource.test.ts",
   "docs/admin-token-security.md",
   "docs/bounded-admin-json-boundary.md",
   "docs/manual-research-concurrency.md",
@@ -218,6 +220,34 @@ requireTokens("src/core/opportunityScoring.ts", [
   "evidenceQualityFor",
   "guardrail:weak_evidence_no_positive_learning_boost",
   "guardrail:weak_evidence_ceiling_45",
+]);
+requireTokens("src/core/opportunitySourceDiscovery.ts", [
+  'SOURCE_CANDIDATE_SAVE_CONTRACT = "opportunity_source_candidate_save_v2_atomic"',
+  "const statements: D1PreparedStatement[] = []",
+  "INSERT INTO opportunity_sources",
+  "UPDATE source_expansion_candidates",
+  "INSERT INTO events",
+  "requestBodySha256: options.requestBodySha256 || null",
+  "await env.DB.batch(statements)",
+  "sourceRecordsExpansionMarkersAndAuditAtomic: true",
+  "reviewOnly: true",
+  "executable: false",
+  "externalExecutionAllowed: false",
+]);
+forbidTokens("src/core/opportunitySourceDiscovery.ts", [
+  "logEvent(",
+  "await env.DB.prepare(`INSERT INTO opportunity_sources",
+  "await env.DB.prepare(`UPDATE source_expansion_candidates",
+  "fetch(",
+  "sendEmail(",
+  "waitUntil(",
+]);
+requireTokens("tests/opportunitySourceCandidateSaveSource.test.ts", [
+  'test("reviewed source candidates commit source rows, markers and audit atomically"',
+  'test("source candidate save has no sequential helper writes or external execution"',
+  'test("source candidate route binds the audit to the bounded request receipt"',
+  "sourceRecordsExpansionMarkersAndAuditAtomic: true",
+  "requestBodySha256: parsed.bodySha256",
 ]);
 
 requireTokens("src/index.ts", [
@@ -358,11 +388,13 @@ requireTokens("scripts/check-manual-research-lease-safety.mjs", [
   "legacyAndModernDraftReviewShareLease: true",
 ]);
 requireTokens("scripts/check-review-mutation-boundary-safety.mjs", [
-  'contract: "review-mutation-boundary-safety-v2-legacy-compatibility"',
+  'contract: "review-mutation-boundary-safety-v3-source-candidate-atomicity"',
   "boundedRequestBodyRequired: true",
   "requestFingerprintRequired: true",
   "legacyDraftReviewUsesSharedLease: true",
   "legacyDraftReviewWritesAtomic: true",
+  "sourceCandidateWritesAtomic: true",
+  "sourceCandidateBehavioralSourceTestsRequired: true",
 ]);
 requireTokens("scripts/check-autonomy-capability-truthfulness.mjs", [
   'contract: "autonomy-capability-truthfulness-v2-bounded-settings"',
@@ -451,7 +483,7 @@ for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v7-settings-and-legacy-review",
+  contract: "dynamic-helper-and-gate-validation-v8-source-candidate-atomicity",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -462,6 +494,7 @@ console.log(JSON.stringify({
   boundedJsonRequestSafetyRequired: true,
   manualResearchLeaseSafetyRequired: true,
   reviewMutationSafetyRequired: true,
+  sourceCandidateAtomicityRequired: true,
   autonomySettingsSafetyRequired: true,
   legacyCompatibilitySafetyRequired: true,
   operationalRoutePolicySafetyRequired: true,

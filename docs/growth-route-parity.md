@@ -12,6 +12,12 @@ The mirrored fixture is:
 fixtures/growth-worker-route-parity-v1.json
 ```
 
+The mirrored pure parser is:
+
+```text
+src/core/growthWorkerRouteParity.ts
+```
+
 Its contract version is:
 
 ```text
@@ -22,6 +28,7 @@ The same bytes must exist at:
 
 ```text
 next-website/tests/fixtures/growth-worker-route-parity-v1.json
+next-website/src/server/growth-autopilot/growthWorkerRouteParity.ts
 ```
 
 The fixture pins:
@@ -35,17 +42,35 @@ The fixture pins:
 - website Next adapter and page-handler versions;
 - website page state;
 - bridge and delivery disabled posture;
-- exact readiness blockers.
+- the exact blockers required by that page state.
 
-## Current posture
+The parser accepts unknown input, requires exact fields and canonical JSON, freezes its result and rejects premature bridge or delivery enablement.
+
+## Conditional blocker posture
+
+### Current page-absent state
 
 ```text
 pageState: absent
 bridgeEnabled: false
 deliveryEnabled: false
-next_website_ingestion_endpoint_not_implemented
-cross_repo_contract_tests_not_implemented
+blockers:
+  - next_website_ingestion_endpoint_not_implemented
+  - cross_repo_contract_tests_not_implemented
 ```
+
+### Approved page-present state before delivery
+
+```text
+pageState: present
+bridgeEnabled: false
+deliveryEnabled: false
+blockers:
+  - worker_proposal_delivery_not_implemented
+  - cross_repo_contract_tests_not_implemented
+```
+
+The present state must not retain `next_website_ingestion_endpoint_not_implemented`. This fixes the previous contradictory shape where `pageState: present` was nominally allowed but the validator still required the absent-page blocker.
 
 The Worker still performs no proposal HTTP delivery.
 
@@ -69,16 +94,17 @@ Run:
 node scripts/check-growth-route-parity.mjs
 ```
 
-The guard validates Worker source and the local fixture.
+The guard validates Worker source, the local fixture and the pure route-state parser.
 
 When a sibling `next-website` checkout exists, it additionally requires:
 
 - byte-for-byte fixture equality;
+- byte-for-byte parser equality;
 - website page state equal to fixture state;
 - matching request, bridge, inventory, Next adapter and page-handler versions;
 - the reserved page path;
 - the website byte-for-byte page source contract;
-- both current readiness blockers.
+- the conditional blocker set matching `pageState`.
 
 For a non-sibling checkout:
 
@@ -93,11 +119,13 @@ The Worker readiness blocker must change only in the same reviewed sequence that
 
 After the page exists:
 
+- set both mirrored fixtures to `pageState: present`;
 - remove `next_website_ingestion_endpoint_not_implemented`;
-- add a truthful post-route blocker;
+- add `worker_proposal_delivery_not_implemented`;
+- make the same blocker replacement in Worker and website readiness parsing;
 - keep `bridgeEnabled: false`;
 - keep delivery absent and unscheduled;
-- preserve `cross_repo_contract_tests_not_implemented` until live HTTP acceptance, replay and authentication smoke exists;
+- preserve `cross_repo_contract_tests_not_implemented` until live HTTP acceptance, safe replay, replay rejection and authentication smoke exists;
 - keep canonical promotion and external execution disabled.
 
-Static fixture parity is not live bridge evidence.
+Static fixture and parser parity are not live bridge evidence.

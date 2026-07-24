@@ -196,7 +196,6 @@ requireTokens("opportunity discovery receipts", opportunityDiscovery, [
   "bodySha256: fetched.bodySha256",
   "timeoutScope: fetched.timeoutScope",
   "sourceFetch,",
-  "sourceFetch: sourceFetch",
   "fullOperationTimeout: true",
   "boundedResponse: true",
   "publicWebOnly: true",

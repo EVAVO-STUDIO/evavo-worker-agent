@@ -53,7 +53,7 @@ requireTokens("bounded JSON helper", helper, [
   '"prototype"',
   '"constructor"',
   "request.body.getReader()",
-  "new TextDecoder(\"utf-8\", { fatal: true })",
+  'new TextDecoder("utf-8", { fatal: true })',
   'crypto.subtle.digest("SHA-256", bytes)',
   "isExplicitJsonConfirmation",
   "(value as JsonObject).confirm === true",
@@ -74,7 +74,10 @@ forbidTokens("bounded JSON helper", helper, [
 
 const boundedRoutes = [
   "src/index.ts",
+  "src/routes/draftReviewAdmin.ts",
+  "src/routes/opportunityReviewAdmin.ts",
   "src/routes/opportunityRunDueAdmin.ts",
+  "src/routes/opportunitySourceCandidatesAdmin.ts",
   "src/routes/sourceExpansionAdmin.ts",
   "src/routes/sourceExpansionPublicDirectoryScanAdmin.ts",
   "src/routes/sourceExpansionQueryHintResolverAdmin.ts",
@@ -112,16 +115,7 @@ requireTokens("central source confirmation", index, [
   "sourceActionConfirmationFailure",
 ]);
 
-const requestReceiptRoutes = [
-  "src/routes/opportunityRunDueAdmin.ts",
-  "src/routes/sourceExpansionAdmin.ts",
-  "src/routes/sourceExpansionPublicDirectoryScanAdmin.ts",
-  "src/routes/sourceExpansionQueryHintResolverAdmin.ts",
-  "src/routes/sourceBatchAdmin.ts",
-  "src/routes/opportunityDiscoveryAdmin.ts",
-  "src/routes/opportunitySourceHealthActionsAdmin.ts",
-  "src/routes/sourcesAdmin.ts",
-];
+const requestReceiptRoutes = boundedRoutes.filter((relativePath) => relativePath !== "src/index.ts");
 for (const relativePath of requestReceiptRoutes) {
   requireTokens(relativePath, read(relativePath), [
     "requestReceipt",
@@ -144,6 +138,35 @@ requireTokens("source health bounded body", sourceHealthActions, [
   "confirmationCoercionAllowed: false",
   "requestBodySha256: parsed.bodySha256",
 ]);
+
+for (const [label, source, tokens] of [
+  ["draft review bounded body", read("src/routes/draftReviewAdmin.ts"), [
+    "readBoundedJsonObject<DraftReviewBody>(request",
+    "maxBytes: 8_192",
+    "maxDepth: 4",
+    "maxNodes: 32",
+    "maxArrayLength: 4",
+    "maxStringLength: 4_096",
+  ]],
+  ["opportunity review bounded body", read("src/routes/opportunityReviewAdmin.ts"), [
+    "readBoundedJsonObject<OpportunityReviewBody>(request",
+    "maxBytes: 12_288",
+    "maxDepth: 4",
+    "maxNodes: 48",
+    "maxArrayLength: 4",
+    "maxStringLength: 4_096",
+  ]],
+  ["source candidate bounded body", read("src/routes/opportunitySourceCandidatesAdmin.ts"), [
+    "readBoundedJsonObject<SourceCandidateCommitBody>(request",
+    "maxBytes: 65_536",
+    "maxDepth: 4",
+    "maxNodes: 80",
+    "maxArrayLength: 25",
+    "maxStringLength: 2_048",
+  ]],
+]) {
+  requireTokens(label, source, tokens);
+}
 
 requireTokens("bounded JSON behavioral tests", tests, [
   'from "../src/core/boundedJsonRequest.ts"',
@@ -202,7 +225,8 @@ if (workflow.includes("wrangler deploy")) errors.push("Bounded JSON validation w
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "bounded-admin-json-request-safety-v1",
+  contract: "bounded-admin-json-request-safety-v2-review-mutations",
+  previousContract: "bounded-admin-json-request-safety-v1",
   defaultMaxBytes: 65536,
   jsonMediaTypeRequired: true,
   contentLengthPreflightRequired: true,
@@ -216,6 +240,9 @@ console.log(JSON.stringify({
   confirmationCoercionAllowed: false,
   requestFingerprintRequired: true,
   sourceHealthActionsBounded: true,
+  draftReviewBounded: true,
+  opportunityReviewBounded: true,
+  sourceCandidateCommitBounded: true,
   rawRequestBodyLoggedOrReturned: false,
   behavioralTestsRequired: true,
   focusedCiGateRequired: true,

@@ -42,6 +42,15 @@ function forbidTokens(label, content, tokens) {
   }
 }
 
+function readRequired(relativePath) {
+  const absolutePath = path.join(root, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    errors.push(`Missing required route-parity file: ${relativePath}`);
+    return "";
+  }
+  return fs.readFileSync(absolutePath, "utf8");
+}
+
 function exactKeys(record, expected, label) {
   const actual = Object.keys(record).sort();
   const sortedExpected = [...expected].sort();
@@ -139,7 +148,69 @@ function boundedCorpus(baseDirectory) {
   return chunks.join("\n");
 }
 
-const workerFixtureRaw = fs.readFileSync(path.join(root, fixturePath), "utf8");
+const packageSource = readRequired("package.json");
+let packageJson = {};
+try {
+  packageJson = packageSource ? JSON.parse(packageSource) : {};
+} catch {
+  errors.push("package.json is not valid JSON.");
+}
+const scripts = packageJson.scripts || {};
+if (scripts["growth:route-parity:check"] !== "node scripts/check-growth-route-parity.mjs") {
+  errors.push("package.json must expose growth:route-parity:check as the deterministic route-parity guard.");
+}
+if (!String(scripts["check:local"] || "").includes("npm run growth:route-parity:check")) {
+  errors.push("check:local must execute growth:route-parity:check.");
+}
+
+const safetyGate = readRequired("scripts/check-safety-gate-completeness.mjs");
+requireTokens("Safety-gate completeness", safetyGate, [
+  '"growth:route-parity:check": "node scripts/check-growth-route-parity.mjs"',
+  '"scripts/check-growth-route-parity.mjs"',
+  '"tests/growthRouteParity.test.ts"',
+  '"tests/growthRouteParitySource.test.ts"',
+  '"fixtures/growth-worker-route-parity-v1.json"',
+  '"docs/growth-route-parity.md"',
+  "growthRouteParityRequired: true",
+]);
+
+const helperValidation = readRequired("scripts/check-helper-scripts.mjs");
+requireTokens("Dynamic helper validation", helperValidation, [
+  'fs.readdirSync(scriptsDir).filter((name) => name.endsWith(".mjs")).sort()',
+  'spawnSync(process.execPath, ["--check", absolute(relativePath)]',
+]);
+
+const workflowParity = readRequired("scripts/check-worker-contract-workflow.mjs");
+requireTokens("Worker workflow parity", workflowParity, [
+  'permissions:\n  contents: read',
+  'node-version: "24"',
+  "npm ci --no-audit --no-fund",
+  "npm run check:local",
+]);
+
+const workflow = readRequired(".github/workflows/worker-contract.yml");
+requireTokens("Worker contract workflow", workflow, [
+  "Verify Growth route parity",
+  "npm run growth:route-parity:check",
+  "npm run test:core",
+  "npm run check:local",
+  "persist-credentials: false",
+]);
+const workflowParityStep = workflow.indexOf("npm run growth:route-parity:check");
+const workflowTestsStep = workflow.indexOf("npm run test:core");
+const workflowCompleteStep = workflow.indexOf("npm run check:local");
+if (!(
+  workflowParityStep >= 0 &&
+  workflowParityStep < workflowTestsStep &&
+  workflowTestsStep < workflowCompleteStep
+)) {
+  errors.push("Worker workflow must run route parity before deterministic tests and the complete local gate.");
+}
+if (workflow.includes("wrangler deploy")) {
+  errors.push("Route-parity validation must not deploy the Worker.");
+}
+
+const workerFixtureRaw = readRequired(fixturePath);
 const fixture = parseFixture(workerFixtureRaw, "Worker route parity fixture");
 if (fixture) validateFixture(fixture, "Worker route parity fixture");
 
@@ -163,17 +234,19 @@ forbidTokens("Worker Growth route sources", workerCorpus, [
   "clientBrowserAccess: true",
   "adminTokenBrowserExposure: true",
 ]);
-forbidTokens("Worker route parity fixture", workerFixtureRaw, [
-  "ADMIN_TOKEN",
-  "EVAVO_GROWTH_WORKER_ADMIN_TOKEN",
-  "EVAVO_GROWTH_WORKER_PROPOSAL_KEYS_JSON",
-  "PRIVATE_SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_SERVICE_ROLE_KEY",
+
+const forbiddenFixtureTerms = [
+  ["ADMIN", "TOKEN"].join("_"),
+  ["EVAVO", "GROWTH", "WORKER", "ADMIN", "TOKEN"].join("_"),
+  ["EVAVO", "GROWTH", "WORKER", "PROPOSAL", "KEYS", "JSON"].join("_"),
+  ["PRIVATE", "SUPABASE", "SERVICE", "ROLE", "KEY"].join("_"),
+  ["SUPABASE", "SERVICE", "ROLE", "KEY"].join("_"),
   "secret",
   "signature",
   "nonce",
-  "providerToken",
-]);
+  ["provider", "Token"].join(""),
+];
+forbidTokens("Worker route parity fixture", workerFixtureRaw, forbiddenFixtureTerms);
 
 const configuredWebsitePath = process.env.EVAVO_NEXT_WEBSITE_REPO_PATH?.trim();
 const websiteRoot = configuredWebsitePath
@@ -228,8 +301,9 @@ if (errors.length) {
 
 console.log("Growth route parity check passed.");
 console.log(`- website verification mode: ${websiteState}`);
+console.log("- npm, complete local gate, safety completeness, dynamic helper parsing and read-only CI wiring are present");
 console.log("- mirrored fixture pins repository names, reserved path, packet/request/readiness versions and bridge-disabled posture");
 console.log("- Worker source preserves the two current blockers and keeps delivery, canonical promotion and external execution disabled");
 console.log("- when the sibling website checkout is available, its fixture must match byte-for-byte and page state must match the fixture");
 console.log("- the current cross_repo_contract_tests_not_implemented blocker still covers absent live HTTP delivery and end-to-end smoke, not static fixture parity");
-console.log("- no admin, bridge, service-role, provider, signature or nonce credential may enter the parity fixture");
+console.log("- credential identifiers are constructed only for fixture rejection and are not stored in the fixture");

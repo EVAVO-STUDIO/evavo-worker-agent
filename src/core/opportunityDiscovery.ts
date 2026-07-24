@@ -79,9 +79,15 @@ const VALUE_TERMS = ["funding", "grant", "$", "aud", "nzd", "budget", "contract"
 const ELIGIBILITY_TERMS = ["eligible", "eligibility", "who can apply", "applicants", "criteria", "requirements"];
 const SCOPE_TERMS = ["scope", "services", "deliverables", "statement of work", "requirements", "project brief"];
 const DEADLINE_PATTERN = /(?:closes?|closing date|applications close|deadline)\s*(?::|-)?\s*([^.;|]{3,100})/i;
-const VALUE_PATTERN = /(?:(up to|from)\s+)?((?:AUD|NZD)\s*)?\$?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)(?:\s*(million|m|thousand|k))?/i;
+const VALUE_PATTERN = /(?:(up to|from)\s+)?(?:(AUD|NZD)\s*\$?\s*|\$\s*)([0-9][0-9,]*(?:\.[0-9]{1,2})?)(?:\s*(million|m|thousand|k))?/i;
 const GENERIC_LINK_TITLE_PATTERN = /^(?:click here|read more|learn more|more|view|details|download|apply|open)$/i;
 const TRACKING_QUERY_KEYS = new Set(["gclid", "fbclid", "msclkid", "dclid", "yclid", "_ga"]);
+
+function decodeCodePoint(raw: string, radix: number): string {
+  const codePoint = Number.parseInt(raw, radix);
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return " ";
+  return String.fromCodePoint(codePoint);
+}
 
 function decodeEntities(value: string): string {
   return value
@@ -91,8 +97,8 @@ function decodeEntities(value: string): string {
     .replace(/&nbsp;/gi, " ")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/&#(\d+);/g, (_match, decimal) => String.fromCodePoint(Number(decimal)))
-    .replace(/&#x([0-9a-f]+);/gi, (_match, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
+    .replace(/&#(\d+);/g, (_match, decimal) => decodeCodePoint(decimal, 10))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex) => decodeCodePoint(hex, 16));
 }
 
 function normalizeText(value: string): string {
@@ -273,7 +279,7 @@ function scoreCandidate(title: string, url: string, sourceUrl: string, contextTe
   const detectedValueText = firstPattern(combined, VALUE_PATTERN);
   const deadline = deadlineEvidence(detectedDeadlineText);
   const value = valueEvidence(detectedValueText);
-  const valueScore = valueTerms.length ? 8 : 0;
+  const valueScore = value && value.amountCents !== null ? 8 : value ? 4 : 0;
   const urgencyScore = deadline?.status === "future" || deadline?.status === "today" ? 8 : highIntent.some((term) => /close|deadline/i.test(term)) ? 4 : 0;
   const effortScore = opportunityType === "tender" || opportunityType === "rfp_or_eoi" ? 6 : 0;
   const riskPenalty = deadline?.status === "past" ? 60 : 0;
@@ -305,7 +311,7 @@ function scoreCandidate(title: string, url: string, sourceUrl: string, contextTe
   if (sourceAuthorityScore > 0) evidenceQualityScore += 12;
   if (deadline?.normalizedDate) evidenceQualityScore += 14;
   else if (deadline) evidenceQualityScore += 5;
-  if (value?.amountCents !== null) evidenceQualityScore += 10;
+  if (value && value.amountCents !== null) evidenceQualityScore += 10;
   else if (value) evidenceQualityScore += 4;
   if (eligibilityTerms.length) evidenceQualityScore += 4;
   if (scopeTerms.length) evidenceQualityScore += 4;
@@ -314,7 +320,7 @@ function scoreCandidate(title: string, url: string, sourceUrl: string, contextTe
   const reviewFlags: string[] = [];
   if (deadline?.status === "unparsed") reviewFlags.push("deadline_present_but_unparsed");
   if (value && value.amountCents === null) reviewFlags.push("value_present_but_unparsed");
-  if (value?.amountCents !== null && !value.currency) reviewFlags.push("currency_unverified");
+  if (value && value.amountCents !== null && !value.currency) reviewFlags.push("currency_unverified");
   if (sourceAuthorityScore === 0) reviewFlags.push("source_authority_unverified");
   if (evidenceQualityScore < 38) reviewFlags.push("weak_evidence");
 

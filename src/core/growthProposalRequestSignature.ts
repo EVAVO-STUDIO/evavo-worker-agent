@@ -213,7 +213,7 @@ function canonicalPacketForSigning(value: GrowthProposalPacket, now: Date): Grow
     );
   }
 
-  return buildGrowthProposalPacket({
+  const canonical = buildGrowthProposalPacket({
     sourceRouteFamily: value.sourceRouteFamily,
     sourceRecordId: value.sourceRecordId,
     sourceFingerprint: value.sourceFingerprint,
@@ -230,6 +230,10 @@ function canonicalPacketForSigning(value: GrowthProposalPacket, now: Date): Grow
     idempotencyKey: value.idempotencyKey,
     createdAt: value.createdAt,
   }, { now });
+  if (JSON.stringify(value) !== JSON.stringify(canonical)) {
+    fail("GROWTH_PROPOSAL_REQUEST_PACKET_NOT_CANONICAL");
+  }
+  return canonical;
 }
 
 export function createGrowthProposalRequestNonce(): string {

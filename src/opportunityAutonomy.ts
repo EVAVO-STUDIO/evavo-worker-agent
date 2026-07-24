@@ -1,5 +1,6 @@
 import type { Env } from "./db";
 import { logEvent } from "./db";
+import { acquireManualResearchLease, releaseManualResearchLease } from "./core/manualResearchLease";
 import { extractOpportunityCandidates } from "./core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "./core/opportunityPersistence";
 import { finishOpportunityRun, prepareSourceRunResult, recordCandidateRejection, startOpportunityRun, type OpportunityRunSummary, type SourceRunResult } from "./core/opportunityRuns";
@@ -71,19 +72,20 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
   const summary: OpportunityRunSummary = { sourcesChecked: 0, candidatesFound: 0, saved: 0, duplicates: 0, failed: 0, skipped: 0, rejected: 0 };
   const runId = await startOpportunityRun(env, "manual_confirmed", { ...settings, researchFetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT });
   let successfulSources = 0;
+  let sourceLeaseConflicts = 0;
   let lastFailureCode: string | null = null;
 
   try {
     if (!settings.opportunityDiscoveryEnabled) {
       await logEvent(env, "opportunity_tick_skip", "Confirmed manual opportunity run skipped because opportunity discovery is disabled.");
       await finishOpportunityRun(env, runId, "skipped", summary, "opportunity_discovery_disabled");
-      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "opportunity_discovery_disabled", successfulSources };
+      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "opportunity_discovery_disabled", successfulSources, sourceLeaseConflicts };
     }
 
     if (!(await tableExists(env, "opportunity_sources")) || !(await tableExists(env, "opportunities"))) {
       await logEvent(env, "opportunity_tick_skip", "Opportunity tables missing. Apply migration 0004_opportunity_intelligence.sql.");
       await finishOpportunityRun(env, runId, "skipped", summary, "missing_opportunity_tables");
-      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "missing_opportunity_tables", successfulSources };
+      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "missing_opportunity_tables", successfulSources, sourceLeaseConflicts };
     }
 
     const limit = Math.min(
@@ -93,14 +95,14 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
     if (limit <= 0) {
       await logEvent(env, "opportunity_tick_skip", "Confirmed manual opportunity run blocked by zero source/network limit.");
       await finishOpportunityRun(env, runId, "skipped", summary, "zero_source_or_network_limit");
-      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "zero_source_or_network_limit", successfulSources };
+      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "zero_source_or_network_limit", successfulSources, sourceLeaseConflicts };
     }
 
     const sources = await dueSources(env, limit);
     if (!sources.length) {
       await logEvent(env, "opportunity_tick_skip", "No due opportunity sources for confirmed manual review.");
       await finishOpportunityRun(env, runId, "skipped", summary, "no_due_sources");
-      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "no_due_sources", successfulSources };
+      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "no_due_sources", successfulSources, sourceLeaseConflicts };
     }
 
     for (const source of sources) {
@@ -109,6 +111,12 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
       let candidatesSaved = 0;
       let candidatesRejected = 0;
       let duplicates = 0;
+      const sourceActionKey = `opportunity-source:${source.id}`;
+      const sourceLease = await acquireManualResearchLease(env, sourceActionKey, 600);
+      if (!sourceLease) {
+        sourceLeaseConflicts += 1;
+        continue;
+      }
 
       try {
         const fetched = await fetchPublicResearchHtml(source.url);
@@ -213,16 +221,26 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
           duplicates,
           error,
         }, false);
+      } finally {
+        await releaseManualResearchLease(env, sourceLease).catch(() => false);
       }
     }
 
-    const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : summary.failed > 0 ? "partial" : "completed";
-    const runError = runStatus === "failed"
-      ? lastFailureCode || "all_opportunity_sources_failed"
-      : runStatus === "partial"
-        ? `partial_source_failures:${summary.failed}`
-        : null;
-    await logEvent(env, "opportunity_tick_ok", `Confirmed manual opportunity run ${runStatus} | checked ${summary.sourcesChecked} | successful ${successfulSources} | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | rejected ${summary.rejected} | failed ${summary.failed} | run ${runId || "audit_disabled"}`);
+    const runStatus = successfulSources === 0 && summary.failed === 0
+      ? "skipped"
+      : summary.failed > 0 && successfulSources === 0
+        ? "failed"
+        : summary.failed > 0 || sourceLeaseConflicts > 0
+          ? "partial"
+          : "completed";
+    const runError = runStatus === "skipped"
+      ? "all_selected_sources_busy"
+      : runStatus === "failed"
+        ? lastFailureCode || "all_opportunity_sources_failed"
+        : runStatus === "partial"
+          ? `partial_source_outcomes:failed:${summary.failed}:busy:${sourceLeaseConflicts}`
+          : null;
+    await logEvent(env, "opportunity_tick_ok", `Confirmed manual opportunity run ${runStatus} | checked ${summary.sourcesChecked} | successful ${successfulSources} | busy ${sourceLeaseConflicts} | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | rejected ${summary.rejected} | failed ${summary.failed} | run ${runId || "audit_disabled"}`);
     await finishOpportunityRun(env, runId, runStatus, summary, runError);
     return {
       ...summary,
@@ -231,9 +249,11 @@ export async function runOpportunityAutonomy(env: Env, settings: OpportunityAuto
       runStatus,
       runError,
       successfulSources,
+      sourceLeaseConflicts,
       fetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
       fullOperationTimeout: true,
       sourceHealthAndAuditAtomic: true,
+      overlappingPerSourceActionAllowed: false,
       reviewOnly: true,
       executable: false,
       deliverable: false,

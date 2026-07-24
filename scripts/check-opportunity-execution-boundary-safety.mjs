@@ -13,9 +13,11 @@ const read = (relativePath) => {
 const sourceExpansion = read("src/routes/sourceExpansionAdmin.ts");
 const runDue = read("src/routes/opportunityRunDueAdmin.ts");
 const opportunityRunner = read("src/opportunityAutonomy.ts");
+const opportunityRuns = read("src/core/opportunityRuns.ts");
 const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
 const learning = read("src/routes/opportunityLearningAdmin.ts");
 const discovery = read("src/routes/opportunityDiscoveryAdmin.ts");
+const boundedJson = read("src/core/boundedJsonRequest.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
 for (const [label, content] of [
@@ -53,6 +55,17 @@ for (const [label, content] of [
   }
 }
 if (!opportunityRunner) errors.push("Missing confirmed manual opportunity runner");
+if (!opportunityRuns) errors.push("Missing opportunity run audit support");
+if (!boundedJson) errors.push("Missing bounded JSON request support");
+
+for (const token of [
+  'BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1"',
+  "readBoundedJsonObject",
+  "isExplicitJsonConfirmation",
+  '(value as JsonObject).confirm === true',
+]) {
+  if (!boundedJson.includes(token)) errors.push(`Bounded request contract is missing: ${token}`);
+}
 
 const sourceExecutionCalls = [
   "bootstrapSourceExpansionSeeds(env)",
@@ -68,38 +81,59 @@ for (const call of sourceExecutionCalls) {
     continue;
   }
   const routeStart = sourceExpansion.lastIndexOf('if (pathname === "', callPosition);
-  const bodyPosition = sourceExpansion.indexOf("const body = await bodyJson(request)", routeStart);
-  const confirmPosition = sourceExpansion.indexOf("if (body?.confirm !== true)", routeStart);
+  const bodyPosition = sourceExpansion.indexOf("const confirmed = await confirmedBody(request, json)", routeStart);
+  const confirmPosition = sourceExpansion.indexOf("if (!confirmed.ok) return confirmed.response", routeStart);
   if (routeStart < 0 || bodyPosition < 0 || confirmPosition < 0 || !(routeStart < bodyPosition && bodyPosition < confirmPosition && confirmPosition < callPosition)) {
-    errors.push(`Source expansion confirmation must precede execution call: ${call}`);
+    errors.push(`Source expansion bounded confirmation must precede execution call: ${call}`);
   }
 }
 
 for (const token of [
-  "limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10)",
-  "maxFetches: boundedInteger(body?.maxFetches, 3, 1, 10)",
-  "maxLinksPerSeed: boundedInteger(body?.maxLinksPerSeed, 40, 5, 80)",
-  "maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100)",
-  "maxSitemapUrls: boundedInteger(body?.maxSitemapUrls, 50, 5, 100)",
-  "limit: boundedInteger(body?.limit, 80, 1, 150)",
+  'from "../core/boundedJsonRequest"',
+  "async function confirmedBody",
+  "readBoundedJsonObject(request)",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
+  "confirmationCoercionAllowed: false",
+  "requestReceipt",
+  "bodySha256",
+  "strategy: boundedStrategy(body.strategy)",
+  "limitSeeds: boundedInteger(body.limitSeeds, 3, 1, 10)",
+  "maxFetches: boundedInteger(body.maxFetches, 3, 1, 10)",
+  "maxLinksPerSeed: boundedInteger(body.maxLinksPerSeed, 40, 5, 80)",
+  "maxCandidates: boundedInteger(body.maxCandidates, 40, 5, 100)",
+  "maxSitemapUrls: boundedInteger(body.maxSitemapUrls, 50, 5, 100)",
+  "limit: boundedInteger(confirmed.body.limit, 80, 1, 150)",
+  "withResearchLease",
 ]) {
-  if (!sourceExpansion.includes(token)) errors.push(`Source expansion execution bound is missing: ${token}`);
+  if (!sourceExpansion.includes(token)) errors.push(`Source expansion bounded execution token is missing: ${token}`);
+}
+for (const forbidden of ["request.json()", 'body?.confirm !== true', 'searchParams.get("confirm")']) {
+  if (sourceExpansion.includes(forbidden)) errors.push(`Source expansion contains unbounded or coercive token: ${forbidden}`);
 }
 
-const runDueBodyPosition = runDue.indexOf("const body = await request.json().catch(() => ({}))");
-const runDueConfirmPosition = runDue.indexOf("if (body?.confirm !== true)");
+const runDueBodyPosition = runDue.indexOf("const parsed = await readBoundedJsonObject(request)");
+const runDueConfirmPosition = runDue.indexOf("if (!isExplicitJsonConfirmation(parsed.value))");
+const runDueLeasePosition = runDue.indexOf("const lease = await acquireManualResearchLease");
 const runDueSettingsPosition = runDue.indexOf("const settings = await readAutonomySettings(env)");
 const runDueExecutionPosition = runDue.indexOf("const summary = await runOpportunityAutonomy(env, settings)");
 if (
   runDueBodyPosition < 0 ||
   runDueConfirmPosition < 0 ||
+  runDueLeasePosition < 0 ||
   runDueSettingsPosition < 0 ||
   runDueExecutionPosition < 0 ||
-  !(runDueBodyPosition < runDueConfirmPosition && runDueConfirmPosition < runDueSettingsPosition && runDueSettingsPosition < runDueExecutionPosition)
+  !(runDueBodyPosition < runDueConfirmPosition && runDueConfirmPosition < runDueLeasePosition && runDueLeasePosition < runDueSettingsPosition && runDueSettingsPosition < runDueExecutionPosition)
 ) {
-  errors.push("Opportunity run-due confirmation must precede settings reads and bounded autonomy execution");
+  errors.push("Opportunity run-due bounded confirmation and lease must precede settings reads and autonomy execution");
 }
 for (const token of [
+  'from "../core/boundedJsonRequest"',
+  "boundedJsonFailurePayload(parsed)",
+  "requiredPayload: { confirm: true }",
+  "confirmationCoercionAllowed: false",
+  "requestReceipt",
+  "bodySha256",
   "if (!settings.opportunityDiscoveryEnabled)",
   "dailySourceLimit: settings.dailySourceLimit",
   "maxNetworkCallsPerRun: settings.maxNetworkCallsPerRun",
@@ -111,19 +145,29 @@ for (const token of [
 ]) {
   if (!runDue.includes(token)) errors.push(`Opportunity run-due safety token is missing: ${token}`);
 }
+for (const forbidden of ["request.json()", 'body?.confirm !== true', 'body?.confirm === 1']) {
+  if (runDue.includes(forbidden)) errors.push(`Opportunity run-due contains unbounded or coercive token: ${forbidden}`);
+}
 
 for (const token of [
   'startOpportunityRun(env, "manual_confirmed"',
   'discoveredBy: "manual-confirmed-run-due"',
+  "PUBLIC_RESEARCH_FETCH_CONTRACT",
   "let successfulSources = 0",
   "successfulSources += 1",
-  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : "completed"',
+  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : summary.failed > 0 ? "partial" : "completed"',
   '`partial_source_failures:${summary.failed}`',
   "sourceFetch: sourceReceipt",
   "bodySha256: fetched.bodySha256",
+  "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
   "fullOperationTimeout: true",
+  "sourceHealthAndAuditAtomic: true",
+  "commitSourceOutcome",
+  "env.DB.batch([sourceUpdate, prepareSourceRunResult(env, result)])",
   "finishOpportunityRun(env, runId, runStatus, summary, runError)",
+  "reviewOnly: true",
+  "externalExecutionAllowed: false",
 ]) {
   if (!opportunityRunner.includes(token)) errors.push(`Confirmed manual opportunity runner is missing: ${token}`);
 }
@@ -133,6 +177,14 @@ for (const forbidden of [
   'finishOpportunityRun(env, runId, "completed", summary)',
 ]) {
   if (opportunityRunner.includes(forbidden)) errors.push(`Confirmed manual opportunity runner contains stale posture: ${forbidden}`);
+}
+
+for (const token of [
+  'OpportunityRunStatus = "running" | "completed" | "partial" | "failed" | "skipped"',
+  "prepareSourceRunResult",
+  "Exclude<OpportunityRunStatus, \"running\">",
+]) {
+  if (!opportunityRuns.includes(token)) errors.push(`Opportunity run audit support is missing: ${token}`);
 }
 
 const sourceHealthBodyPosition = sourceHealthActions.indexOf("const body = await request.json().catch(() => ({}))");
@@ -164,42 +216,49 @@ for (const token of [
   if (!learning.includes(token)) errors.push(`Opportunity learning read-only token is missing: ${token}`);
 }
 
-const discoveryBodyPosition = discovery.indexOf("const body = await request.json().catch(() => ({}))");
-const discoveryConfirmPosition = discovery.indexOf("if (!confirmed(body))");
-const discoveryTestPosition = discovery.indexOf("return json(await testSource(env, parsed.id))");
-const discoveryPreviewPosition = discovery.indexOf("return json(await previewSource(env, parsed.id, requestUrl))");
-const discoveryCommitPosition = discovery.indexOf("return json(await commitPreview(env, parsed.id, body))");
-for (const [label, executionPosition] of [
-  ["source test", discoveryTestPosition],
-  ["source preview", discoveryPreviewPosition],
-  ["preview commit", discoveryCommitPosition],
-]) {
-  if (
-    discoveryBodyPosition < 0 ||
-    discoveryConfirmPosition < 0 ||
-    executionPosition < 0 ||
-    !(discoveryBodyPosition < discoveryConfirmPosition && discoveryConfirmPosition < executionPosition)
-  ) {
-    errors.push(`Opportunity discovery confirmation must precede ${label} execution`);
-  }
+const discoveryBodyPosition = discovery.indexOf("const parsed = await readBoundedJsonObject(request)");
+const discoveryConfirmPosition = discovery.indexOf("if (!isExplicitJsonConfirmation(parsed.value))");
+const discoveryLeasePosition = discovery.indexOf("return withSourceLease(env, json, sourceAction.id");
+if (
+  discoveryBodyPosition < 0 ||
+  discoveryConfirmPosition < 0 ||
+  discoveryLeasePosition < 0 ||
+  !(discoveryBodyPosition < discoveryConfirmPosition && discoveryConfirmPosition < discoveryLeasePosition)
+) {
+  errors.push("Opportunity discovery bounded confirmation must precede the per-source leased execution boundary");
 }
 for (const token of [
-  'reason: "Opportunity source tests, previews and preview commits require explicit confirmation before bounded public-network access or internal state changes."',
+  'reason: "Opportunity source tests, previews and preview commits require exact JSON confirmation before bounded public-network access or internal state changes."',
+  'from "../core/boundedJsonRequest"',
   'from "../core/publicResearchFetch"',
+  "readBoundedJsonObject(request)",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
+  "confirmationCoercionAllowed: false",
+  "requestReceipt",
   "fetchPublicResearchHtml(source.url)",
   "bodySha256: fetched.bodySha256",
+  "redirectChain: fetched.redirectChain",
+  "etag: fetched.etag",
+  "lastModified: fetched.lastModified",
   "timeoutScope: fetched.timeoutScope",
   "sourceFetch,",
   "fullOperationTimeout: true",
   "boundedResponse: true",
   "publicWebOnly: true",
-  "const limit = Math.max(1, Math.min(100",
-  "const minScore = Math.max(1, Math.min(100",
+  "boundedInteger(body.limit, 50, 1, 100)",
+  "boundedInteger(body.minScore, 45, 1, 100)",
   "callsAI: false",
   "sendsEmail: false",
   "autoApplies: false",
+  "result = await testSource",
+  "result = await previewSource",
+  "result = await commitPreview",
 ]) {
   if (!discovery.includes(token)) errors.push(`Opportunity discovery safety token is missing: ${token}`);
+}
+for (const forbidden of ["request.json()", "function confirmed(", 'body?.confirm === 1', 'searchParams.get("confirm")']) {
+  if (discovery.includes(forbidden)) errors.push(`Opportunity discovery contains unbounded or coercive token: ${forbidden}`);
 }
 if (/\bfetch\s*\(/.test(discovery)) errors.push("Opportunity discovery must not call global fetch directly");
 
@@ -214,24 +273,27 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run opport
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "opportunity-execution-boundary-safety-v3-truthful-evidence",
+  contract: "opportunity-execution-boundary-safety-v4-bounded-fetch-v2",
   sourceExpansionUsesSharedAuthentication: true,
-  sourceExpansionRequiresConfirmation: true,
+  sourceExpansionRequiresExactBoundedConfirmation: true,
   sourceExpansionExecutionIsBounded: true,
   opportunityRunDueUsesSharedAuthentication: true,
-  opportunityRunDueRequiresConfirmation: true,
+  opportunityRunDueRequiresExactBoundedConfirmation: true,
   opportunityRunDueRespectsDiscoverySetting: true,
   opportunityRunAuditTypeManualConfirmed: true,
   opportunityRunAllFailedStatusFailed: true,
-  opportunityRunPartialFailuresExplicit: true,
-  opportunityEvidenceReceiptsRequired: true,
+  opportunityRunPartialStatusExplicit: true,
+  opportunitySourceHealthAndAuditAtomic: true,
+  opportunityEvidenceReceiptsV2Required: true,
   sourceHealthActionsUseSharedAuthentication: true,
   sourceHealthActionsRequireConfirmation: true,
   opportunityLearningUsesSharedAuthentication: true,
   opportunityLearningIsReadOnly: true,
   opportunityDiscoveryUsesSharedAuthentication: true,
-  opportunityDiscoveryRequiresConfirmation: true,
-  opportunityDiscoveryUsesPublicFetchBoundary: true,
+  opportunityDiscoveryRequiresExactBoundedConfirmation: true,
+  opportunityDiscoveryUsesPublicFetchV2Boundary: true,
+  queryStringConfirmationAllowed: false,
+  confirmationCoercionAllowed: false,
   callsAI: false,
   sendsEmail: false,
   postsExternally: false,

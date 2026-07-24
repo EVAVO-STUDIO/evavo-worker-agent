@@ -206,24 +206,32 @@ requireTokens("sitemap run truthfulness and index traversal", sitemapExpansion, 
   "ok: runStatus !== \"failed\"",
 ]);
 
-requireTokens("manual opportunity run truthfulness", opportunityRunner, [
+requireTokens("manual opportunity run truthfulness and source exclusion", opportunityRunner, [
   "PUBLIC_RESEARCH_FETCH_CONTRACT",
   'startOpportunityRun(env, "manual_confirmed"',
   'discoveredBy: "manual-confirmed-run-due"',
   'runType: "manual_confirmed"',
   "let successfulSources = 0",
+  "let sourceLeaseConflicts = 0",
   "successfulSources += 1",
-  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : summary.failed > 0 ? "partial" : "completed"',
-  '`partial_source_failures:${summary.failed}`',
+  "sourceLeaseConflicts += 1",
+  'const sourceActionKey = `opportunity-source:${source.id}`',
+  "const sourceLease = await acquireManualResearchLease(env, sourceActionKey, 600)",
+  "releaseManualResearchLease(env, sourceLease)",
+  "successfulSources === 0 && summary.failed === 0",
+  '"all_selected_sources_busy"',
+  '`partial_source_outcomes:failed:${summary.failed}:busy:${sourceLeaseConflicts}`',
   "sourceFetch: sourceReceipt",
   "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
   "fullOperationTimeout: true",
   "sourceHealthAndAuditAtomic: true",
+  "overlappingPerSourceActionAllowed: false",
 ]);
 forbidTokens("manual opportunity runner", opportunityRunner, [
   'startOpportunityRun(env, "scheduled"',
   'discoveredBy: "scheduled"',
+  '`partial_source_failures:${summary.failed}`',
 ]);
 
 requireTokens("opportunity audit transaction support", opportunityRuns, [
@@ -265,7 +273,7 @@ requireTokens("opportunity discovery receipts", opportunityDiscovery, [
   "publicWebOnly: true",
 ]);
 
-requireTokens("tiny source batch receipts and atomicity", sourceBatch, [
+requireTokens("tiny source batch receipts, atomicity, and source exclusion", sourceBatch, [
   "redirectChain: result.redirectChain",
   "timeoutScope: result.timeoutScope",
   "fullOperationTimeout: true",
@@ -273,6 +281,11 @@ requireTokens("tiny source batch receipts and atomicity", sourceBatch, [
   "env.DB.batch([runInsert, sourceUpdate])",
   "auditAndSourceUpdateAtomic: true",
   'runStatus = results.length === 0 ? "skipped"',
+  'const sourceActionKey = `legacy-source:${source.id}`',
+  "const sourceLease = await acquireManualResearchLease(env, sourceActionKey, 600)",
+  'reason: "source_action_in_progress"',
+  "releaseManualResearchLease(env, sourceLease)",
+  "overlappingPerSourceActionAllowed: false",
 ]);
 
 requireTokens("query hint URL resolver", queryResolver, [
@@ -366,7 +379,7 @@ requireTokens("safety gate completeness", safetyGate, [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "public-research-fetch-safety-v6-fetch-v2-behavioral",
+  contract: "public-research-fetch-safety-v7-hierarchical-source-exclusion",
   activeFetchContract: "public_research_fetch_v2",
   publicHttpOnly: true,
   privateAndReservedHostsRejected: true,
@@ -390,6 +403,9 @@ console.log(JSON.stringify({
   relationshipGraphRunTruthfulnessRequired: true,
   sitemapIndexTraversalRequired: true,
   manualOpportunityRunTruthfulnessRequired: true,
+  broadOpportunityPerSourceLeaseRequired: true,
+  tinyBatchPerSourceLeaseRequired: true,
+  overlappingBroadAndPerSourceActionsAllowed: false,
   sourceHealthAuditAtomicityRequired: true,
   queryHintResolutionAtomicityRequired: true,
   manualOpportunityRunsLabelledScheduled: false,

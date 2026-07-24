@@ -14,6 +14,7 @@ const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected
 const healthPath = path.join(root, "src", "core", "health.ts");
 const schemaPath = path.join(root, "src", "core", "schema.ts");
 const publicResearchSafetyPath = path.join(root, "scripts", "check-public-research-fetch-safety.mjs");
+const opportunityEvidenceQualityPath = path.join(root, "scripts", "check-opportunity-evidence-quality.mjs");
 const errors = [];
 
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
@@ -26,6 +27,7 @@ if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fal
 if (!fs.existsSync(healthPath)) errors.push("Missing admin health implementation");
 if (!fs.existsSync(schemaPath)) errors.push("Missing authenticated schema implementation");
 if (!fs.existsSync(publicResearchSafetyPath)) errors.push("Missing public research fetch safety contract");
+if (!fs.existsSync(opportunityEvidenceQualityPath)) errors.push("Missing opportunity evidence quality contract");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
@@ -37,6 +39,7 @@ const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthW
 const health = fs.existsSync(healthPath) ? fs.readFileSync(healthPath, "utf8") : "";
 const schema = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, "utf8") : "";
 const publicResearchSafety = fs.existsSync(publicResearchSafetyPath) ? fs.readFileSync(publicResearchSafetyPath, "utf8") : "";
+const opportunityEvidenceQuality = fs.existsSync(opportunityEvidenceQualityPath) ? fs.readFileSync(opportunityEvidenceQualityPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -48,6 +51,8 @@ for (const token of [
   "node scripts/check-worker-health-contract.mjs",
   "Verify public research fetch boundary",
   "npm run research:public-fetch-safety:check",
+  "Verify deterministic opportunity evidence quality",
+  "npm run opportunities:evidence-quality:check",
   "npm run check:local",
   "timeout-minutes: 12",
 ]) {
@@ -74,6 +79,23 @@ for (const token of [
   "focusedCiGateRequired: true",
 ]) {
   if (!publicResearchSafety.includes(token)) errors.push(`Public research safety contract is missing CI-required posture: ${token}`);
+}
+
+for (const token of [
+  'contract: "opportunity-evidence-quality-v1"',
+  "boundaryAwareTermMatching: true",
+  "publicCanonicalCandidateUrlsRequired: true",
+  "deadlineYearGuessingAllowed: false",
+  "unmarkedNumbersParsedAsMoney: false",
+  "missingFactsInvented: false",
+  "weakEvidenceLearningBoostAllowed: false",
+  "reviewOnlyCandidatePostureRequired: true",
+  "executableCandidatePersistenceAllowed: false",
+  "draftingRecommendationStored: false",
+  "canonicalUrlDeduplicationRequired: true",
+  "groundedCurrencyRequiredForStoredValue: true",
+]) {
+  if (!opportunityEvidenceQuality.includes(token)) errors.push(`Opportunity evidence quality contract is missing CI-required posture: ${token}`);
 }
 
 for (const token of [
@@ -207,6 +229,7 @@ const expectedScripts = {
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "sources:confirmation-safety:check": "node scripts/check-source-action-confirmation-safety.mjs",
   "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
+  "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
   "opportunities:execution-boundary-safety:check": "node scripts/check-opportunity-execution-boundary-safety.mjs",
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
@@ -236,7 +259,7 @@ if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local"
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-ci-workflow-parity-v2-public-research-v5",
+  contract: "worker-ci-workflow-parity-v3-opportunity-evidence",
   deploymentEnabled: false,
   credentialsRequired: false,
   canonicalCredential: "ADMIN_TOKEN",
@@ -267,6 +290,10 @@ console.log(JSON.stringify({
   publicResearchFocusedCiGateRequired: true,
   publicResearchInputRedactionRequired: true,
   publicResearchRunTruthfulnessRequired: true,
+  opportunityEvidenceQualityRequired: true,
+  opportunityEvidenceFocusedCiGateRequired: true,
+  weakEvidenceLearningBoostAllowed: false,
+  opportunityDraftRecommendationAllowed: false,
   publicRoutesRequireAdminToken: false,
   legacyCredentialAliasesAllowed: false,
   publicControlCredentialAllowed: false,

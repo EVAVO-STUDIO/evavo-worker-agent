@@ -86,6 +86,9 @@ jobs:
       - name: Verify deterministic opportunity evidence quality
         run: npm run opportunities:evidence-quality:check
 
+      - name: Verify Growth route parity
+        run: npm run growth:route-parity:check
+
       - name: Run deterministic core tests
         run: npm run test:core
 

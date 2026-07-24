@@ -198,13 +198,13 @@ foreach ($path in $businessReadPaths) {
   }
 }
 
-Write-Host "Verify historical Business read responses remain non-executable" -ForegroundColor Cyan
+Write-Host "Verify historical Business read responses remain review-only and non-executable" -ForegroundColor Cyan
 foreach ($path in $historicalBusinessReadPaths) {
   try {
     $payload = Invoke-RestMethod "$base$path" -Headers $headers
-    if ($payload.historicalOnly -ne $true -or $payload.executable -ne $false -or $payload.deliverable -ne $false -or $payload.authoritativeForExecution -ne $false) {
+    if ($payload.historicalOnly -ne $true -or $payload.reviewOnly -ne $true -or $payload.executable -ne $false -or $payload.deliverable -ne $false -or $payload.authoritativeForExecution -ne $false -or $payload.externalExecutionAllowed -ne $false) {
       $contractFailed = $true
-      Write-Host "Historical Business read response is missing required non-execution flags: $path" -ForegroundColor Red
+      Write-Host "Historical Business read response is missing required review-only non-execution flags: $path" -ForegroundColor Red
     }
   } catch {
     $contractFailed = $true

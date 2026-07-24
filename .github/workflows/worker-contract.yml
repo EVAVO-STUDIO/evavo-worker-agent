@@ -72,5 +72,8 @@ jobs:
       - name: Verify public research fetch boundary
         run: npm run research:public-fetch-safety:check
 
+      - name: Verify deterministic opportunity evidence quality
+        run: npm run opportunities:evidence-quality:check
+
       - name: Run complete Worker local gate
         run: npm run check:local

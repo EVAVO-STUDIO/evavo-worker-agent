@@ -1,3 +1,9 @@
+import {
+  GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS,
+  GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION,
+  type GrowthBusinessRouteInventoryPendingGroup,
+} from "./growthBusinessRouteInventory";
+
 export const GROWTH_BRIDGE_CONTRACT_VERSION = "growth_worker_bridge_v1" as const;
 
 export type GrowthBridgePacketKind =
@@ -22,6 +28,11 @@ export type GrowthBridgeReadiness = Readonly<{
   promotionMode: "proposal_only";
   bridgeEnabled: false;
   routeInventoryComplete: false;
+  routeInventoryVersion: typeof GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION;
+  routeInventoryScope: "growth_and_business_admin_route_policies";
+  routeInventoryCompleteForScope: true;
+  routeInventoryCompleteForAllWorkerPostRoutes: false;
+  unclassifiedPostRouteGroups: readonly GrowthBusinessRouteInventoryPendingGroup[];
   clientBrowserAccess: false;
   adminTokenBrowserExposure: false;
   draftingEnabled: false;
@@ -50,6 +61,11 @@ export const growthBridgeReadiness: GrowthBridgeReadiness = Object.freeze({
   promotionMode: "proposal_only",
   bridgeEnabled: false,
   routeInventoryComplete: false,
+  routeInventoryVersion: GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION,
+  routeInventoryScope: "growth_and_business_admin_route_policies",
+  routeInventoryCompleteForScope: true,
+  routeInventoryCompleteForAllWorkerPostRoutes: false,
+  unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS,
   clientBrowserAccess: false,
   adminTokenBrowserExposure: false,
   draftingEnabled: false,

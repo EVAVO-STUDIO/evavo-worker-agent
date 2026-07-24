@@ -1,5 +1,6 @@
 import { Env, getSetting, insertLead, logEvent, nowISO, uuid } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { fetchPublicResearchHtml, validatePublicResearchUrl, type PublicResearchFetchResult } from "../core/publicResearchFetch";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -8,16 +9,14 @@ function countryFromUrl(url: string): string {
   return lower.includes(".nz") ? "NZ" : "AU";
 }
 
-function normalizeSourceUrl(raw: unknown): string {
-  return String(raw || "").trim().replace(/\/+$/, "");
+function normalizeSourceUrl(raw: unknown, baseUrl?: string): string {
+  const decision = validatePublicResearchUrl(raw, baseUrl);
+  return decision.ok && decision.url ? decision.url.replace(/\/+$/, "") : "";
 }
 
 function absoluteUrl(href: string, baseUrl: string): string | null {
-  try {
-    return new URL(href, baseUrl).toString();
-  } catch {
-    return null;
-  }
+  const normalized = normalizeSourceUrl(href, baseUrl);
+  return normalized || null;
 }
 
 function getDomain(raw: string): string {
@@ -48,7 +47,7 @@ function extractHrefLinks(html: string, baseUrl: string): string[] {
   let match: RegExpExecArray | null;
   while ((match = regex.exec(html)) !== null) {
     const next = absoluteUrl(match[1], baseUrl);
-    if (next) out.push(next.replace(/\/+$/, ""));
+    if (next) out.push(next);
   }
   return Array.from(new Set(out));
 }
@@ -78,20 +77,33 @@ function extractExternalWebsite(profileUrl: string, html: string): string | null
   const links = extractHrefLinks(html, profileUrl);
   for (const link of links) {
     const domain = getDomain(link);
-    if (!domain) continue;
-    if (domain === profileDomain) continue;
-    if (isMarketplaceDomain(domain)) continue;
-    if (isNoiseExternal(link)) continue;
-    if (!/^https?:\/\//i.test(link)) continue;
-    return normalizeSourceUrl(link);
+    if (!domain || domain === profileDomain || isMarketplaceDomain(domain) || isNoiseExternal(link)) continue;
+    return link;
   }
-  const textMatches = Array.from(html.matchAll(/https?:\/\/[^\s"'<>]+/gi)).map((m) => m[0]);
+  const textMatches = Array.from(html.matchAll(/https?:\/\/[^\s"'<>]+/gi)).map((match) => match[0]);
   for (const raw of textMatches) {
-    const domain = getDomain(raw);
-    if (!domain || domain === profileDomain || isMarketplaceDomain(domain) || isNoiseExternal(raw)) continue;
-    return normalizeSourceUrl(raw);
+    const normalized = normalizeSourceUrl(raw);
+    const domain = getDomain(normalized);
+    if (!normalized || !domain || domain === profileDomain || isMarketplaceDomain(domain) || isNoiseExternal(normalized)) continue;
+    return normalized;
   }
   return null;
+}
+
+function fetchReceipt(result: PublicResearchFetchResult) {
+  return {
+    contract: result.contract,
+    requestedUrl: result.requestedUrl,
+    finalUrl: result.finalUrl,
+    status: result.status,
+    contentType: result.contentType,
+    redirectCount: result.redirectCount,
+    bytes: result.bytes,
+    bodySha256: result.bodySha256,
+    elapsedMs: result.elapsedMs,
+    fetchedAtISO: result.fetchedAtISO,
+    error: result.error,
+  };
 }
 
 async function getNumberSetting(env: Env, key: string, fallback: number): Promise<number> {
@@ -101,11 +113,12 @@ async function getNumberSetting(env: Env, key: string, fallback: number): Promis
 }
 
 async function insertSource(env: Env, body: any, rawUrl: unknown) {
-  const sourceUrl = normalizeSourceUrl(rawUrl);
-  if (!sourceUrl) return null;
+  const decision = validatePublicResearchUrl(rawUrl);
+  if (!decision.ok || !decision.url) return { ok: false, error: decision.error || "invalid_research_url", input: String(rawUrl || "") };
+  const sourceUrl = decision.url.replace(/\/+$/, "");
   const id = uuid();
   const now = nowISO();
-  await env.DB.prepare(
+  const result = await env.DB.prepare(
     "INSERT OR IGNORE INTO sources (id, url, source_type, label, country, region, category, status, quality_score, failure_count, success_count, created_at_iso, updated_at_iso) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 50, 0, 0, ?, ?)"
   ).bind(
     id,
@@ -116,27 +129,12 @@ async function insertSource(env: Env, body: any, rawUrl: unknown) {
     body?.region ? String(body.region) : null,
     String(body?.category || "general"),
     now,
-    now
+    now,
   ).run();
-  return { id, url: sourceUrl };
-}
-
-async function fetchSourceHtml(sourceUrl: string): Promise<{ ok: boolean; html: string; status: number; contentType: string }> {
-  try {
-    const res = await fetch(sourceUrl, {
-      headers: {
-        "user-agent": "Mozilla/5.0 (compatible; EVAVO-Outbound-Agent/1.0; +https://evavo.com.au)",
-        "accept-language": "en-AU,en;q=0.9",
-      },
-      redirect: "follow",
-    });
-    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
-    if (!res.ok || (contentType && !/text\/html|application\/xhtml\+xml/.test(contentType))) return { ok: false, html: "", status: res.status, contentType };
-    const html = await res.text();
-    return { ok: Boolean(html.trim()), html, status: res.status, contentType };
-  } catch {
-    return { ok: false, html: "", status: 0, contentType: "" };
-  }
+  const inserted = Number(result.meta?.changes || 0) > 0;
+  if (inserted) return { ok: true, id, url: sourceUrl, inserted: true };
+  const existing = await env.DB.prepare("SELECT id FROM sources WHERE url = ? LIMIT 1").bind(sourceUrl).first<{ id: string }>();
+  return { ok: true, id: existing?.id || null, url: sourceUrl, inserted: false };
 }
 
 async function applyFailurePolicy(env: Env, sourceId: string, completed: string, failedReason: string | null) {
@@ -163,13 +161,12 @@ async function testSource(env: Env, sourceId: string) {
   const source = await env.DB.prepare("SELECT * FROM sources WHERE id = ? LIMIT 1").bind(sourceId).first<any>();
   if (!source) return { ok: false, error: "source_not_found" };
   const started = nowISO();
-  const result = await fetchSourceHtml(String(source.url));
+  const result = await fetchPublicResearchHtml(String(source.url));
   const completed = nowISO();
-  const html = result.html || "";
-  const hrefCount = (html.match(/href=[\"']/gi) || []).length;
-  const profileHintCount = (html.match(/\/business\/|\/connect\/|yellowpages\.com\.au\//gi) || []).length;
+  const hrefCount = result.ok ? (result.body.match(/href=[\"']/gi) || []).length : 0;
+  const profileHintCount = result.ok ? (result.body.match(/\/business\/|\/connect\/|yellowpages\.com\.au\//gi) || []).length : 0;
   const status = result.ok ? "ok" : "failed";
-  const failedReason = result.ok ? null : `status_${result.status || "fetch_failed"}`;
+  const failedReason = result.ok ? null : result.error || "research_fetch_failed";
   await env.DB.prepare("INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)").bind(uuid(), sourceId, status, started, completed, profileHintCount, failedReason, completed).run();
   let sourcePolicy: any = { sourceAction: "none" };
   if (result.ok) {
@@ -180,7 +177,7 @@ async function testSource(env: Env, sourceId: string) {
     sourcePolicy = await applyFailurePolicy(env, sourceId, completed, failedReason);
   }
   await logEvent(env, result.ok ? "source_test_ok" : "source_test_fail", `Source ${sourceId} test ${status}: ${source.url}`);
-  return { ok: true, sourceId, sourceUrl: source.url, status, httpStatus: result.status, contentType: result.contentType, hrefCount, profileHintCount, htmlBytes: html.length, sourcePolicy };
+  return { ok: true, sourceId, sourceUrl: source.url, status, fetch: fetchReceipt(result), hrefCount, profileHintCount, sourcePolicy };
 }
 
 async function loadActiveSource(env: Env, sourceId: string) {
@@ -194,28 +191,30 @@ async function expandPreview(env: Env, sourceId: string, limit: number) {
   const loaded = await loadActiveSource(env, sourceId);
   if (loaded.error) return { ok: false, error: loaded.error, sourceId, status: loaded.source?.status };
   const source = loaded.source;
-  const result = await fetchSourceHtml(String(source.url));
-  if (!result.ok) return { ok: false, error: "source_fetch_failed", sourceId, httpStatus: result.status, contentType: result.contentType };
-  const candidates = pickCandidateLinks(result.html, String(source.url), limit);
+  const result = await fetchPublicResearchHtml(String(source.url));
+  if (!result.ok) return { ok: false, error: result.error || "source_fetch_failed", sourceId, fetch: fetchReceipt(result) };
+  const candidates = pickCandidateLinks(result.body, result.finalUrl || String(source.url), limit);
   await logEvent(env, "source_expand_preview", `Previewed ${candidates.length} candidate links from source ${sourceId}`);
-  return { ok: true, mode: "preview_only", sourceId, sourceUrl: source.url, httpStatus: result.status, contentType: result.contentType, htmlBytes: result.html.length, candidateCount: candidates.length, candidates };
+  return { ok: true, mode: "preview_only", sourceId, sourceUrl: source.url, fetch: fetchReceipt(result), candidateCount: candidates.length, candidates };
 }
 
 async function expandCommit(env: Env, sourceId: string, limit: number) {
   const loaded = await loadActiveSource(env, sourceId);
   if (loaded.error) return { ok: false, error: loaded.error, sourceId, status: loaded.source?.status };
   const source = loaded.source;
+  const sourceRunId = uuid();
   const started = nowISO();
-  const sourceResult = await fetchSourceHtml(String(source.url));
+  const sourceResult = await fetchPublicResearchHtml(String(source.url));
   const completed = nowISO();
   if (!sourceResult.ok) {
-    await env.DB.prepare("INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, 'failed', ?, ?, 0, 0, 0, 0, ?, ?)").bind(uuid(), sourceId, started, completed, `status_${sourceResult.status || "fetch_failed"}`, completed).run();
+    const failure = sourceResult.error || "research_fetch_failed";
+    await env.DB.prepare("INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, 'failed', ?, ?, 0, 0, 0, 0, ?, ?)").bind(sourceRunId, sourceId, started, completed, failure, completed).run();
     await env.DB.prepare("UPDATE sources SET failure_count = failure_count + 1, last_run_at_iso = ?, updated_at_iso = ? WHERE id = ?").bind(completed, completed, sourceId).run();
-    const policy = await applyFailurePolicy(env, sourceId, completed, `status_${sourceResult.status || "fetch_failed"}`);
-    return { ok: false, error: "source_fetch_failed", sourceId, httpStatus: sourceResult.status, sourcePolicy: policy };
+    const policy = await applyFailurePolicy(env, sourceId, completed, failure);
+    return { ok: false, error: failure, sourceId, fetch: fetchReceipt(sourceResult), sourcePolicy: policy };
   }
 
-  const candidates = pickCandidateLinks(sourceResult.html, String(source.url), limit);
+  const candidates = pickCandidateLinks(sourceResult.body, sourceResult.finalUrl || String(source.url), limit);
   const existingRows = await env.DB.prepare("SELECT website_url FROM leads LIMIT 2500").all<any>();
   const existingDomains = new Set((existingRows.results || []).map((row: any) => getDomain(String(row.website_url || ""))).filter(Boolean));
   let profilesFetched = 0;
@@ -226,9 +225,10 @@ async function expandCommit(env: Env, sourceId: string, limit: number) {
 
   for (const candidate of candidates.slice(0, Math.max(1, Math.min(25, limit)))) {
     profilesFetched += 1;
-    const profileResult = await fetchSourceHtml(candidate.url);
+    const profileResult = await fetchPublicResearchHtml(candidate.url);
     if (!profileResult.ok) continue;
-    const external = extractExternalWebsite(candidate.url, profileResult.html);
+    const profileUrl = profileResult.finalUrl || candidate.url;
+    const external = extractExternalWebsite(profileUrl, profileResult.body);
     if (!external) continue;
     externalSitesFound += 1;
     const domain = getDomain(external);
@@ -236,24 +236,34 @@ async function expandCommit(env: Env, sourceId: string, limit: number) {
       duplicatesSkipped += 1;
       continue;
     }
+    const profileReceipt = fetchReceipt(profileResult);
     const lead = await insertLead(env, {
       websiteUrl: external,
       discoverySource: `source:${sourceId}`,
       category: source.category || "general",
       country: source.country || countryFromUrl(external),
       region: source.region || null,
-      signalsJson: JSON.stringify({ discoveredFromSourceId: sourceId, discoveredFromSourceUrl: source.url, profileUrl: candidate.url, sourceExpansion: true }),
+      signalsJson: JSON.stringify({
+        discoveredFromSourceId: sourceId,
+        discoveredFromSourceUrl: source.url,
+        sourceRunId,
+        sourceFetch: fetchReceipt(sourceResult),
+        profileUrl,
+        profileFetch: profileReceipt,
+        sourceExpansion: true,
+      }),
     });
-    await env.DB.prepare("INSERT INTO lead_discoveries (id, lead_id, source_id, source_run_id, discovered_url, created_at_iso) VALUES (?, ?, ?, ?, ?, ?)").bind(uuid(), lead.id, sourceId, null, candidate.url, nowISO()).run();
+    await env.DB.prepare("INSERT INTO lead_discoveries (id, lead_id, source_id, source_run_id, discovered_url, created_at_iso) VALUES (?, ?, ?, ?, ?, ?)").bind(uuid(), lead.id, sourceId, sourceRunId, profileUrl, nowISO()).run();
     existingDomains.add(domain);
     leadsInserted += 1;
-    inserted.push({ leadId: lead.id, websiteUrl: external, profileUrl: candidate.url });
+    inserted.push({ leadId: lead.id, websiteUrl: external, profileUrl, profileFetch: profileReceipt });
   }
 
-  await env.DB.prepare("INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, 'ok', ?, ?, ?, ?, ?, ?, NULL, ?)").bind(uuid(), sourceId, started, nowISO(), profilesFetched, externalSitesFound, leadsInserted, duplicatesSkipped, nowISO()).run();
-  await env.DB.prepare("UPDATE sources SET status = 'active', success_count = success_count + 1, last_run_at_iso = ?, updated_at_iso = ?, quality_score = MIN(100, quality_score + ?) WHERE id = ?").bind(nowISO(), nowISO(), leadsInserted > 0 ? 2 : 0, sourceId).run();
+  const finished = nowISO();
+  await env.DB.prepare("INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, 'ok', ?, ?, ?, ?, ?, ?, NULL, ?)").bind(sourceRunId, sourceId, started, finished, profilesFetched, externalSitesFound, leadsInserted, duplicatesSkipped, finished).run();
+  await env.DB.prepare("UPDATE sources SET status = 'active', success_count = success_count + 1, last_run_at_iso = ?, updated_at_iso = ?, quality_score = MIN(100, quality_score + ?) WHERE id = ?").bind(finished, finished, leadsInserted > 0 ? 2 : 0, sourceId).run();
   await logEvent(env, "source_expand_commit", `Expanded source ${sourceId}: ${leadsInserted} leads inserted, ${duplicatesSkipped} duplicates skipped.`);
-  return { ok: true, mode: "commit", sourceId, sourceUrl: source.url, candidatesSeen: candidates.length, profilesFetched, externalSitesFound, leadsInserted, duplicatesSkipped, inserted };
+  return { ok: true, mode: "commit", sourceRunId, sourceId, sourceUrl: source.url, sourceFetch: fetchReceipt(sourceResult), candidatesSeen: candidates.length, profilesFetched, externalSitesFound, leadsInserted, duplicatesSkipped, inserted };
 }
 
 export async function handleSourcesAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
@@ -275,13 +285,15 @@ export async function handleSourcesAdmin(request: Request, env: Env, pathname: s
   if ((pathname === "/admin/sources" || pathname === "/admin/seeds") && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
     const rawItems = Array.isArray(body?.items) ? body.items : Array.isArray(body?.urls) ? body.urls.map((url: string) => ({ url })) : [{ url: body?.url }];
-    const inserted = [];
-    for (const item of rawItems) {
-      const source = await insertSource(env, { ...body, ...item }, item?.url || item);
-      if (source) inserted.push(source);
+    const accepted = [];
+    const rejected = [];
+    for (const item of rawItems.slice(0, 100)) {
+      const result = await insertSource(env, { ...body, ...item }, item?.url || item);
+      if (result.ok) accepted.push(result);
+      else rejected.push(result);
     }
-    await logEvent(env, "source_add", `Added or refreshed ${inserted.length} source URL(s)`);
-    return json({ ok: true, sources: inserted });
+    await logEvent(env, "source_add", `Accepted ${accepted.length} public source URL(s); rejected ${rejected.length}.`);
+    return json({ ok: rejected.length === 0, acceptedCount: accepted.length, rejectedCount: rejected.length, sources: accepted, rejected, fetchContract: "public_research_fetch_v1" }, rejected.length && !accepted.length ? { status: 400 } : undefined);
   }
 
   const previewMatch = pathname.match(/^\/admin\/sources\/([^/]+)\/expand-preview$/);

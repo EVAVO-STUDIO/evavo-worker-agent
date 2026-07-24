@@ -68,7 +68,7 @@ test("bounded JSON rejects oversized declared and streamed bodies", async (t) =>
   });
 
   await t.test("observed length", async () => {
-    const result = await readBoundedJsonObject(jsonRequest(`{"value":"${"x".repeat(300)}"}`), { "content-length": "" }), {
+    const result = await readBoundedJsonObject(jsonRequest(`{"value":"${"x".repeat(300)}"}`), {
       maxBytes: 256,
     });
     assert.equal(result.ok, false);

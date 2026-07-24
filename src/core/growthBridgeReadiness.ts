@@ -1,10 +1,10 @@
 import {
-  GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS,
-  GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION,
-  type GrowthBusinessRouteInventoryPendingGroup,
+  GROWTH_WORKER_ROUTE_INVENTORY_PENDING_GROUPS,
+  GROWTH_WORKER_ROUTE_INVENTORY_VERSION,
+  type GrowthWorkerRouteInventoryPendingGroup,
 } from "./growthBusinessRouteInventory";
 
-export const GROWTH_BRIDGE_CONTRACT_VERSION = "growth_worker_bridge_v1" as const;
+export const GROWTH_BRIDGE_CONTRACT_VERSION = "growth_worker_bridge_v2" as const;
 
 export type GrowthBridgePacketKind =
   | "account_candidate"
@@ -14,7 +14,6 @@ export type GrowthBridgePacketKind =
   | "next_action_proposal";
 
 export type GrowthBridgeBlockingReason =
-  | "worker_post_route_inventory_pending"
   | "next_website_ingestion_endpoint_not_implemented"
   | "cross_repo_contract_tests_not_implemented";
 
@@ -27,12 +26,14 @@ export type GrowthBridgeReadiness = Readonly<{
   transport: "server_to_server_only";
   promotionMode: "proposal_only";
   bridgeEnabled: false;
-  routeInventoryComplete: false;
-  routeInventoryVersion: typeof GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION;
-  routeInventoryScope: "growth_and_business_admin_route_policies";
+  routeInventoryComplete: true;
+  routeInventoryVersion: typeof GROWTH_WORKER_ROUTE_INVENTORY_VERSION;
+  routeInventoryScope: "all_protected_worker_post_route_owners";
   routeInventoryCompleteForScope: true;
-  routeInventoryCompleteForAllWorkerPostRoutes: false;
-  unclassifiedPostRouteGroups: readonly GrowthBusinessRouteInventoryPendingGroup[];
+  routeInventoryCompleteForAllWorkerPostRoutes: true;
+  routeInventoryIncludesBoundedReadOnlyResearch: true;
+  routeInventoryExternalExecutionGroups: 0;
+  unclassifiedPostRouteGroups: readonly GrowthWorkerRouteInventoryPendingGroup[];
   clientBrowserAccess: false;
   adminTokenBrowserExposure: false;
   draftingEnabled: false;
@@ -60,12 +61,14 @@ export const growthBridgeReadiness: GrowthBridgeReadiness = Object.freeze({
   transport: "server_to_server_only",
   promotionMode: "proposal_only",
   bridgeEnabled: false,
-  routeInventoryComplete: false,
-  routeInventoryVersion: GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION,
-  routeInventoryScope: "growth_and_business_admin_route_policies",
+  routeInventoryComplete: true,
+  routeInventoryVersion: GROWTH_WORKER_ROUTE_INVENTORY_VERSION,
+  routeInventoryScope: "all_protected_worker_post_route_owners",
   routeInventoryCompleteForScope: true,
-  routeInventoryCompleteForAllWorkerPostRoutes: false,
-  unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS,
+  routeInventoryCompleteForAllWorkerPostRoutes: true,
+  routeInventoryIncludesBoundedReadOnlyResearch: true,
+  routeInventoryExternalExecutionGroups: 0,
+  unclassifiedPostRouteGroups: GROWTH_WORKER_ROUTE_INVENTORY_PENDING_GROUPS,
   clientBrowserAccess: false,
   adminTokenBrowserExposure: false,
   draftingEnabled: false,
@@ -88,7 +91,6 @@ export const growthBridgeReadiness: GrowthBridgeReadiness = Object.freeze({
     "canonical_auto_promotion",
   ]),
   blockingReasons: Object.freeze([
-    "worker_post_route_inventory_pending",
     "next_website_ingestion_endpoint_not_implemented",
     "cross_repo_contract_tests_not_implemented",
   ]),

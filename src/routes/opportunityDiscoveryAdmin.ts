@@ -1,5 +1,6 @@
 import { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { extractOpportunityCandidates, summarizeOpportunityPreview } from "../core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "../core/opportunityPersistence";
 import { fetchPublicResearchHtml, type PublicResearchFetchResult } from "../core/publicResearchFetch";
@@ -160,6 +161,17 @@ async function commitPreview(env: Env, id: string, body: any) {
   };
 }
 
+async function withSourceLease(env: Env, json: JsonResponse, sourceId: string, run: () => Promise<Response>): Promise<Response> {
+  const actionKey = `opportunity-source:${sourceId}`;
+  const lease = await acquireManualResearchLease(env, actionKey, 600);
+  if (!lease) return json(manualResearchLeaseConflict(actionKey), { status: 409 });
+  try {
+    return await run();
+  } finally {
+    await releaseManualResearchLease(env, lease).catch(() => false);
+  }
+}
+
 export async function handleOpportunityDiscoveryAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
   if (request.method === "OPTIONS") {
@@ -180,8 +192,10 @@ export async function handleOpportunityDiscoveryAdmin(request: Request, env: Env
   }
 
   const requestUrl = new URL(request.url);
-  if (parsed.action === "test") return json(await testSource(env, parsed.id));
-  if (parsed.action === "preview") return json(await previewSource(env, parsed.id, requestUrl));
-  if (parsed.action === "commit-preview") return json(await commitPreview(env, parsed.id, body));
-  return json({ ok: false, error: "Not found" }, { status: 404 });
+  return withSourceLease(env, json, parsed.id, async () => {
+    if (parsed.action === "test") return json(await testSource(env, parsed.id));
+    if (parsed.action === "preview") return json(await previewSource(env, parsed.id, requestUrl));
+    if (parsed.action === "commit-preview") return json(await commitPreview(env, parsed.id, body));
+    return json({ ok: false, error: "Not found" }, { status: 404 });
+  });
 }

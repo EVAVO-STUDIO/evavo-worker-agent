@@ -97,6 +97,7 @@ async function runOneSource(env: Env, source: any) {
       bodySha256: result.bodySha256,
       elapsedMs: result.elapsedMs,
       fetchedAtISO: result.fetchedAtISO,
+      timeoutScope: result.timeoutScope,
       error: result.error,
     },
     hrefCount,
@@ -157,7 +158,7 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
       processed: results.length,
       skipped,
       results,
-      safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, callsAI: false, sendsEmail: false, externalStateChange: false },
+      safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true, callsAI: false, sendsEmail: false, externalStateChange: false },
     });
   }
 

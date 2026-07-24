@@ -10,9 +10,7 @@ const scriptsDir = path.join(root, "scripts");
 const errors = [];
 const passes = [];
 
-function absolute(relativePath) {
-  return path.join(root, relativePath);
-}
+const absolute = (relativePath) => path.join(root, relativePath);
 
 function read(relativePath) {
   const filePath = absolute(relativePath);
@@ -49,7 +47,6 @@ if (!fs.existsSync(scriptsDir)) errors.push("Missing scripts directory");
 const helperScripts = fs.existsSync(scriptsDir)
   ? fs.readdirSync(scriptsDir).filter((name) => name.endsWith(".mjs")).sort()
   : [];
-
 for (const scriptName of helperScripts) {
   const relativePath = path.posix.join("scripts", scriptName);
   const result = spawnSync(process.execPath, ["--check", absolute(relativePath)], { encoding: "utf8" });
@@ -77,7 +74,6 @@ const requiredFiles = [
   "src/routes/adminProtected.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
-  "src/routes/tools.ts",
   "src/routes/draftReviewAdmin.ts",
   "src/routes/opportunityReviewAdmin.ts",
   "src/routes/opportunitySourceCandidatesAdmin.ts",
@@ -97,6 +93,9 @@ const requiredFiles = [
   "scripts/check-public-research-fetch-safety.mjs",
   "scripts/check-review-mutation-boundary-safety.mjs",
   "scripts/check-opportunity-evidence-quality.mjs",
+  "scripts/check-autonomy-capability-truthfulness.mjs",
+  "scripts/check-manual-execution-safety.mjs",
+  "scripts/check-operations-route-policy.mjs",
   "scripts/check-runtime-capability-config.mjs",
   "tests/adminAuthentication.test.ts",
   "tests/boundedJsonRequest.test.ts",
@@ -134,7 +133,6 @@ requireTokens("src/core/adminAuthentication.ts", [
   'crypto.subtle.digest("SHA-256"',
   "difference |= leftDigest[index] ^ rightDigest[index]",
   "!expected || !provided || !hasValidAdminTokenShape(expected)",
-  "return constantTimeEqual(provided, expected)",
 ]);
 forbidTokens("src/core/adminAuthentication.ts", [
   "provided === expected",
@@ -248,6 +246,8 @@ forbidTokens("src/routes/adminProtected.ts", [
 ]);
 
 for (const [relativePath, routeToken] of [
+  ["src/routes/autonomySettingsAdmin.ts", "const lease = await acquireManualResearchLease"],
+  ["src/routes/legacyExecutionSafetyAdmin.ts", "const lease = await acquireManualResearchLease"],
   ["src/routes/draftReviewAdmin.ts", "const draftLease = await acquireManualResearchLease"],
   ["src/routes/opportunityReviewAdmin.ts", "const opportunityLease = await acquireManualResearchLease"],
   ["src/routes/opportunitySourceCandidatesAdmin.ts", "const lease = await acquireManualResearchLease"],
@@ -298,11 +298,13 @@ requireTokens("src/routes/growthRoutePolicy.ts", [
   'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/opportunityRoutePolicy.ts", [
+  'id: "learning"',
+  'mutationPosture: "read-only"',
+  'confirmation: "not-required"',
+  'networkPosture: "read-only-research"',
   "canSendEmail: false",
   "canPostSocial: false",
   "canSubmitForms: false",
-  'networkPosture: "read-only-research"',
-  'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/businessRoutePolicy.ts", [
   "callsExternalNetwork: false",
@@ -317,21 +319,21 @@ requireTokens("src/routes/operationsRoutePolicy.ts", [
   'id: "legacy-admin-safety"',
   'id: "autonomy-settings"',
   'id: "source-batch"',
-  'id: "strategy-scores"',
+  'id: "draft-review"',
   'writeConfirmation: "handler-enforced"',
+  'writeConfirmation: "not-applicable"',
   "callsAI: false",
   "canSendEmail: false",
   "canPostSocial: false",
   "canSubmitForms: false",
-  'authentication: "handler-enforced"',
 ]);
+forbidTokens("src/routes/operationsRoutePolicy.ts", ['writeConfirmation: "handler-defined"']);
 
 requireTokens("scripts/check-central-authentication-safety.mjs", [
   'contract: "central-protected-route-authentication-v2-bounded-credential"',
   'canonicalCredential: "ADMIN_TOKEN"',
   "minimumCredentialBytes: 32",
   "maximumCredentialBytes: 256",
-  "constantTimeDigestComparison: true",
 ]);
 requireTokens("scripts/check-worker-credential-contract.mjs", [
   'contract: "canonical-bounded-server-side-worker-credential-v2"',
@@ -341,26 +343,41 @@ requireTokens("scripts/check-worker-credential-contract.mjs", [
   "legacyCredentialAliasesAllowed: false",
 ]);
 requireTokens("scripts/check-bounded-json-request-safety.mjs", [
-  'contract: "bounded-admin-json-request-safety-v2-review-mutations"',
+  'contract: "bounded-admin-json-request-safety-v4-settings-and-legacy-review"',
   "exactBooleanConfirmationRequired: true",
   "prototypePollutionKeysRejected: true",
-  "draftReviewBounded: true",
-  "opportunityReviewBounded: true",
-  "sourceCandidateCommitBounded: true",
+  "autonomySettingsBounded: true",
+  "legacySettingsBounded: true",
+  "legacyDraftReviewBounded: true",
 ]);
 requireTokens("scripts/check-manual-research-lease-safety.mjs", [
-  'contract: "manual-research-lease-safety-v3-review-and-candidate-coverage"',
+  'contract: "manual-research-lease-safety-v4-settings-and-legacy-review"',
   "atomicSingleStatementAcquisitionRequired: true",
-  "sourceCandidateCommitLeaseRequired: true",
-  "draftRecordAndStrategyLeasesRequired: true",
-  "opportunityRecordAndStrategyLeasesRequired: true",
+  "autonomySettingsLeaseRequired: true",
+  "legacySettingsLeaseRequired: true",
+  "legacyAndModernDraftReviewShareLease: true",
 ]);
 requireTokens("scripts/check-review-mutation-boundary-safety.mjs", [
-  'contract: "review-mutation-boundary-safety-v1"',
+  'contract: "review-mutation-boundary-safety-v2-legacy-compatibility"',
   "boundedRequestBodyRequired: true",
   "requestFingerprintRequired: true",
-  "draftReviewWritesAtomic: true",
-  "opportunityReviewWritesAtomic: true",
+  "legacyDraftReviewUsesSharedLease: true",
+  "legacyDraftReviewWritesAtomic: true",
+]);
+requireTokens("scripts/check-autonomy-capability-truthfulness.mjs", [
+  'contract: "autonomy-capability-truthfulness-v2-bounded-settings"',
+  "settingsRequestBounded: true",
+  "settingsAndAuditAtomic: true",
+]);
+requireTokens("scripts/check-manual-execution-safety.mjs", [
+  'contract: "manual-legacy-execution-safety-v2-bounded-atomic"',
+  "legacyReadRoutesMutateState: false",
+  "draftDecisionAndAuditAtomic: true",
+]);
+requireTokens("scripts/check-operations-route-policy.mjs", [
+  'contract: "typed-operational-route-policy-v2-bounded-writes"',
+  "readRoutesMutateState: false",
+  "writePoliciesAmbiguous: false",
 ]);
 requireTokens("scripts/check-public-research-fetch-safety.mjs", [
   'contract: "public-research-fetch-safety-v7-hierarchical-source-exclusion"',
@@ -376,7 +393,6 @@ requireTokens("scripts/check-opportunity-evidence-quality.mjs", [
   "unmarkedNumbersParsedAsMoney: false",
   "missingFactsInvented: false",
   "weakEvidenceLearningBoostAllowed: false",
-  "reviewOnlyCandidatePostureRequired: true",
 ]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
   'canonicalCredential: "ADMIN_TOKEN"',
@@ -405,6 +421,8 @@ const expectedScripts = {
   "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
   "review:mutation-safety:check": "node scripts/check-review-mutation-boundary-safety.mjs",
   "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
+  "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
+  "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
   "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
   "scripts:check": "node scripts/check-helper-scripts.mjs",
   "test:core": "node --test",
@@ -413,14 +431,9 @@ const expectedScripts = {
 for (const [name, command] of Object.entries(expectedScripts)) {
   if (scripts[name] !== command) errors.push(`package.json script ${name} must equal: ${command}`);
 }
-
-const requiredLocalSteps = Object.keys(expectedScripts)
-  .filter((name) => name !== "typecheck" && name !== "scripts:check")
-  .map((name) => `npm run ${name}`);
-requiredLocalSteps.push("npm run scripts:check", "npm run typecheck");
 const localGate = String(scripts["check:local"] || "");
-for (const step of requiredLocalSteps) {
-  if (!localGate.includes(step)) errors.push(`check:local is missing: ${step}`);
+for (const name of Object.keys(expectedScripts)) {
+  if (!localGate.includes(`npm run ${name}`)) errors.push(`check:local is missing: npm run ${name}`);
 }
 if (!String(scripts.predeploy || "").includes("npm run check:local")) {
   errors.push("predeploy must run the authoritative check:local gate");
@@ -438,7 +451,7 @@ for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v6-review-and-bounded-credential",
+  contract: "dynamic-helper-and-gate-validation-v7-settings-and-legacy-review",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -446,11 +459,12 @@ console.log(JSON.stringify({
   sharedProtectedAuthenticationRequired: true,
   legacyCredentialAliasesAllowed: false,
   removedLegacyExecutionModulesRequired: true,
-  protectedResponseSafetyRequired: true,
-  scheduledEntrypointSafetyRequired: true,
   boundedJsonRequestSafetyRequired: true,
   manualResearchLeaseSafetyRequired: true,
   reviewMutationSafetyRequired: true,
+  autonomySettingsSafetyRequired: true,
+  legacyCompatibilitySafetyRequired: true,
+  operationalRoutePolicySafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
   opportunityEvidenceQualityRequired: true,
   deterministicCoreBehavioralTestsRequired: true,

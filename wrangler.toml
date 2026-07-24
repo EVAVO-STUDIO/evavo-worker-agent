@@ -4,6 +4,10 @@ name = "evavo-outbound-agent"
 main = "src/index.ts"
 compatibility_date = "2026-02-27"
 
+# Enforce public-only subrequests at the Cloudflare runtime boundary. Active
+# research code also validates URLs and every redirect before issuing requests.
+compatibility_flags = ["global_fetch_strictly_public"]
+
 # Enable workers.dev URL for controlled deployment verification.
 workers_dev = true
 

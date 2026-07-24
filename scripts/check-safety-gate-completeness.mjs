@@ -7,9 +7,7 @@ const root = process.cwd();
 const errors = [];
 const packagePath = path.join(root, "package.json");
 
-if (!fs.existsSync(packagePath)) {
-  errors.push("Missing package.json");
-}
+if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
 
 const packageJson = fs.existsSync(packagePath)
   ? JSON.parse(fs.readFileSync(packagePath, "utf8"))
@@ -49,6 +47,8 @@ const requiredSafetyCommands = {
   "admin:schema-safety:check": "node scripts/check-admin-schema-safety.mjs",
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
   "sources:confirmation-safety:check": "node scripts/check-source-action-confirmation-safety.mjs",
+  "research:bounded-json-safety:check": "node scripts/check-bounded-json-request-safety.mjs",
+  "research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs",
   "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
   "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
   "opportunities:execution-boundary-safety:check": "node scripts/check-opportunity-execution-boundary-safety.mjs",
@@ -58,15 +58,12 @@ const requiredSafetyCommands = {
   "worker:dependabot-config:check": "node scripts/check-dependabot-config.mjs",
   "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
   "worker:workflow-action-pinning:check": "node scripts/check-workflow-action-pinning.mjs",
+  "test:core": "node --test",
 };
 
 for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommands)) {
-  if (scripts[scriptName] !== expectedCommand) {
-    errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
-  }
-  if (!checkLocal.includes(`npm run ${scriptName}`)) {
-    errors.push(`check:local must include ${scriptName}`);
-  }
+  if (scripts[scriptName] !== expectedCommand) errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
+  if (!checkLocal.includes(`npm run ${scriptName}`)) errors.push(`check:local must include ${scriptName}`);
 }
 
 for (const relativePath of [
@@ -101,6 +98,8 @@ for (const relativePath of [
   "scripts/check-admin-schema-safety.mjs",
   "scripts/check-autonomy-capability-truthfulness.mjs",
   "scripts/check-source-action-confirmation-safety.mjs",
+  "scripts/check-bounded-json-request-safety.mjs",
+  "scripts/check-manual-research-lease-safety.mjs",
   "scripts/check-public-research-fetch-safety.mjs",
   "scripts/check-opportunity-evidence-quality.mjs",
   "scripts/check-opportunity-execution-boundary-safety.mjs",
@@ -110,10 +109,10 @@ for (const relativePath of [
   "scripts/check-dependabot-config.mjs",
   "scripts/check-package-service-identity.mjs",
   "scripts/check-workflow-action-pinning.mjs",
+  "tests/boundedJsonRequest.test.ts",
+  "tests/publicResearchFetch.test.ts",
 ]) {
-  if (!fs.existsSync(path.join(root, relativePath))) {
-    errors.push(`Missing safety contract: ${relativePath}`);
-  }
+  if (!fs.existsSync(path.join(root, relativePath))) errors.push(`Missing safety contract or behavioral test: ${relativePath}`);
 }
 
 if (!String(scripts.predeploy || "").includes("npm run check:local")) {
@@ -123,7 +122,7 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "safety-gate-completeness-v3-opportunity-evidence-quality",
+  contract: "safety-gate-completeness-v4-bounded-behavioral-research",
   generatedRouteIntegrityRequired: true,
   readmeOperatingPostureRequired: true,
   readmeTopLevelTruthfulnessRequired: true,
@@ -155,6 +154,8 @@ console.log(JSON.stringify({
   authenticatedSchemaSafetyRequired: true,
   autonomyCapabilityTruthfulnessRequired: true,
   sourceConfirmationSafetyRequired: true,
+  boundedJsonRequestSafetyRequired: true,
+  manualResearchLeaseSafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
   opportunityEvidenceQualityRequired: true,
   opportunityExecutionBoundarySafetyRequired: true,
@@ -165,6 +166,7 @@ console.log(JSON.stringify({
   dependabotConfigurationRequired: true,
   packageServiceIdentityRequired: true,
   workflowActionPinningRequired: true,
+  deterministicCoreBehavioralTestsRequired: true,
   predeployUsesCompleteLocalGate: true,
   errors,
 }, null, 2));

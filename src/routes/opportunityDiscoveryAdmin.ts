@@ -2,6 +2,7 @@ import { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { extractOpportunityCandidates, summarizeOpportunityPreview } from "../core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "../core/opportunityPersistence";
+import { fetchPublicResearchHtml, type PublicResearchFetchResult } from "../core/publicResearchFetch";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -15,12 +16,20 @@ async function getSource(env: Env, id: string) {
   return await env.DB.prepare("SELECT * FROM opportunity_sources WHERE id = ? LIMIT 1").bind(id).first<any>();
 }
 
-async function fetchHtml(url: string) {
-  const started = Date.now();
-  const response = await fetch(url, { method: "GET", headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" } });
-  const contentType = response.headers.get("content-type") || "";
-  const body = await response.text();
-  return { ok: response.ok, status: response.status, contentType, body, elapsedMs: Date.now() - started };
+function fetchReceipt(fetched: PublicResearchFetchResult) {
+  return {
+    contract: fetched.contract,
+    requestedUrl: fetched.requestedUrl,
+    finalUrl: fetched.finalUrl,
+    status: fetched.status,
+    contentType: fetched.contentType,
+    elapsedMs: fetched.elapsedMs,
+    bytes: fetched.bytes,
+    bodySha256: fetched.bodySha256,
+    redirectCount: fetched.redirectCount,
+    fetchedAtISO: fetched.fetchedAtISO,
+    error: fetched.error,
+  };
 }
 
 function parseSourceAction(pathname: string): { id: string; action: string } | null {
@@ -43,37 +52,28 @@ async function testSource(env: Env, id: string) {
   if (!source) return { ok: false, error: "source_not_found_or_missing_migration", requiredMigration: "0004_opportunity_intelligence.sql" };
 
   const now = new Date().toISOString();
-  try {
-    const fetched = await fetchHtml(source.url);
-    const looksHtml = fetched.contentType.includes("html") || /<a\s/i.test(fetched.body.slice(0, 2500));
-    const candidateCount = fetched.ok && looksHtml ? extractOpportunityCandidates(fetched.body, source.url, 25).length : 0;
-    const nextRun = new Date(Date.now() + (fetched.ok && looksHtml ? 24 : 6) * 60 * 60 * 1000).toISOString();
-    const status = fetched.ok && looksHtml ? "active" : "failed";
-    const error = fetched.ok ? (looksHtml ? null : "non_html_response") : `http_${fetched.status}`;
+  const fetched = await fetchPublicResearchHtml(source.url);
+  const looksHtml = fetched.ok && (fetched.contentType.includes("html") || /<a\s/i.test(fetched.body.slice(0, 2500)));
+  const candidateCount = looksHtml ? extractOpportunityCandidates(fetched.body, fetched.finalUrl || source.url, 25).length : 0;
+  const nextRun = new Date(Date.now() + (looksHtml ? 24 : 6) * 60 * 60 * 1000).toISOString();
+  const status = looksHtml ? "active" : "failed";
+  const error = looksHtml ? null : fetched.error || "non_html_response";
 
-    await env.DB.prepare(
-      `UPDATE opportunity_sources
-       SET status = ?, success_count = success_count + ?, failure_count = failure_count + ?, last_run_at_iso = ?, next_run_at_iso = ?, last_error = ?, updated_at_iso = ?
-       WHERE id = ?`
-    ).bind(status, status === "active" ? 1 : 0, status === "failed" ? 1 : 0, now, nextRun, error, now, id).run();
+  await env.DB.prepare(
+    `UPDATE opportunity_sources
+     SET status = ?, success_count = success_count + ?, failure_count = failure_count + ?, last_run_at_iso = ?, next_run_at_iso = ?, last_error = ?, updated_at_iso = ?
+     WHERE id = ?`
+  ).bind(status, status === "active" ? 1 : 0, status === "failed" ? 1 : 0, now, nextRun, error, now, id).run();
 
-    return {
-      ok: status === "active",
-      mode: "opportunity_source_test",
-      source: { id: source.id, url: source.url, label: source.label, status },
-      fetch: { status: fetched.status, contentType: fetched.contentType, elapsedMs: fetched.elapsedMs, bytes: fetched.body.length },
-      candidateCount,
-      error,
-      safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false },
-    };
-  } catch (err: any) {
-    await env.DB.prepare(
-      `UPDATE opportunity_sources
-       SET status = 'failed', failure_count = failure_count + 1, last_run_at_iso = ?, next_run_at_iso = ?, last_error = ?, updated_at_iso = ?
-       WHERE id = ?`
-    ).bind(now, new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), String(err?.message || err), now, id).run();
-    return { ok: false, mode: "opportunity_source_test", error: String(err?.message || err), safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false } };
-  }
+  return {
+    ok: status === "active",
+    mode: "opportunity_source_test",
+    source: { id: source.id, url: source.url, label: source.label, status },
+    fetch: fetchReceipt(fetched),
+    candidateCount,
+    error,
+    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, publicWebOnly: true, boundedResponse: true },
+  };
 }
 
 async function previewSource(env: Env, id: string, requestUrl: URL) {
@@ -81,20 +81,26 @@ async function previewSource(env: Env, id: string, requestUrl: URL) {
   if (!source) return { ok: false, error: "source_not_found_or_missing_migration", requiredMigration: "0004_opportunity_intelligence.sql" };
 
   const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 50)));
-  const fetched = await fetchHtml(source.url);
+  const fetched = await fetchPublicResearchHtml(source.url);
   if (!fetched.ok) {
-    return { ok: false, mode: "opportunity_source_preview", error: `http_${fetched.status}`, safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false } };
+    return {
+      ok: false,
+      mode: "opportunity_source_preview",
+      error: fetched.error || "source_fetch_failed",
+      fetch: fetchReceipt(fetched),
+      safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, publicWebOnly: true, boundedResponse: true },
+    };
   }
 
-  const candidates = extractOpportunityCandidates(fetched.body, source.url, limit);
+  const candidates = extractOpportunityCandidates(fetched.body, fetched.finalUrl || source.url, limit);
   return {
     ok: true,
     mode: "opportunity_source_preview",
     source: { id: source.id, url: source.url, label: source.label, sourceType: source.source_type },
-    fetch: { status: fetched.status, contentType: fetched.contentType, elapsedMs: fetched.elapsedMs, bytes: fetched.body.length },
+    fetch: fetchReceipt(fetched),
     summary: summarizeOpportunityPreview(candidates),
     candidates,
-    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, reviewRequired: true },
+    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, reviewRequired: true, publicWebOnly: true, boundedResponse: true },
   };
 }
 
@@ -107,10 +113,12 @@ async function commitPreview(env: Env, id: string, body: any) {
   const minScore = Math.max(1, Math.min(100, Number(body?.minScore || 45)));
   const limit = Math.max(1, Math.min(100, Number(body?.limit || 50)));
   const now = new Date().toISOString();
-  const fetched = await fetchHtml(source.url);
-  if (!fetched.ok) return { ok: false, mode: "opportunity_commit_preview", error: `http_${fetched.status}`, inserted: 0 };
+  const fetched = await fetchPublicResearchHtml(source.url);
+  if (!fetched.ok) {
+    return { ok: false, mode: "opportunity_commit_preview", error: fetched.error || "source_fetch_failed", inserted: 0, fetch: fetchReceipt(fetched) };
+  }
 
-  const candidates = extractOpportunityCandidates(fetched.body, source.url, limit);
+  const candidates = extractOpportunityCandidates(fetched.body, fetched.finalUrl || source.url, limit);
   const inserted: any[] = [];
   const skipped: any[] = [];
 
@@ -132,13 +140,14 @@ async function commitPreview(env: Env, id: string, body: any) {
     ok: true,
     mode: "opportunity_commit_preview",
     source: { id: source.id, url: source.url, label: source.label },
+    fetch: fetchReceipt(fetched),
     minScore,
     considered: candidates.length,
     insertedCount: inserted.length,
     skippedCount: skipped.length,
     inserted,
     skipped,
-    safety: { callsAI: false, sendsEmail: false, postsSocial: false, autoApplies: false, reviewRequired: true },
+    safety: { callsAI: false, sendsEmail: false, postsSocial: false, autoApplies: false, reviewRequired: true, publicWebOnly: true, boundedResponse: true },
   };
 }
 
@@ -157,7 +166,7 @@ export async function handleOpportunityDiscoveryAdmin(request: Request, env: Env
     return json({
       ok: false,
       error: "confirm_required",
-      reason: "Opportunity source tests, previews and preview commits require explicit confirmation before network access or internal state changes.",
+      reason: "Opportunity source tests, previews and preview commits require explicit confirmation before bounded public-network access or internal state changes.",
     }, { status: 400 });
   }
 

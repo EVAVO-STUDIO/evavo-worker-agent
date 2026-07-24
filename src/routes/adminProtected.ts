@@ -1,11 +1,16 @@
 import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import {
+  boundedJsonFailurePayload,
+  isExplicitJsonConfirmation,
+  readBoundedJsonObject,
+} from "../core/boundedJsonRequest";
 import { handleAdmin as handleAdminImplementation } from "./admin";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
-function confirmed(body: any): boolean {
-  return body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
+function manualMetadataWriteRequiresConfirmation(pathname: string, method: string): boolean {
+  return method === "POST" && (pathname === "/admin/leads" || pathname === "/admin/seeds");
 }
 
 export async function handleAdmin(
@@ -23,14 +28,28 @@ export async function handleAdmin(
     return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
   }
 
-  if (pathname === "/admin/leads" && request.method === "POST") {
-    const body = await request.clone().json().catch(() => ({}));
-    if (!confirmed(body)) {
+  if (manualMetadataWriteRequiresConfirmation(pathname, request.method)) {
+    const parsed = await readBoundedJsonObject(request.clone(), {
+      maxBytes: 65_536,
+      maxDepth: 6,
+      maxNodes: 600,
+      maxArrayLength: 100,
+      maxStringLength: 2_048,
+      maxKeyLength: 96,
+    });
+    if (!parsed.ok) return json(boundedJsonFailurePayload(parsed), { status: parsed.status });
+    if (!isExplicitJsonConfirmation(parsed.value)) {
       return json({
         ok: false,
         error: "confirm_required",
-        reason: "Manual historical-record insertion requires explicit confirmation. This is an internal metadata write only and does not trigger research, drafting, sending, posting, form submission, browser automation, or external mutation.",
+        reason: "Manual historical-record insertion requires exact JSON confirmation. This is an internal metadata write only and does not trigger research, drafting, sending, posting, form submission, browser automation, or external mutation.",
         requiredPayload: { confirm: true },
+        confirmationCoercionAllowed: false,
+        requestReceipt: {
+          contract: parsed.contract,
+          bytes: parsed.bytes,
+          bodySha256: parsed.bodySha256,
+        },
         safety: {
           internalMetadataOnly: true,
           scheduled: false,

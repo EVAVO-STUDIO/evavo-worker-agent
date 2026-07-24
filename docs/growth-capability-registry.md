@@ -1,13 +1,17 @@
 # Growth capability registry
 
-This document defines the capability model for the EVAVO Growth Research Worker.
+This document defines the capability, bridge-readiness and scoped route-inventory model for the EVAVO Growth Research Worker.
 
-The registry is a control-plane and reporting feature. It describes currently available internal capabilities, reserved modelling levels, and blocked capabilities. It does not execute any capability by itself.
+The registry is a control-plane and reporting feature. It describes currently available internal capabilities, reserved modelling levels, blocked capabilities and the safety posture of typed Growth/Business admin route groups. It does not execute any capability by itself.
 
 ## Current code
 
 ```text
 src/core/growthCapabilities.ts
+src/core/growthBridgeReadiness.ts
+src/core/growthBusinessRouteInventory.ts
+src/routes/growthRoutePolicy.ts
+src/routes/businessRoutePolicy.ts
 src/routes/growthCapabilitiesAdmin.ts
 ```
 
@@ -88,6 +92,73 @@ currentImplementation
 notes
 ```
 
+## Bridge readiness
+
+The protected registry includes the versioned bridge-readiness object:
+
+```text
+growth_worker_bridge_v1
+```
+
+Its current posture is intentionally fail-closed:
+
+```text
+bridgeEnabled: false
+routeInventoryComplete: false
+clientBrowserAccess: false
+adminTokenBrowserExposure: false
+draftingEnabled: false
+externalExecutionEnabled: false
+ownerApprovalRequired: true
+idempotencyRequired: true
+auditRequired: true
+transport: server_to_server_only
+promotionMode: proposal_only
+```
+
+This does not create a Worker-to-Growth data bridge. It provides a machine-readable statement of what is and is not ready.
+
+## Scoped Growth/Business route inventory
+
+The protected registry also includes:
+
+```text
+growth_business_route_inventory_v1
+```
+
+The inventory is generated from the typed policy registries:
+
+```text
+src/routes/growthRoutePolicy.ts
+src/routes/businessRoutePolicy.ts
+```
+
+It classifies the Growth and Business admin route groups as read-only, internal mutation or retired-write-fail-closed. Every entry reports authentication, confirmation, network, AI, external-channel, browser and canonical-promotion posture.
+
+The inventory is deliberately scoped:
+
+```text
+scope: growth_and_business_admin_route_policies
+completeForScope: true
+completeForAllWorkerPostRoutes: false
+bridgeEligible: false
+```
+
+`completeForScope: true` means the typed Growth and Business policy groups are represented. It does not mean every POST route in the Worker has been inventoried. The cross-repository bridge must remain disabled until all relevant Worker POST families are classified and guarded.
+
+Current inventory safety posture:
+
+```text
+browserCallable: false
+exposesAdminToken: false
+callsExternalNetwork: false
+callsAI: false
+externalExecutionEnabled: false
+canonicalGrowthPromotionEnabled: false
+```
+
+Historical Business draft and approval route groups are represented as `retired-write-fail-closed`; their records may be readable, but their retired writes do not execute.
+
 ## Registry safety posture
 
 The registry reports:
@@ -131,4 +202,4 @@ The handler is:
 src/routes/growthCapabilitiesAdmin.ts
 ```
 
-The route requires the canonical server-side `ADMIN_TOKEN`, authenticates before method handling, accepts GET only, and returns registry metadata without executing any capability.
+The route requires the canonical server-side `ADMIN_TOKEN`, authenticates before method handling, accepts GET only, and returns registry, bridge-readiness and scoped route-inventory metadata without executing any capability.

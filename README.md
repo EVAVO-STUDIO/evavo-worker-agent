@@ -19,6 +19,8 @@ It does **not** provide outbound execution.
 - Scheduled work is internal-only and may synchronise defensive flags, refresh learning from existing D1 review metadata and record internal audit events.
 - Scheduled work cannot fetch public sources, expand source candidates, discover opportunities, generate drafts or perform external actions.
 - Public-source research is manual-only, authenticated, explicitly confirmed, bounded and review-only.
+- Public research URLs and every redirect are validated against the shared public-only network policy.
+- Public response bodies are timeout-bounded, byte-bounded and hashed for evidence receipts.
 - Manual legacy execution routes return a fail-closed response.
 - All protected routes require server-side Worker authentication.
 - Confirmed write routes mutate internal D1 metadata only.
@@ -44,9 +46,15 @@ Each policy records authentication, mutation, confirmation, network and prohibit
 
 Allowed network activity is read-only public research through explicitly classified, authenticated, confirmation-gated and bounded manual source or opportunity handlers.
 
+All active research handlers use `src/core/publicResearchFetch.ts`. The boundary rejects non-public hosts, embedded URL credentials, unsafe protocols and non-standard ports. Redirects are followed manually only after the next target passes the same public URL policy. Cloudflare runtime configuration also enables `global_fetch_strictly_public`.
+
+The default response limit is 1,048,576 bytes, the default redirect limit is four and the default per-request timeout is 12 seconds. Bodies are streamed and cancelled when the configured byte limit is exceeded.
+
+Each completed fetch returns an evidence receipt containing the requested URL, final URL, status, content type, redirect count, byte count, SHA-256 body hash, elapsed time and fetch timestamp. Source expansion and opportunity candidates retain relevant receipt data, and inserted lead discoveries retain the source-run identifier.
+
 Manual research handlers may:
 
-- fetch public HTML with GET requests
+- fetch public HTML, robots files and sitemap XML with GET requests
 - inspect public directory or business pages
 - save source candidates and research evidence
 - update source health and cooldown metadata
@@ -64,8 +72,11 @@ They may not:
 - mutate third-party data
 - invoke the deleted legacy execution engine
 
+The authoritative detailed contract is [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md).
+
 ## Current operating documents
 
+- [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md)
 - [`docs/zero-source-startup.md`](docs/zero-source-startup.md)
 - [`docs/zero-source-route-catalogue.md`](docs/zero-source-route-catalogue.md)
 - [`docs/growth-autonomous-discovery-architecture.md`](docs/growth-autonomous-discovery-architecture.md)
@@ -133,7 +144,9 @@ npm run scheduled:autonomy-safety:check
 npm run manual:execution-safety:check
 npm run legacy:engine-isolation:check
 npm run public:surface-safety:check
+npm run research:public-fetch-safety:check
 npm run runtime:capability-config:check
+npm run opportunities:execution-boundary-safety:check
 npm run opportunities:route-policy:check
 npm run business:route-policy:check
 npm run business:route-catalogue-truthfulness:check
@@ -180,6 +193,7 @@ An optional `PUBLIC_BASE_URL` may be retained for future private-hub integration
 
 - the D1 binding
 - bounded manual public-research capacity
+- strict public-only Cloudflare subrequests
 - an internal-only Worker schedule
 - brand and geographic context
 - a compatibility Cloudflare AI binding that active safety contracts prohibit from executing
@@ -195,5 +209,5 @@ When no approved source list exists:
 3. Review candidate domains and crawl policy.
 4. Run one authenticated, explicitly confirmed and bounded research action.
 5. Save findings as internal review metadata only.
-6. Review evidence and source health manually.
+6. Review evidence receipts and source health manually.
 7. Do not draft, send, post, submit or mutate external systems.

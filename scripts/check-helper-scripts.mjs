@@ -51,6 +51,7 @@ for (const relativePath of [
   "src/db.ts",
   "src/engineAutonomy.ts",
   "src/core/adminAuthentication.ts",
+  "src/core/publicResearchFetch.ts",
   "src/routes/admin.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
@@ -65,7 +66,9 @@ for (const relativePath of [
   "scripts/check-worker-env-contract.mjs",
   "scripts/check-protected-response-safety.mjs",
   "scripts/check-scheduled-entrypoint-safety.mjs",
+  "scripts/check-public-research-fetch-safety.mjs",
   "scripts/check-runtime-capability-config.mjs",
+  "docs/public-research-fetch-boundary.md",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
   "package.json",
@@ -86,6 +89,14 @@ requireTokens("src/core/adminAuthentication.ts", [
   'crypto.subtle.digest("SHA-256"',
   "difference |= leftDigest[index] ^ rightDigest[index]",
   "return constantTimeEqual(provided, expected)",
+]);
+requireTokens("src/core/publicResearchFetch.ts", [
+  'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v1"',
+  'redirect: "manual"',
+  "readBodyBounded",
+  "bodySha256",
+  "fetchPublicResearchHtml",
+  "fetchPublicResearchText",
 ]);
 requireTokens("src/index.ts", [
   'headers.set("cache-control", "no-store")',
@@ -190,6 +201,7 @@ requireTokens("src/routes/workerRoutePolicy.ts", [
 requireTokens("wrangler.toml", [
   'PUBLIC_ENGINE_NAME = "EVAVO Growth Research Worker"',
   'CAP_CRAWL_PER_DAY = "60"',
+  'compatibility_flags = ["global_fetch_strictly_public"]',
   "No email-provider secrets are used or accepted by the active Worker source.",
   "ADMIN_TOKEN",
 ]);
@@ -221,9 +233,16 @@ requireTokens("scripts/check-scheduled-entrypoint-safety.mjs", [
   "automaticRetryAllowed: false",
   "alternateExecutionFallbackAllowed: false",
 ]);
+requireTokens("scripts/check-public-research-fetch-safety.mjs", [
+  'contract: "public-research-fetch-safety-v2-documented-boundary"',
+  "strictPublicCloudflareFetchRequired: true",
+  "sourceRunProvenanceRequired: true",
+  "boundaryDocumentationRequired: true",
+]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
-  'contract: "review-first-runtime-capability-configuration"',
+  'contract: "review-first-runtime-capability-configuration',
   'canonicalCredential: "ADMIN_TOKEN"',
+  "strictPublicSubrequestsEnabled:",
   "legacyCredentialAliasesAdvertised: false",
   "emailProviderConfigured: false",
   "draftRuntimeCapConfigured: false",
@@ -273,6 +292,7 @@ if (fs.existsSync(packagePath)) {
     "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
     "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
     "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
+    "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
     "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
     "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
@@ -300,6 +320,7 @@ if (fs.existsSync(packagePath)) {
     "npm run manual:execution-safety:check",
     "npm run legacy:engine-isolation:check",
     "npm run public:surface-safety:check",
+    "npm run research:public-fetch-safety:check",
     "npm run runtime:capability-config:check",
     "npm run opportunities:route-policy:check",
     "npm run business:route-policy:check",
@@ -320,7 +341,7 @@ if (fs.existsSync(packagePath)) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation",
+  contract: "dynamic-helper-and-gate-validation-v2-public-research",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -329,6 +350,7 @@ console.log(JSON.stringify({
   removedLegacyExecutionModulesRequired: true,
   protectedResponseSafetyRequired: true,
   scheduledEntrypointSafetyRequired: true,
+  publicResearchFetchSafetyRequired: true,
   errors,
 }, null, 2));
 

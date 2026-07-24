@@ -11,6 +11,13 @@ import {
 } from "../routes/businessRoutePolicy";
 
 export const GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION = "growth_business_route_inventory_v1" as const;
+export const GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS = Object.freeze([
+  "opportunity_route_policies",
+  "operations_route_policies",
+  "admin_fallback_posts",
+] as const);
+
+export type GrowthBusinessRouteInventoryPendingGroup = (typeof GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS)[number];
 
 export type WorkerPostClassification =
   | "not-supported"
@@ -136,7 +143,7 @@ export function listGrowthBusinessRouteInventory() {
     completeForScope: true,
     completeForAllWorkerPostRoutes: false,
     bridgeEligible: false,
-    unclassifiedPostRouteGroups: Object.freeze([] as string[]),
+    unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS,
     entries,
     summary: Object.freeze({
       routeGroups: entries.length,
@@ -144,6 +151,7 @@ export function listGrowthBusinessRouteInventory() {
       readOnlyGroups: entries.filter((entry) => entry.writeMethods.length === 0).length,
       retiredWriteGroups: entries.filter((entry) => entry.retiredWritesFailClosed).length,
       externalExecutionGroups: entries.filter((entry) => entry.postClassification === "external-execution").length,
+      unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS.length,
       postClassifications: Object.freeze(postClassifications),
     }),
     safety: Object.freeze({

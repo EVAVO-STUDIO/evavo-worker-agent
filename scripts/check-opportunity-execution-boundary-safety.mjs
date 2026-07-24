@@ -159,7 +159,12 @@ for (const [label, executionPosition] of [
   }
 }
 for (const token of [
-  'reason: "Opportunity source tests, previews and preview commits require explicit confirmation before network access or internal state changes."',
+  'reason: "Opportunity source tests, previews and preview commits require explicit confirmation before bounded public-network access or internal state changes."',
+  'from "../core/publicResearchFetch"',
+  "fetchPublicResearchHtml(source.url)",
+  "bodySha256: fetched.bodySha256",
+  "boundedResponse: true",
+  "publicWebOnly: true",
   "const limit = Math.max(1, Math.min(100",
   "const minScore = Math.max(1, Math.min(100",
   "callsAI: false",
@@ -168,6 +173,7 @@ for (const token of [
 ]) {
   if (!discovery.includes(token)) errors.push(`Opportunity discovery safety token is missing: ${token}`);
 }
+if (/\bfetch\s*\(/.test(discovery)) errors.push("Opportunity discovery must not call global fetch directly");
 
 const expectedCommand = "node scripts/check-opportunity-execution-boundary-safety.mjs";
 if (packageJson.scripts?.["opportunities:execution-boundary-safety:check"] !== expectedCommand) {
@@ -180,7 +186,7 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run opport
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "opportunity-execution-boundary-safety",
+  contract: "opportunity-execution-boundary-safety-v2-public-fetch",
   sourceExpansionUsesSharedAuthentication: true,
   sourceExpansionRequiresConfirmation: true,
   sourceExpansionExecutionIsBounded: true,
@@ -193,6 +199,7 @@ console.log(JSON.stringify({
   opportunityLearningIsReadOnly: true,
   opportunityDiscoveryUsesSharedAuthentication: true,
   opportunityDiscoveryRequiresConfirmation: true,
+  opportunityDiscoveryUsesPublicFetchBoundary: true,
   callsAI: false,
   sendsEmail: false,
   postsExternally: false,

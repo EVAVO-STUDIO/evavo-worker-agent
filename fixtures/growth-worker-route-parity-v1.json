@@ -1,0 +1,19 @@
+{
+  "contractVersion": "growth_worker_route_parity_v1",
+  "websiteRepository": "EVAVO-STUDIO/next-website",
+  "workerRepository": "EVAVO-STUDIO/evavo-worker-agent",
+  "path": "/api/private/growth/worker-proposals",
+  "proposalVersion": "growth_worker_proposal_v1",
+  "requestVersion": "growth_worker_request_v1",
+  "bridgeVersion": "growth_worker_bridge_v2",
+  "inventoryVersion": "growth_worker_route_inventory_v2",
+  "nextApiAdapterVersion": "growth_worker_next_api_adapter_v1",
+  "pageHandlerVersion": "growth_worker_proposal_page_handler_v1",
+  "pageState": "absent",
+  "bridgeEnabled": false,
+  "deliveryEnabled": false,
+  "blockers": [
+    "next_website_ingestion_endpoint_not_implemented",
+    "cross_repo_contract_tests_not_implemented"
+  ]
+}

@@ -1,5 +1,6 @@
 import { Env, getSetting, logEvent, nowISO, uuid } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { fetchPublicResearchHtml } from "../core/publicResearchFetch";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -7,26 +8,6 @@ async function numberSetting(env: Env, key: string, fallback: number): Promise<n
   const raw = await getSetting(env, key);
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-async function fetchHtml(url: string): Promise<{ ok: boolean; html: string; status: number; contentType: string }> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "user-agent": "Mozilla/5.0 (compatible; EVAVO-Outbound-Agent/1.0; +https://evavo.com.au)",
-        "accept-language": "en-AU,en;q=0.9",
-      },
-      redirect: "follow",
-    });
-    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
-    if (!res.ok || (contentType && !/text\/html|application\/xhtml\+xml/.test(contentType))) {
-      return { ok: false, html: "", status: res.status, contentType };
-    }
-    const html = await res.text();
-    return { ok: Boolean(html.trim()), html, status: res.status, contentType };
-  } catch {
-    return { ok: false, html: "", status: 0, contentType: "" };
-  }
 }
 
 function countProfileHints(html: string): number {
@@ -75,12 +56,12 @@ async function applyFailurePolicy(env: Env, sourceId: string, failedReason: stri
 
 async function runOneSource(env: Env, source: any) {
   const started = nowISO();
-  const result = await fetchHtml(String(source.url));
+  const result = await fetchPublicResearchHtml(String(source.url));
   const completed = nowISO();
-  const profilesFound = result.ok ? countProfileHints(result.html) : 0;
-  const hrefCount = result.ok ? countLinks(result.html) : 0;
+  const profilesFound = result.ok ? countProfileHints(result.body) : 0;
+  const hrefCount = result.ok ? countLinks(result.body) : 0;
   const status = result.ok ? "ok" : "failed";
-  const failedReason = result.ok ? null : `status_${result.status || "fetch_failed"}`;
+  const failedReason = result.ok ? null : result.error || "research_fetch_failed";
 
   await env.DB.prepare(
     "INSERT INTO source_runs (id, source_id, status, started_at_iso, completed_at_iso, profiles_found, external_sites_found, leads_inserted, duplicates_skipped, failed_reason, created_at_iso) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)"
@@ -105,11 +86,21 @@ async function runOneSource(env: Env, source: any) {
     sourceId: source.id,
     url: source.url,
     status,
-    httpStatus: result.status,
-    contentType: result.contentType,
+    fetch: {
+      contract: result.contract,
+      requestedUrl: result.requestedUrl,
+      finalUrl: result.finalUrl,
+      status: result.status,
+      contentType: result.contentType,
+      redirectCount: result.redirectCount,
+      bytes: result.bytes,
+      bodySha256: result.bodySha256,
+      elapsedMs: result.elapsedMs,
+      fetchedAtISO: result.fetchedAtISO,
+      error: result.error,
+    },
     hrefCount,
     profileHintCount: profilesFound,
-    htmlBytes: result.html.length,
     policy,
   };
 }
@@ -154,10 +145,11 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
     const results = [];
     for (const source of runnable) results.push(await runOneSource(env, source));
 
-    await logEvent(env, "source_run_tiny", `Ran tiny source batch over ${results.length} source(s), skipped ${skipped.length}.`);
+    await logEvent(env, "source_run_tiny", `Ran confirmed tiny source batch over ${results.length} source(s), skipped ${skipped.length}.`);
     return json({
       ok: true,
       mode: "tiny_source_batch",
+      fetchContract: "public_research_fetch_v1",
       requested: requestedLimit,
       perTickLimit,
       effectiveLimit: limit,
@@ -165,6 +157,7 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
       processed: results.length,
       skipped,
       results,
+      safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, callsAI: false, sendsEmail: false, externalStateChange: false },
     });
   }
 

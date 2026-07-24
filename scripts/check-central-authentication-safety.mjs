@@ -14,7 +14,9 @@ const auth = read("src/core/adminAuthentication.ts");
 const index = read("src/index.ts");
 const plannerWrapper = read("src/routes/plannerAdminProtected.ts");
 const growthWrapper = read("src/routes/growthAdminProtected.ts");
+const reviewSafety = read("scripts/check-review-mutation-boundary-safety.mjs");
 const packageJson = JSON.parse(read("package.json") || "{}");
+
 const protectedHandlers = [
   "src/routes/admin.ts",
   "src/routes/tools.ts",
@@ -23,6 +25,7 @@ const protectedHandlers = [
   "src/routes/businessAutopilotAdmin.ts",
   "src/routes/businessAutopilotPeopleAdmin.ts",
   "src/routes/businessAutopilotWebsiteAdmin.ts",
+  "src/routes/draftReviewAdmin.ts",
   "src/routes/opportunitiesAdmin.ts",
   "src/routes/opportunityDiscoveryAdmin.ts",
   "src/routes/opportunityLearningAdmin.ts",
@@ -40,7 +43,6 @@ const protectedHandlers = [
   "src/routes/sourceExpansionPublicDirectoryScanAdmin.ts",
   "src/routes/sourcesAdmin.ts",
   "src/routes/sourceBatchAdmin.ts",
-  "src/routes/draftReviewAdmin.ts",
   "src/routes/plannerAdminProtected.ts",
   "src/routes/plannerRoutesAdmin.ts",
   "src/routes/growthAdminProtected.ts",
@@ -56,20 +58,35 @@ for (const [name, content] of [
   ["Worker dispatcher", index],
   ["protected planner wrapper", plannerWrapper],
   ["protected Growth wrapper", growthWrapper],
+  ["review mutation safety contract", reviewSafety],
 ]) {
   if (!content) errors.push(`Missing ${name}`);
 }
 
 for (const token of [
+  "ADMIN_TOKEN_MIN_BYTES = 32",
+  "ADMIN_TOKEN_MAX_BYTES = 256",
+  "function hasValidAdminTokenShape",
   'authorization.startsWith("Bearer ")',
   'authorization.slice("Bearer ".length)',
-  'token.trim() !== token',
-  '/\\s/.test(token)',
+  "value.trim() !== value",
+  "/\\s/.test(value)",
   'crypto.subtle.digest("SHA-256"',
   "difference |= leftDigest[index] ^ rightDigest[index]",
+  "!expected || !provided || !hasValidAdminTokenShape(expected)",
   "return constantTimeEqual(provided, expected)",
 ]) {
   if (!auth.includes(token)) errors.push(`Authentication helper is missing: ${token}`);
+}
+for (const forbidden of [
+  "authorization ===",
+  "authorization ==",
+  "provided === expected",
+  "provided == expected",
+  "PUBLIC_CONTROL_KEY",
+  "OUTBOUND_AGENT_ADMIN_TOKEN",
+]) {
+  if (auth.includes(forbidden)) errors.push(`Authentication helper contains forbidden token: ${forbidden}`);
 }
 
 for (const token of [
@@ -78,7 +95,7 @@ for (const token of [
   'import { handleGrowthAdmin } from "./routes/growthAdminProtected"',
   'matchesWorkerRouteFamily("admin", pathname)',
   'matchesWorkerRouteFamily("tools", pathname)',
-  'if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))',
+  "if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))",
   'error: "Unauthorized"',
   "status: 401",
 ]) {
@@ -95,21 +112,21 @@ function requireProtectedWrapper(content, label, implementationImport, delegateC
   for (const token of [
     'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
     implementationImport,
-    'await isAdminRequestAuthorized(request, env)',
+    "await isAdminRequestAuthorized(request, env)",
     'request.method === "OPTIONS"',
-    'status: 405',
+    "status: 405",
     delegateCall,
   ]) {
     if (!content.includes(token)) errors.push(`${label} is missing: ${token}`);
   }
-  const wrapperAuthPosition = content.indexOf("await isAdminRequestAuthorized(request, env)");
-  const wrapperOptionsPosition = content.indexOf('request.method === "OPTIONS"');
-  const wrapperDelegatePosition = content.indexOf(delegateCall);
+  const authPosition = content.indexOf("await isAdminRequestAuthorized(request, env)");
+  const optionsPosition = content.indexOf('request.method === "OPTIONS"');
+  const delegatePosition = content.indexOf(delegateCall);
   if (
-    wrapperAuthPosition < 0 ||
-    wrapperOptionsPosition < 0 ||
-    wrapperDelegatePosition < 0 ||
-    !(wrapperAuthPosition < wrapperOptionsPosition && wrapperOptionsPosition < wrapperDelegatePosition)
+    authPosition < 0 ||
+    optionsPosition < 0 ||
+    delegatePosition < 0 ||
+    !(authPosition < optionsPosition && optionsPosition < delegatePosition)
   ) {
     errors.push(`${label} must authenticate before OPTIONS handling and delegate only afterward`);
   }
@@ -119,20 +136,25 @@ requireProtectedWrapper(
   plannerWrapper,
   "Protected planner wrapper",
   'import { handlePlannerAdmin as handlePlannerAdminImplementation } from "./plannerAdmin"',
-  'return handlePlannerAdminImplementation(request, env, pathname, json)',
+  "return handlePlannerAdminImplementation(request, env, pathname, json)",
 );
 requireProtectedWrapper(
   growthWrapper,
   "Protected Growth wrapper",
   'import { handleGrowthAdmin as handleGrowthAdminImplementation } from "./growthAdmin"',
-  'return handleGrowthAdminImplementation(request, env, pathname, json)',
+  "return handleGrowthAdminImplementation(request, env, pathname, json)",
 );
 
 const healthPosition = index.indexOf('matchesWorkerRouteFamily("health", pathname)');
 const authPosition = index.indexOf("if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))");
 const opportunityPosition = index.indexOf("switch (resolveOpportunityRouteHandlerId(pathname))");
 const publicPosition = index.indexOf('matchesWorkerRouteFamily("public", pathname)');
-if (healthPosition < 0 || authPosition < 0 || opportunityPosition < 0 || !(healthPosition < authPosition && authPosition < opportunityPosition)) {
+if (
+  healthPosition < 0 ||
+  authPosition < 0 ||
+  opportunityPosition < 0 ||
+  !(healthPosition < authPosition && authPosition < opportunityPosition)
+) {
   errors.push("Central authentication must run after public health and before protected route resolution");
 }
 if (publicPosition < 0 || publicPosition <= authPosition) {
@@ -147,7 +169,7 @@ for (const relativePath of protectedHandlers) {
   }
   for (const token of [
     'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-    'await isAdminRequestAuthorized(request, env)',
+    "await isAdminRequestAuthorized(request, env)",
     'error: "Unauthorized"',
   ]) {
     if (!content.includes(token)) errors.push(`${relativePath} is missing shared authentication token: ${token}`);
@@ -170,110 +192,13 @@ for (const relativePath of protectedHandlers) {
   }
 }
 
-const draftReview = read("src/routes/draftReviewAdmin.ts");
 for (const token of [
-  "function confirmed(body: any): boolean",
-  "if (!confirmed(body))",
-  'error: "confirm_required"',
-  "Draft review-state changes require explicit confirmation",
+  'contract: "review-mutation-boundary-safety-v1"',
+  "exactBooleanConfirmationRequired: true",
+  "boundedRequestBodyRequired: true",
+  "perRecordLeaseRequired: true",
 ]) {
-  if (!draftReview.includes(token)) errors.push(`Draft review confirmation contract is missing: ${token}`);
-}
-const draftBodyPosition = draftReview.indexOf("const body = await request.json()");
-const draftConfirmPosition = draftReview.indexOf("if (!confirmed(body))");
-const draftReviewCallPosition = draftReview.indexOf("const result = await reviewDraft");
-if (draftBodyPosition < 0 || draftConfirmPosition < 0 || draftReviewCallPosition < 0 || !(draftBodyPosition < draftConfirmPosition && draftConfirmPosition < draftReviewCallPosition)) {
-  errors.push("Draft review confirmation must run after body parsing and before review-state mutation");
-}
-
-const opportunityReview = read("src/routes/opportunityReviewAdmin.ts");
-for (const token of [
-  "function confirmed(body: any): boolean",
-  "if (!confirmed(body))",
-  'error: "confirm_required"',
-  "Opportunity review-state and strategy-score changes require explicit confirmation",
-]) {
-  if (!opportunityReview.includes(token)) errors.push(`Opportunity review confirmation contract is missing: ${token}`);
-}
-const opportunityBodyPosition = opportunityReview.indexOf("const body = await request.json()");
-const opportunityConfirmPosition = opportunityReview.indexOf("if (!confirmed(body))");
-const opportunityMutationPosition = opportunityReview.indexOf("return json(await reviewOpportunity");
-if (opportunityBodyPosition < 0 || opportunityConfirmPosition < 0 || opportunityMutationPosition < 0 || !(opportunityBodyPosition < opportunityConfirmPosition && opportunityConfirmPosition < opportunityMutationPosition)) {
-  errors.push("Opportunity review confirmation must run after body parsing and before review-state or strategy-score mutation");
-}
-
-const sourceCandidates = read("src/routes/opportunitySourceCandidatesAdmin.ts");
-for (const token of [
-  'pathname === "/admin/opportunities/sources/candidates/commit"',
-  "if (body?.confirm !== true)",
-  'error: "confirm_required"',
-  "saveOpportunitySourceCandidates",
-]) {
-  if (!sourceCandidates.includes(token)) errors.push(`Source-candidate confirmation contract is missing: ${token}`);
-}
-const sourceCandidateBodyPosition = sourceCandidates.indexOf("const body = await readJson(request)");
-const sourceCandidateConfirmPosition = sourceCandidates.indexOf("if (body?.confirm !== true)");
-const sourceCandidateSavePosition = sourceCandidates.indexOf("return json(await saveOpportunitySourceCandidates");
-if (
-  sourceCandidateBodyPosition < 0 ||
-  sourceCandidateConfirmPosition < 0 ||
-  sourceCandidateSavePosition < 0 ||
-  !(sourceCandidateBodyPosition < sourceCandidateConfirmPosition && sourceCandidateConfirmPosition < sourceCandidateSavePosition)
-) {
-  errors.push("Source-candidate confirmation must run after body parsing and before candidate persistence");
-}
-
-const queryHintResolver = read("src/routes/sourceExpansionQueryHintResolverAdmin.ts");
-for (const token of [
-  "const body = await readJson(request)",
-  "if (body?.confirm !== true)",
-  'error: "confirm_required"',
-  "resolveQueryHintUrls",
-]) {
-  if (!queryHintResolver.includes(token)) errors.push(`Query-hint confirmation contract is missing: ${token}`);
-}
-const queryHintBodyPosition = queryHintResolver.indexOf("const body = await readJson(request)");
-const queryHintConfirmPosition = queryHintResolver.indexOf("if (body?.confirm !== true)");
-const queryHintRunPosition = queryHintResolver.indexOf("return json(await resolveQueryHintUrls");
-if (
-  queryHintBodyPosition < 0 ||
-  queryHintConfirmPosition < 0 ||
-  queryHintRunPosition < 0 ||
-  !(queryHintBodyPosition < queryHintConfirmPosition && queryHintConfirmPosition < queryHintRunPosition)
-) {
-  errors.push("Query-hint confirmation must run after body parsing and before resolution writes");
-}
-
-const publicDirectoryScan = read("src/routes/sourceExpansionPublicDirectoryScanAdmin.ts");
-for (const token of [
-  "const body = await bodyJson(request)",
-  "if (body?.confirm !== true)",
-  'error: "confirm_required"',
-  "runRelationshipGraphDiscovery",
-]) {
-  if (!publicDirectoryScan.includes(token)) errors.push(`Public-directory confirmation contract is missing: ${token}`);
-}
-const publicDirectoryBodyPosition = publicDirectoryScan.indexOf("const body = await bodyJson(request)");
-const publicDirectoryConfirmPosition = publicDirectoryScan.indexOf("if (body?.confirm !== true)");
-const publicDirectoryRunPosition = publicDirectoryScan.indexOf("return json(await runRelationshipGraphDiscovery");
-if (
-  publicDirectoryBodyPosition < 0 ||
-  publicDirectoryConfirmPosition < 0 ||
-  publicDirectoryRunPosition < 0 ||
-  !(publicDirectoryBodyPosition < publicDirectoryConfirmPosition && publicDirectoryConfirmPosition < publicDirectoryRunPosition)
-) {
-  errors.push("Public-directory confirmation must run after body parsing and before bounded network discovery");
-}
-
-for (const forbidden of [
-  "authorization ===",
-  "authorization ==",
-  "provided === expected",
-  "provided == expected",
-  "PUBLIC_CONTROL_KEY",
-  "OUTBOUND_AGENT_ADMIN_TOKEN",
-]) {
-  if (auth.includes(forbidden)) errors.push(`Authentication helper contains forbidden token: ${forbidden}`);
+  if (!reviewSafety.includes(token)) errors.push(`Review mutation authentication delegation is missing: ${token}`);
 }
 
 const expectedCommand = "node scripts/check-central-authentication-safety.mjs";
@@ -287,8 +212,11 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run worker
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "central-protected-route-authentication",
+  contract: "central-protected-route-authentication-v2-bounded-credential",
   canonicalCredential: "ADMIN_TOKEN",
+  minimumCredentialBytes: 32,
+  maximumCredentialBytes: 256,
+  weakConfiguredCredentialFailsClosed: true,
   strictBearerParsing: true,
   constantTimeDigestComparison: true,
   centralAuthenticationBeforeProtectedDispatch: true,
@@ -298,31 +226,7 @@ console.log(JSON.stringify({
   directGrowthFallbackImplementationImportAllowed: false,
   publicRoutesRequireAdminToken: false,
   protectedHandlersUsingSharedAuthentication: protectedHandlers,
-  opportunityDiscoveryUsesSharedAuthentication: true,
-  opportunityLearningUsesSharedAuthentication: true,
-  opportunityRunDueUsesSharedAuthentication: true,
-  opportunitySourceHealthActionsUseSharedAuthentication: true,
-  sourceExpansionUsesSharedAuthentication: true,
-  growthApprovalRequestsUseSharedAuthentication: true,
-  growthBlackboardUsesSharedAuthentication: true,
-  growthCampaignIntelligenceUsesSharedAuthentication: true,
-  growthStrategyMemoryUsesSharedAuthentication: true,
-  draftReviewRequiresConfirmation: true,
-  opportunityReviewRequiresConfirmation: true,
-  opportunityRunsUseSharedAuthentication: true,
-  opportunitySourceHealthUsesSharedAuthentication: true,
-  opportunityScoringDiagnosticsUseSharedAuthentication: true,
-  opportunitySourceCandidatesUseSharedAuthentication: true,
-  opportunitySourceCandidateCommitRequiresConfirmation: true,
-  opportunitySourceOriginMetricsUseSharedAuthentication: true,
-  sourceExpansionBudgetRecommendationsUseSharedAuthentication: true,
-  sourceExpansionQueryHintResolverUsesSharedAuthentication: true,
-  queryHintResolutionRequiresConfirmation: true,
-  sourceExpansionPublicDirectoryScanUsesSharedAuthentication: true,
-  publicDirectoryScanRequiresConfirmation: true,
-  unauthenticatedProtectedPreflightAllowed: false,
-  localBearerEqualityAllowed: false,
-  handlerDefenceInDepthRequired: true,
+  reviewMutationSemanticsDelegatedToFocusedGate: true,
   errors,
 }, null, 2));
 

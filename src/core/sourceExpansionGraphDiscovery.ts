@@ -1,6 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
-import { fetchPublicResearchHtml, validatePublicResearchUrl } from "./publicResearchFetch";
+import { PUBLIC_RESEARCH_FETCH_CONTRACT, fetchPublicResearchHtml, validatePublicResearchUrl } from "./publicResearchFetch";
 
 type GraphSeed = {
   id: string | null;
@@ -173,13 +173,19 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
     const fetched = await fetchPublicResearchHtml(seed.url);
     const receipt = {
       seedId: seed.id,
+      contract: fetched.contract,
       requestedUrl: fetched.requestedUrl,
       finalUrl: fetched.finalUrl,
       status: fetched.status,
       contentType: fetched.contentType,
+      contentLength: fetched.contentLength,
+      contentLanguage: fetched.contentLanguage,
+      etag: fetched.etag,
+      lastModified: fetched.lastModified,
       bytes: fetched.bytes,
       bodySha256: fetched.bodySha256,
       redirectCount: fetched.redirectCount,
+      redirectChain: fetched.redirectChain,
       error: fetched.error,
       fetchedAtISO: fetched.fetchedAtISO,
       timeoutScope: fetched.timeoutScope,
@@ -219,6 +225,8 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
           sourceBodySha256: fetched.bodySha256,
           sourceFetchedAtISO: fetched.fetchedAtISO,
           sourceTimeoutScope: fetched.timeoutScope,
+          sourceFetchContract: fetched.contract,
+          sourceRedirectChain: fetched.redirectChain,
           sourceSeedStrategy: seed.strategy || null,
           relationshipDomain: domain,
         },
@@ -231,17 +239,19 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
     }
   }
 
-  const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed";
+  const runStatus = fetchAttempts === 0 ? "skipped" : failed > 0 && pagesFetched === 0 ? "failed" : failed > 0 ? "partial" : "completed";
   const runError = runStatus === "failed"
     ? lastFailureCode || "all_relationship_graph_fetches_failed"
-    : failed > 0
+    : runStatus === "partial"
       ? `partial_source_failures:${failed}`
-      : null;
-  await logEvent(env, "source_expansion_relationship_graph_run", `Relationship graph discovery attempted ${fetchAttempts} page(s), fetched ${pagesFetched}, failed ${failed}, found ${candidatesFound} candidate(s).`);
+      : runStatus === "skipped"
+        ? "no_eligible_sources"
+        : null;
+  await logEvent(env, "source_expansion_relationship_graph_run", `Relationship graph discovery ${runStatus}: attempted ${fetchAttempts} page(s), fetched ${pagesFetched}, failed ${failed}, found ${candidatesFound} candidate(s).`);
   return {
-    ok: true,
+    ok: runStatus !== "failed",
     mode: "source_expansion_relationship_graph_discovery",
-    fetchContract: "public_research_fetch_v1",
+    fetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
     runStatus,
     runError,
     seedsChecked: seedRows.length,
@@ -256,6 +266,11 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
     failed,
     fetchReceipts: fetchReceipts.slice(0, 10),
     candidates: found.slice(0, 25),
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
     safety: { writesTables: ["source_expansion_candidates", "events"], callsAI: false, sendsEmail: false, callsNetwork: true, publicWebOnly: true, respectsAccessControls: true, fullOperationTimeout: true },
   };
 }

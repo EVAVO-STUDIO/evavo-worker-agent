@@ -102,6 +102,7 @@ function fetchReceipt(result: PublicResearchFetchResult) {
     bodySha256: result.bodySha256,
     elapsedMs: result.elapsedMs,
     fetchedAtISO: result.fetchedAtISO,
+    timeoutScope: result.timeoutScope,
     error: result.error,
   };
 }
@@ -114,7 +115,9 @@ async function getNumberSetting(env: Env, key: string, fallback: number): Promis
 
 async function insertSource(env: Env, body: any, rawUrl: unknown) {
   const decision = validatePublicResearchUrl(rawUrl);
-  if (!decision.ok || !decision.url) return { ok: false, error: decision.error || "invalid_research_url", input: String(rawUrl || "") };
+  if (!decision.ok || !decision.url) {
+    return { ok: false, error: decision.error || "invalid_research_url", inputRedacted: true };
+  }
   const sourceUrl = decision.url.replace(/\/+$/, "");
   const id = uuid();
   const now = nowISO();
@@ -287,10 +290,10 @@ export async function handleSourcesAdmin(request: Request, env: Env, pathname: s
     const rawItems = Array.isArray(body?.items) ? body.items : Array.isArray(body?.urls) ? body.urls.map((url: string) => ({ url })) : [{ url: body?.url }];
     const accepted = [];
     const rejected = [];
-    for (const item of rawItems.slice(0, 100)) {
+    for (const [index, item] of rawItems.slice(0, 100).entries()) {
       const result = await insertSource(env, { ...body, ...item }, item?.url || item);
       if (result.ok) accepted.push(result);
-      else rejected.push(result);
+      else rejected.push({ index, error: result.error, inputRedacted: true });
     }
     await logEvent(env, "source_add", `Accepted ${accepted.length} public source URL(s); rejected ${rejected.length}.`);
     return json({ ok: rejected.length === 0, acceptedCount: accepted.length, rejectedCount: rejected.length, sources: accepted, rejected, fetchContract: "public_research_fetch_v1" }, rejected.length && !accepted.length ? { status: 400 } : undefined);

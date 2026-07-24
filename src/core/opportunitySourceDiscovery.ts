@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { nowISO, uuid } from "../db";
+import { validatePublicResearchUrl } from "./publicResearchFetch";
 
 type SourceCandidate = {
   url: string;
@@ -78,6 +79,14 @@ function normalizeUrl(raw: string) {
   }
 }
 
+function normalizePublicHttpsCandidateUrl(raw: string): string | null {
+  const decision = validatePublicResearchUrl(raw);
+  if (!decision.ok || !decision.url) return null;
+  const url = new URL(decision.url);
+  if (url.protocol !== "https:") return null;
+  return url.toString().replace(/\/+$/, "");
+}
+
 function domainOf(raw: string) {
   try {
     return new URL(raw).hostname.replace(/^www\./i, "").toLowerCase();
@@ -148,11 +157,13 @@ async function expansionMemoryCandidates(
      LIMIT 500`,
   ).all<any>();
 
-  return (rows.results || []).map((row) => {
-    const url = normalizeUrl(row.url);
+  const candidates: SourceCandidate[] = [];
+  for (const row of rows.results || []) {
+    const url = normalizePublicHttpsCandidateUrl(String(row.url || ""));
+    if (!url) continue;
     const domain = domainOf(url);
     const existing = existingByDomain.get(domain);
-    return {
+    candidates.push({
       url,
       label: row.label || domain,
       sourceType: row.source_type || "opportunity_directory",
@@ -160,11 +171,12 @@ async function expansionMemoryCandidates(
       region: row.region || null,
       category: row.category || "opportunities",
       score: Math.max(0, Math.min(100, Math.round(Number(row.score || 50)))),
-      reasons: ["source_candidate:continuous_expansion_memory"],
+      reasons: ["source_candidate:continuous_expansion_memory", "source_candidate:public_research_url_policy"],
       duplicate: Boolean(existing),
       existingSourceId: existing?.id || null,
-    } satisfies SourceCandidate;
-  });
+    });
+  }
+  return candidates;
 }
 
 async function expansionCandidateMetaByUrl(
@@ -173,15 +185,22 @@ async function expansionCandidateMetaByUrl(
 ): Promise<Map<string, ExpansionCandidateMeta>> {
   const meta = new Map<string, ExpansionCandidateMeta>();
   if (!urls.length || !(await tableExists(env, "source_expansion_candidates"))) return meta;
-  const uniqueUrls = Array.from(new Set(urls.map(normalizeUrl))).slice(0, 25);
-  for (const url of uniqueUrls) {
-    const row = await env.DB.prepare(
-      `SELECT url, strategy, reasons_json, evidence_json, seed_id, score, quality_score
-       FROM source_expansion_candidates
-       WHERE url = ?
-       LIMIT 1`,
-    ).bind(url).first<ExpansionCandidateMeta>();
-    if (row) meta.set(url, row);
+  const uniqueUrls = Array.from(new Set(
+    urls
+      .map((url) => normalizePublicHttpsCandidateUrl(url))
+      .filter((url): url is string => Boolean(url)),
+  )).slice(0, 25);
+  if (!uniqueUrls.length) return meta;
+
+  const placeholders = uniqueUrls.map(() => "?").join(", ");
+  const rows = await env.DB.prepare(
+    `SELECT url, strategy, reasons_json, evidence_json, seed_id, score, quality_score
+     FROM source_expansion_candidates
+     WHERE url IN (${placeholders})`,
+  ).bind(...uniqueUrls).all<ExpansionCandidateMeta>();
+  for (const row of rows.results || []) {
+    const normalized = normalizePublicHttpsCandidateUrl(row.url);
+    if (normalized) meta.set(normalized, row);
   }
   return meta;
 }
@@ -255,10 +274,12 @@ async function buildCandidateList(
   );
   const limit = Math.max(1, Math.min(100, Math.round(Number(options.limit || 50))));
 
-  const deterministicCandidates: SourceCandidate[] = BASE_CANDIDATES.map((base) => {
-    const normalizedBase = { ...base, url: normalizeUrl(base.url) };
+  const deterministicCandidates: SourceCandidate[] = BASE_CANDIDATES.flatMap((base) => {
+    const url = normalizePublicHttpsCandidateUrl(base.url);
+    if (!url) return [];
+    const normalizedBase = { ...base, url };
     const scored = scoreCandidate(normalizedBase, existingByDomain);
-    return { ...normalizedBase, ...scored };
+    return [{ ...normalizedBase, ...scored }];
   });
   const learnedCandidates = await expansionMemoryCandidates(env, existingByDomain);
   const byUrl = new Map<string, SourceCandidate>();
@@ -297,6 +318,7 @@ export async function previewOpportunitySourceCandidates(
     },
     safety: {
       previewOnly: true,
+      publicResearchUrlPolicyRequired: true,
       writesTables: [],
       callsAI: false,
       sendsEmail: false,
@@ -321,8 +343,8 @@ export async function saveOpportunitySourceCandidates(
   }
   const selectedUrls = Array.from(new Set(
     (options.urls || [])
-      .map((url) => normalizeUrl(String(url || "")))
-      .filter(Boolean),
+      .map((url) => normalizePublicHttpsCandidateUrl(String(url || "")))
+      .filter((url): url is string => Boolean(url)),
   )).slice(0, 25);
   if (!selectedUrls.length) return { ok: false, error: "urls_required" };
 
@@ -415,6 +437,8 @@ export async function saveOpportunitySourceCandidates(
     actor: options.actor || "operator",
     reason: options.reason || null,
     requestBodySha256: options.requestBodySha256 || null,
+    publicResearchUrlPolicyRequired: true,
+    candidateMetadataLookupBatched: true,
     reviewOnly: true,
     executable: false,
     deliverable: false,
@@ -444,6 +468,9 @@ export async function saveOpportunitySourceCandidates(
     externalExecutionAllowed: false,
     safety: {
       confirmRequired: true,
+      publicResearchUrlPolicyRequired: true,
+      sensitiveQueryParametersRejected: true,
+      candidateMetadataLookupBatched: true,
       sourceRecordsExpansionMarkersAndAuditAtomic: true,
       writesTables: hasExpansionCandidateTable
         ? ["opportunity_sources", "source_expansion_candidates", "events"]

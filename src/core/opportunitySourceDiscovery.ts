@@ -1,5 +1,5 @@
 import type { Env } from "../db";
-import { logEvent, nowISO, uuid } from "../db";
+import { nowISO, uuid } from "../db";
 
 type SourceCandidate = {
   url: string;
@@ -35,6 +35,15 @@ type ExpansionCandidateMeta = {
   score?: number | null;
   quality_score?: number | null;
 };
+
+type SaveCandidateOptions = {
+  urls: string[];
+  reason?: string | null;
+  actor?: string | null;
+  requestBodySha256?: string | null;
+};
+
+const SOURCE_CANDIDATE_SAVE_CONTRACT = "opportunity_source_candidate_save_v2_atomic";
 
 const BASE_CANDIDATES: Array<Omit<SourceCandidate, "score" | "reasons" | "duplicate" | "existingSourceId">> = [
   { url: "https://www.tenders.gov.au/", label: "Australian Government AusTender", sourceType: "government_tenders", country: "AU", region: "national", category: "tenders" },
@@ -77,7 +86,10 @@ function domainOf(raw: string) {
   }
 }
 
-function scoreCandidate(candidate: Omit<SourceCandidate, "score" | "reasons" | "duplicate" | "existingSourceId">, existingByDomain: Map<string, ExistingSource>) {
+function scoreCandidate(
+  candidate: Omit<SourceCandidate, "score" | "reasons" | "duplicate" | "existingSourceId">,
+  existingByDomain: Map<string, ExistingSource>,
+) {
   const reasons: string[] = [];
   let score = 30;
   const lower = `${candidate.url} ${candidate.label} ${candidate.sourceType} ${candidate.category}`.toLowerCase();
@@ -97,7 +109,9 @@ function scoreCandidate(candidate: Omit<SourceCandidate, "score" | "reasons" | "
 }
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
-  const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1").bind(tableName).first<any>();
+  const row = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+  ).bind(tableName).first<any>();
   return Boolean(row?.name);
 }
 
@@ -106,26 +120,32 @@ async function existingOpportunitySources(env: Env): Promise<ExistingSource[]> {
   const rows = await env.DB.prepare(
     `SELECT id, url, label, source_type, country, region, category, status, priority
      FROM opportunity_sources
-     LIMIT 5000`
+     LIMIT 5000`,
   ).all<ExistingSource>();
   return rows.results || [];
 }
 
-function candidateMatchesFilters(candidate: SourceCandidate, filters: { country?: string; category?: string; includeDuplicates?: boolean }) {
+function candidateMatchesFilters(
+  candidate: SourceCandidate,
+  filters: { country?: string; category?: string; includeDuplicates?: boolean },
+) {
   if (filters.country && candidate.country.toUpperCase() !== filters.country.toUpperCase()) return false;
   if (filters.category && candidate.category !== filters.category) return false;
   if (!filters.includeDuplicates && candidate.duplicate) return false;
   return true;
 }
 
-async function expansionMemoryCandidates(env: Env, existingByDomain: Map<string, ExistingSource>): Promise<SourceCandidate[]> {
+async function expansionMemoryCandidates(
+  env: Env,
+  existingByDomain: Map<string, ExistingSource>,
+): Promise<SourceCandidate[]> {
   if (!(await tableExists(env, "source_expansion_candidates"))) return [];
   const rows = await env.DB.prepare(
     `SELECT url, domain, label, source_type, country, region, category, score, status
      FROM source_expansion_candidates
      WHERE status = 'candidate'
      ORDER BY score DESC, quality_score DESC, last_seen_at_iso DESC
-     LIMIT 500`
+     LIMIT 500`,
   ).all<any>();
 
   return (rows.results || []).map((row) => {
@@ -147,7 +167,10 @@ async function expansionMemoryCandidates(env: Env, existingByDomain: Map<string,
   });
 }
 
-async function expansionCandidateMetaByUrl(env: Env, urls: string[]): Promise<Map<string, ExpansionCandidateMeta>> {
+async function expansionCandidateMetaByUrl(
+  env: Env,
+  urls: string[],
+): Promise<Map<string, ExpansionCandidateMeta>> {
   const meta = new Map<string, ExpansionCandidateMeta>();
   if (!urls.length || !(await tableExists(env, "source_expansion_candidates"))) return meta;
   const uniqueUrls = Array.from(new Set(urls.map(normalizeUrl))).slice(0, 25);
@@ -156,7 +179,7 @@ async function expansionCandidateMetaByUrl(env: Env, urls: string[]): Promise<Ma
       `SELECT url, strategy, reasons_json, evidence_json, seed_id, score, quality_score
        FROM source_expansion_candidates
        WHERE url = ?
-       LIMIT 1`
+       LIMIT 1`,
     ).bind(url).first<ExpansionCandidateMeta>();
     if (row) meta.set(url, row);
   }
@@ -203,7 +226,11 @@ function originFromExpansionMeta(meta?: ExpansionCandidateMeta | null) {
   return { key: "source_candidate_preview", label: "source candidate preview", detail: null as string | null };
 }
 
-function buildSavedSourceNotes(candidate: SourceCandidate, meta: ExpansionCandidateMeta | undefined, options: { reason?: string | null; actor?: string | null }) {
+function buildSavedSourceNotes(
+  candidate: SourceCandidate,
+  meta: ExpansionCandidateMeta | undefined,
+  options: { reason?: string | null; actor?: string | null },
+) {
   const origin = originFromExpansionMeta(meta);
   const noteParts = [
     `Saved from ${origin.label}`,
@@ -218,9 +245,14 @@ function buildSavedSourceNotes(candidate: SourceCandidate, meta: ExpansionCandid
   return noteParts.join("; ").slice(0, 950);
 }
 
-async function buildCandidateList(env: Env, options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {}) {
+async function buildCandidateList(
+  env: Env,
+  options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {},
+) {
   const existing = await existingOpportunitySources(env);
-  const existingByDomain = new Map(existing.map((source) => [domainOf(normalizeUrl(source.url)), source]));
+  const existingByDomain = new Map(
+    existing.map((source) => [domainOf(normalizeUrl(source.url)), source]),
+  );
   const limit = Math.max(1, Math.min(100, Math.round(Number(options.limit || 50))));
 
   const deterministicCandidates: SourceCandidate[] = BASE_CANDIDATES.map((base) => {
@@ -228,7 +260,6 @@ async function buildCandidateList(env: Env, options: { country?: string; categor
     const scored = scoreCandidate(normalizedBase, existingByDomain);
     return { ...normalizedBase, ...scored };
   });
-
   const learnedCandidates = await expansionMemoryCandidates(env, existingByDomain);
   const byUrl = new Map<string, SourceCandidate>();
   for (const candidate of [...deterministicCandidates, ...learnedCandidates]) {
@@ -237,14 +268,20 @@ async function buildCandidateList(env: Env, options: { country?: string; categor
   }
 
   const candidates = Array.from(byUrl.values())
-    .filter((candidate) => candidateMatchesFilters(candidate, { country: options.country, category: options.category, includeDuplicates: options.includeDuplicates }))
-    .sort((a, b) => b.score - a.score || a.url.localeCompare(b.url))
+    .filter((candidate) => candidateMatchesFilters(candidate, {
+      country: options.country,
+      category: options.category,
+      includeDuplicates: options.includeDuplicates,
+    }))
+    .sort((left, right) => right.score - left.score || left.url.localeCompare(right.url))
     .slice(0, limit);
-
   return { candidates, existing, limit };
 }
 
-export async function previewOpportunitySourceCandidates(env: Env, options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {}) {
+export async function previewOpportunitySourceCandidates(
+  env: Env,
+  options: { country?: string; category?: string; limit?: number; includeDuplicates?: boolean } = {},
+) {
   const { candidates, existing, limit } = await buildCandidateList(env, options);
   return {
     ok: true,
@@ -252,50 +289,170 @@ export async function previewOpportunitySourceCandidates(env: Env, options: { co
     candidateCount: candidates.length,
     existingSourceCount: existing.length,
     candidates,
-    filters: { country: options.country || null, category: options.category || null, includeDuplicates: Boolean(options.includeDuplicates), limit },
-    safety: { previewOnly: true, writesTables: [], callsAI: false, sendsEmail: false, postsExternally: false, appliesExternally: false, callsNetwork: false },
+    filters: {
+      country: options.country || null,
+      category: options.category || null,
+      includeDuplicates: Boolean(options.includeDuplicates),
+      limit,
+    },
+    safety: {
+      previewOnly: true,
+      writesTables: [],
+      callsAI: false,
+      sendsEmail: false,
+      postsExternally: false,
+      appliesExternally: false,
+      callsNetwork: false,
+    },
   };
 }
 
-export async function saveOpportunitySourceCandidates(env: Env, options: { urls: string[]; reason?: string | null; actor?: string | null }) {
-  if (!(await tableExists(env, "opportunity_sources"))) return { ok: false, error: "missing_migration", missing: "opportunity_sources", requiredMigration: "0004_opportunity_intelligence.sql" };
-  const selectedUrls = Array.from(new Set((options.urls || []).map((url) => normalizeUrl(String(url || ""))).filter(Boolean))).slice(0, 25);
+export async function saveOpportunitySourceCandidates(
+  env: Env,
+  options: SaveCandidateOptions,
+) {
+  if (!(await tableExists(env, "opportunity_sources"))) {
+    return {
+      ok: false,
+      error: "missing_migration",
+      missing: "opportunity_sources",
+      requiredMigration: "0004_opportunity_intelligence.sql",
+    };
+  }
+  const selectedUrls = Array.from(new Set(
+    (options.urls || [])
+      .map((url) => normalizeUrl(String(url || "")))
+      .filter(Boolean),
+  )).slice(0, 25);
   if (!selectedUrls.length) return { ok: false, error: "urls_required" };
 
   const { candidates } = await buildCandidateList(env, { includeDuplicates: true, limit: 100 });
   const candidateByUrl = new Map(candidates.map((candidate) => [candidate.url, candidate]));
   const expansionMeta = await expansionCandidateMetaByUrl(env, selectedUrls);
   const existing = await existingOpportunitySources(env);
-  const existingByDomain = new Map(existing.map((source) => [domainOf(normalizeUrl(source.url)), source]));
+  const existingByDomain = new Map(
+    existing.map((source) => [domainOf(normalizeUrl(source.url)), source]),
+  );
+  const hasExpansionCandidateTable = await tableExists(env, "source_expansion_candidates");
   const now = nowISO();
   const inserted: any[] = [];
   const skipped: any[] = [];
+  const statements: D1PreparedStatement[] = [];
 
   for (const selectedUrl of selectedUrls) {
     const candidate = candidateByUrl.get(selectedUrl);
-    if (!candidate) { skipped.push({ url: selectedUrl, reason: "not_in_preview_or_expansion_candidate_set" }); continue; }
+    if (!candidate) {
+      skipped.push({ url: selectedUrl, reason: "not_in_preview_or_expansion_candidate_set" });
+      continue;
+    }
     const domain = domainOf(candidate.url);
     const existingSource = existingByDomain.get(domain);
-    if (existingSource) { skipped.push({ url: candidate.url, reason: "duplicate_domain", existingSourceId: existingSource.id }); continue; }
+    if (existingSource) {
+      skipped.push({
+        url: candidate.url,
+        reason: "duplicate_domain",
+        existingSourceId: existingSource.id,
+      });
+      continue;
+    }
 
     const id = uuid();
     const priority = Math.max(10, Math.min(90, Math.round(candidate.score)));
     const meta = expansionMeta.get(candidate.url);
     const origin = originFromExpansionMeta(meta);
     const notes = buildSavedSourceNotes(candidate, meta, options);
-    await env.DB.prepare(
-      `INSERT INTO opportunity_sources (id, url, label, source_type, country, region, category, status, priority, notes, created_at_iso, updated_at_iso)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
-    ).bind(id, candidate.url, candidate.label, candidate.sourceType, candidate.country, candidate.region || null, candidate.category, priority, notes, now, now).run();
-
-    if (await tableExists(env, "source_expansion_candidates")) {
-      await env.DB.prepare(`UPDATE source_expansion_candidates SET status = 'saved', saved_source_id = ?, reviewed_at_iso = ?, last_seen_at_iso = ? WHERE url = ?`).bind(id, now, now, candidate.url).run();
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO opportunity_sources (
+           id, url, label, source_type, country, region, category,
+           status, priority, notes, created_at_iso, updated_at_iso
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        candidate.url,
+        candidate.label,
+        candidate.sourceType,
+        candidate.country,
+        candidate.region || null,
+        candidate.category,
+        priority,
+        notes,
+        now,
+        now,
+      ),
+    );
+    if (hasExpansionCandidateTable) {
+      statements.push(
+        env.DB.prepare(
+          `UPDATE source_expansion_candidates
+           SET status = 'saved', saved_source_id = ?, reviewed_at_iso = ?, last_seen_at_iso = ?
+           WHERE url = ?`,
+        ).bind(id, now, now, candidate.url),
+      );
     }
 
-    inserted.push({ id, url: candidate.url, label: candidate.label, sourceType: candidate.sourceType, country: candidate.country, region: candidate.region || null, category: candidate.category, priority, origin: origin.key, notes });
+    inserted.push({
+      id,
+      url: candidate.url,
+      label: candidate.label,
+      sourceType: candidate.sourceType,
+      country: candidate.country,
+      region: candidate.region || null,
+      category: candidate.category,
+      priority,
+      origin: origin.key,
+      notes,
+    });
     existingByDomain.set(domain, { id, url: candidate.url });
   }
 
-  await logEvent(env, "opportunity_source_candidates_saved", `Saved ${inserted.length} opportunity source candidate(s); skipped ${skipped.length}.`);
-  return { ok: true, mode: "opportunity_source_candidate_save", insertedCount: inserted.length, skippedCount: skipped.length, inserted, skipped, safety: { confirmRequired: true, writesTables: ["opportunity_sources", "events"], callsAI: false, sendsEmail: false, callsNetwork: false } };
+  const auditMessage = JSON.stringify({
+    contract: SOURCE_CANDIDATE_SAVE_CONTRACT,
+    insertedCount: inserted.length,
+    skippedCount: skipped.length,
+    insertedSourceIds: inserted.map((source) => source.id),
+    origins: Array.from(new Set(inserted.map((source) => source.origin))).sort(),
+    actor: options.actor || "operator",
+    reason: options.reason || null,
+    requestBodySha256: options.requestBodySha256 || null,
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
+  });
+  statements.push(
+    env.DB.prepare(
+      `INSERT INTO events (id, type, message, lead_id, created_at_iso)
+       VALUES (?, 'opportunity_source_candidates_saved', ?, NULL, ?)`,
+    ).bind(uuid(), auditMessage, now),
+  );
+  await env.DB.batch(statements);
+
+  return {
+    ok: true,
+    mode: "opportunity_source_candidate_save",
+    contract: SOURCE_CANDIDATE_SAVE_CONTRACT,
+    insertedCount: inserted.length,
+    skippedCount: skipped.length,
+    inserted,
+    skipped,
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
+    safety: {
+      confirmRequired: true,
+      sourceRecordsExpansionMarkersAndAuditAtomic: true,
+      writesTables: hasExpansionCandidateTable
+        ? ["opportunity_sources", "source_expansion_candidates", "events"]
+        : ["opportunity_sources", "events"],
+      callsAI: false,
+      sendsEmail: false,
+      postsExternally: false,
+      appliesExternally: false,
+      callsNetwork: false,
+    },
+  };
 }

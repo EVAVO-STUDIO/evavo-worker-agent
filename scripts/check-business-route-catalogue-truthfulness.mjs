@@ -24,6 +24,7 @@ const plannerCatalogue = read("src/routes/routeCataloguePlanner.ts");
 const catalogueApplyScript = read("scripts/apply-business-autopilot-route-catalogue.mjs");
 const adminRoute = read("src/routes/businessAutopilotAdmin.ts");
 const smokePrinter = read("scripts/print-business-autopilot-route-contract-check.mjs");
+const readOnlyPrinter = read("scripts/print-business-autopilot-readonly-verify-commands.mjs");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
 const disabledRouteIds = [
@@ -127,6 +128,22 @@ for (const token of [
   if (!smokePrinter.includes(token)) errors.push(`Business route smoke contract missing: ${token}`);
 }
 
+for (const token of [
+  "function Assert-BusinessRead([string]$Path, [bool]$HistoricalOnly = $false)",
+  "$payload.historicalOnly -ne $true",
+  "$payload.reviewOnly -ne $true",
+  "$payload.executable -ne $false",
+  "$payload.deliverable -ne $false",
+  "$payload.authoritativeForExecution -ne $false",
+  "$payload.externalExecutionAllowed -ne $false",
+  "$historicalPaths = @(",
+  '"/admin/business/action-drafts?limit=5"',
+  '"/admin/business/approval-requests?limit=5"',
+  "Assert-BusinessRead $path $true",
+]) {
+  if (!readOnlyPrinter.includes(token)) errors.push(`Business read-only verification printer missing: ${token}`);
+}
+
 const expectedCommand = "node scripts/check-business-route-catalogue-truthfulness.mjs";
 const scripts = packageJson.scripts || {};
 if (scripts["business:route-catalogue-truthfulness:check"] !== expectedCommand) {
@@ -139,7 +156,7 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v6-fail-closed-wiring",
+  contract: "business-route-catalogue-truthfulness-v7-historical-read-verification",
   plannerUsesAuthoritativeBusinessCatalogue: true,
   plannerBusinessImportCountExpected: 1,
   plannerBusinessSpreadCountExpected: 1,
@@ -148,6 +165,7 @@ console.log(JSON.stringify({
   catalogueApplyScriptBlocksRetiredRouteIds: true,
   historicalReadsUseDedicatedCataloguePosture: true,
   historicalReadsRecommendedInOperationsHub: false,
+  historicalReadVerificationChecksNonExecutionFlags: true,
   historicalReviewWriteUsesDedicatedCataloguePosture: true,
   historicalReviewWriteRecommendedInOperationsHub: false,
   disabledDirectDraftWriteAdvertised: false,

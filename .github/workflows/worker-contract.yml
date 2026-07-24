@@ -69,5 +69,8 @@ jobs:
       - name: Verify README top-level truthfulness
         run: npm run docs:readme-truthfulness:check
 
+      - name: Verify public research fetch boundary
+        run: npm run research:public-fetch-safety:check
+
       - name: Run complete Worker local gate
         run: npm run check:local

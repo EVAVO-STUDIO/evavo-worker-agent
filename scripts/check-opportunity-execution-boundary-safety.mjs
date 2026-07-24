@@ -62,7 +62,7 @@ for (const token of [
   'BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1"',
   "readBoundedJsonObject",
   "isExplicitJsonConfirmation",
-  '(value as JsonObject).confirm === true',
+  "(value as JsonObject).confirm === true",
 ]) {
   if (!boundedJson.includes(token)) errors.push(`Bounded request contract is missing: ${token}`);
 }
@@ -191,29 +191,63 @@ for (const forbidden of [
 for (const token of [
   'OpportunityRunStatus = "running" | "completed" | "partial" | "failed" | "skipped"',
   "prepareSourceRunResult",
-  "Exclude<OpportunityRunStatus, \"running\">",
+  'Exclude<OpportunityRunStatus, "running">',
 ]) {
   if (!opportunityRuns.includes(token)) errors.push(`Opportunity run audit support is missing: ${token}`);
 }
 
-const sourceHealthBodyPosition = sourceHealthActions.indexOf("const body = await request.json().catch(() => ({}))");
-const sourceHealthConfirmPosition = sourceHealthActions.indexOf("if (body?.confirm !== true)");
-const sourceHealthMutationPosition = sourceHealthActions.indexOf('UPDATE opportunity_sources SET status = ?');
+const sourceHealthBodyPosition = sourceHealthActions.indexOf("const parsed = await readBoundedJsonObject<SourceHealthActionBody>(request");
+const sourceHealthConfirmPosition = sourceHealthActions.indexOf("if (!isExplicitJsonConfirmation(parsed.value))");
+const sourceHealthLeasePosition = sourceHealthActions.indexOf("const lease = await acquireManualResearchLease(env, actionKey, 600)");
+const sourceHealthMutationPosition = sourceHealthActions.indexOf("await env.DB.batch([mutation.statement, auditInsert])");
 if (
   sourceHealthBodyPosition < 0 ||
   sourceHealthConfirmPosition < 0 ||
+  sourceHealthLeasePosition < 0 ||
   sourceHealthMutationPosition < 0 ||
-  !(sourceHealthBodyPosition < sourceHealthConfirmPosition && sourceHealthConfirmPosition < sourceHealthMutationPosition)
+  !(sourceHealthBodyPosition < sourceHealthConfirmPosition && sourceHealthConfirmPosition < sourceHealthLeasePosition && sourceHealthLeasePosition < sourceHealthMutationPosition)
 ) {
-  errors.push("Source-health action confirmation must precede all source metadata mutations");
+  errors.push("Source-health bounded confirmation and per-source lease must precede the atomic metadata and audit mutation");
 }
 for (const token of [
   'type SourceHealthAction = "pause" | "activate" | "lower_priority" | "raise_priority" | "reset_error"',
+  'SOURCE_HEALTH_ACTION_CONTRACT = "opportunity_source_health_action_v2_review_only"',
+  'from "../core/boundedJsonRequest"',
+  'from "../core/manualResearchLease"',
+  "readBoundedJsonObject<SourceHealthActionBody>(request",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
+  "requiredPayload: { confirm: true }",
+  "confirmationCoercionAllowed: false",
+  "requestReceipt",
+  'const actionKey = `opportunity-source:${sourceId}`',
+  "manualResearchLeaseConflict(actionKey)",
+  "await env.DB.batch([mutation.statement, auditInsert])",
+  "VALUES (?, 'opportunity_source_health_action', ?, NULL, ?)",
+  "requestBodySha256: parsed.bodySha256",
+  "auditAndSourceUpdateAtomic: true",
   "writesOnlyD1SourceMetadata: true",
+  "overlappingPerSourceActionAllowed: false",
+  "internalMetadataOnly: true",
+  "reviewOnly: true",
+  "executable: false",
+  "deliverable: false",
+  "authoritativeForExecution: false",
+  "externalExecutionAllowed: false",
   "callsNetwork: false",
   "requiresConfirm: true",
 ]) {
   if (!sourceHealthActions.includes(token)) errors.push(`Source-health action safety token is missing: ${token}`);
+}
+for (const forbidden of [
+  "request.json()",
+  'body?.confirm !== true',
+  'body?.confirm === 1',
+  'searchParams.get("confirm")',
+  "logEvent(",
+  "JSON.stringify({ sourceId, action, before, after, reason: body?.reason",
+]) {
+  if (sourceHealthActions.includes(forbidden)) errors.push(`Source-health action contains stale unsafe token: ${forbidden}`);
 }
 
 for (const token of [
@@ -299,6 +333,11 @@ console.log(JSON.stringify({
   opportunityEvidenceReceiptsV2Required: true,
   sourceHealthActionsUseSharedAuthentication: true,
   sourceHealthActionsRequireConfirmation: true,
+  sourceHealthActionsRequireExactBoundedConfirmation: true,
+  sourceHealthActionsUsePerSourceLease: true,
+  sourceHealthActionsAuditAndMutationAtomic: true,
+  sourceHealthActionsHistoricalLeadIdOverloadAllowed: false,
+  sourceHealthActionsExecutable: false,
   opportunityLearningUsesSharedAuthentication: true,
   opportunityLearningIsReadOnly: true,
   opportunityDiscoveryUsesSharedAuthentication: true,

@@ -12,6 +12,7 @@ const read = (relativePath) => {
 
 const sourceExpansion = read("src/routes/sourceExpansionAdmin.ts");
 const runDue = read("src/routes/opportunityRunDueAdmin.ts");
+const opportunityRunner = read("src/opportunityAutonomy.ts");
 const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
 const learning = read("src/routes/opportunityLearningAdmin.ts");
 const discovery = read("src/routes/opportunityDiscoveryAdmin.ts");
@@ -51,6 +52,7 @@ for (const [label, content] of [
     if (content.includes(forbidden)) errors.push(`${label} contains forbidden authentication token: ${forbidden}`);
   }
 }
+if (!opportunityRunner) errors.push("Missing confirmed manual opportunity runner");
 
 const sourceExecutionCalls = [
   "bootstrapSourceExpansionSeeds(env)",
@@ -110,6 +112,29 @@ for (const token of [
   if (!runDue.includes(token)) errors.push(`Opportunity run-due safety token is missing: ${token}`);
 }
 
+for (const token of [
+  'startOpportunityRun(env, "manual_confirmed"',
+  'discoveredBy: "manual-confirmed-run-due"',
+  "let successfulSources = 0",
+  "successfulSources += 1",
+  'const runStatus = summary.failed > 0 && successfulSources === 0 ? "failed" : "completed"',
+  '`partial_source_failures:${summary.failed}`',
+  "sourceFetch: sourceReceipt",
+  "bodySha256: fetched.bodySha256",
+  "timeoutScope: fetched.timeoutScope",
+  "fullOperationTimeout: true",
+  "finishOpportunityRun(env, runId, runStatus, summary, runError)",
+]) {
+  if (!opportunityRunner.includes(token)) errors.push(`Confirmed manual opportunity runner is missing: ${token}`);
+}
+for (const forbidden of [
+  'startOpportunityRun(env, "scheduled"',
+  'discoveredBy: "scheduled"',
+  'finishOpportunityRun(env, runId, "completed", summary)',
+]) {
+  if (opportunityRunner.includes(forbidden)) errors.push(`Confirmed manual opportunity runner contains stale posture: ${forbidden}`);
+}
+
 const sourceHealthBodyPosition = sourceHealthActions.indexOf("const body = await request.json().catch(() => ({}))");
 const sourceHealthConfirmPosition = sourceHealthActions.indexOf("if (body?.confirm !== true)");
 const sourceHealthMutationPosition = sourceHealthActions.indexOf('UPDATE opportunity_sources SET status = ?');
@@ -163,6 +188,9 @@ for (const token of [
   'from "../core/publicResearchFetch"',
   "fetchPublicResearchHtml(source.url)",
   "bodySha256: fetched.bodySha256",
+  "timeoutScope: fetched.timeoutScope",
+  "sourceFetch,",
+  "fullOperationTimeout: true",
   "boundedResponse: true",
   "publicWebOnly: true",
   "const limit = Math.max(1, Math.min(100",
@@ -186,13 +214,17 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run opport
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "opportunity-execution-boundary-safety-v2-public-fetch",
+  contract: "opportunity-execution-boundary-safety-v3-truthful-evidence",
   sourceExpansionUsesSharedAuthentication: true,
   sourceExpansionRequiresConfirmation: true,
   sourceExpansionExecutionIsBounded: true,
   opportunityRunDueUsesSharedAuthentication: true,
   opportunityRunDueRequiresConfirmation: true,
   opportunityRunDueRespectsDiscoverySetting: true,
+  opportunityRunAuditTypeManualConfirmed: true,
+  opportunityRunAllFailedStatusFailed: true,
+  opportunityRunPartialFailuresExplicit: true,
+  opportunityEvidenceReceiptsRequired: true,
   sourceHealthActionsUseSharedAuthentication: true,
   sourceHealthActionsRequireConfirmation: true,
   opportunityLearningUsesSharedAuthentication: true,

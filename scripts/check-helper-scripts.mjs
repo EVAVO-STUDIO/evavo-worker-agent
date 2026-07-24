@@ -51,6 +51,8 @@ for (const relativePath of [
   "src/db.ts",
   "src/engineAutonomy.ts",
   "src/core/adminAuthentication.ts",
+  "src/core/boundedJsonRequest.ts",
+  "src/core/manualResearchLease.ts",
   "src/core/publicResearchFetch.ts",
   "src/core/opportunityDiscovery.ts",
   "src/core/opportunityPersistence.ts",
@@ -69,9 +71,15 @@ for (const relativePath of [
   "scripts/check-worker-env-contract.mjs",
   "scripts/check-protected-response-safety.mjs",
   "scripts/check-scheduled-entrypoint-safety.mjs",
+  "scripts/check-bounded-json-request-safety.mjs",
+  "scripts/check-manual-research-lease-safety.mjs",
   "scripts/check-public-research-fetch-safety.mjs",
   "scripts/check-opportunity-evidence-quality.mjs",
   "scripts/check-runtime-capability-config.mjs",
+  "tests/boundedJsonRequest.test.ts",
+  "tests/publicResearchFetch.test.ts",
+  "docs/bounded-admin-json-boundary.md",
+  "docs/manual-research-concurrency.md",
   "docs/public-research-fetch-boundary.md",
   "docs/opportunity-evidence-quality.md",
   ".github/workflows/worker-contract.yml",
@@ -95,9 +103,26 @@ requireTokens("src/core/adminAuthentication.ts", [
   "difference |= leftDigest[index] ^ rightDigest[index]",
   "return constantTimeEqual(provided, expected)",
 ]);
+requireTokens("src/core/boundedJsonRequest.ts", [
+  'BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1"',
+  "DEFAULT_ADMIN_JSON_MAX_BYTES = 65_536",
+  "readRequestBodyBounded",
+  "validateJsonStructure",
+  "isExplicitJsonConfirmation",
+  "bodySha256",
+]);
+requireTokens("src/core/manualResearchLease.ts", [
+  'MANUAL_RESEARCH_LEASE_CONTRACT = "manual_research_lease_v1"',
+  "acquireManualResearchLease",
+  "releaseManualResearchLease",
+  'error: "research_action_in_progress"',
+]);
 requireTokens("src/core/publicResearchFetch.ts", [
-  'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v1"',
+  'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v2"',
   'redirect: "manual"',
+  "SENSITIVE_QUERY_KEYS",
+  "redirectChain",
+  "isProbablyBinary",
   "readBodyBounded",
   "bodySha256",
   "fetchPublicResearchHtml",
@@ -132,6 +157,8 @@ requireTokens("src/index.ts", [
   "runScheduledSafely",
   'import { isAdminRequestAuthorized } from "./core/adminAuthentication"',
   "if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))",
+  "sourceActionConfirmationFailure",
+  "readBoundedJsonObject(request.clone())",
 ]);
 requireTokens("src/routes/admin.ts", [
   'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
@@ -260,17 +287,31 @@ requireTokens("scripts/check-scheduled-entrypoint-safety.mjs", [
   "automaticRetryAllowed: false",
   "alternateExecutionFallbackAllowed: false",
 ]);
+requireTokens("scripts/check-bounded-json-request-safety.mjs", [
+  'contract: "bounded-admin-json-request-safety-v1"',
+  "exactBooleanConfirmationRequired: true",
+  "queryStringConfirmationAllowed: false",
+  "prototypePollutionKeysRejected: true",
+  "behavioralTestsRequired: true",
+]);
+requireTokens("scripts/check-manual-research-lease-safety.mjs", [
+  'contract: "manual-research-lease-safety-v1"',
+  "atomicSingleStatementAcquisitionRequired: true",
+  "staleHolderCanReleaseNewLease: false",
+]);
 requireTokens("scripts/check-public-research-fetch-safety.mjs", [
-  'contract: "public-research-fetch-safety-v5-truthful-redacted-evidence"',
-  "strictPublicCloudflareFetchRequired: true",
+  'contract: "public-research-fetch-safety-v6-fetch-v2-behavioral"',
+  'activeFetchContract: "public_research_fetch_v2"',
+  "sensitiveQueryParametersRejected: true",
+  "redirectChainEvidenceRequired: true",
+  "binaryResponsesRejected: true",
   "timeoutCoversRedirectsAndBody: true",
-  "rejectedUnsafeInputsEchoed: false",
-  "sourceRunProvenanceRequired: true",
   "sourceExpansionRunTruthfulnessRequired: true",
   "relationshipGraphRunTruthfulnessRequired: true",
-  "sitemapRunTruthfulnessRequired: true",
+  "sitemapIndexTraversalRequired: true",
   "manualOpportunityRunTruthfulnessRequired: true",
-  "boundaryDocumentationRequired: true",
+  "sourceHealthAuditAtomicityRequired: true",
+  "behavioralTestsRequired: true",
 ]);
 requireTokens("scripts/check-opportunity-evidence-quality.mjs", [
   'contract: "opportunity-evidence-quality-v1"',
@@ -335,6 +376,8 @@ if (fs.existsSync(packagePath)) {
     "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
     "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
     "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
+    "research:bounded-json-safety:check": "node scripts/check-bounded-json-request-safety.mjs",
+    "research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs",
     "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
     "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
     "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
@@ -344,6 +387,7 @@ if (fs.existsSync(packagePath)) {
     "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
     "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
     "scripts:check": "node scripts/check-helper-scripts.mjs",
+    "test:core": "node --test",
     "typecheck": "tsc --noEmit",
   };
   for (const [name, command] of Object.entries(expectedScripts)) {
@@ -364,6 +408,8 @@ if (fs.existsSync(packagePath)) {
     "npm run manual:execution-safety:check",
     "npm run legacy:engine-isolation:check",
     "npm run public:surface-safety:check",
+    "npm run research:bounded-json-safety:check",
+    "npm run research:manual-lease-safety:check",
     "npm run research:public-fetch-safety:check",
     "npm run opportunities:evidence-quality:check",
     "npm run runtime:capability-config:check",
@@ -372,6 +418,7 @@ if (fs.existsSync(packagePath)) {
     "npm run operations:route-policy:check",
     "npm run growth:route-policy:check",
     "npm run growth:negative-safety:check",
+    "npm run test:core",
     "npm run typecheck",
   ];
   const localGate = String(scripts["check:local"] || "");
@@ -386,7 +433,7 @@ if (fs.existsSync(packagePath)) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v4-opportunity-evidence",
+  contract: "dynamic-helper-and-gate-validation-v5-bounded-behavioral-research",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -395,10 +442,13 @@ console.log(JSON.stringify({
   removedLegacyExecutionModulesRequired: true,
   protectedResponseSafetyRequired: true,
   scheduledEntrypointSafetyRequired: true,
+  boundedJsonRequestSafetyRequired: true,
+  manualResearchLeaseSafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
   publicResearchInputRedactionRequired: true,
   publicResearchRunTruthfulnessRequired: true,
   opportunityEvidenceQualityRequired: true,
+  deterministicCoreBehavioralTestsRequired: true,
   weakEvidenceLearningBoostAllowed: false,
   opportunityDraftRecommendationAllowed: false,
   errors,

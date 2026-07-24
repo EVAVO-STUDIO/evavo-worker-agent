@@ -104,10 +104,14 @@ for (const token of [
 }
 
 for (const token of [
-  'contract: "manual-research-lease-safety-v1"',
+  'contract: "manual-research-lease-safety-v3-hierarchical-source-exclusion"',
   "atomicSingleStatementAcquisitionRequired: true",
   "readThenWriteAcquisitionAllowed: false",
   "staleHolderCanReleaseNewLease: false",
+  "confirmationBeforeLeaseRequired: true",
+  "broadOpportunityRunPerSourceLeaseRequired: true",
+  "tinySourceBatchPerSourceLeaseRequired: true",
+  "overlappingBroadAndPerSourceActionsAllowed: false",
   "automaticRetryAllowed: false",
   "scheduledFallbackAllowed: false",
 ]) {
@@ -115,7 +119,7 @@ for (const token of [
 }
 
 for (const token of [
-  'contract: "public-research-fetch-safety-v6-fetch-v2-behavioral"',
+  'contract: "public-research-fetch-safety-v7-hierarchical-source-exclusion"',
   'activeFetchContract: "public_research_fetch_v2"',
   "sensitiveQueryParametersRejected: true",
   "redirectChainEvidenceRequired: true",
@@ -126,6 +130,9 @@ for (const token of [
   "relationshipGraphRunTruthfulnessRequired: true",
   "sitemapIndexTraversalRequired: true",
   "manualOpportunityRunTruthfulnessRequired: true",
+  "broadOpportunityPerSourceLeaseRequired: true",
+  "tinyBatchPerSourceLeaseRequired: true",
+  "overlappingBroadAndPerSourceActionsAllowed: false",
   "sourceHealthAuditAtomicityRequired: true",
   "behavioralTestsRequired: true",
   "focusedCiGateRequired: true",
@@ -317,7 +324,7 @@ if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local"
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-ci-workflow-parity-v4-bounded-behavioral-research",
+  contract: "worker-ci-workflow-parity-v5-hierarchical-source-exclusion",
   deploymentEnabled: false,
   credentialsRequired: false,
   canonicalCredential: "ADMIN_TOKEN",
@@ -348,9 +355,12 @@ console.log(JSON.stringify({
   boundedJsonFocusedCiGateRequired: true,
   exactBooleanResearchConfirmationRequired: true,
   manualResearchLeaseSafetyRequired: true,
+  manualResearchHierarchicalSourceExclusionRequired: true,
   manualResearchLeaseFocusedCiGateRequired: true,
   publicResearchFetchSafetyRequired: true,
   publicResearchFetchV2Required: true,
+  publicResearchHierarchicalSourceExclusionRequired: true,
+  overlappingBroadAndPerSourceActionsAllowed: false,
   publicResearchFocusedCiGateRequired: true,
   publicResearchInputRedactionRequired: true,
   publicResearchRunTruthfulnessRequired: true,

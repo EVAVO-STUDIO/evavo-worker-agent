@@ -31,6 +31,7 @@ export type PublicResearchFetchResult = {
   bodySha256: string | null;
   elapsedMs: number;
   fetchedAtISO: string;
+  timeoutScope: "full_operation";
   error: string | null;
 };
 
@@ -166,7 +167,11 @@ async function readBodyBounded(response: Response, maxBytes: number): Promise<{ 
       chunks.push(next.value);
     }
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // A timed-out or cancelled stream may already have released its lock.
+    }
   }
 
   const combined = new Uint8Array(total);
@@ -205,6 +210,7 @@ function failedResult(
     bodySha256: null,
     elapsedMs: Date.now() - startedAt,
     fetchedAtISO: new Date().toISOString(),
+    timeoutScope: "full_operation",
     error,
   };
 }
@@ -224,6 +230,7 @@ async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResear
   const maxBytes = boundedInteger(options.maxBytes, DEFAULT_PUBLIC_RESEARCH_MAX_BYTES, 16_384, 5_242_880);
   const maxRedirects = boundedInteger(options.maxRedirects, DEFAULT_PUBLIC_RESEARCH_MAX_REDIRECTS, 0, 8);
   const timeoutMs = boundedInteger(options.timeoutMs, DEFAULT_PUBLIC_RESEARCH_TIMEOUT_MS, 1_000, 30_000);
+  const deadlineAt = startedAt + timeoutMs;
   const contentKind = options.contentKind || "html";
   const requestedUrl = initial.url;
   let currentUrl = initial.url;
@@ -234,12 +241,15 @@ async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResear
     if (visited.has(currentUrl)) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "redirect_loop");
     visited.add(currentUrl);
 
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "research_fetch_timeout");
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort("research_fetch_timeout"), timeoutMs);
-    let response: Response;
+    const timeout = setTimeout(() => controller.abort("research_fetch_timeout"), remainingMs);
+    let phase: "headers" | "body" = "headers";
 
     try {
-      response = await fetch(currentUrl, {
+      const response = await fetch(currentUrl, {
         method: "GET",
         redirect: "manual",
         signal: controller.signal,
@@ -249,56 +259,62 @@ async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResear
           "user-agent": "EVAVO-Growth-Research-Worker/1.0 (+https://evavo.com.au)",
         },
       });
-    } catch (error) {
-      clearTimeout(timeout);
-      const reason = error instanceof Error && error.name === "AbortError" ? "research_fetch_timeout" : "research_fetch_failed";
-      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, reason);
-    }
-    clearTimeout(timeout);
 
-    if (REDIRECT_STATUSES.has(response.status)) {
-      const location = response.headers.get("location");
-      await response.body?.cancel().catch(() => undefined);
-      if (!location) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "redirect_location_missing", response.status);
-      if (redirectCount >= maxRedirects) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "too_many_redirects", response.status);
-      const next = validatePublicResearchUrl(location, currentUrl);
-      if (!next.ok || !next.url) {
-        return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, next.error || "unsafe_redirect_target", response.status);
+      if (REDIRECT_STATUSES.has(response.status)) {
+        const location = response.headers.get("location");
+        await response.body?.cancel().catch(() => undefined);
+        if (!location) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "redirect_location_missing", response.status);
+        if (redirectCount >= maxRedirects) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "too_many_redirects", response.status);
+        const next = validatePublicResearchUrl(location, currentUrl);
+        if (!next.ok || !next.url) {
+          return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, next.error || "unsafe_redirect_target", response.status);
+        }
+        currentUrl = next.url;
+        redirectCount += 1;
+        continue;
       }
-      currentUrl = next.url;
-      redirectCount += 1;
-      continue;
-    }
 
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    if (!contentTypeAllowed(contentType, contentKind)) {
-      await response.body?.cancel().catch(() => undefined);
-      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "unsupported_content_type", response.status, contentType);
-    }
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => undefined);
-      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, `http_${response.status}`, response.status, contentType);
-    }
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (!contentTypeAllowed(contentType, contentKind)) {
+        await response.body?.cancel().catch(() => undefined);
+        return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "unsupported_content_type", response.status, contentType);
+      }
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, `http_${response.status}`, response.status, contentType);
+      }
 
-    const bounded = await readBodyBounded(response, maxBytes);
-    if (!bounded.ok) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, bounded.error || "response_read_failed", response.status, contentType);
+      phase = "body";
+      const bounded = await readBodyBounded(response, maxBytes);
+      if (!bounded.ok) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, bounded.error || "response_read_failed", response.status, contentType);
 
-    const body = new TextDecoder("utf-8", { fatal: false }).decode(bounded.bytes);
-    return {
-      ok: Boolean(body.trim()),
-      contract: PUBLIC_RESEARCH_FETCH_CONTRACT,
-      requestedUrl,
-      finalUrl: currentUrl,
-      redirectCount,
-      status: response.status,
-      contentType,
-      body,
-      bytes: bounded.bytes.byteLength,
-      bodySha256: await sha256Hex(bounded.bytes),
-      elapsedMs: Date.now() - startedAt,
-      fetchedAtISO: new Date().toISOString(),
-      error: body.trim() ? null : "empty_response",
-    };
+      const body = new TextDecoder("utf-8", { fatal: false }).decode(bounded.bytes);
+      return {
+        ok: Boolean(body.trim()),
+        contract: PUBLIC_RESEARCH_FETCH_CONTRACT,
+        requestedUrl,
+        finalUrl: currentUrl,
+        redirectCount,
+        status: response.status,
+        contentType,
+        body,
+        bytes: bounded.bytes.byteLength,
+        bodySha256: await sha256Hex(bounded.bytes),
+        elapsedMs: Date.now() - startedAt,
+        fetchedAtISO: new Date().toISOString(),
+        timeoutScope: "full_operation",
+        error: body.trim() ? null : "empty_response",
+      };
+    } catch {
+      const reason = controller.signal.aborted
+        ? "research_fetch_timeout"
+        : phase === "body"
+          ? "response_read_failed"
+          : "research_fetch_failed";
+      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, reason);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 

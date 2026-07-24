@@ -10,13 +10,28 @@ const read = (relativePath) => {
   return fs.existsSync(absolute) ? fs.readFileSync(absolute, "utf8") : "";
 };
 
+const boundedJson = read("src/core/boundedJsonRequest.ts");
 const index = read("src/index.ts");
 const sources = read("src/routes/sourcesAdmin.ts");
 const sourceBatch = read("src/routes/sourceBatchAdmin.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
-for (const [name, content] of [["Worker dispatcher", index], ["sources handler", sources], ["source batch handler", sourceBatch]]) {
+for (const [name, content] of [
+  ["bounded JSON helper", boundedJson],
+  ["Worker dispatcher", index],
+  ["sources handler", sources],
+  ["source batch handler", sourceBatch],
+]) {
   if (!content) errors.push(`Missing ${name}`);
+}
+
+for (const token of [
+  'BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1"',
+  "readBoundedJsonObject",
+  "isExplicitJsonConfirmation",
+  '(value as JsonObject).confirm === true',
+]) {
+  if (!boundedJson.includes(token)) errors.push(`Bounded source confirmation helper is missing: ${token}`);
 }
 
 for (const token of [
@@ -27,11 +42,13 @@ for (const token of [
   'pathname === "/admin/sources/run-tiny"',
   "test|expand-preview|expand-commit|cooldown|retire|activate",
   "async function sourceActionConfirmationFailure(request: Request, pathname: string)",
-  "request.clone().json()",
-  'url.searchParams.get("confirm") === "1"',
-  "body?.confirm === true",
+  "readBoundedJsonObject(request.clone())",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
   'error: "confirm_required"',
-  "Source writes and bounded source-network actions require explicit confirmation",
+  "requiredPayload: { confirm: true }",
+  "confirmationCoercionAllowed: false",
+  "Source writes and bounded source-network actions require exact JSON confirmation",
   "const sourceConfirmationFailure = await sourceActionConfirmationFailure(req, pathname)",
   "if (sourceConfirmationFailure) return sourceConfirmationFailure",
 ]) {
@@ -48,26 +65,51 @@ if (authPosition < 0 || confirmationPosition < 0 || opportunityRoutingPosition <
   errors.push("Source confirmation must run after authentication and before all protected route dispatch");
 }
 
-for (const token of [
-  'body?.confirm !== true && body?.confirm !== 1 && body?.confirm !== "1"',
-  'error: "confirm_required"',
+for (const [label, content] of [
+  ["sources handler", sources],
+  ["source batch handler", sourceBatch],
 ]) {
-  if (!sources.includes(token)) errors.push(`Sources handler must retain confirmed expansion commit guard: ${token}`);
+  for (const token of [
+    'from "../core/boundedJsonRequest"',
+    "readBoundedJsonObject(request)",
+    "boundedJsonFailurePayload(parsed)",
+    "isExplicitJsonConfirmation(parsed.value)",
+    'error: "confirm_required"',
+    "requiredPayload: { confirm: true }",
+    "confirmationCoercionAllowed: false",
+    "requestReceipt",
+    "bodySha256",
+  ]) {
+    if (!content.includes(token)) errors.push(`${label} must retain bounded exact confirmation: ${token}`);
+  }
 }
 
 for (const token of [
-  'body?.confirm !== true && body?.confirm !== 1 && body?.confirm !== "1"',
-  'error: "confirm_required"',
+  'pathname === "/admin/sources" || pathname === "/admin/seeds"',
+  "const previewMatch = pathname.match",
+  "const commitMatch = pathname.match",
+  "const testMatch = pathname.match",
+  "const actionMatch = pathname.match",
+  "const confirmed = await confirmedBody(request, json)",
 ]) {
-  if (!sourceBatch.includes(token)) errors.push(`Source batch handler must retain confirmation guard: ${token}`);
+  if (!sources.includes(token)) errors.push(`Sources handler must retain confirmation coverage: ${token}`);
 }
 
 for (const forbidden of [
+  'url.searchParams.get("confirm")',
+  "request.json()",
+  "request.clone().json()",
+  'body?.confirm === 1',
+  'body?.confirm === "1"',
+  'body?.confirm === "true"',
+  'body?.confirm !== true && body?.confirm !== 1',
   'request.method === "POST") return await handleSourcesAdmin',
   "sourceActionConfirmationFailure(req, pathname).catch",
   "confirm_required_override",
 ]) {
-  if (index.includes(forbidden)) errors.push(`Worker dispatcher contains forbidden source confirmation bypass: ${forbidden}`);
+  if (index.includes(forbidden) || sources.includes(forbidden) || sourceBatch.includes(forbidden)) {
+    errors.push(`Source confirmation implementation contains forbidden bypass or coercion: ${forbidden}`);
+  }
 }
 
 const expectedCommand = "node scripts/check-source-action-confirmation-safety.mjs";
@@ -81,7 +123,7 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run source
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "source-action-confirmation-boundary",
+  contract: "source-action-confirmation-boundary-v2-bounded-exact-json",
   protectedActions: [
     "source-add",
     "source-test",
@@ -95,7 +137,12 @@ console.log(JSON.stringify({
   authenticationBeforeConfirmation: true,
   confirmationBeforeRouting: true,
   requestBodyPreservedWithClone: true,
-  handlerLevelConfirmationRetainedForCommitAndBatch: true,
+  boundedRequestBodyRequired: true,
+  exactJsonBooleanConfirmationRequired: true,
+  queryStringConfirmationAllowed: false,
+  numericOrStringConfirmationAllowed: false,
+  handlerLevelConfirmationDefenseInDepthRequired: true,
+  requestFingerprintRequired: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

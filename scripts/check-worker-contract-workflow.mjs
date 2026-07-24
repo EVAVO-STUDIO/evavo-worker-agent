@@ -13,33 +13,44 @@ const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtect
 const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
 const healthPath = path.join(root, "src", "core", "health.ts");
 const schemaPath = path.join(root, "src", "core", "schema.ts");
+const boundedJsonSafetyPath = path.join(root, "scripts", "check-bounded-json-request-safety.mjs");
+const manualLeaseSafetyPath = path.join(root, "scripts", "check-manual-research-lease-safety.mjs");
 const publicResearchSafetyPath = path.join(root, "scripts", "check-public-research-fetch-safety.mjs");
 const opportunityEvidenceQualityPath = path.join(root, "scripts", "check-opportunity-evidence-quality.mjs");
 const errors = [];
 
-if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
-if (!fs.existsSync(packagePath)) errors.push("Missing package.json");
-if (!fs.existsSync(indexPath)) errors.push("Missing Worker dispatcher");
-if (!fs.existsSync(adminPath)) errors.push("Missing broad admin implementation");
-if (!fs.existsSync(adminWrapperPath)) errors.push("Missing protected broad admin wrapper");
-if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner wrapper");
-if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
-if (!fs.existsSync(healthPath)) errors.push("Missing admin health implementation");
-if (!fs.existsSync(schemaPath)) errors.push("Missing authenticated schema implementation");
-if (!fs.existsSync(publicResearchSafetyPath)) errors.push("Missing public research fetch safety contract");
-if (!fs.existsSync(opportunityEvidenceQualityPath)) errors.push("Missing opportunity evidence quality contract");
+for (const [label, absolutePath] of [
+  ["Worker contract workflow", workflowPath],
+  ["package.json", packagePath],
+  ["Worker dispatcher", indexPath],
+  ["broad admin implementation", adminPath],
+  ["protected broad admin wrapper", adminWrapperPath],
+  ["protected planner wrapper", plannerWrapperPath],
+  ["protected Growth fallback wrapper", growthWrapperPath],
+  ["admin health implementation", healthPath],
+  ["authenticated schema implementation", schemaPath],
+  ["bounded JSON request safety contract", boundedJsonSafetyPath],
+  ["manual research lease safety contract", manualLeaseSafetyPath],
+  ["public research fetch safety contract", publicResearchSafetyPath],
+  ["opportunity evidence quality contract", opportunityEvidenceQualityPath],
+]) {
+  if (!fs.existsSync(absolutePath)) errors.push(`Missing ${label}`);
+}
 
-const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
-const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
-const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
-const admin = fs.existsSync(adminPath) ? fs.readFileSync(adminPath, "utf8") : "";
-const adminWrapper = fs.existsSync(adminWrapperPath) ? fs.readFileSync(adminWrapperPath, "utf8") : "";
-const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plannerWrapperPath, "utf8") : "";
-const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
-const health = fs.existsSync(healthPath) ? fs.readFileSync(healthPath, "utf8") : "";
-const schema = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, "utf8") : "";
-const publicResearchSafety = fs.existsSync(publicResearchSafetyPath) ? fs.readFileSync(publicResearchSafetyPath, "utf8") : "";
-const opportunityEvidenceQuality = fs.existsSync(opportunityEvidenceQualityPath) ? fs.readFileSync(opportunityEvidenceQualityPath, "utf8") : "";
+const read = (absolutePath) => fs.existsSync(absolutePath) ? fs.readFileSync(absolutePath, "utf8") : "";
+const workflow = read(workflowPath);
+const packageJson = fs.existsSync(packagePath) ? JSON.parse(read(packagePath)) : {};
+const index = read(indexPath);
+const admin = read(adminPath);
+const adminWrapper = read(adminWrapperPath);
+const plannerWrapper = read(plannerWrapperPath);
+const growthWrapper = read(growthWrapperPath);
+const health = read(healthPath);
+const schema = read(schemaPath);
+const boundedJsonSafety = read(boundedJsonSafetyPath);
+const manualLeaseSafety = read(manualLeaseSafetyPath);
+const publicResearchSafety = read(publicResearchSafetyPath);
+const opportunityEvidenceQuality = read(opportunityEvidenceQualityPath);
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -49,33 +60,74 @@ for (const token of [
   "cache: npm",
   "npm ci --no-audit --no-fund",
   "node scripts/check-worker-health-contract.mjs",
+  "Verify bounded admin JSON requests",
+  "npm run research:bounded-json-safety:check",
+  "Verify manual research concurrency leases",
+  "npm run research:manual-lease-safety:check",
   "Verify public research fetch boundary",
   "npm run research:public-fetch-safety:check",
   "Verify deterministic opportunity evidence quality",
   "npm run opportunities:evidence-quality:check",
+  "Run deterministic core tests",
+  "npm run test:core",
   "npm run check:local",
   "timeout-minutes: 12",
 ]) {
   if (!workflow.includes(token)) errors.push(`Worker contract workflow is missing: ${token}`);
 }
 
-if (!workflow.includes('      - "src/**"')) errors.push("Worker workflow must watch source changes");
-if (!workflow.includes('      - "scripts/**"')) errors.push("Worker workflow must watch validation scripts");
-if (!workflow.includes('      - "docs/**"')) errors.push("Worker workflow must watch documentation changes");
-if (!workflow.includes('      - "README.md"')) errors.push("Worker workflow must watch README changes");
-if (!workflow.includes('      - "wrangler.toml"')) errors.push("Worker workflow must watch Wrangler configuration");
-if (!workflow.includes('      - "package-lock.json"')) errors.push("Worker workflow must watch the dependency lockfile");
+for (const watchedPath of [
+  '      - "src/**"',
+  '      - "scripts/**"',
+  '      - "tests/**"',
+  '      - "docs/**"',
+  '      - "README.md"',
+  '      - "wrangler.toml"',
+  '      - "package-lock.json"',
+]) {
+  if (!workflow.includes(watchedPath)) errors.push(`Worker workflow must watch: ${watchedPath.trim()}`);
+}
 if (workflow.includes("wrangler deploy")) errors.push("Contract workflow must not deploy the Worker");
 if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_TOKEN")) errors.push("Contract workflow must not request Worker credentials");
 
 for (const token of [
-  'contract: "public-research-fetch-safety-v5-truthful-redacted-evidence"',
+  'contract: "bounded-admin-json-request-safety-v1"',
+  "exactBooleanConfirmationRequired: true",
+  "queryStringConfirmationAllowed: false",
+  "confirmationCoercionAllowed: false",
+  "prototypePollutionKeysRejected: true",
+  "requestFingerprintRequired: true",
+  "behavioralTestsRequired: true",
+  "focusedCiGateRequired: true",
+]) {
+  if (!boundedJsonSafety.includes(token)) errors.push(`Bounded JSON safety contract is missing CI-required posture: ${token}`);
+}
+
+for (const token of [
+  'contract: "manual-research-lease-safety-v1"',
+  "atomicSingleStatementAcquisitionRequired: true",
+  "readThenWriteAcquisitionAllowed: false",
+  "staleHolderCanReleaseNewLease: false",
+  "automaticRetryAllowed: false",
+  "scheduledFallbackAllowed: false",
+]) {
+  if (!manualLeaseSafety.includes(token)) errors.push(`Manual lease safety contract is missing CI-required posture: ${token}`);
+}
+
+for (const token of [
+  'contract: "public-research-fetch-safety-v6-fetch-v2-behavioral"',
+  'activeFetchContract: "public_research_fetch_v2"',
+  "sensitiveQueryParametersRejected: true",
+  "redirectChainEvidenceRequired: true",
+  "binaryResponsesRejected: true",
   "timeoutCoversRedirectsAndBody: true",
   "rejectedUnsafeInputsEchoed: false",
   "sourceExpansionRunTruthfulnessRequired: true",
   "relationshipGraphRunTruthfulnessRequired: true",
-  "sitemapRunTruthfulnessRequired: true",
+  "sitemapIndexTraversalRequired: true",
   "manualOpportunityRunTruthfulnessRequired: true",
+  "sourceHealthAuditAtomicityRequired: true",
+  "behavioralTestsRequired: true",
   "focusedCiGateRequired: true",
 ]) {
   if (!publicResearchSafety.includes(token)) errors.push(`Public research safety contract is missing CI-required posture: ${token}`);
@@ -107,8 +159,11 @@ for (const token of [
   "return await handleAdmin(req, env, pathname, ctx, jsonResponse)",
   "return await handlePlannerAdmin(req, env, pathname, jsonResponse)",
   "return await handleGrowthAdmin(req, env, pathname, jsonResponse)",
+  'import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "./core/boundedJsonRequest"',
+  "sourceActionConfirmationFailure",
+  "readBoundedJsonObject(request.clone())",
 ]) {
-  if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected wrapper routing token: ${token}`);
+  if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected or bounded routing token: ${token}`);
 }
 if (index.includes('from "./routes/admin"')) errors.push("Worker dispatcher must not import the broad admin implementation directly");
 if (index.includes('from "./routes/plannerAdmin"')) errors.push("Worker dispatcher must not import the legacy planner implementation directly");
@@ -228,6 +283,8 @@ const expectedScripts = {
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "sources:confirmation-safety:check": "node scripts/check-source-action-confirmation-safety.mjs",
+  "research:bounded-json-safety:check": "node scripts/check-bounded-json-request-safety.mjs",
+  "research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs",
   "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
   "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
   "opportunities:execution-boundary-safety:check": "node scripts/check-opportunity-execution-boundary-safety.mjs",
@@ -241,6 +298,7 @@ const expectedScripts = {
   "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
   "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
   "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
+  "test:core": "node --test",
 };
 for (const [scriptName, expectedCommand] of Object.entries(expectedScripts)) {
   if (packageJson.scripts?.[scriptName] !== expectedCommand) errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
@@ -259,7 +317,7 @@ if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local"
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-ci-workflow-parity-v3-opportunity-evidence",
+  contract: "worker-ci-workflow-parity-v4-bounded-behavioral-research",
   deploymentEnabled: false,
   credentialsRequired: false,
   canonicalCredential: "ADMIN_TOKEN",
@@ -286,10 +344,17 @@ console.log(JSON.stringify({
   growthSubhandlerWritesRequireConfirmation: true,
   safetyGateCompletenessRequired: true,
   autonomyCapabilityTruthfulnessRequired: true,
+  boundedJsonRequestSafetyRequired: true,
+  boundedJsonFocusedCiGateRequired: true,
+  exactBooleanResearchConfirmationRequired: true,
+  manualResearchLeaseSafetyRequired: true,
+  manualResearchLeaseFocusedCiGateRequired: true,
   publicResearchFetchSafetyRequired: true,
+  publicResearchFetchV2Required: true,
   publicResearchFocusedCiGateRequired: true,
   publicResearchInputRedactionRequired: true,
   publicResearchRunTruthfulnessRequired: true,
+  publicResearchBehavioralTestsRequired: true,
   opportunityEvidenceQualityRequired: true,
   opportunityEvidenceFocusedCiGateRequired: true,
   weakEvidenceLearningBoostAllowed: false,

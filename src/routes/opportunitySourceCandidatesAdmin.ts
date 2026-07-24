@@ -10,6 +10,7 @@ import {
   manualResearchLeaseConflict,
   releaseManualResearchLease,
 } from "../core/manualResearchLease";
+import { validatePublicResearchUrl } from "../core/publicResearchFetch";
 import { boundedReviewText } from "../core/reviewMutationSafety";
 import {
   previewOpportunitySourceCandidates,
@@ -44,17 +45,16 @@ function normalizedCandidateUrls(value: unknown):
     if (typeof raw !== "string" || raw.length > 2_048) {
       return { ok: false, error: "invalid_candidate_url", index };
     }
-    try {
-      const parsed = new URL(raw.trim());
-      if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-        return { ok: false, error: "invalid_candidate_url", index };
-      }
-      parsed.hash = "";
-      const normalized = parsed.toString().replace(/\/+$/, "");
-      if (!urls.includes(normalized)) urls.push(normalized);
-    } catch {
+    const decision = validatePublicResearchUrl(raw.trim());
+    if (!decision.ok || !decision.url) {
       return { ok: false, error: "invalid_candidate_url", index };
     }
+    const parsed = new URL(decision.url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      return { ok: false, error: "invalid_candidate_url", index };
+    }
+    const normalized = parsed.toString().replace(/\/+$/, "");
+    if (!urls.includes(normalized)) urls.push(normalized);
   }
   return urls.length ? { ok: true, urls } : { ok: false, error: "urls_required" };
 }
@@ -163,6 +163,8 @@ export async function handleOpportunitySourceCandidatesAdmin(
       safety: {
         ...inheritedSafety,
         publicHttpsCandidateUrlsOnly: true,
+        publicResearchUrlPolicyRequired: true,
+        sensitiveQueryParametersRejected: true,
         maximumCandidateCount: 25,
         concurrentDuplicateCommitAllowed: false,
         callsAI: false,

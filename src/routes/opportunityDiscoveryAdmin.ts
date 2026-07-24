@@ -1,11 +1,20 @@
 import { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "../core/boundedJsonRequest";
 import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { extractOpportunityCandidates, summarizeOpportunityPreview } from "../core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "../core/opportunityPersistence";
 import { fetchPublicResearchHtml, type PublicResearchFetchResult } from "../core/publicResearchFetch";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
+type SourceAction = "test" | "preview" | "commit-preview";
+type RequestReceipt = { contract: string; bytes: number; bodySha256: string; sourceId: string; action: SourceAction };
+
+function boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
   const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1").bind(tableName).first<any>();
@@ -24,29 +33,35 @@ function fetchReceipt(fetched: PublicResearchFetchResult) {
     finalUrl: fetched.finalUrl,
     status: fetched.status,
     contentType: fetched.contentType,
+    contentLength: fetched.contentLength,
     elapsedMs: fetched.elapsedMs,
     bytes: fetched.bytes,
     bodySha256: fetched.bodySha256,
     redirectCount: fetched.redirectCount,
+    redirectChain: fetched.redirectChain,
+    etag: fetched.etag,
+    lastModified: fetched.lastModified,
+    contentLanguage: fetched.contentLanguage,
     fetchedAtISO: fetched.fetchedAtISO,
     timeoutScope: fetched.timeoutScope,
     error: fetched.error,
   };
 }
 
-function parseSourceAction(pathname: string): { id: string; action: string } | null {
+function parseSourceAction(pathname: string): { id: string; action: SourceAction } | null {
   const prefix = "/admin/opportunities/sources/";
   if (!pathname.startsWith(prefix)) return null;
   const rest = pathname.slice(prefix.length);
   const parts = rest.split("/").filter(Boolean);
   if (parts.length !== 2) return null;
-  const action = parts[1];
-  if (!["test", "preview", "commit-preview"].includes(action)) return null;
-  return { id: decodeURIComponent(parts[0]), action };
-}
-
-function confirmed(body: any): boolean {
-  return body?.confirm === true || body?.confirm === "true" || body?.confirm === 1 || body?.confirm === "1";
+  if (parts[1] !== "test" && parts[1] !== "preview" && parts[1] !== "commit-preview") return null;
+  try {
+    const id = decodeURIComponent(parts[0]).trim();
+    if (!id || id.length > 160) return null;
+    return { id, action: parts[1] };
+  } catch {
+    return null;
+  }
 }
 
 async function testSource(env: Env, id: string) {
@@ -78,11 +93,11 @@ async function testSource(env: Env, id: string) {
   };
 }
 
-async function previewSource(env: Env, id: string, requestUrl: URL) {
+async function previewSource(env: Env, id: string, body: Record<string, unknown>) {
   const source = await getSource(env, id);
   if (!source) return { ok: false, error: "source_not_found_or_missing_migration", requiredMigration: "0004_opportunity_intelligence.sql" };
 
-  const limit = Math.max(1, Math.min(100, Number(requestUrl.searchParams.get("limit") || 50)));
+  const limit = boundedInteger(body.limit, 50, 1, 100);
   const fetched = await fetchPublicResearchHtml(source.url);
   if (!fetched.ok) {
     return {
@@ -106,14 +121,14 @@ async function previewSource(env: Env, id: string, requestUrl: URL) {
   };
 }
 
-async function commitPreview(env: Env, id: string, body: any) {
+async function commitPreview(env: Env, id: string, body: Record<string, unknown>) {
   const source = await getSource(env, id);
   if (!source || !(await tableExists(env, "opportunities"))) {
     return { ok: false, error: "source_or_opportunities_table_missing", requiredMigration: "0004_opportunity_intelligence.sql" };
   }
 
-  const minScore = Math.max(1, Math.min(100, Number(body?.minScore || 45)));
-  const limit = Math.max(1, Math.min(100, Number(body?.limit || 50)));
+  const minScore = boundedInteger(body.minScore, 45, 1, 100);
+  const limit = boundedInteger(body.limit, 50, 1, 100);
   const now = new Date().toISOString();
   const fetched = await fetchPublicResearchHtml(source.url);
   const sourceFetch = fetchReceipt(fetched);
@@ -161,10 +176,10 @@ async function commitPreview(env: Env, id: string, body: any) {
   };
 }
 
-async function withSourceLease(env: Env, json: JsonResponse, sourceId: string, run: () => Promise<Response>): Promise<Response> {
+async function withSourceLease(env: Env, json: JsonResponse, sourceId: string, requestReceipt: RequestReceipt, run: () => Promise<Response>): Promise<Response> {
   const actionKey = `opportunity-source:${sourceId}`;
   const lease = await acquireManualResearchLease(env, actionKey, 600);
-  if (!lease) return json(manualResearchLeaseConflict(actionKey), { status: 409 });
+  if (!lease) return json({ ...manualResearchLeaseConflict(actionKey), requestReceipt }, { status: 409 });
   try {
     return await run();
   } finally {
@@ -179,23 +194,35 @@ export async function handleOpportunityDiscoveryAdmin(request: Request, env: Env
   }
   if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
 
-  const parsed = parseSourceAction(pathname);
-  if (!parsed) return json({ ok: false, error: "Not found" }, { status: 404 });
+  const sourceAction = parseSourceAction(pathname);
+  if (!sourceAction) return json({ ok: false, error: "Not found" }, { status: 404 });
 
-  const body = await request.json().catch(() => ({}));
-  if (!confirmed(body)) {
+  const parsed = await readBoundedJsonObject(request);
+  if (!parsed.ok) return json(boundedJsonFailurePayload(parsed), { status: parsed.status });
+  if (!isExplicitJsonConfirmation(parsed.value)) {
     return json({
       ok: false,
       error: "confirm_required",
-      reason: "Opportunity source tests, previews and preview commits require explicit confirmation before bounded public-network access or internal state changes.",
+      requiredPayload: { confirm: true },
+      confirmationCoercionAllowed: false,
+      requestBodyContract: parsed.contract,
+      reason: "Opportunity source tests, previews and preview commits require exact JSON confirmation before bounded public-network access or internal state changes.",
     }, { status: 400 });
   }
 
-  const requestUrl = new URL(request.url);
-  return withSourceLease(env, json, parsed.id, async () => {
-    if (parsed.action === "test") return json(await testSource(env, parsed.id));
-    if (parsed.action === "preview") return json(await previewSource(env, parsed.id, requestUrl));
-    if (parsed.action === "commit-preview") return json(await commitPreview(env, parsed.id, body));
-    return json({ ok: false, error: "Not found" }, { status: 404 });
+  const requestReceipt: RequestReceipt = {
+    contract: parsed.contract,
+    bytes: parsed.bytes,
+    bodySha256: parsed.bodySha256,
+    sourceId: sourceAction.id,
+    action: sourceAction.action,
+  };
+
+  return withSourceLease(env, json, sourceAction.id, requestReceipt, async () => {
+    let result: any;
+    if (sourceAction.action === "test") result = await testSource(env, sourceAction.id);
+    else if (sourceAction.action === "preview") result = await previewSource(env, sourceAction.id, parsed.value);
+    else result = await commitPreview(env, sourceAction.id, parsed.value);
+    return json({ ...result, requestReceipt });
   });
 }

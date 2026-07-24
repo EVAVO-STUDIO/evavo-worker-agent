@@ -154,6 +154,7 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
   const maxCandidates = Math.max(5, Math.min(100, Math.round(Number(options.maxCandidates || 40))));
   const existing = await existingDomains(env);
   const seedRows = await seeds(env, limitSeeds);
+  let fetchAttempts = 0;
   let pagesFetched = 0;
   let linksFound = 0;
   let candidatesFound = 0;
@@ -162,25 +163,34 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
   let duplicates = 0;
   let rejected = 0;
   let failed = 0;
+  let lastFailureCode: string | null = null;
   const found: GraphCandidate[] = [];
   const fetchReceipts: Array<Record<string, unknown>> = [];
 
   for (const seed of seedRows) {
-    if (pagesFetched >= maxFetches || found.length >= maxCandidates) break;
+    if (fetchAttempts >= maxFetches || found.length >= maxCandidates) break;
+    fetchAttempts += 1;
     const fetched = await fetchPublicResearchHtml(seed.url);
-    pagesFetched += 1;
-    fetchReceipts.push({
+    const receipt = {
       seedId: seed.id,
       requestedUrl: fetched.requestedUrl,
       finalUrl: fetched.finalUrl,
       status: fetched.status,
+      contentType: fetched.contentType,
       bytes: fetched.bytes,
       bodySha256: fetched.bodySha256,
       redirectCount: fetched.redirectCount,
       error: fetched.error,
       fetchedAtISO: fetched.fetchedAtISO,
-    });
-    if (!fetched.ok) { failed += 1; continue; }
+      timeoutScope: fetched.timeoutScope,
+    };
+    fetchReceipts.push(receipt);
+    if (!fetched.ok) {
+      failed += 1;
+      lastFailureCode = fetched.error || "research_fetch_failed";
+      continue;
+    }
+    pagesFetched += 1;
 
     const links = extractLinks(fetched.body, fetched.finalUrl || seed.url, maxLinksPerSeed);
     linksFound += links.length;
@@ -208,6 +218,7 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
           sourceFinalUrl: fetched.finalUrl,
           sourceBodySha256: fetched.bodySha256,
           sourceFetchedAtISO: fetched.fetchedAtISO,
+          sourceTimeoutScope: fetched.timeoutScope,
           sourceSeedStrategy: seed.strategy || null,
           relationshipDomain: domain,
         },
@@ -220,12 +231,21 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
     }
   }
 
-  await logEvent(env, "source_expansion_relationship_graph_run", `Relationship graph discovery fetched ${pagesFetched} page(s), found ${candidatesFound} candidate(s).`);
+  const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed";
+  const runError = runStatus === "failed"
+    ? lastFailureCode || "all_relationship_graph_fetches_failed"
+    : failed > 0
+      ? `partial_source_failures:${failed}`
+      : null;
+  await logEvent(env, "source_expansion_relationship_graph_run", `Relationship graph discovery attempted ${fetchAttempts} page(s), fetched ${pagesFetched}, failed ${failed}, found ${candidatesFound} candidate(s).`);
   return {
     ok: true,
     mode: "source_expansion_relationship_graph_discovery",
     fetchContract: "public_research_fetch_v1",
+    runStatus,
+    runError,
     seedsChecked: seedRows.length,
+    fetchAttempts,
     pagesFetched,
     linksFound,
     candidatesFound,
@@ -236,6 +256,6 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
     failed,
     fetchReceipts: fetchReceipts.slice(0, 10),
     candidates: found.slice(0, 25),
-    safety: { writesTables: ["source_expansion_candidates", "events"], callsAI: false, sendsEmail: false, callsNetwork: true, publicWebOnly: true, respectsAccessControls: true },
+    safety: { writesTables: ["source_expansion_candidates", "events"], callsAI: false, sendsEmail: false, callsNetwork: true, publicWebOnly: true, respectsAccessControls: true, fullOperationTimeout: true },
   };
 }

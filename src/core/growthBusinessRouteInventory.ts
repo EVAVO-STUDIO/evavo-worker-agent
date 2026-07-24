@@ -140,7 +140,7 @@ export function listGrowthBusinessRouteInventory() {
     entries,
     summary: Object.freeze({
       routeGroups: entries.length,
-      postCapableGroups: entries.filter((entry) => entry.writeMethods.includes("POST")).length,
+      postCapableGroups: entries.filter((entry) => entry.writeMethods.length > 0).length,
       readOnlyGroups: entries.filter((entry) => entry.writeMethods.length === 0).length,
       retiredWriteGroups: entries.filter((entry) => entry.retiredWritesFailClosed).length,
       externalExecutionGroups: entries.filter((entry) => entry.postClassification === "external-execution").length,

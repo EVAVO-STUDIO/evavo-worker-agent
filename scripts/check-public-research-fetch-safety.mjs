@@ -29,6 +29,7 @@ function forbidTokens(label, source, tokens) {
 
 const helper = read("src/core/publicResearchFetch.ts");
 const wrangler = read("wrangler.toml");
+const workflow = read(".github/workflows/worker-contract.yml");
 const readme = read("README.md");
 const boundaryDoc = read("docs/public-research-fetch-boundary.md");
 const packageJson = JSON.parse(read("package.json") || "{}");
@@ -140,6 +141,13 @@ requireTokens("Cloudflare runtime configuration", wrangler, [
   "Enforce public-only subrequests at the Cloudflare runtime boundary.",
 ]);
 
+requireTokens("Worker contract workflow", workflow, [
+  "Verify public research fetch boundary",
+  "npm run research:public-fetch-safety:check",
+  "npm run check:local",
+]);
+if (workflow.includes("wrangler deploy")) errors.push("Worker contract workflow must not deploy while validating public research safety");
+
 requireTokens("README public research boundary", readme, [
   "Public research URLs and every redirect are validated against the shared public-only network policy.",
   "Public response bodies are timeout-bounded, byte-bounded and hashed for evidence receipts.",
@@ -176,7 +184,7 @@ requireTokens("safety gate completeness", safetyGate, [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "public-research-fetch-safety-v2-documented-boundary",
+  contract: "public-research-fetch-safety-v3-focused-ci",
   publicHttpOnly: true,
   privateAndReservedHostsRejected: true,
   urlCredentialsRejected: true,
@@ -191,6 +199,7 @@ console.log(JSON.stringify({
   sourceRunProvenanceRequired: true,
   manualOpportunityRunsLabelledScheduled: false,
   boundaryDocumentationRequired: true,
+  focusedCiGateRequired: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

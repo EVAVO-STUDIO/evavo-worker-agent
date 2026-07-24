@@ -52,6 +52,9 @@ for (const relativePath of [
   "src/engineAutonomy.ts",
   "src/core/adminAuthentication.ts",
   "src/core/publicResearchFetch.ts",
+  "src/core/opportunityDiscovery.ts",
+  "src/core/opportunityPersistence.ts",
+  "src/core/opportunityScoring.ts",
   "src/routes/admin.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
@@ -67,8 +70,10 @@ for (const relativePath of [
   "scripts/check-protected-response-safety.mjs",
   "scripts/check-scheduled-entrypoint-safety.mjs",
   "scripts/check-public-research-fetch-safety.mjs",
+  "scripts/check-opportunity-evidence-quality.mjs",
   "scripts/check-runtime-capability-config.mjs",
   "docs/public-research-fetch-boundary.md",
+  "docs/opportunity-evidence-quality.md",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
   "package.json",
@@ -99,6 +104,26 @@ requireTokens("src/core/publicResearchFetch.ts", [
   "fetchPublicResearchText",
   "const deadlineAt = startedAt + timeoutMs",
   'timeoutScope: "full_operation"',
+]);
+requireTokens("src/core/opportunityDiscovery.ts", [
+  "evidenceQualityScore",
+  "missingFacts",
+  "reviewFlags",
+  "canonicalPublicUrl",
+  "shortlist_for_operator_review",
+  "reviewOnly: true",
+  "executable: false",
+]);
+requireTokens("src/core/opportunityPersistence.ts", [
+  "hasRequiredReviewPosture",
+  'schemaVersion: "opportunity_evidence_v4_quality_review_only"',
+  "normalizeReviewAction",
+  "groundedValueCents",
+]);
+requireTokens("src/core/opportunityScoring.ts", [
+  "evidenceQualityFor",
+  "guardrail:weak_evidence_no_positive_learning_boost",
+  "guardrail:weak_evidence_ceiling_45",
 ]);
 requireTokens("src/index.ts", [
   'headers.set("cache-control", "no-store")',
@@ -247,6 +272,16 @@ requireTokens("scripts/check-public-research-fetch-safety.mjs", [
   "manualOpportunityRunTruthfulnessRequired: true",
   "boundaryDocumentationRequired: true",
 ]);
+requireTokens("scripts/check-opportunity-evidence-quality.mjs", [
+  'contract: "opportunity-evidence-quality-v1"',
+  "boundaryAwareTermMatching: true",
+  "unmarkedNumbersParsedAsMoney: false",
+  "missingFactsInvented: false",
+  "weakEvidenceLearningBoostAllowed: false",
+  "reviewOnlyCandidatePostureRequired: true",
+  "draftingRecommendationStored: false",
+  "canonicalUrlDeduplicationRequired: true",
+]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
   'contract: "review-first-runtime-capability-configuration',
   'canonicalCredential: "ADMIN_TOKEN"',
@@ -301,6 +336,7 @@ if (fs.existsSync(packagePath)) {
     "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
     "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
     "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
+    "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
     "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
     "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
     "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
@@ -329,6 +365,7 @@ if (fs.existsSync(packagePath)) {
     "npm run legacy:engine-isolation:check",
     "npm run public:surface-safety:check",
     "npm run research:public-fetch-safety:check",
+    "npm run opportunities:evidence-quality:check",
     "npm run runtime:capability-config:check",
     "npm run opportunities:route-policy:check",
     "npm run business:route-policy:check",
@@ -349,7 +386,7 @@ if (fs.existsSync(packagePath)) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v3-research-truthfulness",
+  contract: "dynamic-helper-and-gate-validation-v4-opportunity-evidence",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -361,6 +398,9 @@ console.log(JSON.stringify({
   publicResearchFetchSafetyRequired: true,
   publicResearchInputRedactionRequired: true,
   publicResearchRunTruthfulnessRequired: true,
+  opportunityEvidenceQualityRequired: true,
+  weakEvidenceLearningBoostAllowed: false,
+  opportunityDraftRecommendationAllowed: false,
   errors,
 }, null, 2));
 

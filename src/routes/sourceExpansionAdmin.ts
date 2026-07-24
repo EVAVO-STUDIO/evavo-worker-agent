@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { bootstrapSourceExpansionSeeds, listSourceExpansionCandidates, runSourceExpansion } from "../core/sourceExpansionEngine";
 import { learnSourceExpansionQuality, listSourceExpansionStrategyScores } from "../core/sourceExpansionLearning";
 import { runSitemapSourceExpansion } from "../core/sourceExpansionSitemap";
@@ -15,6 +16,21 @@ function boundedInteger(value: unknown, fallback: number, min: number, max: numb
 
 async function bodyJson(request: Request) {
   return request.json().catch(() => ({}));
+}
+
+async function withResearchLease(
+  env: Env,
+  json: JsonResponse,
+  actionKey: string,
+  run: () => Promise<Response>,
+): Promise<Response> {
+  const lease = await acquireManualResearchLease(env, actionKey, 900);
+  if (!lease) return json(manualResearchLeaseConflict(actionKey), { status: 409 });
+  try {
+    return await run();
+  } finally {
+    await releaseManualResearchLease(env, lease).catch(() => false);
+  }
 }
 
 function sourceExpansionFallback(result: any) {
@@ -111,25 +127,30 @@ export async function handleSourceExpansionAdmin(request: Request, env: Env, pat
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    const result = await runSourceExpansion(env, {
-      strategy: typeof body?.strategy === "string" ? body.strategy : undefined,
-      limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
-      maxFetches: boundedInteger(body?.maxFetches, 3, 1, 10),
-      maxLinksPerSeed: boundedInteger(body?.maxLinksPerSeed, 40, 5, 80),
-      maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
+    return withResearchLease(env, json, "source-expansion-scan", async () => {
+      const result = await runSourceExpansion(env, {
+        strategy: typeof body?.strategy === "string" ? body.strategy : undefined,
+        limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
+        maxFetches: boundedInteger(body?.maxFetches, 3, 1, 10),
+        maxLinksPerSeed: boundedInteger(body?.maxLinksPerSeed, 40, 5, 80),
+        maxCandidates: boundedInteger(body?.maxCandidates, 40, 5, 100),
+      });
+      return json({ ...result, leaseContract: "manual_research_lease_v1", fallback: sourceExpansionFallback(result) });
     });
-    return json({ ...result, fallback: sourceExpansionFallback(result) });
   }
 
   if (pathname === "/admin/opportunities/sources/expansion/sitemap-scan") {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
     const body = await bodyJson(request);
     if (body?.confirm !== true) return json({ ok: false, error: "confirm_required" }, { status: 400 });
-    return json(await runSitemapSourceExpansion(env, {
-      limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
-      maxFetches: boundedInteger(body?.maxFetches, 4, 1, 10),
-      maxSitemapUrls: boundedInteger(body?.maxSitemapUrls, 50, 5, 100),
-      maxCandidates: boundedInteger(body?.maxCandidates, 30, 5, 100),
+    return withResearchLease(env, json, "source-expansion-sitemap-scan", async () => json({
+      ...(await runSitemapSourceExpansion(env, {
+        limitSeeds: boundedInteger(body?.limitSeeds, 3, 1, 10),
+        maxFetches: boundedInteger(body?.maxFetches, 4, 1, 10),
+        maxSitemapUrls: boundedInteger(body?.maxSitemapUrls, 50, 5, 100),
+        maxCandidates: boundedInteger(body?.maxCandidates, 30, 5, 100),
+      })),
+      leaseContract: "manual_research_lease_v1",
     }));
   }
 

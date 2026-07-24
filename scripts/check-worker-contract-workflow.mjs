@@ -6,7 +6,13 @@ import path from "node:path";
 const root = process.cwd();
 const errors = [];
 const resolve = (...parts) => path.join(root, ...parts);
-const read = (absolutePath) => fs.existsSync(absolutePath) ? fs.readFileSync(absolutePath, "utf8") : "";
+const read = (absolutePath) => {
+  if (!fs.existsSync(absolutePath)) {
+    errors.push(`Missing required file: ${path.relative(root, absolutePath)}`);
+    return "";
+  }
+  return fs.readFileSync(absolutePath, "utf8");
+};
 
 const paths = {
   workflow: resolve(".github", "workflows", "worker-contract.yml"),
@@ -16,6 +22,9 @@ const paths = {
   adminWrapper: resolve("src", "routes", "adminProtected.ts"),
   plannerWrapper: resolve("src", "routes", "plannerAdminProtected.ts"),
   growthWrapper: resolve("src", "routes", "growthAdminProtected.ts"),
+  autonomy: resolve("src", "routes", "autonomySettingsAdmin.ts"),
+  legacy: resolve("src", "routes", "legacyExecutionSafetyAdmin.ts"),
+  operationsPolicy: resolve("src", "routes", "operationsRoutePolicy.ts"),
   health: resolve("src", "core", "health.ts"),
   schema: resolve("src", "core", "schema.ts"),
   bounded: resolve("scripts", "check-bounded-json-request-safety.mjs"),
@@ -23,26 +32,15 @@ const paths = {
   review: resolve("scripts", "check-review-mutation-boundary-safety.mjs"),
   publicFetch: resolve("scripts", "check-public-research-fetch-safety.mjs"),
   evidence: resolve("scripts", "check-opportunity-evidence-quality.mjs"),
+  autonomyTruth: resolve("scripts", "check-autonomy-capability-truthfulness.mjs"),
+  manualSafety: resolve("scripts", "check-manual-execution-safety.mjs"),
+  operationsPolicyCheck: resolve("scripts", "check-operations-route-policy.mjs"),
 };
 
-for (const [label, absolutePath] of Object.entries(paths)) {
-  if (!fs.existsSync(absolutePath)) errors.push(`Missing ${label}: ${absolutePath}`);
-}
-
-const workflow = read(paths.workflow);
-const packageJson = fs.existsSync(paths.package) ? JSON.parse(read(paths.package)) : {};
-const index = read(paths.index);
-const admin = read(paths.admin);
-const adminWrapper = read(paths.adminWrapper);
-const plannerWrapper = read(paths.plannerWrapper);
-const growthWrapper = read(paths.growthWrapper);
-const health = read(paths.health);
-const schema = read(paths.schema);
-const bounded = read(paths.bounded);
-const lease = read(paths.lease);
-const review = read(paths.review);
-const publicFetch = read(paths.publicFetch);
-const evidence = read(paths.evidence);
+const sources = Object.fromEntries(
+  Object.entries(paths).map(([key, absolutePath]) => [key, read(absolutePath)]),
+);
+const packageJson = sources.package ? JSON.parse(sources.package) : {};
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
 
@@ -71,9 +69,8 @@ for (const token of [
   "persist-credentials: false",
   "cancel-in-progress: true",
 ]) {
-  if (!workflow.includes(token)) errors.push(`Worker contract workflow is missing: ${token}`);
+  if (!sources.workflow.includes(token)) errors.push(`Worker contract workflow is missing: ${token}`);
 }
-
 for (const watchedPath of [
   '      - "src/**"',
   '      - "scripts/**"',
@@ -85,11 +82,11 @@ for (const watchedPath of [
   '      - "package.json"',
   '      - "package-lock.json"',
 ]) {
-  if (!workflow.includes(watchedPath)) errors.push(`Worker workflow must watch: ${watchedPath.trim()}`);
+  if (!sources.workflow.includes(watchedPath)) errors.push(`Worker workflow must watch: ${watchedPath.trim()}`);
 }
-if (workflow.includes("wrangler deploy")) errors.push("Contract workflow must not deploy the Worker");
+if (sources.workflow.includes("wrangler deploy")) errors.push("Contract workflow must not deploy the Worker");
 for (const secretName of ["ADMIN_TOKEN", "OUTBOUND_AGENT_ADMIN_TOKEN", "PUBLIC_CONTROL_KEY"]) {
-  if (workflow.includes(secretName)) errors.push(`Contract workflow must not request Worker credential: ${secretName}`);
+  if (sources.workflow.includes(secretName)) errors.push(`Contract workflow must not request Worker credential: ${secretName}`);
 }
 
 const orderedSteps = [
@@ -103,42 +100,51 @@ const orderedSteps = [
 ];
 let previousIndex = -1;
 for (const step of orderedSteps) {
-  const indexOfStep = workflow.indexOf(step);
-  if (indexOfStep < 0 || indexOfStep <= previousIndex) errors.push(`Worker workflow step order is invalid at ${step}`);
-  previousIndex = indexOfStep;
+  const currentIndex = sources.workflow.indexOf(step);
+  if (currentIndex < 0 || currentIndex <= previousIndex) errors.push(`Worker workflow step order is invalid at ${step}`);
+  previousIndex = currentIndex;
 }
 
 for (const [label, source, tokens] of [
-  ["bounded JSON safety", bounded, [
-    'contract: "bounded-admin-json-request-safety-v2-review-mutations"',
+  ["bounded JSON safety", sources.bounded, [
+    'contract: "bounded-admin-json-request-safety-v4-settings-and-legacy-review"',
     "exactBooleanConfirmationRequired: true",
     "prototypePollutionKeysRejected: true",
     "requestFingerprintRequired: true",
+    "protectedBroadAdminWritesBounded: true",
+    "autonomySettingsBounded: true",
+    "legacySettingsBounded: true",
+    "legacyDraftReviewBounded: true",
     "draftReviewBounded: true",
     "opportunityReviewBounded: true",
     "sourceCandidateCommitBounded: true",
   ]],
-  ["manual lease safety", lease, [
-    'contract: "manual-research-lease-safety-v3-review-and-candidate-coverage"',
+  ["manual lease safety", sources.lease, [
+    'contract: "manual-research-lease-safety-v4-settings-and-legacy-review"',
     "atomicSingleStatementAcquisitionRequired: true",
     "staleHolderCanReleaseNewLease: false",
     "confirmationBeforeLeaseRequired: true",
     "sourceCandidateCommitLeaseRequired: true",
+    "autonomySettingsLeaseRequired: true",
+    "legacySettingsLeaseRequired: true",
     "draftRecordAndStrategyLeasesRequired: true",
+    "legacyAndModernDraftReviewShareLease: true",
     "opportunityRecordAndStrategyLeasesRequired: true",
     "automaticRetryAllowed: false",
   ]],
-  ["review mutation safety", review, [
-    'contract: "review-mutation-boundary-safety-v1"',
+  ["review mutation safety", sources.review, [
+    'contract: "review-mutation-boundary-safety-v2-legacy-compatibility"',
     "exactBooleanConfirmationRequired: true",
     "boundedRequestBodyRequired: true",
     "requestFingerprintRequired: true",
     "perRecordLeaseRequired: true",
     "sharedLearningScopeLeaseRequired: true",
-    "draftReviewWritesAtomic: true",
+    "modernDraftReviewWritesAtomic: true",
+    "legacyDraftReviewUsesSharedLease: true",
+    "legacyDraftReviewWritesAtomic: true",
     "opportunityReviewWritesAtomic: true",
   ]],
-  ["public research safety", publicFetch, [
+  ["public research safety", sources.publicFetch, [
     'contract: "public-research-fetch-safety-v7-hierarchical-source-exclusion"',
     'activeFetchContract: "public_research_fetch_v2"',
     "sensitiveQueryParametersRejected: true",
@@ -148,7 +154,7 @@ for (const [label, source, tokens] of [
     "overlappingBroadAndPerSourceActionsAllowed: false",
     "behavioralTestsRequired: true",
   ]],
-  ["opportunity evidence quality", evidence, [
+  ["opportunity evidence quality", sources.evidence, [
     'contract: "opportunity-evidence-quality-v1"',
     "boundaryAwareTermMatching: true",
     "unmarkedNumbersParsedAsMoney: false",
@@ -156,6 +162,24 @@ for (const [label, source, tokens] of [
     "weakEvidenceLearningBoostAllowed: false",
     "reviewOnlyCandidatePostureRequired: true",
     "canonicalUrlDeduplicationRequired: true",
+  ]],
+  ["autonomy truthfulness", sources.autonomyTruth, [
+    'contract: "autonomy-capability-truthfulness-v2-bounded-settings"',
+    "settingsRequestBounded: true",
+    "exactBooleanConfirmationRequired: true",
+    "settingsAndAuditAtomic: true",
+  ]],
+  ["legacy execution safety", sources.manualSafety, [
+    'contract: "manual-legacy-execution-safety-v2-bounded-atomic"',
+    "disabledRunMutatesState: false",
+    "legacyReadRoutesMutateState: false",
+    "settingsAndAuditAtomic: true",
+    "draftDecisionAndAuditAtomic: true",
+  ]],
+  ["operations policy safety", sources.operationsPolicyCheck, [
+    'contract: "typed-operational-route-policy-v2-bounded-writes"',
+    "readRoutesMutateState: false",
+    "writePoliciesAmbiguous: false",
   ]],
 ]) {
   for (const token of tokens) {
@@ -179,20 +203,20 @@ for (const token of [
   "sourceActionConfirmationFailure",
   "readBoundedJsonObject(request.clone())",
 ]) {
-  if (!index.includes(token)) errors.push(`Worker dispatcher is missing protected or bounded routing token: ${token}`);
+  if (!sources.index.includes(token)) errors.push(`Worker dispatcher is missing protected or bounded routing token: ${token}`);
 }
 for (const forbiddenImport of [
   'from "./routes/admin"',
   'from "./routes/plannerAdmin"',
   'from "./routes/growthAdmin"',
 ]) {
-  if (index.includes(forbiddenImport)) errors.push(`Worker dispatcher contains direct implementation import: ${forbiddenImport}`);
+  if (sources.index.includes(forbiddenImport)) errors.push(`Worker dispatcher contains direct implementation import: ${forbiddenImport}`);
 }
 
 for (const [label, content, delegateCall] of [
-  ["Protected broad admin wrapper", adminWrapper, "return handleAdminImplementation(request, env, pathname, ctx, json)"],
-  ["Protected planner wrapper", plannerWrapper, "return handlePlannerAdminImplementation(request, env, pathname, json)"],
-  ["Protected Growth wrapper", growthWrapper, "return handleGrowthAdminImplementation(request, env, pathname, json)"],
+  ["Protected broad admin wrapper", sources.adminWrapper, "return handleAdminImplementation(request, env, pathname, ctx, json)"],
+  ["Protected planner wrapper", sources.plannerWrapper, "return handlePlannerAdminImplementation(request, env, pathname, json)"],
+  ["Protected Growth wrapper", sources.growthWrapper, "return handleGrowthAdminImplementation(request, env, pathname, json)"],
 ]) {
   for (const token of [
     'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
@@ -219,10 +243,41 @@ for (const token of [
   "sendsEmail: false",
   "externalStateChange: false",
 ]) {
-  if (!adminWrapper.includes(token)) errors.push(`Protected broad admin wrapper is missing manual-write safety token: ${token}`);
+  if (!sources.adminWrapper.includes(token)) errors.push(`Protected broad admin wrapper is missing manual-write safety token: ${token}`);
 }
 for (const forbidden of ["request.clone().json()", "body?.confirm === 1", 'body?.confirm === "1"']) {
-  if (adminWrapper.includes(forbidden)) errors.push(`Protected broad admin wrapper contains stale confirmation token: ${forbidden}`);
+  if (sources.adminWrapper.includes(forbidden)) errors.push(`Protected broad admin wrapper contains stale confirmation token: ${forbidden}`);
+}
+
+for (const [label, source, tokens] of [
+  ["Autonomy settings handler", sources.autonomy, [
+    "readBoundedJsonObject<AutonomySettingsBody>(request",
+    "isExplicitJsonConfirmation(parsed.value)",
+    'AUTONOMY_SETTINGS_LEASE = "autonomy-settings"',
+    "await env.DB.batch([",
+    "settingsAndAuditAtomic: true",
+  ]],
+  ["Legacy compatibility handler", sources.legacy, [
+    "readBoundedJsonObject<LegacySettingsBody>(request",
+    "readBoundedJsonObject<LegacyDraftDecisionBody>(request",
+    "isExplicitJsonConfirmation(parsed.value)",
+    'LEGACY_SETTINGS_LEASE = "legacy-safe-settings"',
+    'const actionKey = `draft-review:${draftId}`',
+    "readRouteMutatesSettings: false",
+    "responseMutatesSettings: false",
+  ]],
+  ["Operations route policy", sources.operationsPolicy, [
+    'writeConfirmation: "handler-enforced"',
+    'writeConfirmation: "not-applicable"',
+    "callsAI: false",
+    "canSendEmail: false",
+    "canPostSocial: false",
+    "canSubmitForms: false",
+  ]],
+]) {
+  for (const token of tokens) {
+    if (!source.includes(token)) errors.push(`${label} is missing: ${token}`);
+  }
 }
 
 for (const token of [
@@ -233,7 +288,7 @@ for (const token of [
   'contractVersion: "admin_historical_runs_v2_read_only"',
   "safety: historicalReadSafety",
 ]) {
-  if (!admin.includes(token)) errors.push(`Broad admin read implementation is missing truthful token: ${token}`);
+  if (!sources.admin.includes(token)) errors.push(`Broad admin read implementation is missing truthful token: ${token}`);
 }
 for (const token of [
   'contractVersion: "admin_health_v2_manual_research_only"',
@@ -244,7 +299,7 @@ for (const token of [
   'contractVersion: "admin_diagnostics_v2_historical_read_only"',
   "authoritativeForExecution: false",
 ]) {
-  if (!health.includes(token)) errors.push(`Admin reporting implementation is missing truthful runtime token: ${token}`);
+  if (!sources.health.includes(token)) errors.push(`Admin reporting implementation is missing truthful runtime token: ${token}`);
 }
 for (const token of [
   'contractVersion: "admin_schema_v2_names_only"',
@@ -254,7 +309,7 @@ for (const token of [
   "secretsExposed: false",
   "executable: false",
 ]) {
-  if (!schema.includes(token)) errors.push(`Authenticated schema implementation is missing safe token: ${token}`);
+  if (!sources.schema.includes(token)) errors.push(`Authenticated schema implementation is missing safe token: ${token}`);
 }
 
 const expectedScripts = {
@@ -266,6 +321,9 @@ const expectedScripts = {
   "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
   "review:mutation-safety:check": "node scripts/check-review-mutation-boundary-safety.mjs",
   "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
+  "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
+  "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
+  "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
   "test:core": "node --test",
   "safety:gates:check": "node scripts/check-safety-gate-completeness.mjs",
 };
@@ -278,7 +336,7 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) errors.pus
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-contract-workflow-v4-review-and-bounded-credential",
+  contract: "worker-contract-workflow-v5-settings-and-legacy-review",
   nodeVersion: 24,
   lockedInstallRequired: true,
   readOnlyWorkflowPermissions: true,
@@ -288,12 +346,17 @@ console.log(JSON.stringify({
   boundedJsonGateRequired: true,
   manualLeaseGateRequired: true,
   reviewMutationGateRequired: true,
+  autonomySettingsGateRequired: true,
+  legacyExecutionSafetyGateRequired: true,
+  operationsRoutePolicyGateRequired: true,
   publicResearchGateRequired: true,
   evidenceQualityGateRequired: true,
   deterministicCoreTestsRequired: true,
   completeLocalGateRequired: true,
   protectedWrappersRequired: true,
   broadAdminWritesBoundedAndExact: true,
+  settingsWritesBoundedLeasedAndAtomic: true,
+  legacyReviewWritesBoundedLeasedAndAtomic: true,
   errors,
 }, null, 2));
 

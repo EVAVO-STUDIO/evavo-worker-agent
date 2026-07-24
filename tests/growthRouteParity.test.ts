@@ -3,11 +3,14 @@ import path from "node:path";
 
 import {
   GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS,
+  GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS,
+  GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE,
   GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS,
   assertGrowthWorkerRouteParityPageState,
   growthWorkerRouteBlockersForPageState,
   parseGrowthWorkerRouteParityContract,
   parseGrowthWorkerRouteParityJson,
+  type GrowthWorkerRoutePageState,
   type GrowthWorkerRouteParityContract,
 } from "../src/core/growthWorkerRouteParity";
 
@@ -78,10 +81,10 @@ const fixtureRaw = fs.readFileSync(fixturePath, "utf8");
 const fixture = parseGrowthWorkerRouteParityJson(fixtureRaw);
 assert(Object.isFrozen(fixture), "fixture-frozen");
 assert(Object.isFrozen(fixture.blockers), "fixture-blockers-frozen");
-assert(fixture.pageState === "absent", "fixture-currently-absent");
+assert(fixture.pageState === GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE, "fixture-current-page-state");
 assert(
-  fixture.blockers.join(",") === GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS.join(","),
-  "fixture-absent-blockers",
+  fixture.blockers.join(",") === GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS.join(","),
+  "fixture-current-blockers",
 );
 assert(
   growthWorkerRouteBlockersForPageState("absent") === GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS,
@@ -91,6 +94,19 @@ assert(
   growthWorkerRouteBlockersForPageState("present") === GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS,
   "present-blocker-identity",
 );
+
+const absent = parseGrowthWorkerRouteParityContract(withChanges(fixture, {
+  pageState: "absent",
+  blockers: [...GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS],
+}));
+assert(absent.pageState === "absent", "absent-state-accepted");
+assert(
+  absent.blockers.join(",") === GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS.join(","),
+  "absent-blockers-accepted",
+);
+assert(absent.blockers.includes("next_website_ingestion_endpoint_not_implemented"), "absent-keeps-endpoint-blocker");
+assert(!absent.blockers.includes("worker_proposal_delivery_not_implemented"), "absent-excludes-delivery-blocker");
+assert(Object.isFrozen(absent) && Object.isFrozen(absent.blockers), "absent-frozen");
 
 const present = parseGrowthWorkerRouteParityContract(withChanges(fixture, {
   pageState: "present",
@@ -108,6 +124,7 @@ assert(Object.isFrozen(present) && Object.isFrozen(present.blockers), "present-f
 expectError(
   "absent-with-present-blockers",
   () => parseGrowthWorkerRouteParityContract(withChanges(fixture, {
+    pageState: "absent",
     blockers: [...GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS],
   })),
   "GROWTH_WORKER_ROUTE_PARITY_BLOCKERS_INVALID",
@@ -140,9 +157,11 @@ expectError(
   () => parseGrowthWorkerRouteParityJson(JSON.stringify(fixture)),
   "GROWTH_WORKER_ROUTE_PARITY_JSON_NOT_CANONICAL",
 );
+const oppositePageState: GrowthWorkerRoutePageState =
+  fixture.pageState === "absent" ? "present" : "absent";
 expectError(
   "page-state-mismatch",
-  () => assertGrowthWorkerRouteParityPageState(fixture, "present"),
+  () => assertGrowthWorkerRouteParityPageState(fixture, oppositePageState),
   "GROWTH_WORKER_ROUTE_PARITY_PAGE_STATE_MISMATCH",
 );
 
@@ -200,7 +219,7 @@ if (fs.existsSync(websiteFixturePath)) {
     "growth",
     "worker-proposals.ts",
   );
-  const actualPageState = fs.existsSync(websitePagePath) ? "present" : "absent";
+  const actualPageState: GrowthWorkerRoutePageState = fs.existsSync(websitePagePath) ? "present" : "absent";
   assertGrowthWorkerRouteParityPageState(fixture, actualPageState);
 
   const websiteParserPath = path.join(
@@ -222,6 +241,6 @@ if (fs.existsSync(websiteFixturePath)) {
 
 console.log("Growth route parity contract passed.");
 console.log("- one pure parser owns exact route fields, canonical JSON, frozen output and bridge-disabled posture");
-console.log("- absent pages require the endpoint blocker while present pages require the Worker delivery blocker");
-console.log("- the approved present state is reachable without retaining a contradictory endpoint-not-implemented blocker");
+console.log("- the fixture must match the exported current page state and current blocker set");
+console.log("- both absent and present states remain executable contract fixtures with distinct exact blockers");
 console.log("- sibling website fixture, parser bytes and actual page state are checked when the checkout is available");

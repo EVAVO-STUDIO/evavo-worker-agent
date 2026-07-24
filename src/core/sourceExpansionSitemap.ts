@@ -184,6 +184,7 @@ function receipt(result: Awaited<ReturnType<typeof fetchPublicResearchText>>, ki
     redirectCount: result.redirectCount,
     elapsedMs: result.elapsedMs,
     fetchedAtISO: result.fetchedAtISO,
+    timeoutScope: result.timeoutScope,
     error: result.error,
   };
 }
@@ -200,16 +201,19 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
   const discovered: SitemapCandidate[] = [];
   const fetchReceipts: Array<Record<string, unknown>> = [];
   let fetches = 0;
+  let successfulFetches = 0;
   let sitemapUrlsFound = 0;
   let candidatesNewOrUpdated = 0;
   let duplicates = 0;
   let failures = 0;
+  let lastFailureCode: string | null = null;
 
   for (const seed of seeds) {
     if (fetches >= maxFetches || discovered.length >= maxCandidates) break;
     const origin = baseOrigin(seed.url);
     if (!origin) {
       failures += 1;
+      lastFailureCode = "invalid_research_url";
       continue;
     }
     let sitemapUrls = robotsSitemapUrls("", origin);
@@ -218,8 +222,13 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
       const robots = await fetchPublicResearchText(robotsUrl, { maxBytes: 262_144 });
       fetches += 1;
       fetchReceipts.push({ seedId: seed.id, ...receipt(robots, "robots") });
-      if (robots.ok) sitemapUrls = robotsSitemapUrls(robots.body, origin);
-      else failures += 1;
+      if (robots.ok) {
+        successfulFetches += 1;
+        sitemapUrls = robotsSitemapUrls(robots.body, origin);
+      } else {
+        failures += 1;
+        lastFailureCode = robots.error || "research_fetch_failed";
+      }
     }
 
     for (const sitemapUrl of sitemapUrls) {
@@ -230,8 +239,10 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
       fetchReceipts.push({ seedId: seed.id, ...sitemapReceipt });
       if (!response.ok) {
         failures += 1;
+        lastFailureCode = response.error || "research_fetch_failed";
         continue;
       }
+      successfulFetches += 1;
       const effectiveSitemapUrl = response.finalUrl || sitemapUrl;
       const locs = extractSitemapLocs(response.body, effectiveSitemapUrl, maxSitemapUrls);
       sitemapUrlsFound += locs.length;
@@ -248,13 +259,28 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
     }
   }
 
-  await logEvent(env, "source_expansion_sitemap_run", `Confirmed sitemap expansion checked ${seeds.length} seed(s), found ${discovered.length} candidate(s).`);
+  const runStatus = seeds.length === 0
+    ? "skipped"
+    : failures > 0 && successfulFetches === 0
+      ? "failed"
+      : "completed";
+  const runError = runStatus === "skipped"
+    ? "no_active_seeds"
+    : runStatus === "failed"
+      ? lastFailureCode || "all_sitemap_fetches_failed"
+      : failures > 0
+        ? `partial_source_failures:${failures}`
+        : null;
+  await logEvent(env, "source_expansion_sitemap_run", `Confirmed sitemap expansion attempted ${fetches} fetch(es), successful ${successfulFetches}, failed ${failures}, found ${discovered.length} candidate(s).`);
   return {
     ok: true,
     mode: "source_expansion_sitemap_run",
     fetchContract: "public_research_fetch_v1",
+    runStatus,
+    runError,
     seedsChecked: seeds.length,
     fetches,
+    successfulFetches,
     sitemapUrlsFound,
     candidatesFound: discovered.length,
     candidatesNewOrUpdated,
@@ -262,6 +288,6 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
     failures,
     fetchReceipts: fetchReceipts.slice(0, 15),
     preview: discovered.slice(0, 25),
-    safety: { bounded: true, publicWebOnly: true, redirectsValidated: true, responseBytesBounded: true, maxFetches, maxSitemapUrls, maxCandidates, callsAI: false, sendsEmail: false, savesOpportunitySources: false, candidateSaveStillRequiresConfirmation: true },
+    safety: { bounded: true, publicWebOnly: true, redirectsValidated: true, responseBytesBounded: true, fullOperationTimeout: true, maxFetches, maxSitemapUrls, maxCandidates, callsAI: false, sendsEmail: false, savesOpportunitySources: false, candidateSaveStillRequiresConfirmation: true },
   };
 }

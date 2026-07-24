@@ -28,6 +28,7 @@ function forbidTokens(label, source, tokens) {
 }
 
 const helper = read("src/core/publicResearchFetch.ts");
+const sourceExpansion = read("src/core/sourceExpansionEngine.ts");
 const wrangler = read("wrangler.toml");
 const workflow = read(".github/workflows/worker-contract.yml");
 const readme = read("README.md");
@@ -63,7 +64,21 @@ requireTokens("public research fetch helper", helper, [
   '"EVAVO-Growth-Research-Worker/1.0 (+https://evavo.com.au)"',
   "fetchPublicResearchHtml",
   "fetchPublicResearchText",
+  "const deadlineAt = startedAt + timeoutMs",
+  "const remainingMs = deadlineAt - Date.now()",
+  'let phase: "headers" | "body" = "headers"',
+  'phase = "body"',
+  'timeoutScope: "full_operation"',
+  "controller.signal.aborted",
+  "finally {",
+  "clearTimeout(timeout)",
 ]);
+
+const boundedReadPosition = helper.indexOf("const bounded = await readBodyBounded(response, maxBytes)");
+const timeoutClearPosition = helper.indexOf("clearTimeout(timeout)");
+if (boundedReadPosition < 0 || timeoutClearPosition < 0 || timeoutClearPosition <= boundedReadPosition) {
+  errors.push("Public research timeout must remain active until after the bounded response body is read");
+}
 
 forbidTokens("public research fetch helper", helper, [
   'redirect: "follow"',
@@ -92,6 +107,25 @@ for (const relativePath of guardedFetchFiles) {
     "EVAVO-Opportunity-Agent",
     "Opportunity Intelligence Source Discovery",
   ]);
+}
+
+requireTokens("source expansion run truthfulness", sourceExpansion, [
+  "normalizeExpansionFailure",
+  "ALLOWED_EXPANSION_FAILURES",
+  "let fetchAttempts = 0",
+  "fetchAttempts += 1",
+  "pagesFetched += 1",
+  'const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed"',
+  '`partial_source_failures:${failed}`',
+  "error: runError",
+  "fetchAttempts,",
+  "timeoutScope: fetched.timeoutScope",
+  "fullOperationTimeout: true",
+]);
+const fetchFailurePosition = sourceExpansion.indexOf('if (!fetched.ok) throw new Error(fetched.error || "research_fetch_failed")');
+const successfulPagePosition = sourceExpansion.indexOf("pagesFetched += 1");
+if (fetchFailurePosition < 0 || successfulPagePosition < 0 || successfulPagePosition <= fetchFailurePosition) {
+  errors.push("Source expansion pagesFetched must count only successful bounded fetches");
 }
 
 const sourcesAdmin = read("src/routes/sourcesAdmin.ts");
@@ -184,7 +218,7 @@ requireTokens("safety gate completeness", safetyGate, [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "public-research-fetch-safety-v3-focused-ci",
+  contract: "public-research-fetch-safety-v4-full-operation-timeout",
   publicHttpOnly: true,
   privateAndReservedHostsRejected: true,
   urlCredentialsRejected: true,
@@ -193,10 +227,12 @@ console.log(JSON.stringify({
   redirectLoopsBlocked: true,
   responseBytesBounded: true,
   fetchTimeoutRequired: true,
+  timeoutCoversRedirectsAndBody: true,
   responseHashRequired: true,
   strictPublicCloudflareFetchRequired: true,
   directResearchFetchCallsOutsideBoundaryAllowed: false,
   sourceRunProvenanceRequired: true,
+  sourceExpansionRunTruthfulnessRequired: true,
   manualOpportunityRunsLabelledScheduled: false,
   boundaryDocumentationRequired: true,
   focusedCiGateRequired: true,

@@ -4,6 +4,7 @@ import path from "node:path";
 const CHECK_NAME = "check-growth-route-parity";
 const root = process.cwd();
 const fixturePath = "fixtures/growth-worker-route-parity-v1.json";
+const parserPath = "src/core/growthWorkerRouteParity.ts";
 const errors = [];
 
 const EXPECTED_KEYS = Object.freeze([
@@ -22,10 +23,16 @@ const EXPECTED_KEYS = Object.freeze([
   "deliveryEnabled",
   "blockers",
 ]);
-const EXPECTED_BLOCKERS = Object.freeze([
-  "next_website_ingestion_endpoint_not_implemented",
-  "cross_repo_contract_tests_not_implemented",
-]);
+const EXPECTED_BLOCKERS_BY_PAGE_STATE = Object.freeze({
+  absent: Object.freeze([
+    "next_website_ingestion_endpoint_not_implemented",
+    "cross_repo_contract_tests_not_implemented",
+  ]),
+  present: Object.freeze([
+    "worker_proposal_delivery_not_implemented",
+    "cross_repo_contract_tests_not_implemented",
+  ]),
+});
 const MAX_DISCOVERED_FILES = 800;
 const MAX_DISCOVERED_BYTES = 12_000_000;
 const MAX_FILE_BYTES = 500_000;
@@ -75,6 +82,9 @@ function parseFixture(raw, label) {
     return null;
   }
   exactKeys(value, EXPECTED_KEYS, label);
+  if (`${JSON.stringify(value, null, 2)}\n` !== raw) {
+    errors.push(`${label} must use canonical two-space JSON with one trailing newline.`);
+  }
   return value;
 }
 
@@ -102,12 +112,14 @@ function validateFixture(record, label) {
   }
   exactBoolean(record, "bridgeEnabled", false, label);
   exactBoolean(record, "deliveryEnabled", false, label);
+  const expectedBlockers = EXPECTED_BLOCKERS_BY_PAGE_STATE[record.pageState];
   if (
+    !expectedBlockers ||
     !Array.isArray(record.blockers) ||
-    record.blockers.length !== EXPECTED_BLOCKERS.length ||
-    record.blockers.some((value, index) => value !== EXPECTED_BLOCKERS[index])
+    record.blockers.length !== expectedBlockers.length ||
+    record.blockers.some((value, index) => value !== expectedBlockers[index])
   ) {
-    errors.push(`${label}.blockers must preserve the exact current bridge-disabled blocker order.`);
+    errors.push(`${label}.blockers must match the exact blocker set for pageState=${record.pageState}.`);
   }
 }
 
@@ -214,8 +226,23 @@ const workerFixtureRaw = readRequired(fixturePath);
 const fixture = parseFixture(workerFixtureRaw, "Worker route parity fixture");
 if (fixture) validateFixture(fixture, "Worker route parity fixture");
 
+const workerParserSource = readRequired(parserPath);
+requireTokens("Worker Growth route state parser", workerParserSource, [
+  "GROWTH_WORKER_ROUTE_PARITY_CONTRACT_VERSION",
+  "GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS",
+  "GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS",
+  "worker_proposal_delivery_not_implemented",
+  "growthWorkerRouteBlockersForPageState",
+  "parseGrowthWorkerRouteParityContract",
+  "parseGrowthWorkerRouteParityJson",
+  "assertGrowthWorkerRouteParityPageState",
+  "GROWTH_WORKER_ROUTE_PARITY_BLOCKERS_INVALID",
+  "GROWTH_WORKER_ROUTE_PARITY_PAGE_STATE_MISMATCH",
+]);
+
 const workerCorpus = boundedCorpus(path.join(root, "src"));
 requireTokens("Worker Growth route sources", workerCorpus, [
+  "growth_worker_route_parity_v1",
   "growth_worker_proposal_v1",
   "growth_worker_request_v1",
   "growth_worker_bridge_v2",
@@ -225,6 +252,7 @@ requireTokens("Worker Growth route sources", workerCorpus, [
   "externalExecutionEnabled: false",
   "canonicalGrowthPromotionEnabled: false",
   "next_website_ingestion_endpoint_not_implemented",
+  "worker_proposal_delivery_not_implemented",
   "cross_repo_contract_tests_not_implemented",
 ]);
 forbidTokens("Worker Growth route sources", workerCorpus, [
@@ -253,6 +281,13 @@ const websiteRoot = configuredWebsitePath
   ? path.resolve(configuredWebsitePath)
   : path.resolve(root, "..", "next-website");
 const websiteFixturePath = path.join(websiteRoot, "tests", "fixtures", "growth-worker-route-parity-v1.json");
+const websiteParserPath = path.join(
+  websiteRoot,
+  "src",
+  "server",
+  "growth-autopilot",
+  "growthWorkerRouteParity.ts",
+);
 let websiteState = "fixture-only";
 
 if (fs.existsSync(websiteFixturePath)) {
@@ -270,7 +305,14 @@ if (fs.existsSync(websiteFixturePath)) {
     errors.push(`Mirrored route parity fixture pageState=${fixture.pageState} does not match website page state=${actualPageState}.`);
   }
 
+  if (!fs.existsSync(websiteParserPath)) {
+    errors.push(`Website route state parser is missing: ${websiteParserPath}`);
+  } else if (fs.readFileSync(websiteParserPath, "utf8") !== workerParserSource) {
+    errors.push("Worker and website route state parsers must match byte-for-byte.");
+  }
+
   const websiteCorpus = [
+    websiteParserPath,
     path.join(websiteRoot, "src", "server", "growth-autopilot", "workerProposalRequestSignature.ts"),
     path.join(websiteRoot, "src", "server", "growth-autopilot", "workerBridgeReadiness.ts"),
     path.join(websiteRoot, "src", "server", "growth-autopilot", "workerProposalIngestionNextApiAdapter.ts"),
@@ -278,6 +320,7 @@ if (fs.existsSync(websiteFixturePath)) {
     path.join(websiteRoot, "scripts", "check-growth-worker-proposal-page-source.mjs"),
   ].map((file) => fs.readFileSync(file, "utf8")).join("\n");
   requireTokens("Website route parity sources", websiteCorpus, [
+    "growth_worker_route_parity_v1",
     "growth_worker_request_v1",
     "growth_worker_bridge_v2",
     "growth_worker_route_inventory_v2",
@@ -286,6 +329,7 @@ if (fs.existsSync(websiteFixturePath)) {
     "/api/private/growth/worker-proposals",
     "bridgeEnabled: false",
     "next_website_ingestion_endpoint_not_implemented",
+    "worker_proposal_delivery_not_implemented",
     "cross_repo_contract_tests_not_implemented",
     "present state must match the exact reviewed frozen-config and page-handler delegation source byte-for-byte",
   ]);
@@ -302,8 +346,7 @@ if (errors.length) {
 console.log("Growth route parity check passed.");
 console.log(`- website verification mode: ${websiteState}`);
 console.log("- npm, complete local gate, safety completeness, dynamic helper parsing and read-only CI wiring are present");
-console.log("- mirrored fixture pins repository names, reserved path, packet/request/readiness versions and bridge-disabled posture");
-console.log("- Worker source preserves the two current blockers and keeps delivery, canonical promotion and external execution disabled");
-console.log("- when the sibling website checkout is available, its fixture must match byte-for-byte and page state must match the fixture");
-console.log("- the current cross_repo_contract_tests_not_implemented blocker still covers absent live HTTP delivery and end-to-end smoke, not static fixture parity");
-console.log("- credential identifiers are constructed only for fixture rejection and are not stored in the fixture");
+console.log("- absent pages require the endpoint blocker; present pages require the Worker proposal delivery blocker");
+console.log("- mirrored fixtures and pure route-state parsers match byte-for-byte when both checkouts are available");
+console.log("- the approved present state is reachable without retaining a contradictory endpoint-not-implemented blocker");
+console.log("- bridge, delivery, canonical promotion and external execution remain disabled");

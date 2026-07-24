@@ -1,0 +1,23 @@
+{
+  "contractVersion": "growth_worker_request_v1",
+  "method": "POST",
+  "pathname": "/api/private/growth/worker-proposals",
+  "contentType": "application/json",
+  "keyId": "worker-primary-2026-07",
+  "requestId": "worker-request:proposal:000000000001",
+  "timestamp": 1784865600,
+  "signedAt": "2026-07-24T04:00:00.000Z",
+  "nonce": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+  "body": "{\"contractVersion\":\"growth_worker_proposal_v1\",\"sourceSystem\":\"evavo-worker-agent\",\"sourceRouteFamily\":\"opportunity\",\"sourceRecordId\":\"worker-opportunity-000001\",\"sourceFingerprint\":\"sha256:worker-source-00000000000000000001\",\"organisationId\":\"00000000-0000-4000-8000-000000000101\",\"workspaceId\":\"00000000-0000-4000-8000-000000000201\",\"candidateKind\":\"opportunity_signal\",\"candidateTitle\":\"Public service redesign timing signal\",\"candidateSummary\":\"A bounded Worker research run found a public signal that may justify owner review.\",\"evidenceItems\":[{\"evidenceKind\":\"public_source\",\"title\":\"Public page evidence\",\"summary\":\"A bounded public-source review found a signal that merits owner review only.\",\"sourceUrl\":\"https://example.com/services\",\"sourceLabel\":\"Example service page\",\"capturedAt\":\"2026-07-24T03:45:00.000Z\",\"confidence\":0.82}],\"confidence\":0.81,\"proposedAction\":\"Prepare a short evidence review for the owner.\",\"doNothingRationale\":\"Waiting is reasonable if the signal is not strong enough to justify operator time.\",\"riskNotes\":\"The signal may be stale or unrelated to an active buying cycle. No external action is proposed.\",\"idempotencyKey\":\"worker-proposal:opportunity:000000000001\",\"createdAt\":\"2026-07-24T03:50:00.000Z\",\"proposalMode\":\"proposal_only\",\"externalExecutionRequested\":false,\"canonicalPromotionRequested\":false}",
+  "bodySha256": "d09ae9a464d3b6e0b77f483287d1d96b2290fe068a8dc4e6f592ef707ef702ce",
+  "headers": {
+    "content-type": "application/json",
+    "x-evavo-growth-contract-version": "growth_worker_request_v1",
+    "x-evavo-growth-key-id": "worker-primary-2026-07",
+    "x-evavo-growth-request-id": "worker-request:proposal:000000000001",
+    "x-evavo-growth-timestamp": "1784865600",
+    "x-evavo-growth-nonce": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "x-evavo-growth-content-sha256": "d09ae9a464d3b6e0b77f483287d1d96b2290fe068a8dc4e6f592ef707ef702ce",
+    "x-evavo-growth-signature": "sha256=2f991b05142c37c1439aec59d5d12ec89620d7d831171f0ef79e55d617d16b5f"
+  }
+}

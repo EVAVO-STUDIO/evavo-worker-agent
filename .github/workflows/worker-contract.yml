@@ -77,6 +77,9 @@ jobs:
       - name: Verify manual research concurrency leases
         run: npm run research:manual-lease-safety:check
 
+      - name: Verify review mutation safety
+        run: npm run review:mutation-safety:check
+
       - name: Verify public research fetch boundary
         run: npm run research:public-fetch-safety:check
 

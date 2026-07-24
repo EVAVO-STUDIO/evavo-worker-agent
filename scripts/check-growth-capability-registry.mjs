@@ -7,6 +7,9 @@ const repoRoot = path.resolve(__dirname, '..');
 
 const registryPath = path.join(repoRoot, 'src/core/growthCapabilities.ts');
 const bridgePath = path.join(repoRoot, 'src/core/growthBridgeReadiness.ts');
+const inventoryPath = path.join(repoRoot, 'src/core/growthBusinessRouteInventory.ts');
+const growthPolicyPath = path.join(repoRoot, 'src/routes/growthRoutePolicy.ts');
+const businessPolicyPath = path.join(repoRoot, 'src/routes/businessRoutePolicy.ts');
 const routePath = path.join(repoRoot, 'src/routes/growthCapabilitiesAdmin.ts');
 const indexPath = path.join(repoRoot, 'src/index.ts');
 const docPath = path.join(repoRoot, 'docs/growth-capability-registry.md');
@@ -54,8 +57,18 @@ function mustContain(label, content, token) {
   }
 }
 
+function mustNotContain(label, content, token) {
+  if (content.includes(token)) {
+    failed = true;
+    console.error(`FAIL ${label} contains forbidden token ${token}`);
+  }
+}
+
 const registry = read('src/core/growthCapabilities.ts', registryPath);
 const bridge = read('src/core/growthBridgeReadiness.ts', bridgePath);
+const inventory = read('src/core/growthBusinessRouteInventory.ts', inventoryPath);
+const growthPolicy = read('src/routes/growthRoutePolicy.ts', growthPolicyPath);
+const businessPolicy = read('src/routes/businessRoutePolicy.ts', businessPolicyPath);
 const route = read('src/routes/growthCapabilitiesAdmin.ts', routePath);
 const index = read('src/index.ts', indexPath);
 const doc = read('docs/growth-capability-registry.md', docPath);
@@ -76,6 +89,7 @@ for (const token of [
   'externalDeliveryEnabled: false',
   'autonomousCampaignsEnabled: false',
   'bridgeReadiness: growthBridgeReadiness',
+  'routeInventory: listGrowthBusinessRouteInventory()',
   'executesCapabilities: false',
   'touchesExternalChannel: false',
 ]) mustContain('capability registry', registry, token);
@@ -102,16 +116,52 @@ for (const token of [
   'canonical_auto_promotion',
 ]) mustContain('bridge readiness contract', bridge, token);
 
+for (const token of [
+  'growth_business_route_inventory_v1',
+  'scope: "growth_and_business_admin_route_policies"',
+  '"src/routes/growthRoutePolicy.ts"',
+  '"src/routes/businessRoutePolicy.ts"',
+  'completeForScope: true',
+  'completeForAllWorkerPostRoutes: false',
+  'bridgeEligible: false',
+  'postClassification: readOnly ? "not-supported" : "internal-mutation"',
+  'postClassification: retired ? "retired-write-fail-closed" : "internal-mutation"',
+  'browserCallable: false',
+  'canonicalGrowthPromotion: false',
+  'exposesAdminToken: false',
+  'callsExternalNetwork: false',
+  'callsAI: false',
+  'externalExecutionEnabled: false',
+  'canonicalGrowthPromotionEnabled: false',
+  'entry.writeMethods.length > 0',
+]) mustContain('Growth Business route inventory', inventory, token);
+
+for (const token of [
+  'GROWTH_ROUTE_POLICIES',
+  'authentication: "handler-enforced"',
+  'callsExternalNetwork: false',
+  'callsAI: false',
+  'canSendEmail: false',
+  'canPostSocial: false',
+  'canSubmitForms: false',
+]) mustContain('Growth route policy source', growthPolicy, token);
+
+for (const token of [
+  'BUSINESS_ROUTE_POLICIES',
+  'writeConfirmation: "handler-enforced"',
+  'retiredWritesFailClosed: true',
+  'callsExternalNetwork: false',
+  'callsAI: false',
+  'canSendEmail: false',
+  'canPostSocial: false',
+  'canSubmitForms: false',
+]) mustContain('Business route policy source', businessPolicy, token);
+
 for (const forbidden of [
   'growth_capabilities_v1_autonomy_execution_contract',
   'currentImplementation: "planned", notes: ["Draft-only.',
   'currentImplementation: "planned", notes: ["Preparation only.',
-]) {
-  if (registry.includes(forbidden)) {
-    failed = true;
-    console.error(`FAIL capability registry contains stale execution posture: ${forbidden}`);
-  }
-}
+]) mustNotContain('capability registry stale execution posture', registry, forbidden);
 
 for (const forbidden of [
   'ADMIN_TOKEN',
@@ -123,12 +173,25 @@ for (const forbidden of [
   'routeInventoryComplete: true',
   'clientBrowserAccess: true',
   'externalExecutionEnabled: true',
-]) {
-  if (bridge.includes(forbidden)) {
-    failed = true;
-    console.error(`FAIL bridge readiness contract contains unsafe or premature posture: ${forbidden}`);
-  }
-}
+]) mustNotContain('bridge readiness unsafe or premature posture', bridge, forbidden);
+
+for (const forbidden of [
+  'ADMIN_TOKEN',
+  'providerToken',
+  'accessToken',
+  'refreshToken',
+  'serviceRoleKey',
+  'completeForAllWorkerPostRoutes: true',
+  'bridgeEligible: true',
+  'browserCallable: true',
+  'canonicalGrowthPromotion: true',
+  'exposesAdminToken: true',
+  'callsExternalNetwork: true',
+  'callsAI: true',
+  'externalExecutionEnabled: true',
+  'canonicalGrowthPromotionEnabled: true',
+  'postClassification: "external-execution"',
+]) mustNotContain('Growth Business route inventory unsafe or premature posture', inventory, forbidden);
 
 mustContain('capability route', route, 'mode: "growth_capabilities"');
 mustContain('capability route', route, 'listGrowthCapabilities');
@@ -150,5 +213,7 @@ if (failed) {
 }
 
 console.log('Growth capability registry check passed.');
-console.log('- protected capability metadata now includes explicit cross-repo bridge readiness');
-console.log('- bridge remains disabled until route inventory, ingestion and cross-repo contract tests exist');
+console.log('- protected capability metadata includes explicit cross-repo bridge readiness');
+console.log('- protected capability metadata includes typed Growth/Business route-policy inventory');
+console.log('- scoped inventory is complete for typed Growth/Business policies but not all Worker POST routes');
+console.log('- bridge remains disabled until all-Worker route inventory, ingestion and cross-repo contract tests exist');

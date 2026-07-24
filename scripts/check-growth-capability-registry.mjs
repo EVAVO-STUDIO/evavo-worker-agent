@@ -1,236 +1,328 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(__dirname, "..");
+const errors = [];
 
-const registryPath = path.join(repoRoot, 'src/core/growthCapabilities.ts');
-const bridgePath = path.join(repoRoot, 'src/core/growthBridgeReadiness.ts');
-const inventoryPath = path.join(repoRoot, 'src/core/growthBusinessRouteInventory.ts');
-const growthPolicyPath = path.join(repoRoot, 'src/routes/growthRoutePolicy.ts');
-const businessPolicyPath = path.join(repoRoot, 'src/routes/businessRoutePolicy.ts');
-const routePath = path.join(repoRoot, 'src/routes/growthCapabilitiesAdmin.ts');
-const indexPath = path.join(repoRoot, 'src/index.ts');
-const docPath = path.join(repoRoot, 'docs/growth-capability-registry.md');
+const paths = {
+  registry: "src/core/growthCapabilities.ts",
+  bridge: "src/core/growthBridgeReadiness.ts",
+  inventory: "src/core/growthBusinessRouteInventory.ts",
+  growthPolicy: "src/routes/growthRoutePolicy.ts",
+  businessPolicy: "src/routes/businessRoutePolicy.ts",
+  opportunityPolicy: "src/routes/opportunityRoutePolicy.ts",
+  operationsPolicy: "src/routes/operationsRoutePolicy.ts",
+  adminProtected: "src/routes/adminProtected.ts",
+  admin: "src/routes/admin.ts",
+  tools: "src/routes/tools.ts",
+  route: "src/routes/growthCapabilitiesAdmin.ts",
+  index: "src/index.ts",
+  doc: "docs/growth-capability-registry.md",
+};
 
-const expectedCapabilityIds = [
-  'research_public_website',
-  'score_growth_signal',
-  'draft_message',
-  'draft_owned_content',
-  'prepare_browser_step',
-  'create_internal_task',
-  'request_approval',
-  'external_delivery_approved',
-  'record_outcome',
-  'generate_growth_brief',
-];
-
-const expectedLevelIds = [
-  'read_only',
-  'draft_only',
-  'internal_write',
-  'approved_external',
-  'trusted_bounded_external',
-  'autonomous_campaign',
-];
-
-let failed = false;
-
-function read(relativePath, absolutePath) {
+function read(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(absolutePath)) {
-    failed = true;
-    console.error(`FAIL ${relativePath} is missing`);
-    return '';
+    errors.push(`Missing ${relativePath}`);
+    return "";
   }
-  console.log(`OK   ${relativePath} exists`);
-  return fs.readFileSync(absolutePath, 'utf8');
+  return fs.readFileSync(absolutePath, "utf8");
 }
 
-function mustContain(label, content, token) {
-  if (!content.includes(token)) {
-    failed = true;
-    console.error(`FAIL ${label} missing ${token}`);
-  } else {
-    console.log(`OK   ${label} contains ${token}`);
+function requireTokens(label, content, tokens) {
+  for (const token of tokens) {
+    if (!content.includes(token)) errors.push(`${label} is missing: ${token}`);
   }
 }
 
-function mustNotContain(label, content, token) {
-  if (content.includes(token)) {
-    failed = true;
-    console.error(`FAIL ${label} contains forbidden token ${token}`);
+function forbidTokens(label, content, tokens) {
+  for (const token of tokens) {
+    if (content.includes(token)) errors.push(`${label} contains forbidden token: ${token}`);
   }
 }
 
-const registry = read('src/core/growthCapabilities.ts', registryPath);
-const bridge = read('src/core/growthBridgeReadiness.ts', bridgePath);
-const inventory = read('src/core/growthBusinessRouteInventory.ts', inventoryPath);
-const growthPolicy = read('src/routes/growthRoutePolicy.ts', growthPolicyPath);
-const businessPolicy = read('src/routes/businessRoutePolicy.ts', businessPolicyPath);
-const route = read('src/routes/growthCapabilitiesAdmin.ts', routePath);
-const index = read('src/index.ts', indexPath);
-const doc = read('docs/growth-capability-registry.md', docPath);
+const registry = read(paths.registry);
+const bridge = read(paths.bridge);
+const inventory = read(paths.inventory);
+const growthPolicy = read(paths.growthPolicy);
+const businessPolicy = read(paths.businessPolicy);
+const opportunityPolicy = read(paths.opportunityPolicy);
+const operationsPolicy = read(paths.operationsPolicy);
+const adminProtected = read(paths.adminProtected);
+const admin = read(paths.admin);
+const tools = read(paths.tools);
+const route = read(paths.route);
+const index = read(paths.index);
+const doc = read(paths.doc);
 
-for (const id of expectedCapabilityIds) mustContain('capability registry', registry, id);
-for (const id of expectedLevelIds) mustContain('autonomy levels', registry, id);
+requireTokens("Growth capability registry", registry, [
+  "growth_capabilities_v2_registry_only",
+  "listGrowthWorkerRouteInventory",
+  "routeInventory: listGrowthWorkerRouteInventory()",
+  "bridgeReadiness: growthBridgeReadiness",
+  "scheduledExecutionEnabled: false",
+  "scheduledExternalResearchEnabled: false",
+  "manualResearchRequiresAuthentication: true",
+  "manualResearchRequiresConfirmation: true",
+  "manualResearchIsBounded: true",
+  "manualResearchSavesReviewItemsOnly: true",
+  "draftingEnabled: false",
+  "browserExecutionEnabled: false",
+  "externalDeliveryEnabled: false",
+  "autonomousCampaignsEnabled: false",
+  "executesCapabilities: false",
+  "touchesExternalChannel: false",
+]);
 
-for (const token of [
-  'growth_capabilities_v2_registry_only',
-  'scheduledExecutionEnabled: false',
-  'scheduledExternalResearchEnabled: false',
-  'manualResearchRequiresAuthentication: true',
-  'manualResearchRequiresConfirmation: true',
-  'manualResearchIsBounded: true',
-  'manualResearchSavesReviewItemsOnly: true',
-  'draftingEnabled: false',
-  'browserExecutionEnabled: false',
-  'externalDeliveryEnabled: false',
-  'autonomousCampaignsEnabled: false',
-  'bridgeReadiness: growthBridgeReadiness',
-  'routeInventory: listGrowthBusinessRouteInventory()',
-  'executesCapabilities: false',
-  'touchesExternalChannel: false',
-]) mustContain('capability registry', registry, token);
+for (const id of [
+  "research_public_website",
+  "score_growth_signal",
+  "draft_message",
+  "draft_owned_content",
+  "prepare_browser_step",
+  "create_internal_task",
+  "request_approval",
+  "external_delivery_approved",
+  "record_outcome",
+  "generate_growth_brief",
+]) requireTokens("Growth capability registry", registry, [id]);
 
-for (const token of [
-  'growth_worker_bridge_v1',
-  'sourceSystem: "evavo-worker-agent"',
-  'canonicalTarget: "next-website:supabase:growth_*"',
-  'workerRole: "discovery_candidate_research_memory"',
-  'transport: "server_to_server_only"',
-  'promotionMode: "proposal_only"',
-  'bridgeEnabled: false',
-  'routeInventoryComplete: false',
-  'routeInventoryVersion: GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION',
-  'routeInventoryScope: "growth_and_business_admin_route_policies"',
-  'routeInventoryCompleteForScope: true',
-  'routeInventoryCompleteForAllWorkerPostRoutes: false',
-  'unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS',
-  'clientBrowserAccess: false',
-  'adminTokenBrowserExposure: false',
-  'draftingEnabled: false',
-  'externalExecutionEnabled: false',
-  'ownerApprovalRequired: true',
-  'idempotencyRequired: true',
-  'auditRequired: true',
-  'worker_post_route_inventory_pending',
-  'next_website_ingestion_endpoint_not_implemented',
-  'cross_repo_contract_tests_not_implemented',
-  'canonical_auto_promotion',
-]) mustContain('bridge readiness contract', bridge, token);
+for (const id of [
+  "read_only",
+  "draft_only",
+  "internal_write",
+  "approved_external",
+  "trusted_bounded_external",
+  "autonomous_campaign",
+]) requireTokens("Growth autonomy levels", registry, [id]);
 
-for (const token of [
-  'growth_business_route_inventory_v1',
-  'GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS',
-  'opportunity_route_policies',
-  'operations_route_policies',
-  'admin_fallback_posts',
-  'scope: "growth_and_business_admin_route_policies"',
-  '"src/routes/growthRoutePolicy.ts"',
-  '"src/routes/businessRoutePolicy.ts"',
-  'completeForScope: true',
-  'completeForAllWorkerPostRoutes: false',
-  'bridgeEligible: false',
-  'unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS',
-  'unclassifiedPostRouteGroups: GROWTH_BUSINESS_ROUTE_INVENTORY_PENDING_GROUPS.length',
-  'postClassification: readOnly ? "not-supported" : "internal-mutation"',
-  'postClassification: retired ? "retired-write-fail-closed" : "internal-mutation"',
-  'browserCallable: false',
-  'canonicalGrowthPromotion: false',
-  'exposesAdminToken: false',
-  'callsExternalNetwork: false',
-  'callsAI: false',
-  'externalExecutionEnabled: false',
-  'canonicalGrowthPromotionEnabled: false',
-  'entry.writeMethods.length > 0',
-]) mustContain('Growth Business route inventory', inventory, token);
+requireTokens("Growth bridge readiness", bridge, [
+  "growth_worker_bridge_v2",
+  "sourceSystem: \"evavo-worker-agent\"",
+  "canonicalTarget: \"next-website:supabase:growth_*\"",
+  "workerRole: \"discovery_candidate_research_memory\"",
+  "transport: \"server_to_server_only\"",
+  "promotionMode: \"proposal_only\"",
+  "bridgeEnabled: false",
+  "routeInventoryComplete: true",
+  "routeInventoryVersion: GROWTH_WORKER_ROUTE_INVENTORY_VERSION",
+  "routeInventoryScope: \"all_protected_worker_post_route_owners\"",
+  "routeInventoryCompleteForScope: true",
+  "routeInventoryCompleteForAllWorkerPostRoutes: true",
+  "routeInventoryIncludesBoundedReadOnlyResearch: true",
+  "routeInventoryExternalExecutionGroups: 0",
+  "unclassifiedPostRouteGroups: GROWTH_WORKER_ROUTE_INVENTORY_PENDING_GROUPS",
+  "clientBrowserAccess: false",
+  "adminTokenBrowserExposure: false",
+  "draftingEnabled: false",
+  "externalExecutionEnabled: false",
+  "ownerApprovalRequired: true",
+  "idempotencyRequired: true",
+  "auditRequired: true",
+  "next_website_ingestion_endpoint_not_implemented",
+  "cross_repo_contract_tests_not_implemented",
+  "canonical_auto_promotion",
+]);
 
-for (const token of [
-  'GROWTH_ROUTE_POLICIES',
-  'authentication: "handler-enforced"',
-  'callsExternalNetwork: false',
-  'callsAI: false',
-  'canSendEmail: false',
-  'canPostSocial: false',
-  'canSubmitForms: false',
-]) mustContain('Growth route policy source', growthPolicy, token);
+forbidTokens("Growth bridge readiness", bridge, [
+  "growth_worker_bridge_v1",
+  "worker_post_route_inventory_pending",
+  "routeInventoryComplete: false",
+  "routeInventoryCompleteForAllWorkerPostRoutes: false",
+  "bridgeEnabled: true",
+  "clientBrowserAccess: true",
+  "adminTokenBrowserExposure: true",
+  "draftingEnabled: true",
+  "externalExecutionEnabled: true",
+  "ADMIN_TOKEN",
+  "providerToken",
+  "accessToken",
+  "refreshToken",
+  "serviceRoleKey",
+]);
 
-for (const token of [
-  'BUSINESS_ROUTE_POLICIES',
-  'writeConfirmation: "handler-enforced"',
-  'retiredWritesFailClosed: true',
-  'callsExternalNetwork: false',
-  'callsAI: false',
-  'canSendEmail: false',
-  'canPostSocial: false',
-  'canSubmitForms: false',
-]) mustContain('Business route policy source', businessPolicy, token);
+requireTokens("Complete Worker route inventory", inventory, [
+  "growth_worker_route_inventory_v2",
+  "GROWTH_WORKER_ROUTE_INVENTORY_PENDING_GROUPS = Object.freeze([] as const)",
+  "OPPORTUNITY_ROUTE_POLICIES",
+  "OPERATIONS_ROUTE_POLICIES",
+  "routeFamily: \"growth\"",
+  "routeFamily: \"business\"",
+  "routeFamily: \"opportunity\"",
+  "routeFamily: \"operations\"",
+  "routeFamily: \"admin-fallback\"",
+  "handlerId: \"historical-leads\"",
+  "scope: \"all_protected_worker_post_route_owners\"",
+  "postRouteOwnerFamilies",
+  "protectedGetOnlyFamilies: Object.freeze([\"tools\"]",
+  "publicReadOnlyFamilies: Object.freeze([\"health\", \"public\", \"root\"]",
+  "completeForScope: true",
+  "completeForAllWorkerPostRoutes: true",
+  "bridgeEligible: false",
+  "unclassifiedPostRouteGroups: GROWTH_WORKER_ROUTE_INVENTORY_PENDING_GROUPS",
+  "metadata-write",
+  "internal-mutation",
+  "external-dry-run",
+  "retired-write-fail-closed",
+  "legacyExecutionFailClosed",
+  "externalExecutionGroups",
+  "inventoryIncludesBoundedReadOnlyResearch",
+  "inventoryIncludesExternalExecution: false",
+  "registryRouteCallsExternalNetwork: false",
+  "callsAI: false",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
+  "canonicalGrowthPromotionEnabled: false",
+  "export const listGrowthBusinessRouteInventory = listGrowthWorkerRouteInventory",
+]);
 
-for (const forbidden of [
-  'growth_capabilities_v1_autonomy_execution_contract',
-  'currentImplementation: "planned", notes: ["Draft-only.',
-  'currentImplementation: "planned", notes: ["Preparation only.',
-]) mustNotContain('capability registry stale execution posture', registry, forbidden);
+for (const source of [
+  "src/index.ts",
+  "src/routes/workerRoutePolicy.ts",
+  "src/routes/growthRoutePolicy.ts",
+  "src/routes/businessRoutePolicy.ts",
+  "src/routes/opportunityRoutePolicy.ts",
+  "src/routes/operationsRoutePolicy.ts",
+  "src/routes/adminProtected.ts",
+  "src/routes/admin.ts",
+  "src/routes/tools.ts",
+]) requireTokens("Complete Worker route inventory", inventory, [`\"${source}\"`]);
 
-for (const forbidden of [
-  'ADMIN_TOKEN',
-  'providerToken',
-  'accessToken',
-  'refreshToken',
-  'serviceRoleKey',
-  'bridgeEnabled: true',
-  'routeInventoryComplete: true',
-  'routeInventoryCompleteForAllWorkerPostRoutes: true',
-  'clientBrowserAccess: true',
-  'externalExecutionEnabled: true',
-]) mustNotContain('bridge readiness unsafe or premature posture', bridge, forbidden);
+forbidTokens("Complete Worker route inventory", inventory, [
+  "growth_business_route_inventory_v1",
+  "completeForAllWorkerPostRoutes: false",
+  "bridgeEligible: true",
+  "unclassifiedPostRouteGroups: Object.freeze([",
+  "browserCallable: true",
+  "canonicalGrowthPromotion: true",
+  "exposesAdminToken: true",
+  "inventoryIncludesExternalExecution: true",
+  "registryRouteCallsExternalNetwork: true",
+  "callsAI: true",
+  "canSendEmail: true",
+  "canPostSocial: true",
+  "canSubmitForms: true",
+  "canonicalGrowthPromotionEnabled: true",
+  "postClassification: \"external-execution\"",
+  "ADMIN_TOKEN",
+  "providerToken",
+  "accessToken",
+  "refreshToken",
+  "serviceRoleKey",
+]);
 
-for (const forbidden of [
-  'ADMIN_TOKEN',
-  'providerToken',
-  'accessToken',
-  'refreshToken',
-  'serviceRoleKey',
-  'completeForAllWorkerPostRoutes: true',
-  'bridgeEligible: true',
-  'unclassifiedPostRouteGroups: Object.freeze([]',
-  'browserCallable: true',
-  'canonicalGrowthPromotion: true',
-  'exposesAdminToken: true',
-  'callsExternalNetwork: true',
-  'callsAI: true',
-  'externalExecutionEnabled: true',
-  'canonicalGrowthPromotionEnabled: true',
-  'postClassification: "external-execution"',
-]) mustNotContain('Growth Business route inventory unsafe or premature posture', inventory, forbidden);
+requireTokens("Growth route policy", growthPolicy, [
+  "GROWTH_ROUTE_POLICIES",
+  "authentication: \"handler-enforced\"",
+  "callsExternalNetwork: false",
+  "callsAI: false",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
+]);
 
-mustContain('capability route', route, 'mode: "growth_capabilities"');
-mustContain('capability route', route, 'listGrowthCapabilities');
-mustContain('capability docs', doc, 'GET /admin/growth/capabilities');
-mustContain('capability docs', doc, 'Scheduled external execution is disabled');
-mustContain('capability docs', doc, 'Draft generation is disabled');
-mustContain('capability docs', doc, 'External delivery is blocked');
-mustContain('capability docs', doc, 'opportunity_route_policies');
-mustContain('capability docs', doc, 'operations_route_policies');
-mustContain('capability docs', doc, 'admin_fallback_posts');
+requireTokens("Business route policy", businessPolicy, [
+  "BUSINESS_ROUTE_POLICIES",
+  "writeConfirmation: \"handler-enforced\"",
+  "retiredWritesFailClosed: true",
+  "callsExternalNetwork: false",
+  "callsAI: false",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
+]);
 
-if (index.includes('handleGrowthCapabilitiesAdmin') && index.includes('/admin/growth/capabilities')) {
-  console.log('OK   src/index.ts wires the Growth capabilities route');
-} else {
-  failed = true;
-  console.error('FAIL src/index.ts does not wire /admin/growth/capabilities yet');
-}
+requireTokens("Opportunity route policy", opportunityPolicy, [
+  "OPPORTUNITY_ROUTE_POLICIES",
+  "networkPosture: OpportunityNetworkPosture",
+  "read-only-research",
+  "authentication: \"handler-enforced\"",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
+]);
 
-if (failed) {
-  console.error('Growth capability registry check failed.');
+requireTokens("Operations route policy", operationsPolicy, [
+  "OPERATIONS_ROUTE_POLICIES",
+  "networkPosture: OperationsNetworkPosture",
+  "read-only-research",
+  "writeConfirmation: \"handler-enforced\"",
+  "callsAI: false",
+  "canSendEmail: false",
+  "canPostSocial: false",
+  "canSubmitForms: false",
+]);
+
+requireTokens("Admin fallback confirmation", adminProtected, [
+  "pathname === \"/admin/leads\" && request.method === \"POST\"",
+  "confirm_required",
+  "internalMetadataOnly: true",
+  "callsNetwork: false",
+  "callsAI: false",
+  "externalStateChange: false",
+]);
+requireTokens("Admin fallback owner", admin, [
+  "pathname === \"/admin/leads\" && request.method === \"POST\"",
+  "insertLead",
+  "internalMetadataOnly: true",
+  "externalStateChange: false",
+]);
+requireTokens("Protected tools posture", tools, [
+  "request.method === \"OPTIONS\"",
+  "allow: \"GET\"",
+  "pathname === \"/tools/capabilities\" && request.method === \"GET\"",
+]);
+
+requireTokens("Worker dispatcher", index, [
+  "switch (resolveOpportunityRouteHandlerId(pathname))",
+  "switch (resolveGrowthRouteHandlerId(pathname))",
+  "switch (resolveBusinessRouteHandlerId(pathname))",
+  "switch (resolveOperationsRouteHandlerId(pathname))",
+  "matchesWorkerRouteFamily(\"admin\", pathname)",
+  "matchesWorkerRouteFamily(\"tools\", pathname)",
+]);
+
+requireTokens("Capability route", route, [
+  "mode: \"growth_capabilities\"",
+  "listGrowthCapabilities",
+  "request.method !== \"GET\"",
+]);
+
+requireTokens("Capability documentation", doc, [
+  "growth_worker_bridge_v2",
+  "growth_worker_route_inventory_v2",
+  "all_protected_worker_post_route_owners",
+  "routeInventoryCompleteForAllWorkerPostRoutes: true",
+  "routeInventoryExternalExecutionGroups: 0",
+  "unclassifiedPostRouteGroups: 0",
+  "Inventory completion does **not** enable the bridge.",
+  "next_website_ingestion_endpoint_not_implemented",
+  "cross_repo_contract_tests_not_implemented",
+  "Every protected POST owner is classified",
+  "external-dry-run",
+  "GET /admin/growth/capabilities",
+]);
+
+forbidTokens("Capability documentation", doc, [
+  "growth_worker_bridge_v1",
+  "growth_business_route_inventory_v1",
+  "routeInventoryComplete: false",
+  "completeForAllWorkerPostRoutes: false",
+  "worker_post_route_inventory_pending",
+]);
+
+if (errors.length) {
+  console.error("Growth capability registry check failed:\n");
+  for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
 
-console.log('Growth capability registry check passed.');
-console.log('- protected capability metadata includes explicit cross-repo bridge readiness');
-console.log('- protected capability metadata includes typed Growth/Business route-policy inventory');
-console.log('- scoped inventory is complete for typed Growth/Business policies but not all Worker POST routes');
-console.log('- readiness and inventory enumerate Opportunity, Operations and admin-fallback POST coverage gaps');
-console.log('- bridge remains disabled until all-Worker route inventory, ingestion and cross-repo contract tests exist');
+console.log("Growth capability registry check passed.");
+console.log("- protected capability metadata publishes growth_worker_bridge_v2 and the complete Worker POST-owner inventory");
+console.log("- Growth, Business, Opportunity, Operations and admin-fallback POST owners are classified from dispatcher policy sources");
+console.log("- bounded public research is classified as external-dry-run without external state mutation or delivery capability");
+console.log("- no protected Worker POST owner is unclassified and no inventory group permits external execution or canonical promotion");
+console.log("- bridge remains disabled until next-website ingestion and cross-repository proposal/promotion tests exist");

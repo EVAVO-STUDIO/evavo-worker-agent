@@ -243,7 +243,8 @@ export async function saveOpportunityCandidate(
   const dbScores = buildDbScoreFields(candidate, score, confidence, signals);
   const value = candidate.evidence?.value;
   const groundedCurrency = value?.currency === "AUD" || value?.currency === "NZD" ? value.currency : null;
-  const groundedValueCents = groundedCurrency && Number.isSafeInteger(value?.amountCents) ? value?.amountCents ?? null : null;
+  const groundedAmountCents = typeof value?.amountCents === "number" && Number.isSafeInteger(value.amountCents) ? value.amountCents : null;
+  const groundedValueCents = groundedCurrency ? groundedAmountCents : null;
 
   await env.DB.prepare(
     `INSERT INTO opportunities (

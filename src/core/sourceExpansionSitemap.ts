@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
+import { fetchPublicResearchText, validatePublicResearchUrl } from "./publicResearchFetch";
 
 type SitemapSeed = {
   id: string;
@@ -30,14 +31,8 @@ const OPPORTUNITY_PATH_PATTERN = /(tender|tenders|procurement|supplier|suppliers
 const NOISE_PATH_PATTERN = /(login|signin|register|cart|privacy|terms|policy|cookie|contact|about|news|media|event|blog|\.pdf$|\.jpg$|\.png$|\.zip$)/i;
 
 function normalizeUrl(raw: string, base?: string) {
-  try {
-    const url = new URL(raw.trim(), base);
-    if (!["http:", "https:"].includes(url.protocol)) return null;
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  const decision = validatePublicResearchUrl(raw.trim(), base);
+  return decision.ok && decision.url ? decision.url.replace(/\/+$/, "") : null;
 }
 
 function domainOf(raw: string) {
@@ -49,11 +44,9 @@ function domainOf(raw: string) {
 }
 
 function baseOrigin(raw: string) {
-  try {
-    return new URL(raw).origin;
-  } catch {
-    return null;
-  }
+  const decision = validatePublicResearchUrl(raw);
+  if (!decision.ok || !decision.url) return null;
+  return new URL(decision.url).origin;
 }
 
 function confidence(score: number): "low" | "medium" | "high" {
@@ -106,8 +99,10 @@ function robotsSitemapUrls(robotsText: string, origin: string) {
     const url = normalizeUrl(match[1]);
     if (url) urls.add(url);
   }
-  urls.add(`${origin}/sitemap.xml`);
-  urls.add(`${origin}/sitemap_index.xml`);
+  const standardSitemap = normalizeUrl(`${origin}/sitemap.xml`);
+  const standardIndex = normalizeUrl(`${origin}/sitemap_index.xml`);
+  if (standardSitemap) urls.add(standardSitemap);
+  if (standardIndex) urls.add(standardIndex);
   return Array.from(urls).slice(0, 5);
 }
 
@@ -176,6 +171,23 @@ async function upsertCandidate(env: Env, candidate: SitemapCandidate, seed: Site
   return status;
 }
 
+function receipt(result: Awaited<ReturnType<typeof fetchPublicResearchText>>, kind: "robots" | "sitemap") {
+  return {
+    kind,
+    contract: result.contract,
+    requestedUrl: result.requestedUrl,
+    finalUrl: result.finalUrl,
+    status: result.status,
+    contentType: result.contentType,
+    bytes: result.bytes,
+    bodySha256: result.bodySha256,
+    redirectCount: result.redirectCount,
+    elapsedMs: result.elapsedMs,
+    fetchedAtISO: result.fetchedAtISO,
+    error: result.error,
+  };
+}
+
 export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?: number; maxFetches?: number; maxSitemapUrls?: number; maxCandidates?: number } = {}) {
   const hasCandidates = await tableExists(env, "source_expansion_candidates");
   if (!hasCandidates) return { ok: false, error: "missing_migration", requiredMigration: "0007_source_expansion_memory.sql" };
@@ -186,6 +198,7 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
   const seeds = await activeSeeds(env, limitSeeds);
   const existing = await existingDomains(env);
   const discovered: SitemapCandidate[] = [];
+  const fetchReceipts: Array<Record<string, unknown>> = [];
   let fetches = 0;
   let sitemapUrlsFound = 0;
   let candidatesNewOrUpdated = 0;
@@ -195,44 +208,51 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
   for (const seed of seeds) {
     if (fetches >= maxFetches || discovered.length >= maxCandidates) break;
     const origin = baseOrigin(seed.url);
-    if (!origin) continue;
-    let sitemapUrls = [`${origin}/sitemap.xml`];
-    try {
-      const robots = await fetch(`${origin}/robots.txt`, { headers: { "user-agent": "EVAVO Opportunity Intelligence Source Discovery/1.0" } });
-      fetches += 1;
-      if (robots.ok) sitemapUrls = robotsSitemapUrls(await robots.text(), origin);
-    } catch {
+    if (!origin) {
       failures += 1;
+      continue;
+    }
+    let sitemapUrls = robotsSitemapUrls("", origin);
+    const robotsUrl = normalizeUrl(`${origin}/robots.txt`);
+    if (robotsUrl && fetches < maxFetches) {
+      const robots = await fetchPublicResearchText(robotsUrl, { maxBytes: 262_144 });
+      fetches += 1;
+      fetchReceipts.push({ seedId: seed.id, ...receipt(robots, "robots") });
+      if (robots.ok) sitemapUrls = robotsSitemapUrls(robots.body, origin);
+      else failures += 1;
     }
 
     for (const sitemapUrl of sitemapUrls) {
       if (fetches >= maxFetches || discovered.length >= maxCandidates) break;
-      try {
-        const response = await fetch(sitemapUrl, { headers: { "user-agent": "EVAVO Opportunity Intelligence Source Discovery/1.0" } });
-        fetches += 1;
-        if (!response.ok) continue;
-        const xml = await response.text();
-        const locs = extractSitemapLocs(xml, sitemapUrl, maxSitemapUrls);
-        sitemapUrlsFound += locs.length;
-        for (const loc of locs) {
-          if (discovered.length >= maxCandidates) break;
-          const candidate = candidateFromUrl(loc, seed);
-          if (!candidate) continue;
-          const status = await upsertCandidate(env, candidate, seed, existing);
-          if (status === "duplicate_existing_source") duplicates += 1;
-          else candidatesNewOrUpdated += 1;
-          discovered.push(candidate);
-        }
-      } catch {
+      const response = await fetchPublicResearchText(sitemapUrl, { maxBytes: 1_048_576 });
+      fetches += 1;
+      const sitemapReceipt = receipt(response, "sitemap");
+      fetchReceipts.push({ seedId: seed.id, ...sitemapReceipt });
+      if (!response.ok) {
         failures += 1;
+        continue;
+      }
+      const effectiveSitemapUrl = response.finalUrl || sitemapUrl;
+      const locs = extractSitemapLocs(response.body, effectiveSitemapUrl, maxSitemapUrls);
+      sitemapUrlsFound += locs.length;
+      for (const loc of locs) {
+        if (discovered.length >= maxCandidates) break;
+        const candidate = candidateFromUrl(loc, seed);
+        if (!candidate) continue;
+        candidate.evidence = { ...candidate.evidence, sitemapFetch: sitemapReceipt };
+        const status = await upsertCandidate(env, candidate, seed, existing);
+        if (status === "duplicate_existing_source") duplicates += 1;
+        else candidatesNewOrUpdated += 1;
+        discovered.push(candidate);
       }
     }
   }
 
-  await logEvent(env, "source_expansion_sitemap_run", `Sitemap expansion checked ${seeds.length} seed(s), found ${discovered.length} candidate(s).`);
+  await logEvent(env, "source_expansion_sitemap_run", `Confirmed sitemap expansion checked ${seeds.length} seed(s), found ${discovered.length} candidate(s).`);
   return {
     ok: true,
     mode: "source_expansion_sitemap_run",
+    fetchContract: "public_research_fetch_v1",
     seedsChecked: seeds.length,
     fetches,
     sitemapUrlsFound,
@@ -240,7 +260,8 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
     candidatesNewOrUpdated,
     duplicates,
     failures,
+    fetchReceipts: fetchReceipts.slice(0, 15),
     preview: discovered.slice(0, 25),
-    safety: { bounded: true, maxFetches, maxSitemapUrls, maxCandidates, callsAI: false, sendsEmail: false, savesOpportunitySources: false, candidateSaveStillRequiresConfirmation: true },
+    safety: { bounded: true, publicWebOnly: true, redirectsValidated: true, responseBytesBounded: true, maxFetches, maxSitemapUrls, maxCandidates, callsAI: false, sendsEmail: false, savesOpportunitySources: false, candidateSaveStillRequiresConfirmation: true },
   };
 }

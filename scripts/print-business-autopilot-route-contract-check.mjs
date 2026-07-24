@@ -92,6 +92,11 @@ $businessReadPaths = @(
   "/admin/business/learning?limit=5"
 )
 
+$historicalBusinessReadPaths = @(
+  "/admin/business/action-drafts?limit=5",
+  "/admin/business/approval-requests?limit=5"
+)
+
 $expectedBusinessRouteIds = @($businessReadRouteIds + $businessConfirmRouteIds | Select-Object -Unique)
 
 $allRoutes = @()
@@ -189,6 +194,21 @@ foreach ($path in $businessReadPaths) {
   } catch {
     $contractFailed = $true
     Write-Host "Business Autopilot route threw: $path" -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+  }
+}
+
+Write-Host "Verify historical Business read responses remain non-executable" -ForegroundColor Cyan
+foreach ($path in $historicalBusinessReadPaths) {
+  try {
+    $payload = Invoke-RestMethod "$base$path" -Headers $headers
+    if ($payload.historicalOnly -ne $true -or $payload.executable -ne $false -or $payload.deliverable -ne $false -or $payload.authoritativeForExecution -ne $false) {
+      $contractFailed = $true
+      Write-Host "Historical Business read response is missing required non-execution flags: $path" -ForegroundColor Red
+    }
+  } catch {
+    $contractFailed = $true
+    Write-Host "Historical Business read verification threw: $path" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
   }
 }

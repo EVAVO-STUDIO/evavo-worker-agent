@@ -1,8 +1,8 @@
 # Growth capability registry
 
-This document defines the capability, bridge-readiness and scoped route-inventory model for the EVAVO Growth Research Worker.
+This document defines the capability, bridge-readiness and protected route-inventory model for the EVAVO Growth Research Worker.
 
-The registry is a control-plane and reporting feature. It describes currently available internal capabilities, reserved modelling levels, blocked capabilities and the safety posture of typed Growth/Business admin route groups. It does not execute any capability by itself.
+The registry is a control-plane and reporting feature. It describes available internal capabilities, reserved modelling levels, blocked capabilities and the safety posture of every protected Worker POST owner. It does not execute a capability by itself.
 
 ## Current code
 
@@ -10,8 +10,14 @@ The registry is a control-plane and reporting feature. It describes currently av
 src/core/growthCapabilities.ts
 src/core/growthBridgeReadiness.ts
 src/core/growthBusinessRouteInventory.ts
+src/routes/workerRoutePolicy.ts
 src/routes/growthRoutePolicy.ts
 src/routes/businessRoutePolicy.ts
+src/routes/opportunityRoutePolicy.ts
+src/routes/operationsRoutePolicy.ts
+src/routes/adminProtected.ts
+src/routes/admin.ts
+src/routes/tools.ts
 src/routes/growthCapabilitiesAdmin.ts
 ```
 
@@ -19,17 +25,12 @@ The registry is a static typed source of truth. It does not accept runtime overr
 
 ## Runtime posture
 
-Scheduled external execution is disabled.
-
-Manual research is permitted only through authenticated, POST-only routes that require explicit confirmation and enforce bounded limits. Manual research saves review items or internal metadata only.
-
-Draft generation is disabled.
-
-Browser execution is disabled.
-
-External delivery is blocked.
-
-Email sending, social posting, form submission and external state mutation are disabled.
+- Scheduled external execution is disabled.
+- Manual public research is authenticated, explicitly confirmed and bounded.
+- Manual research performs public GET-only inspection and saves review items or internal metadata only.
+- Draft generation is disabled.
+- Browser execution is disabled.
+- Email sending, social posting, form submission and external state mutation are disabled.
 
 ## Autonomy modelling levels
 
@@ -42,7 +43,7 @@ Email sending, social posting, form submission and external state mutation are d
 5 autonomous_campaign
 ```
 
-These levels are modelling vocabulary, not enabled runtime modes. The current Worker supports read-only analysis and explicitly confirmed internal metadata writes. Levels involving drafting, browser execution, external delivery or autonomous campaigns remain blocked.
+These levels are modelling vocabulary, not enabled runtime modes. The current Worker supports read-only analysis, bounded confirmed public research and explicitly confirmed internal metadata writes. Drafting, browser execution, external delivery and autonomous campaigns remain blocked.
 
 ## Capability IDs
 
@@ -59,7 +60,7 @@ record_outcome
 generate_growth_brief
 ```
 
-A capability entry may exist to model a blocked or future concept. `currentImplementation` is authoritative:
+`currentImplementation` is authoritative:
 
 ```text
 available
@@ -69,46 +70,26 @@ blocked
 
 An entry marked `blocked` has no executable runtime implementation.
 
-## Registry fields
-
-```text
-id
-label
-description
-category
-autonomyLevelRequired
-callsNetwork
-callsAI
-touchesExternalChannel
-externalStateChange
-requiresApproval
-requiresEvidence
-requiresContactSource
-requiresSuppressionCheck
-costRisk
-reputationRisk
-allowedInFreeSafeMode
-currentImplementation
-notes
-```
-
 ## Bridge readiness
 
-The protected registry includes the versioned bridge-readiness object:
+The protected registry includes:
 
 ```text
-growth_worker_bridge_v1
+growth_worker_bridge_v2
 ```
 
-Its current posture is intentionally fail-closed:
+Current posture:
 
 ```text
 bridgeEnabled: false
-routeInventoryComplete: false
-routeInventoryVersion: growth_business_route_inventory_v1
-routeInventoryScope: growth_and_business_admin_route_policies
+routeInventoryComplete: true
+routeInventoryVersion: growth_worker_route_inventory_v2
+routeInventoryScope: all_protected_worker_post_route_owners
 routeInventoryCompleteForScope: true
-routeInventoryCompleteForAllWorkerPostRoutes: false
+routeInventoryCompleteForAllWorkerPostRoutes: true
+routeInventoryIncludesBoundedReadOnlyResearch: true
+routeInventoryExternalExecutionGroups: 0
+unclassifiedPostRouteGroups: 0
 clientBrowserAccess: false
 adminTokenBrowserExposure: false
 draftingEnabled: false
@@ -120,71 +101,125 @@ transport: server_to_server_only
 promotionMode: proposal_only
 ```
 
-The bridge-readiness payload also names the currently unclassified POST route groups:
+Inventory completion does **not** enable the bridge. The remaining blockers are:
 
 ```text
-opportunity_route_policies
-operations_route_policies
-admin_fallback_posts
+next_website_ingestion_endpoint_not_implemented
+cross_repo_contract_tests_not_implemented
 ```
 
-This does not create a Worker-to-Growth data bridge. It provides a machine-readable statement of what is and is not ready, including the concrete route families that still prevent bridge eligibility.
+Candidate ingestion, canonical promotion and external execution remain unavailable.
 
-## Scoped Growth/Business route inventory
+## Complete protected POST-owner inventory
 
 The protected registry also includes:
 
 ```text
-growth_business_route_inventory_v1
+growth_worker_route_inventory_v2
 ```
 
-The inventory is generated from the typed policy registries:
+The inventory follows the dispatcher ownership order and covers:
 
 ```text
+growth
+business
+opportunity
+operations
+admin-fallback
+```
+
+`tools` is protected and GET-only. `health`, `public` and `root` are public read-only families.
+
+Source-of-truth files include:
+
+```text
+src/index.ts
+src/routes/workerRoutePolicy.ts
 src/routes/growthRoutePolicy.ts
 src/routes/businessRoutePolicy.ts
+src/routes/opportunityRoutePolicy.ts
+src/routes/operationsRoutePolicy.ts
+src/routes/adminProtected.ts
+src/routes/admin.ts
+src/routes/tools.ts
 ```
 
-It classifies the Growth and Business admin route groups as read-only, internal mutation or retired-write-fail-closed. Every entry reports authentication, confirmation, network, AI, external-channel, browser and canonical-promotion posture.
-
-The inventory is deliberately scoped:
+Every protected POST owner is classified as one of:
 
 ```text
-scope: growth_and_business_admin_route_policies
+metadata-write
+internal-mutation
+external-dry-run
+retired-write-fail-closed
+```
+
+`external-dry-run` means bounded, confirmed, read-only public research that may save internal review metadata. It does not mean third-party mutation, delivery or autonomous execution.
+
+The inventory records:
+
+```text
+routeFamily
+handlerId
+priority
+ownership
+readMethods
+writeMethods
+postClassification
+authentication
+confirmation
+networkPosture
+callsExternalNetwork
+callsAI
+canSendEmail
+canPostSocial
+canSubmitForms
+externalStateChange
+historicalOnly
+retiredWritesFailClosed
+legacyExecutionFailClosed
+browserCallable
+canonicalGrowthPromotion
+```
+
+Current inventory contract:
+
+```text
+scope: all_protected_worker_post_route_owners
 completeForScope: true
-completeForAllWorkerPostRoutes: false
+completeForAllWorkerPostRoutes: true
 bridgeEligible: false
-unclassifiedPostRouteGroups: 3
+unclassifiedPostRouteGroups: 0
+externalExecutionGroups: 0
 ```
 
-`completeForScope: true` means the typed Growth and Business policy groups are represented. It does not mean every POST route in the Worker has been inventoried. The cross-repository bridge must remain disabled until the Opportunity policies, Operations policies and top-level admin fallback writes are classified and guarded.
+Important classifications:
 
-The exact outstanding groups are:
-
-```text
-opportunity_route_policies
-operations_route_policies
-admin_fallback_posts
-```
-
-These identifiers are part of the machine-readable contract. An empty gap list while `completeForAllWorkerPostRoutes` is false is invalid because it would leave operators unable to see what still blocks the bridge.
+- Growth and Business writes are internal D1 mutations; historical Business write groups fail closed.
+- Opportunity discovery and source expansion may perform bounded confirmed public research and save review metadata only.
+- Opportunity reviews, learning, source health and candidate decisions are internal mutations.
+- Operations source routes may perform bounded confirmed public research; planner and settings routes remain internal.
+- `/admin/run` remains fail-closed through the legacy execution safety handler.
+- The only top-level admin fallback POST owner is confirmed historical lead metadata insertion at `/admin/leads`.
+- No inventory entry is browser-callable or able to promote canonical Supabase Growth records.
 
 Current inventory safety posture:
 
 ```text
 browserCallable: false
 exposesAdminToken: false
-callsExternalNetwork: false
+inventoryIncludesBoundedReadOnlyResearch: true
+inventoryIncludesExternalExecution: false
+registryRouteCallsExternalNetwork: false
 callsAI: false
-externalExecutionEnabled: false
+canSendEmail: false
+canPostSocial: false
+canSubmitForms: false
 canonicalGrowthPromotionEnabled: false
 ```
 
-Historical Business draft and approval route groups are represented as `retired-write-fail-closed`; their records may be readable, but their retired writes do not execute.
-
 ## Registry safety posture
 
-The registry reports:
+The registry itself reports:
 
 ```text
 scheduledExecutionEnabled: false
@@ -205,24 +240,16 @@ touchesExternalChannel: false
 callsNetwork: false
 ```
 
-The blocked external-delivery entry exists only so the control plane can describe a prohibited capability explicitly. It is not a roadmap commitment and does not enable external execution.
+The blocked external-delivery entry exists only to describe a prohibited capability explicitly. It is not a roadmap commitment and does not enable external execution.
 
-Internal approval requests are metadata records only. Creating an approval request does not activate the proposed action.
-
-Historical draft and lead records may remain readable for compatibility, but they are not executable.
+Internal approval requests are metadata records only. Creating one does not activate the proposed action. Historical draft and lead records may remain readable for compatibility, but they are not executable.
 
 ## Worker route
 
-The protected Worker route is:
+The protected route is:
 
 ```text
 GET /admin/growth/capabilities
 ```
 
-The handler is:
-
-```text
-src/routes/growthCapabilitiesAdmin.ts
-```
-
-The route requires the canonical server-side `ADMIN_TOKEN`, authenticates before method handling, accepts GET only, and returns registry, bridge-readiness and scoped route-inventory metadata without executing any capability.
+The route requires the canonical server-side `ADMIN_TOKEN`, authenticates before method handling, accepts GET only, and returns registry, bridge-readiness and route-inventory metadata without executing any capability or calling the network.

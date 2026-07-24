@@ -26,9 +26,11 @@ function Assert-BusinessRead([string]$Path, [bool]$HistoricalOnly = $false) {
   if ($payload.safety.externalStateChange -or $payload.safety.callsAI -or $payload.safety.callsNetwork -or $payload.safety.canSendEmail -or $payload.safety.canPostSocial -or $payload.safety.canSubmitForms) { throw "GET $Path safety is unsafe." }
   if ($HistoricalOnly) {
     if ($payload.historicalOnly -ne $true) { throw "GET $Path is not marked historicalOnly." }
+    if ($payload.reviewOnly -ne $true) { throw "GET $Path is not marked reviewOnly." }
     if ($payload.executable -ne $false) { throw "GET $Path is not marked executable false." }
     if ($payload.deliverable -ne $false) { throw "GET $Path is not marked deliverable false." }
     if ($payload.authoritativeForExecution -ne $false) { throw "GET $Path is not marked authoritativeForExecution false." }
+    if ($payload.externalExecutionAllowed -ne $false) { throw "GET $Path is not marked externalExecutionAllowed false." }
   }
 }
 

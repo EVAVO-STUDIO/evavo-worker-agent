@@ -27,6 +27,8 @@ const paths = {
   operationsPolicy: resolve("src", "routes", "operationsRoutePolicy.ts"),
   health: resolve("src", "core", "health.ts"),
   schema: resolve("src", "core", "schema.ts"),
+  sourceCandidateCore: resolve("src", "core", "opportunitySourceDiscovery.ts"),
+  sourceCandidateTests: resolve("tests", "opportunitySourceCandidateSaveSource.test.ts"),
   bounded: resolve("scripts", "check-bounded-json-request-safety.mjs"),
   lease: resolve("scripts", "check-manual-research-lease-safety.mjs"),
   review: resolve("scripts", "check-review-mutation-boundary-safety.mjs"),
@@ -133,7 +135,7 @@ for (const [label, source, tokens] of [
     "automaticRetryAllowed: false",
   ]],
   ["review mutation safety", sources.review, [
-    'contract: "review-mutation-boundary-safety-v2-legacy-compatibility"',
+    'contract: "review-mutation-boundary-safety-v3-source-candidate-atomicity"',
     "exactBooleanConfirmationRequired: true",
     "boundedRequestBodyRequired: true",
     "requestFingerprintRequired: true",
@@ -143,6 +145,8 @@ for (const [label, source, tokens] of [
     "legacyDraftReviewUsesSharedLease: true",
     "legacyDraftReviewWritesAtomic: true",
     "opportunityReviewWritesAtomic: true",
+    "sourceCandidateWritesAtomic: true",
+    "sourceCandidateBehavioralSourceTestsRequired: true",
   ]],
   ["public research safety", sources.publicFetch, [
     'contract: "public-research-fetch-safety-v7-hierarchical-source-exclusion"',
@@ -185,6 +189,23 @@ for (const [label, source, tokens] of [
   for (const token of tokens) {
     if (!source.includes(token)) errors.push(`${label} contract is missing CI-required posture: ${token}`);
   }
+}
+
+for (const token of [
+  'SOURCE_CANDIDATE_SAVE_CONTRACT = "opportunity_source_candidate_save_v2_atomic"',
+  "const statements: D1PreparedStatement[] = []",
+  "await env.DB.batch(statements)",
+  "sourceRecordsExpansionMarkersAndAuditAtomic: true",
+  "requestBodySha256: options.requestBodySha256 || null",
+]) {
+  if (!sources.sourceCandidateCore.includes(token)) errors.push(`Source-candidate application service is missing: ${token}`);
+}
+for (const token of [
+  'test("reviewed source candidates commit source rows, markers and audit atomically"',
+  'test("source candidate save has no sequential helper writes or external execution"',
+  'test("source candidate route binds the audit to the bounded request receipt"',
+]) {
+  if (!sources.sourceCandidateTests.includes(token)) errors.push(`Source-candidate behavioral source test is missing: ${token}`);
 }
 
 for (const token of [
@@ -336,7 +357,7 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) errors.pus
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-contract-workflow-v5-settings-and-legacy-review",
+  contract: "worker-contract-workflow-v6-source-candidate-atomicity",
   nodeVersion: 24,
   lockedInstallRequired: true,
   readOnlyWorkflowPermissions: true,
@@ -352,6 +373,8 @@ console.log(JSON.stringify({
   publicResearchGateRequired: true,
   evidenceQualityGateRequired: true,
   deterministicCoreTestsRequired: true,
+  sourceCandidateWritesAtomic: true,
+  sourceCandidateBehavioralSourceTestsRequired: true,
   completeLocalGateRequired: true,
   protectedWrappersRequired: true,
   broadAdminWritesBoundedAndExact: true,

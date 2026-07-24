@@ -10,6 +10,7 @@ const paths = {
   registry: "src/core/growthCapabilities.ts",
   bridge: "src/core/growthBridgeReadiness.ts",
   routeParity: "src/core/growthWorkerRouteParity.ts",
+  fixture: "fixtures/growth-worker-route-parity-v1.json",
   inventory: "src/core/growthBusinessRouteInventory.ts",
   growthPolicy: "src/routes/growthRoutePolicy.ts",
   businessPolicy: "src/routes/businessRoutePolicy.ts",
@@ -45,9 +46,20 @@ function forbidTokens(label, content, tokens) {
   }
 }
 
+function currentPageState(parserSource) {
+  const matches = [...parserSource.matchAll(/GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE = "(absent|present)"/g)];
+  if (matches.length !== 1) {
+    errors.push("Growth route parity parser must expose exactly one finite current page state.");
+    return null;
+  }
+  return matches[0][1];
+}
+
 const registry = read(paths.registry);
 const bridge = read(paths.bridge);
 const routeParity = read(paths.routeParity);
+const fixtureRaw = read(paths.fixture);
+const fixture = fixtureRaw ? JSON.parse(fixtureRaw) : null;
 const inventory = read(paths.inventory);
 const growthPolicy = read(paths.growthPolicy);
 const businessPolicy = read(paths.businessPolicy);
@@ -79,7 +91,6 @@ requireTokens("Growth capability registry", registry, [
   "executesCapabilities: false",
   "touchesExternalChannel: false",
 ]);
-
 for (const id of [
   "research_public_website",
   "score_growth_signal",
@@ -92,7 +103,6 @@ for (const id of [
   "record_outcome",
   "generate_growth_brief",
 ]) requireTokens("Growth capability registry", registry, [id]);
-
 for (const id of [
   "read_only",
   "draft_only",
@@ -154,7 +164,7 @@ requireTokens("Growth route parity state", routeParity, [
   "GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS",
   "GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS",
   "GROWTH_WORKER_ROUTE_BLOCKERS_BY_PAGE_STATE",
-  'GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE = "absent"',
+  "GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE",
   "GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS",
   "next_website_ingestion_endpoint_not_implemented",
   "worker_proposal_delivery_not_implemented",
@@ -174,6 +184,32 @@ forbidTokens("Growth route parity state", routeParity, [
   "fetch(",
   "process.env",
 ]);
+const parserPageState = currentPageState(routeParity);
+const blockersByState = Object.freeze({
+  absent: Object.freeze([
+    "next_website_ingestion_endpoint_not_implemented",
+    "cross_repo_contract_tests_not_implemented",
+  ]),
+  present: Object.freeze([
+    "worker_proposal_delivery_not_implemented",
+    "cross_repo_contract_tests_not_implemented",
+  ]),
+});
+if (fixture) {
+  if (fixture.pageState !== "absent" && fixture.pageState !== "present") {
+    errors.push("Growth route parity fixture page state is invalid.");
+  } else {
+    if (JSON.stringify(fixture.blockers) !== JSON.stringify(blockersByState[fixture.pageState])) {
+      errors.push(`Growth route parity fixture blockers do not match page state=${fixture.pageState}.`);
+    }
+    if (parserPageState && fixture.pageState !== parserPageState) {
+      errors.push(`Growth route parity fixture state=${fixture.pageState} does not match parser state=${parserPageState}.`);
+    }
+  }
+  if (fixture.bridgeEnabled !== false || fixture.deliveryEnabled !== false) {
+    errors.push("Growth route parity fixture must keep bridge and delivery disabled.");
+  }
+}
 
 requireTokens("Complete Worker route inventory", inventory, [
   "growth_worker_route_inventory_v2",
@@ -210,7 +246,6 @@ requireTokens("Complete Worker route inventory", inventory, [
   "canonicalGrowthPromotionEnabled: false",
   "export const listGrowthBusinessRouteInventory = listGrowthWorkerRouteInventory",
 ]);
-
 for (const source of [
   "src/index.ts",
   "src/routes/workerRoutePolicy.ts",
@@ -222,7 +257,6 @@ for (const source of [
   "src/routes/admin.ts",
   "src/routes/tools.ts",
 ]) requireTokens("Complete Worker route inventory", inventory, [`"${source}"`]);
-
 forbidTokens("Complete Worker route inventory", inventory, [
   "growth_business_route_inventory_v1",
   "completeForAllWorkerPostRoutes: false",
@@ -284,7 +318,6 @@ requireTokens("Operations route policy", operationsPolicy, [
   "canPostSocial: false",
   "canSubmitForms: false",
 ]);
-
 requireTokens("Admin fallback confirmation", adminProtected, [
   'pathname === "/admin/leads" && request.method === "POST"',
   "confirm_required",
@@ -304,7 +337,6 @@ requireTokens("Protected tools posture", tools, [
   'allow: "GET"',
   'pathname === "/tools/capabilities" && request.method === "GET"',
 ]);
-
 requireTokens("Worker dispatcher", index, [
   "switch (resolveOpportunityRouteHandlerId(pathname))",
   "switch (resolveGrowthRouteHandlerId(pathname))",
@@ -327,12 +359,24 @@ requireTokens("Capability documentation", doc, [
   "routeInventoryExternalExecutionGroups: 0",
   "unclassifiedPostRouteGroups: 0",
   "Inventory completion does **not** enable the bridge.",
-  "next_website_ingestion_endpoint_not_implemented",
   "cross_repo_contract_tests_not_implemented",
   "Every protected POST owner is classified",
   "external-dry-run",
   "GET /admin/growth/capabilities",
 ]);
+if (parserPageState === "absent") {
+  requireTokens("Capability documentation absent state", doc, [
+    "next_website_ingestion_endpoint_not_implemented",
+  ]);
+} else if (parserPageState === "present") {
+  requireTokens("Capability documentation present state", doc, [
+    "worker_proposal_delivery_not_implemented",
+    "The exact next-website proposal page is present",
+  ]);
+  forbidTokens("Capability documentation present state", doc, [
+    "next_website_ingestion_endpoint_not_implemented",
+  ]);
+}
 requireTokens("Route parity documentation", routeParityDoc, [
   "Growth Route Parity",
   "growth_worker_route_parity_v1",
@@ -358,6 +402,7 @@ if (errors.length) {
 console.log("Growth capability registry check passed.");
 console.log("- protected capability metadata publishes growth_worker_bridge_v2 and the complete Worker POST-owner inventory");
 console.log("- current readiness blockers come from the mirrored Growth route-state contract rather than a duplicated fixed array");
+console.log(`- reviewed page state ${parserPageState} matches the mirrored fixture and exact conditional blocker set`);
 console.log("- absent and present website page states have distinct exact blocker sets while bridge and delivery remain disabled");
 console.log("- Growth, Business, Opportunity, Operations and admin-fallback POST owners are classified from dispatcher policy sources");
 console.log("- bounded public research is classified as external-dry-run without external state mutation or delivery capability");

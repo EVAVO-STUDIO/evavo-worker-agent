@@ -141,6 +141,7 @@ export async function handleOpportunitySourceCandidatesAdmin(
       urls: selected.urls,
       reason: reason.value,
       actor: actor.value,
+      requestBodySha256: parsed.bodySha256,
     });
     const resultError = "error" in result ? result.error : null;
     const inheritedSafety = "safety" in result && result.safety && typeof result.safety === "object"

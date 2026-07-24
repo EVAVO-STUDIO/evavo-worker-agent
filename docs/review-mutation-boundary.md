@@ -18,11 +18,13 @@ Numeric or string confirmation compatibility values are not accepted. Query-stri
 
 ## Concurrency
 
-Draft and opportunity reviews acquire a per-record D1 lease before reading mutable review context. They also acquire a hashed learning-scope lease before changing a shared strategy score. This prevents:
+Modern draft and opportunity reviews acquire a per-record D1 lease before reading mutable review context. They also acquire a hashed learning-scope lease before changing a shared strategy score. This prevents:
 
 - duplicate concurrent decisions for one record;
 - lost score increments from reviews that share a learning bucket;
 - a stale holder releasing a newer lease.
+
+The legacy `/admin/drafts/:id/approve` and `/admin/drafts/:id/reject` compatibility routes use the same `draft-review:<draft-id>` lease as the modern draft-review route. A legacy decision therefore cannot race a modern review for the same draft. The compatibility route does not change a learning score and does not acquire a strategy lease.
 
 Source-candidate commits use one broad commit lease because they may add several reviewed source records in one bounded operation.
 
@@ -30,7 +32,9 @@ A conflict returns HTTP `409` with `research_action_in_progress`. It does not en
 
 ## Atomic writes
 
-A draft review commits its review row, strategy score, draft status, applicable lead status and audit event in one D1 batch.
+A modern draft review commits its review row, strategy score, draft status, applicable lead status and audit event in one D1 batch.
+
+A legacy draft compatibility decision commits its lead status, draft status and audit event in one D1 batch while the shared draft lease is held.
 
 An opportunity review commits its review row, opportunity status, strategy score and audit event in one D1 batch.
 
@@ -54,4 +58,4 @@ Review routes:
 - do not apply for opportunities;
 - do not create executable deliverables.
 
-An `approved`, `shortlisted` or similar stored status remains internal review metadata only.
+An `approved`, `shortlisted` or similar stored status remains internal review metadata only. Legacy compatibility naming does not weaken this posture.

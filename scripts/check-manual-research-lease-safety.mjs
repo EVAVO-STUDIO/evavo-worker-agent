@@ -155,6 +155,30 @@ const routeContracts = [
     ],
   },
   {
+    label: "autonomy settings",
+    path: "src/routes/autonomySettingsAdmin.ts",
+    gateToken: "const lease = await acquireManualResearchLease(env, AUTONOMY_SETTINGS_LEASE, 600)",
+    tokens: [
+      'AUTONOMY_SETTINGS_LEASE = "autonomy-settings"',
+      "manualResearchLeaseConflict(AUTONOMY_SETTINGS_LEASE)",
+      "releaseManualResearchLease(env, lease)",
+      "concurrentSettingsWriteAllowed: false",
+      "settingsAndAuditAtomic: true",
+    ],
+  },
+  {
+    label: "legacy safe settings",
+    path: "src/routes/legacyExecutionSafetyAdmin.ts",
+    gateToken: "const lease = await acquireManualResearchLease(env, LEGACY_SETTINGS_LEASE, 600)",
+    tokens: [
+      'LEGACY_SETTINGS_LEASE = "legacy-safe-settings"',
+      "manualResearchLeaseConflict(LEGACY_SETTINGS_LEASE)",
+      "releaseManualResearchLease(env, lease)",
+      "concurrentSettingsWriteAllowed: false",
+      "settingsAndAuditAtomic: true",
+    ],
+  },
+  {
     label: "draft review actions",
     path: "src/routes/draftReviewAdmin.ts",
     gateToken: "const draftLease = await acquireManualResearchLease(env, draftActionKey, 600)",
@@ -166,6 +190,18 @@ const routeContracts = [
       "releaseManualResearchLease(env, draftLease)",
       "concurrentDuplicateReviewAllowed: false",
       "concurrentStrategyScoreMutationAllowed: false",
+    ],
+  },
+  {
+    label: "legacy draft review action",
+    path: "src/routes/legacyExecutionSafetyAdmin.ts",
+    gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 600)",
+    tokens: [
+      'const actionKey = `draft-review:${draftId}`',
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+      "concurrentDuplicateReviewAllowed: false",
+      "reviewStateAndAuditAtomic: true",
     ],
   },
   {
@@ -227,6 +263,20 @@ for (const contract of routeContracts) {
   ]);
 }
 
+const legacy = read("src/routes/legacyExecutionSafetyAdmin.ts");
+const legacySettingsFunction = legacy.indexOf("async function updateSafeSettings");
+const legacySettingsConfirm = legacy.indexOf("if (!isExplicitJsonConfirmation(parsed.value))", legacySettingsFunction);
+const legacySettingsLease = legacy.indexOf("const lease = await acquireManualResearchLease(env, LEGACY_SETTINGS_LEASE, 600)", legacySettingsFunction);
+const legacyDraftFunction = legacy.indexOf("async function updateDraftDecision");
+const legacyDraftConfirm = legacy.indexOf("if (!isExplicitJsonConfirmation(parsed.value))", legacyDraftFunction);
+const legacyDraftLease = legacy.indexOf("const lease = await acquireManualResearchLease(env, actionKey, 600)", legacyDraftFunction);
+if (!(legacySettingsFunction < legacySettingsConfirm && legacySettingsConfirm < legacySettingsLease)) {
+  errors.push("Legacy settings confirmation must precede legacy settings lease acquisition");
+}
+if (!(legacyDraftFunction < legacyDraftConfirm && legacyDraftConfirm < legacyDraftLease)) {
+  errors.push("Legacy draft confirmation must precede shared draft lease acquisition");
+}
+
 requireTokens("manual research concurrency document", doc, [
   "# Manual research concurrency",
   "manual_research_lease_v1",
@@ -236,10 +286,12 @@ requireTokens("manual research concurrency document", doc, [
   "research_action_in_progress",
   "automaticRetryAllowed: false",
   "query-hint",
-  "legacy source",
-  "source-health",
+  "legacy-source:<source-id>",
   "opportunity-source-candidates-commit",
+  "autonomy-settings",
+  "legacy-safe-settings",
   "draft-review:<draft-id>",
+  "legacy draft approve/reject compatibility route deliberately uses the same",
   "opportunity-review:<opportunity-id>",
   "hashed `draft-strategy:` lease",
   "hashed `opportunity-strategy:` lease",
@@ -253,7 +305,6 @@ if (packageJson.scripts?.["research:manual-lease-safety:check"] !== expectedComm
 if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run research:manual-lease-safety:check")) {
   errors.push("check:local must include research:manual-lease-safety:check");
 }
-
 requireTokens("safety gate completeness", safetyGate, [
   '"research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs"',
   '"scripts/check-manual-research-lease-safety.mjs"',
@@ -268,8 +319,8 @@ if (workflow.includes("wrangler deploy")) errors.push("Manual research lease val
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "manual-research-lease-safety-v3-review-and-candidate-coverage",
-  previousContract: "manual-research-lease-safety-v2-complete-route-coverage",
+  contract: "manual-research-lease-safety-v4-settings-and-legacy-review",
+  previous_contract: "manual-research-lease-safety-v3-review-and-candidate-coverage",
   atomicSingleStatementAcquisitionRequired: true,
   readThenWriteAcquisitionAllowed: false,
   boundedLeaseTtlRequired: true,
@@ -288,7 +339,10 @@ console.log(JSON.stringify({
   perOpportunitySourceHealthLeaseRequired: true,
   perLegacySourceLeaseRequired: true,
   sourceCandidateCommitLeaseRequired: true,
+  autonomySettingsLeaseRequired: true,
+  legacySettingsLeaseRequired: true,
   draftRecordAndStrategyLeasesRequired: true,
+  legacyAndModernDraftReviewShareLease: true,
   opportunityRecordAndStrategyLeasesRequired: true,
   externalExecutionEnabled: false,
   errors,

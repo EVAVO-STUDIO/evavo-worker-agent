@@ -175,7 +175,19 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
       }
 
       const results = [];
-      for (const source of runnable) results.push(await runOneSource(env, source));
+      for (const source of runnable) {
+        const sourceActionKey = `legacy-source:${source.id}`;
+        const sourceLease = await acquireManualResearchLease(env, sourceActionKey, 600);
+        if (!sourceLease) {
+          skipped.push({ sourceId: source.id, url: source.url, reason: "source_action_in_progress" });
+          continue;
+        }
+        try {
+          results.push(await runOneSource(env, source));
+        } finally {
+          await releaseManualResearchLease(env, sourceLease).catch(() => false);
+        }
+      }
 
       const failed = results.filter((result) => result.status === "failed").length;
       const successful = results.length - failed;
@@ -199,7 +211,7 @@ export async function handleSourceBatchAdmin(request: Request, env: Env, pathnam
         failed,
         skipped,
         results,
-        safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true, callsAI: false, sendsEmail: false, externalStateChange: false, concurrentDuplicateRunAllowed: false, auditAndSourceUpdateAtomic: true },
+        safety: { callsNetwork: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true, callsAI: false, sendsEmail: false, externalStateChange: false, concurrentDuplicateRunAllowed: false, overlappingPerSourceActionAllowed: false, auditAndSourceUpdateAtomic: true },
       });
     } finally {
       await releaseManualResearchLease(env, lease).catch(() => false);

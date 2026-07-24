@@ -14,6 +14,23 @@ import { boundedReviewText } from "../core/reviewMutationSafety";
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 type AutonomyMode = "observe_only" | "free_safe_autonomy" | "assisted_discovery";
+type AutonomySettings = {
+  mode: AutonomyMode;
+  engineEnabled: boolean;
+  freeSafeOnly: true;
+  opportunityDiscoveryEnabled: boolean;
+  sourceExpansionEnabled: boolean;
+  leadDiscoveryEnabled: false;
+  aiDraftsEnabled: false;
+  sendingEnabled: false;
+  dailySourceLimit: number;
+  maxNetworkCallsPerRun: number;
+  minOpportunityScore: number;
+  maxExpansionFetchesPerRun: number;
+  maxExpansionCandidatesPerRun: number;
+  updatedAtISO: string | null;
+  updatedBy: string;
+};
 type AutonomySettingsBody = Record<string, unknown> & {
   confirm?: unknown;
   mode?: unknown;
@@ -55,9 +72,8 @@ const acceptedWriteKeys = new Set([
   "maxExpansionCandidatesPerRun",
   "updatedBy",
 ]);
-
-const defaultSettings = Object.freeze({
-  mode: "free_safe_autonomy" as AutonomyMode,
+const defaultSettings: AutonomySettings = {
+  mode: "free_safe_autonomy",
   engineEnabled: false,
   freeSafeOnly: true,
   opportunityDiscoveryEnabled: true,
@@ -70,11 +86,9 @@ const defaultSettings = Object.freeze({
   minOpportunityScore: 45,
   maxExpansionFetchesPerRun: 2,
   maxExpansionCandidatesPerRun: 25,
-  updatedAtISO: null as string | null,
+  updatedAtISO: null,
   updatedBy: "system-default",
-});
-
-type NormalizedAutonomySettings = { ...typeof defaultSettings };
+};
 
 function parseJson(value: string | null): unknown {
   if (!value) return null;
@@ -93,18 +107,19 @@ function storedBoolean(value: unknown, fallback: boolean): boolean {
 
 function storedInteger(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(parsed)));
+  return Number.isFinite(parsed)
+    ? Math.max(min, Math.min(max, Math.round(parsed)))
+    : fallback;
 }
 
-function normalizeStoredSettings(value: unknown): NormalizedAutonomySettings {
+function normalizeStoredSettings(value: unknown): AutonomySettings {
   const input = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
   const mode = typeof input.mode === "string" && allowedModes.includes(input.mode as AutonomyMode)
     ? input.mode as AutonomyMode
     : defaultSettings.mode;
-  const settings: NormalizedAutonomySettings = {
+  const settings: AutonomySettings = {
     mode,
     engineEnabled: storedBoolean(input.engineEnabled, defaultSettings.engineEnabled),
     freeSafeOnly: true,
@@ -119,37 +134,17 @@ function normalizeStoredSettings(value: unknown): NormalizedAutonomySettings {
     leadDiscoveryEnabled: false,
     aiDraftsEnabled: false,
     sendingEnabled: false,
-    dailySourceLimit: storedInteger(input.dailySourceLimit, defaultSettings.dailySourceLimit, 0, 100),
-    maxNetworkCallsPerRun: storedInteger(
-      input.maxNetworkCallsPerRun,
-      defaultSettings.maxNetworkCallsPerRun,
-      0,
-      250,
-    ),
-    minOpportunityScore: storedInteger(
-      input.minOpportunityScore,
-      defaultSettings.minOpportunityScore,
-      1,
-      100,
-    ),
-    maxExpansionFetchesPerRun: storedInteger(
-      input.maxExpansionFetchesPerRun,
-      defaultSettings.maxExpansionFetchesPerRun,
-      0,
-      10,
-    ),
-    maxExpansionCandidatesPerRun: storedInteger(
-      input.maxExpansionCandidatesPerRun,
-      defaultSettings.maxExpansionCandidatesPerRun,
-      0,
-      100,
-    ),
+    dailySourceLimit: storedInteger(input.dailySourceLimit, 10, 0, 100),
+    maxNetworkCallsPerRun: storedInteger(input.maxNetworkCallsPerRun, 20, 0, 250),
+    minOpportunityScore: storedInteger(input.minOpportunityScore, 45, 1, 100),
+    maxExpansionFetchesPerRun: storedInteger(input.maxExpansionFetchesPerRun, 2, 0, 10),
+    maxExpansionCandidatesPerRun: storedInteger(input.maxExpansionCandidatesPerRun, 25, 0, 100),
     updatedAtISO: typeof input.updatedAtISO === "string" ? input.updatedAtISO : null,
     updatedBy: typeof input.updatedBy === "string" ? input.updatedBy.slice(0, 120) : "operator",
   };
-  if (settings.maxNetworkCallsPerRun <= 0) {
-    settings.sourceExpansionEnabled = false;
+  if (settings.maxNetworkCallsPerRun === 0) {
     settings.opportunityDiscoveryEnabled = false;
+    settings.sourceExpansionEnabled = false;
   }
   return settings;
 }
@@ -161,8 +156,9 @@ function exactBoolean(
 ): { ok: true; value: boolean } | { ok: false; error: "invalid_boolean"; field: string } {
   if (!Object.prototype.hasOwnProperty.call(body, key)) return { ok: true, value: fallback };
   const value = body[key];
-  if (typeof value !== "boolean") return { ok: false, error: "invalid_boolean", field: String(key) };
-  return { ok: true, value };
+  return typeof value === "boolean"
+    ? { ok: true, value }
+    : { ok: false, error: "invalid_boolean", field: String(key) };
 }
 
 function exactInteger(
@@ -174,13 +170,12 @@ function exactInteger(
 ): { ok: true; value: number } | { ok: false; error: "invalid_integer"; field: string; allowed: { min: number; max: number } } {
   if (!Object.prototype.hasOwnProperty.call(body, key)) return { ok: true, value: fallback };
   const value = body[key];
-  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
-    return { ok: false, error: "invalid_integer", field: String(key), allowed: { min, max } };
-  }
-  return { ok: true, value };
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+    ? { ok: true, value }
+    : { ok: false, error: "invalid_integer", field: String(key), allowed: { min, max } };
 }
 
-function policyFor(settings: NormalizedAutonomySettings) {
+function policyFor(settings: AutonomySettings) {
   const manualResearchConfigured = settings.engineEnabled && settings.maxNetworkCallsPerRun > 0;
   return {
     scheduledExecutionEnabled: false,
@@ -220,14 +215,14 @@ function compatibilityMetadata() {
 }
 
 async function readSettings(env: Env) {
-  const saved = normalizeStoredSettings(parseJson(await getSetting(env, SETTING_KEY)));
+  const settings = normalizeStoredSettings(parseJson(await getSetting(env, SETTING_KEY)));
   return {
     ok: true,
     mode: "autonomy_settings",
     contractVersion: AUTONOMY_SETTINGS_CONTRACT,
     compatibility: compatibilityMetadata(),
-    settings: saved,
-    policy: policyFor(saved),
+    settings,
+    policy: policyFor(settings),
     allowedModes,
     safety: {
       readOnly: true,
@@ -248,12 +243,11 @@ async function readSettings(env: Env) {
 
 function buildNextSettings(
   body: AutonomySettingsBody,
-  previous: NormalizedAutonomySettings,
+  previous: AutonomySettings,
   now: string,
-): { ok: true; settings: NormalizedAutonomySettings } | { ok: false; error: string; [key: string]: unknown } {
+): { ok: true; settings: AutonomySettings } | { ok: false; error: string; [key: string]: unknown } {
   const unknownKeys = Object.keys(body).filter((key) => !acceptedWriteKeys.has(key));
   if (unknownKeys.length) return { ok: false, error: "unsupported_setting_keys", keys: unknownKeys.sort() };
-
   if (Object.prototype.hasOwnProperty.call(body, "mode")
     && (typeof body.mode !== "string" || !allowedModes.includes(body.mode as AutonomyMode))) {
     return { ok: false, error: "invalid_mode", allowedModes };
@@ -278,7 +272,6 @@ function buildNextSettings(
     previous.sourceExpansionEnabled,
   );
   if (!sourceExpansionEnabled.ok) return sourceExpansionEnabled;
-
   const dailySourceLimit = exactInteger(body, "dailySourceLimit", previous.dailySourceLimit, 0, 100);
   if (!dailySourceLimit.ok) return dailySourceLimit;
   const maxNetworkCallsPerRun = exactInteger(
@@ -313,11 +306,10 @@ function buildNextSettings(
     100,
   );
   if (!maxExpansionCandidatesPerRun.ok) return maxExpansionCandidatesPerRun;
-
   const updatedBy = boundedReviewText(body.updatedBy, "updatedBy", 120);
   if (!updatedBy.ok) return updatedBy;
 
-  const settings: NormalizedAutonomySettings = {
+  const settings: AutonomySettings = {
     mode: typeof body.mode === "string" ? body.mode as AutonomyMode : previous.mode,
     engineEnabled: engineEnabled.value,
     freeSafeOnly: true,
@@ -334,9 +326,9 @@ function buildNextSettings(
     updatedAtISO: now,
     updatedBy: updatedBy.value || "operator",
   };
-  if (settings.maxNetworkCallsPerRun <= 0) {
-    settings.sourceExpansionEnabled = false;
+  if (settings.maxNetworkCallsPerRun === 0) {
     settings.opportunityDiscoveryEnabled = false;
+    settings.sourceExpansionEnabled = false;
   }
   return { ok: true, settings };
 }

@@ -146,12 +146,14 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       const historicalDrafts = drafts.map((record) => projectHistoricalBusinessDraft(record));
       return json({
         mode: "business_action_drafts",
-        contract: "business_historical_draft_reads_v3_minimized",
+        contract: "business_historical_draft_reads_v4_full_posture",
         historicalOnly: true,
+        reviewOnly: true,
         historicalContentRedacted: true,
         executable: false,
         deliverable: false,
         authoritativeForExecution: false,
+        externalExecutionAllowed: false,
         ...businessReadPayload(historicalDrafts, "drafts"),
       });
     }
@@ -160,13 +162,15 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       const historicalApprovals = approvals.map((record) => projectHistoricalBusinessApproval(record));
       return json({
         mode: "business_approval_requests",
-        contract: "business_historical_approval_reads_v3_minimized",
+        contract: "business_historical_approval_reads_v4_full_posture",
         historicalOnly: true,
+        reviewOnly: true,
         historicalContentRedacted: true,
         historicalIdentityRedacted: true,
         executable: false,
         deliverable: false,
         authoritativeForExecution: false,
+        externalExecutionAllowed: false,
         ...businessReadPayload(historicalApprovals, "approvalRequests"),
       });
     }

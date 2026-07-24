@@ -25,6 +25,13 @@ const required = [
   "Historical labels and schema families are retained only for data compatibility.",
   "They do not describe enabled drafting, approvals-to-execution, campaigns or external delivery.",
   "The authoritative model is research-memory-first, metadata-first, review-first and non-executing.",
+  "Confirmation is the exact JSON boolean `true`; query-string, numeric and string coercions are rejected.",
+  "Confirmed research and source-management JSON bodies are media-type checked, stream-bounded, structure-bounded and SHA-256 fingerprinted.",
+  "Sensitive query credentials and binary response bodies are rejected.",
+  "Paired source-health and source-run audit updates use a D1 transaction.",
+  "bounded_admin_json_request_v1",
+  "public_research_fetch_v2",
+  "Sitemap research traverses sitemap indexes to a maximum depth of two",
   "Opportunity extraction is deterministic, boundary-aware and evidence-quality-scored.",
   "Missing deadlines, values, currencies, eligibility and scope remain missing rather than being inferred.",
   "Historical source and review learning may calibrate grounded evidence but cannot promote weak evidence into high confidence.",
@@ -36,11 +43,22 @@ for (const token of required) {
   if (!readme.includes(token)) errors.push(`README missing truthful top-level posture: ${token}`);
 }
 
+for (const document of [
+  "docs/bounded-admin-json-boundary.md",
+  "docs/public-research-fetch-boundary.md",
+  "docs/opportunity-evidence-quality.md",
+  "docs/manual-research-concurrency.md",
+]) {
+  if (!readme.includes(document)) errors.push(`README operating document list is missing: ${document}`);
+}
+
 const requiredFocusedChecks = [
   "npm run safety:gates:check",
   "npm run docs:operating-posture:check",
   "npm run docs:readme-truthfulness:check",
   "npm run worker:package-identity:check",
+  "npm run research:bounded-json-safety:check",
+  "npm run research:manual-lease-safety:check",
   "npm run research:public-fetch-safety:check",
   "npm run opportunities:evidence-quality:check",
   "npm run opportunities:execution-boundary-safety:check",
@@ -50,6 +68,7 @@ const requiredFocusedChecks = [
   "npm run business:review-record-storage-isolation:check",
   "npm run business:ci-parity:check",
   "npm run planner:catalogue-truthfulness:check",
+  "npm run test:core",
   "npm run typecheck",
 ];
 
@@ -68,6 +87,10 @@ const forbidden = [
   "Learning may promote weak evidence into high confidence.",
   "Missing opportunity facts may be inferred from source context.",
   "shortlist and prepare response",
+  "Query-string confirmation is supported",
+  "numeric confirmation is accepted",
+  "public_research_fetch_v1",
+  "automatic retry executor",
 ];
 
 for (const token of forbidden) {
@@ -85,11 +108,17 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run docs:r
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "readme-top-level-truthfulness-v3-evidence-quality",
+  contract: "readme-top-level-truthfulness-v4-bounded-behavioral-research",
   outboundExecutionDocumentedAsDisabled: true,
   historicalReviewRecordsDocumentedAsNonAuthoritative: true,
   approvalToExecutionDocumentedAsDisabled: true,
   authoritativeModelDocumentedAsNonExecuting: true,
+  exactBooleanConfirmationDocumented: true,
+  boundedJsonRequestDocumented: true,
+  publicResearchFetchV2Documented: true,
+  sensitiveQueryAndBinaryRejectionDocumented: true,
+  researchTransactionAtomicityDocumented: true,
+  boundedSitemapIndexTraversalDocumented: true,
   deterministicEvidenceQualityDocumented: true,
   missingFactsRemainMissing: true,
   weakEvidenceLearningPromotionAllowed: false,
@@ -97,6 +126,7 @@ console.log(JSON.stringify({
   authoritativeCompleteGateDocumented: true,
   focusedSafetyChecksDocumented: true,
   focusedCommandsBackedByPackageScripts: true,
+  deterministicCoreTestsDocumented: true,
   errors,
 }, null, 2));
 

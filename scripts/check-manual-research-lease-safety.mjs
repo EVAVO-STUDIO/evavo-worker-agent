@@ -34,6 +34,7 @@ const relationshipGraph = read("src/routes/sourceExpansionPublicDirectoryScanAdm
 const queryHintResolver = read("src/routes/sourceExpansionQueryHintResolverAdmin.ts");
 const sourceBatch = read("src/routes/sourceBatchAdmin.ts");
 const opportunityDiscovery = read("src/routes/opportunityDiscoveryAdmin.ts");
+const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
 const sourcesAdmin = read("src/routes/sourcesAdmin.ts");
 const doc = read("docs/manual-research-concurrency.md");
 const workflow = read(".github/workflows/worker-contract.yml");
@@ -127,7 +128,7 @@ const routeContracts = [
     ],
   },
   {
-    label: "opportunity source actions",
+    label: "opportunity source research actions",
     source: opportunityDiscovery,
     gateToken: "return withSourceLease(env, json, sourceAction.id",
     tokens: [
@@ -136,6 +137,19 @@ const routeContracts = [
       "const lease = await acquireManualResearchLease(env, actionKey, 600)",
       "manualResearchLeaseConflict(actionKey)",
       "releaseManualResearchLease(env, lease)",
+    ],
+  },
+  {
+    label: "opportunity source health actions",
+    source: sourceHealthActions,
+    gateToken: "const lease = await acquireManualResearchLease(env, actionKey, 600)",
+    tokens: [
+      'const actionKey = `opportunity-source:${sourceId}`',
+      "manualResearchLeaseConflict(actionKey)",
+      "releaseManualResearchLease(env, lease)",
+      "await env.DB.batch([mutation.statement, auditInsert])",
+      "auditAndSourceUpdateAtomic: true",
+      "overlappingPerSourceActionAllowed: false",
     ],
   },
   {
@@ -196,6 +210,7 @@ requireTokens("manual research concurrency document", doc, [
   "automaticRetryAllowed: false",
   "query-hint",
   "legacy source",
+  "source-health",
   "It does not authorise an automatic retry executor.",
 ]);
 
@@ -239,6 +254,7 @@ console.log(JSON.stringify({
   queryHintResolutionLeaseRequired: true,
   tinySourceBatchLeaseRequired: true,
   perOpportunitySourceLeaseRequired: true,
+  perOpportunitySourceHealthLeaseRequired: true,
   perLegacySourceLeaseRequired: true,
   externalExecutionEnabled: false,
   errors,

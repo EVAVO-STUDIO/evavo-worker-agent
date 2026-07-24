@@ -1,6 +1,7 @@
 import type { Env } from "../db";
 import { logEvent } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "../core/boundedJsonRequest";
 import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { readAutonomySettings } from "../engineAutonomy";
 import { runOpportunityAutonomy } from "../opportunityAutonomy";
@@ -17,12 +18,15 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
   if (pathname !== "/admin/opportunities/run-due") return json({ ok: false, error: "Not found" }, { status: 404 });
   if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "POST" } });
 
-  const body = await request.json().catch(() => ({}));
-  if (body?.confirm !== true) {
+  const parsed = await readBoundedJsonObject(request);
+  if (!parsed.ok) return json(boundedJsonFailurePayload(parsed), { status: parsed.status });
+  if (!isExplicitJsonConfirmation(parsed.value)) {
     return json({
       ok: false,
       error: "confirm_required",
       requiredPayload: { confirm: true },
+      confirmationCoercionAllowed: false,
+      requestBodyContract: parsed.contract,
       safety: {
         callsAI: false,
         sendsEmail: false,
@@ -32,17 +36,23 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
     }, { status: 400 });
   }
 
+  const requestReceipt = {
+    contract: parsed.contract,
+    bytes: parsed.bytes,
+    bodySha256: parsed.bodySha256,
+  };
+
   const lease = await acquireManualResearchLease(env, MANUAL_OPPORTUNITY_RUN_LEASE, 900);
   if (!lease) {
     await logEvent(env, "opportunity_run_due_conflict", "Confirmed manual opportunity run rejected because the same research action is already in progress.");
-    return json(manualResearchLeaseConflict(MANUAL_OPPORTUNITY_RUN_LEASE), { status: 409 });
+    return json({ ...manualResearchLeaseConflict(MANUAL_OPPORTUNITY_RUN_LEASE), requestReceipt }, { status: 409 });
   }
 
   try {
     const settings = await readAutonomySettings(env);
     if (!settings.opportunityDiscoveryEnabled) {
       await logEvent(env, "opportunity_run_due_skip", "Manual opportunity run skipped because opportunity discovery is disabled.");
-      return json({ ok: false, error: "opportunity_discovery_disabled", settings });
+      return json({ ok: false, error: "opportunity_discovery_disabled", settings, requestReceipt });
     }
 
     const summary = await runOpportunityAutonomy(env, settings);
@@ -52,6 +62,7 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
       ok: summary.runStatus !== "failed",
       mode: "opportunity_run_due",
       leaseContract: lease.contract,
+      requestReceipt,
       settings: {
         mode: settings.mode,
         freeSafeOnly: settings.freeSafeOnly,

@@ -3,12 +3,20 @@ import { getAdminToken } from "../db";
 
 const encoder = new TextEncoder();
 
+export const ADMIN_TOKEN_MIN_BYTES = 32;
+export const ADMIN_TOKEN_MAX_BYTES = 256;
+
+function hasValidAdminTokenShape(value: string): boolean {
+  if (!value || value.trim() !== value || /\s/.test(value)) return false;
+  const byteLength = encoder.encode(value).byteLength;
+  return byteLength >= ADMIN_TOKEN_MIN_BYTES && byteLength <= ADMIN_TOKEN_MAX_BYTES;
+}
+
 function extractBearerToken(request: Request): string | null {
   const authorization = request.headers.get("authorization");
   if (!authorization || !authorization.startsWith("Bearer ")) return null;
   const token = authorization.slice("Bearer ".length);
-  if (!token || token.trim() !== token || /\s/.test(token)) return null;
-  return token;
+  return hasValidAdminTokenShape(token) ? token : null;
 }
 
 async function digest(value: string): Promise<Uint8Array> {
@@ -28,6 +36,6 @@ async function constantTimeEqual(left: string, right: string): Promise<boolean> 
 export async function isAdminRequestAuthorized(request: Request, env: Env): Promise<boolean> {
   const expected = getAdminToken(env);
   const provided = extractBearerToken(request);
-  if (!expected || !provided) return false;
+  if (!expected || !provided || !hasValidAdminTokenShape(expected)) return false;
   return constantTimeEqual(provided, expected);
 }

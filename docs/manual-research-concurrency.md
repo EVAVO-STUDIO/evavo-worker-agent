@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Authenticated confirmation authorises one bounded manual research action. It does not imply that the same action may safely run multiple times concurrently.
+Authenticated confirmation authorises one bounded manual research or review action. It does not imply that the same action may safely run multiple times concurrently.
 
-The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source research and source-health actions, and duplicate query-hint resolution writes.
+The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source research and source-health actions, duplicate query-hint resolution writes, competing review decisions and lost shared learning-score updates.
 
 This control does not create background work, scheduled retries or external execution.
 
@@ -56,7 +56,7 @@ Current route TTLs are:
 
 ```text
 query-hint resolution: 300 seconds
-per-source actions and tiny batches: 600 seconds
+per-source actions, review actions, source-candidate commits and tiny batches: 600 seconds
 broad opportunity, source-expansion and sitemap scans: 900 seconds
 ```
 
@@ -74,7 +74,10 @@ source-expansion-scan
 source-expansion-sitemap-scan
 source-expansion-relationship-graph
 sources-run-tiny
+opportunity-source-candidates-commit
 ```
+
+The source-candidate commit lease protects the bounded selection and save operation from a second concurrent commit. It does not permit arbitrary URLs: the route accepts at most 25 HTTPS URLs and the application service still requires each URL to belong to the reviewed candidate set.
 
 Opportunity source test, preview, commit-preview and source-health routes share a key based on the source identifier:
 
@@ -106,6 +109,28 @@ query-hint-resolve:<hint-id>
 ```
 
 The candidate upserts and hint usage counters then commit in one D1 transaction. Query-hint generation and internal learning remain metadata-only and do not acquire a public-research network lease.
+
+## Review exclusion
+
+Draft reviews first acquire:
+
+```text
+draft-review:<draft-id>
+```
+
+After the draft is read, they acquire a hashed `draft-strategy:` lease derived from the normalized strategy key. The record lease prevents duplicate concurrent decisions. The strategy lease prevents two different drafts from losing increments while changing the same shared score row.
+
+Opportunity reviews first acquire:
+
+```text
+opportunity-review:<opportunity-id>
+```
+
+After the opportunity is read, they acquire a hashed `opportunity-strategy:` lease derived from opportunity type, category, country and region. The hash keeps the key bounded and avoids exposing the full learning scope in the lease row.
+
+Both review routes acquire the record lease before the shared-score lease and release in reverse order. Their database mutations and audit event are committed in one D1 batch while both leases are held.
+
+A stored review status remains internal metadata. Neither lease authorises email, posting, applying, browser automation, AI execution or any other external action.
 
 ## Conflict response
 

@@ -13,6 +13,7 @@ const plannerWrapperPath = path.join(root, "src", "routes", "plannerAdminProtect
 const growthWrapperPath = path.join(root, "src", "routes", "growthAdminProtected.ts");
 const healthPath = path.join(root, "src", "core", "health.ts");
 const schemaPath = path.join(root, "src", "core", "schema.ts");
+const publicResearchSafetyPath = path.join(root, "scripts", "check-public-research-fetch-safety.mjs");
 const errors = [];
 
 if (!fs.existsSync(workflowPath)) errors.push("Missing Worker contract workflow");
@@ -24,6 +25,7 @@ if (!fs.existsSync(plannerWrapperPath)) errors.push("Missing protected planner w
 if (!fs.existsSync(growthWrapperPath)) errors.push("Missing protected Growth fallback wrapper");
 if (!fs.existsSync(healthPath)) errors.push("Missing admin health implementation");
 if (!fs.existsSync(schemaPath)) errors.push("Missing authenticated schema implementation");
+if (!fs.existsSync(publicResearchSafetyPath)) errors.push("Missing public research fetch safety contract");
 
 const workflow = fs.existsSync(workflowPath) ? fs.readFileSync(workflowPath, "utf8") : "";
 const packageJson = fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")) : {};
@@ -34,6 +36,7 @@ const plannerWrapper = fs.existsSync(plannerWrapperPath) ? fs.readFileSync(plann
 const growthWrapper = fs.existsSync(growthWrapperPath) ? fs.readFileSync(growthWrapperPath, "utf8") : "";
 const health = fs.existsSync(healthPath) ? fs.readFileSync(healthPath, "utf8") : "";
 const schema = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, "utf8") : "";
+const publicResearchSafety = fs.existsSync(publicResearchSafetyPath) ? fs.readFileSync(publicResearchSafetyPath, "utf8") : "";
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 
 for (const token of [
@@ -43,6 +46,8 @@ for (const token of [
   "cache: npm",
   "npm ci --no-audit --no-fund",
   "node scripts/check-worker-health-contract.mjs",
+  "Verify public research fetch boundary",
+  "npm run research:public-fetch-safety:check",
   "npm run check:local",
   "timeout-minutes: 12",
 ]) {
@@ -51,10 +56,25 @@ for (const token of [
 
 if (!workflow.includes('      - "src/**"')) errors.push("Worker workflow must watch source changes");
 if (!workflow.includes('      - "scripts/**"')) errors.push("Worker workflow must watch validation scripts");
+if (!workflow.includes('      - "docs/**"')) errors.push("Worker workflow must watch documentation changes");
+if (!workflow.includes('      - "README.md"')) errors.push("Worker workflow must watch README changes");
 if (!workflow.includes('      - "wrangler.toml"')) errors.push("Worker workflow must watch Wrangler configuration");
 if (!workflow.includes('      - "package-lock.json"')) errors.push("Worker workflow must watch the dependency lockfile");
 if (workflow.includes("wrangler deploy")) errors.push("Contract workflow must not deploy the Worker");
 if (workflow.includes("ADMIN_TOKEN") || workflow.includes("OUTBOUND_AGENT_ADMIN_TOKEN")) errors.push("Contract workflow must not request Worker credentials");
+
+for (const token of [
+  'contract: "public-research-fetch-safety-v5-truthful-redacted-evidence"',
+  "timeoutCoversRedirectsAndBody: true",
+  "rejectedUnsafeInputsEchoed: false",
+  "sourceExpansionRunTruthfulnessRequired: true",
+  "relationshipGraphRunTruthfulnessRequired: true",
+  "sitemapRunTruthfulnessRequired: true",
+  "manualOpportunityRunTruthfulnessRequired: true",
+  "focusedCiGateRequired: true",
+]) {
+  if (!publicResearchSafety.includes(token)) errors.push(`Public research safety contract is missing CI-required posture: ${token}`);
+}
 
 for (const token of [
   'import { handleAdmin } from "./routes/adminProtected"',
@@ -186,6 +206,7 @@ const expectedScripts = {
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
   "sources:confirmation-safety:check": "node scripts/check-source-action-confirmation-safety.mjs",
+  "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
   "opportunities:execution-boundary-safety:check": "node scripts/check-opportunity-execution-boundary-safety.mjs",
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
@@ -215,7 +236,7 @@ if (!String(packageJson.scripts?.predeploy || "").includes("npm run check:local"
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-ci-workflow-parity",
+  contract: "worker-ci-workflow-parity-v2-public-research-v5",
   deploymentEnabled: false,
   credentialsRequired: false,
   canonicalCredential: "ADMIN_TOKEN",
@@ -242,6 +263,10 @@ console.log(JSON.stringify({
   growthSubhandlerWritesRequireConfirmation: true,
   safetyGateCompletenessRequired: true,
   autonomyCapabilityTruthfulnessRequired: true,
+  publicResearchFetchSafetyRequired: true,
+  publicResearchFocusedCiGateRequired: true,
+  publicResearchInputRedactionRequired: true,
+  publicResearchRunTruthfulnessRequired: true,
   publicRoutesRequireAdminToken: false,
   legacyCredentialAliasesAllowed: false,
   publicControlCredentialAllowed: false,

@@ -112,11 +112,11 @@ export async function resolveQueryHintUrls(env: Env, options: ResolveOptions) {
   const uniqueUrls: string[] = [];
   const results: any[] = [];
   let rejected = 0;
-  for (const rawUrl of submittedUrls) {
+  for (const [index, rawUrl] of submittedUrls.entries()) {
     const decision = validatePublicResearchUrl(rawUrl);
     if (!decision.ok || !decision.url) {
       rejected += 1;
-      results.push({ url: rawUrl, status: "rejected", reason: decision.error || "invalid_research_url" });
+      results.push({ index, status: "rejected", reason: decision.error || "invalid_research_url", inputRedacted: true });
       continue;
     }
     const normalized = normalizeUrl(decision.url);

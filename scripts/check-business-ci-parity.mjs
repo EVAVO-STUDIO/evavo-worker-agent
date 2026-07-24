@@ -103,12 +103,16 @@ for (const token of [
 }
 
 for (const token of [
-  'contract: "business-route-catalogue-truthfulness-v6-fail-closed-wiring"',
+  'contract: "business-route-catalogue-truthfulness-v9-historical-read-smoke-gated"',
   'plannerBusinessImportCountExpected: 1',
   'plannerBusinessSpreadCountExpected: 1',
   'catalogueApplyScriptIdempotent: true',
   'catalogueApplyScriptValidatesPostureBeforeWrite: true',
   'catalogueApplyScriptBlocksRetiredRouteIds: true',
+  'historicalReadsUseDedicatedCataloguePosture: true',
+  'historicalReadsRecommendedInOperationsHub: false',
+  'historicalReadVerificationChecksRequiredNonExecutionFlags: true',
+  'historicalReadSmokeChecksRequiredNonExecutionFlags: true',
   'historicalReviewWriteUsesDedicatedCataloguePosture: true',
   'historicalReviewWriteRecommendedInOperationsHub: false',
   'disabledDirectDraftWriteAdvertised: false',
@@ -236,7 +240,7 @@ if (!checkLocal.includes("npm run business:ci-parity:check")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-worker-ci-parity-v12-suppression-integrity",
+  contract: "business-worker-ci-parity-v13-route-truthfulness-v9",
   workflowRunsCompleteLocalGate: true,
   documentationChangesTriggerWorkflow: true,
   migrationChangesTriggerWorkflow: true,
@@ -267,6 +271,7 @@ console.log(JSON.stringify({
   businessRouteCatalogueImportCountExpected: 1,
   businessRouteCatalogueSpreadCountExpected: 1,
   businessRouteCatalogueGeneratorIdempotencyRequired: true,
+  historicalReadResponseVerificationRequired: true,
   retiredBusinessWritesExpectedStatus: 410,
   deploymentEnabled: false,
   credentialsRequired: false,

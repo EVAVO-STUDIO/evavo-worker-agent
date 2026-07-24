@@ -1,6 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
-import { fetchPublicResearchHtml, validatePublicResearchUrl } from "./publicResearchFetch";
+import { PUBLIC_RESEARCH_FETCH_CONTRACT, fetchPublicResearchHtml, validatePublicResearchUrl } from "./publicResearchFetch";
 
 type ExpansionSeed = {
   id: string;
@@ -70,18 +70,26 @@ const ALLOWED_EXPANSION_FAILURES = new Set([
   "url_credentials_not_allowed",
   "non_public_research_host",
   "non_standard_port_not_allowed",
+  "sensitive_query_parameter_not_allowed",
   "invalid_research_url",
   "redirect_loop",
   "redirect_location_missing",
   "too_many_redirects",
   "unsafe_redirect_target",
   "unsupported_content_type",
+  "binary_response_rejected",
   "research_fetch_timeout",
   "response_too_large",
   "response_read_failed",
   "research_fetch_failed",
   "empty_response",
 ]);
+
+function boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
 
 function normalizeUrl(raw: string, base?: string) {
   const decision = validatePublicResearchUrl(raw.trim(), base);
@@ -160,7 +168,7 @@ function selectionReason(seed: ExpansionSeed) {
 
 async function dueSeeds(env: Env, options: ExpansionOptions): Promise<ExpansionSeed[]> {
   const now = nowISO();
-  const limit = Math.max(1, Math.min(25, Math.round(Number(options.limitSeeds || 5))));
+  const limit = boundedInteger(options.limitSeeds, 5, 1, 25);
   const clauses = ["s.status = 'active'", "(s.cooldown_until_iso IS NULL OR s.cooldown_until_iso <= ?)", "(s.next_run_at_iso IS NULL OR s.next_run_at_iso <= ?)"];
   const binds: any[] = [now, now];
   if (options.strategy) {
@@ -269,7 +277,20 @@ function scoreLink(link: { url: string; text: string }, seed: ExpansionSeed): Ex
     confidence: classifyConfidence(score),
     strategy: seed.strategy,
     reasons,
-    evidence: { seedId: seed.id, seedUrl: seed.url, seedSelectionReason: seed.selection_reason, strategyQualityScore: seed.strategy_quality_score ?? null, strategyRecommendation: seed.strategy_recommendation ?? null, linkText: link.text, discoveredAtISO: nowISO() },
+    evidence: {
+      seedId: seed.id,
+      seedUrl: seed.url,
+      seedSelectionReason: seed.selection_reason,
+      strategyQualityScore: seed.strategy_quality_score ?? null,
+      strategyRecommendation: seed.strategy_recommendation ?? null,
+      linkText: link.text,
+      discoveredAtISO: nowISO(),
+      reviewOnly: true,
+      executable: false,
+      deliverable: false,
+      authoritativeForExecution: false,
+      externalExecutionAllowed: false,
+    },
   };
 }
 
@@ -323,7 +344,11 @@ async function startRun(env: Env, options: ExpansionOptions, seeds: ExpansionSee
   await env.DB.prepare(
     `INSERT INTO source_expansion_runs (id, run_type, strategy, started_at_iso, status, settings_json)
      VALUES (?, 'source_expansion', ?, ?, 'running', ?)`
-  ).bind(id, options.strategy || null, now, JSON.stringify({ ...options, researchFetchContract: "public_research_fetch_v1", selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })) })).run();
+  ).bind(id, options.strategy || null, now, JSON.stringify({
+    ...options,
+    researchFetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
+    selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })),
+  })).run();
   return id;
 }
 
@@ -367,10 +392,10 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
   }
 
   await bootstrapSourceExpansionSeeds(env);
-  const maxFetches = Math.max(1, Math.min(10, Math.round(Number(options.maxFetches || 3))));
-  const maxLinksPerSeed = Math.max(5, Math.min(80, Math.round(Number(options.maxLinksPerSeed || 40))));
-  const maxCandidates = Math.max(5, Math.min(100, Math.round(Number(options.maxCandidates || 40))));
-  const seeds = await dueSeeds(env, { ...options, limitSeeds: Math.min(options.limitSeeds || maxFetches, maxFetches) });
+  const maxFetches = boundedInteger(options.maxFetches, 3, 1, 10);
+  const maxLinksPerSeed = boundedInteger(options.maxLinksPerSeed, 40, 5, 80);
+  const maxCandidates = boundedInteger(options.maxCandidates, 40, 5, 100);
+  const seeds = await dueSeeds(env, { ...options, limitSeeds: Math.min(boundedInteger(options.limitSeeds, maxFetches, 1, 25), maxFetches) });
   const runId = await startRun(env, { ...options, maxFetches, maxLinksPerSeed, maxCandidates }, seeds);
   const existingDomains = await existingSourceDomains(env);
   const seenCandidates: ExpansionCandidate[] = [];
@@ -382,7 +407,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
   let candidatesNew = 0;
   let candidatesUpdated = 0;
   let candidatesRejected = 0;
-  const skipped = 0;
+  const skipped = seeds.length ? 0 : 1;
   let failed = 0;
   let lastFailureCode: string | null = null;
 
@@ -412,9 +437,14 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
         finalUrl: fetched.finalUrl,
         status: fetched.status,
         contentType: fetched.contentType,
+        contentLength: fetched.contentLength,
+        contentLanguage: fetched.contentLanguage,
+        etag: fetched.etag,
+        lastModified: fetched.lastModified,
         bytes: fetched.bytes,
         bodySha256: fetched.bodySha256,
         redirectCount: fetched.redirectCount,
+        redirectChain: fetched.redirectChain,
         elapsedMs: fetched.elapsedMs,
         fetchedAtISO: fetched.fetchedAtISO,
         timeoutScope: fetched.timeoutScope,
@@ -480,15 +510,17 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     await env.DB.prepare(
       `INSERT INTO source_expansion_attempts (id, run_id, seed_id, seed_url, strategy, fetch_status, content_type, elapsed_ms, bytes, links_found, candidates_found, candidates_new, candidates_updated, candidates_rejected, error, created_at_iso)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(attemptId, runId, seed.id, seed.url, `${seed.strategy}|${seed.selection_reason || "selection_reason:unknown"}|fetch:public_research_fetch_v1`, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
+    ).bind(attemptId, runId, seed.id, seed.url, `${seed.strategy}|${seed.selection_reason || "selection_reason:unknown"}|fetch:${PUBLIC_RESEARCH_FETCH_CONTRACT}`, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
   }
 
-  const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed";
+  const runStatus = fetchAttempts === 0 ? "skipped" : failed > 0 && pagesFetched === 0 ? "failed" : failed > 0 ? "partial" : "completed";
   const runError = runStatus === "failed"
     ? lastFailureCode || "all_selected_source_fetches_failed"
-    : failed > 0
+    : runStatus === "partial"
       ? `partial_source_failures:${failed}`
-      : null;
+      : runStatus === "skipped"
+        ? "no_due_seeds"
+        : null;
 
   await finishRun(env, runId, {
     status: runStatus,
@@ -504,12 +536,12 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     error: runError,
   });
 
-  await logEvent(env, "source_expansion_run", `Confirmed source expansion attempted ${fetchAttempts} seed(s), fetched ${pagesFetched} page(s), failed ${failed}, found ${candidatesFound} candidate(s), new ${candidatesNew}.`);
+  await logEvent(env, "source_expansion_run", `Confirmed source expansion ${runStatus}: attempted ${fetchAttempts} seed(s), fetched ${pagesFetched} page(s), failed ${failed}, found ${candidatesFound} candidate(s), new ${candidatesNew}.`);
 
   return {
-    ok: true,
+    ok: runStatus !== "failed",
     mode: "source_expansion_run",
-    fetchContract: "public_research_fetch_v1",
+    fetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
     runId,
     runStatus,
     runError,
@@ -526,6 +558,11 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     failed,
     fetchReceipts: fetchReceipts.slice(0, 10),
     preview: seenCandidates.slice(0, 25),
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
     safety: {
       bounded: true,
       publicWebOnly: true,
@@ -547,7 +584,7 @@ export async function listSourceExpansionCandidates(env: Env, options: { status?
   const tables = await ensureTables(env);
   if (!tables.candidates) return { ok: false, error: "missing_migration", requiredMigration: "0007_source_expansion_memory.sql", tables };
   const status = options.status || "candidate";
-  const limit = Math.max(1, Math.min(100, Math.round(Number(options.limit || 50))));
+  const limit = boundedInteger(options.limit, 50, 1, 100);
   const rows = await env.DB.prepare(
     `SELECT id, url, domain, label, source_type, country, region, category, status, score, confidence, strategy, seed_id, discovery_depth, reasons_json, evidence_json, first_seen_at_iso, last_seen_at_iso, seen_count, duplicate_count, failure_count, quality_score
      FROM source_expansion_candidates
@@ -555,5 +592,16 @@ export async function listSourceExpansionCandidates(env: Env, options: { status?
      ORDER BY score DESC, quality_score DESC, last_seen_at_iso DESC
      LIMIT ?`
   ).bind(status, limit).all<any>();
-  return { ok: true, mode: "source_expansion_candidates", status, count: rows.results?.length || 0, candidates: rows.results || [] };
+  return {
+    ok: true,
+    mode: "source_expansion_candidates",
+    status,
+    count: rows.results?.length || 0,
+    candidates: rows.results || [],
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
+  };
 }

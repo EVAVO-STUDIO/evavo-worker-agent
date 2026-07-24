@@ -20,7 +20,9 @@ It does **not** provide outbound execution.
 - Scheduled work cannot fetch public sources, expand source candidates, discover opportunities, generate drafts or perform external actions.
 - Public-source research is manual-only, authenticated, explicitly confirmed, bounded and review-only.
 - Public research URLs and every redirect are validated against the shared public-only network policy.
-- Public response bodies are timeout-bounded, byte-bounded and hashed for evidence receipts.
+- Public response bodies are full-operation-timeout-bounded, byte-bounded and hashed for evidence receipts.
+- Unsafe rejected URL inputs are redacted rather than reflected in route responses or audit metadata.
+- Research runs distinguish attempts from successful fetches and report skipped, failed, partial and completed outcomes truthfully.
 - Manual legacy execution routes return a fail-closed response.
 - All protected routes require server-side Worker authentication.
 - Confirmed write routes mutate internal D1 metadata only.
@@ -48,9 +50,11 @@ Allowed network activity is read-only public research through explicitly classif
 
 All active research handlers use `src/core/publicResearchFetch.ts`. The boundary rejects non-public hosts, embedded URL credentials, unsafe protocols and non-standard ports. Redirects are followed manually only after the next target passes the same public URL policy. Cloudflare runtime configuration also enables `global_fetch_strictly_public`.
 
-The default response limit is 1,048,576 bytes, the default redirect limit is four and the default per-request timeout is 12 seconds. Bodies are streamed and cancelled when the configured byte limit is exceeded.
+The default response limit is 1,048,576 bytes, the default redirect limit is four and the default full-operation timeout is 12 seconds. One deadline covers the redirect chain, response headers and streamed body read. Bodies are cancelled when the configured byte or time limit is exceeded.
 
-Each completed fetch returns an evidence receipt containing the requested URL, final URL, status, content type, redirect count, byte count, SHA-256 body hash, elapsed time and fetch timestamp. Source expansion and opportunity candidates retain relevant receipt data, and inserted lead discoveries retain the source-run identifier.
+Each completed fetch returns an evidence receipt containing the requested URL, final URL, status, content type, redirect count, byte count, SHA-256 body hash, elapsed time, fetch timestamp and `timeoutScope: full_operation`. Source expansion and opportunity candidates retain relevant receipt data, and inserted lead discoveries retain the source-run identifier.
+
+Research summaries keep network attempts separate from successful pages. A run is skipped when no eligible source exists, failed when every attempted source fails, completed with a bounded partial-failure code when only some sources fail, and completed without an error when every attempted source succeeds.
 
 Manual research handlers may:
 
@@ -209,5 +213,5 @@ When no approved source list exists:
 3. Review candidate domains and crawl policy.
 4. Run one authenticated, explicitly confirmed and bounded research action.
 5. Save findings as internal review metadata only.
-6. Review evidence receipts and source health manually.
+6. Review evidence receipts, run status and source health manually.
 7. Do not draft, send, post, submit or mutate external systems.

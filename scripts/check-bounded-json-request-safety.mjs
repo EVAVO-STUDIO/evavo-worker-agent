@@ -64,7 +64,6 @@ requireTokens("bounded JSON helper", helper, [
   "maxStringLength",
   "maxKeyLength",
 ]);
-
 forbidTokens("bounded JSON helper", helper, [
   "request.json()",
   "request.text()",
@@ -74,6 +73,7 @@ forbidTokens("bounded JSON helper", helper, [
 
 const boundedRoutes = [
   "src/index.ts",
+  "src/routes/adminProtected.ts",
   "src/routes/draftReviewAdmin.ts",
   "src/routes/opportunityReviewAdmin.ts",
   "src/routes/opportunityRunDueAdmin.ts",
@@ -124,22 +124,26 @@ for (const relativePath of requestReceiptRoutes) {
   ]);
 }
 
-const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
-requireTokens("source health bounded body", sourceHealthActions, [
-  "readBoundedJsonObject<SourceHealthActionBody>(request",
-  "maxBytes: 4_096",
-  "maxDepth: 4",
-  "maxNodes: 32",
-  "maxArrayLength: 4",
-  "maxStringLength: 512",
-  "maxKeyLength: 64",
-  "if (!isExplicitJsonConfirmation(parsed.value))",
-  'error: "confirm_required"',
-  "confirmationCoercionAllowed: false",
-  "requestBodySha256: parsed.bodySha256",
-]);
-
 for (const [label, source, tokens] of [
+  ["protected broad-admin bounded body", read("src/routes/adminProtected.ts"), [
+    "readBoundedJsonObject(request.clone()",
+    "maxBytes: 65_536",
+    "maxDepth: 6",
+    "maxNodes: 600",
+    "maxArrayLength: 100",
+    "maxStringLength: 2_048",
+    "maxKeyLength: 96",
+  ]],
+  ["source health bounded body", read("src/routes/opportunitySourceHealthActionsAdmin.ts"), [
+    "readBoundedJsonObject<SourceHealthActionBody>(request",
+    "maxBytes: 4_096",
+    "maxDepth: 4",
+    "maxNodes: 32",
+    "maxArrayLength: 4",
+    "maxStringLength: 512",
+    "maxKeyLength: 64",
+    "requestBodySha256: parsed.bodySha256",
+  ]],
   ["draft review bounded body", read("src/routes/draftReviewAdmin.ts"), [
     "readBoundedJsonObject<DraftReviewBody>(request",
     "maxBytes: 8_192",
@@ -184,7 +188,6 @@ requireTokens("bounded JSON behavioral tests", tests, [
   '"json_structure_too_deep"',
   '"json_string_too_long"',
 ]);
-
 requireTokens("bounded JSON boundary document", boundaryDoc, [
   "# Bounded admin JSON boundary",
   "bounded_admin_json_request_v1",
@@ -213,7 +216,6 @@ requireTokens("safety gate completeness", safetyGate, [
   '"scripts/check-bounded-json-request-safety.mjs"',
   "boundedJsonRequestSafetyRequired: true",
 ]);
-
 requireTokens("Worker contract workflow", workflow, [
   "Verify bounded admin JSON requests",
   "npm run research:bounded-json-safety:check",
@@ -225,8 +227,8 @@ if (workflow.includes("wrangler deploy")) errors.push("Bounded JSON validation w
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "bounded-admin-json-request-safety-v2-review-mutations",
-  previousContract: "bounded-admin-json-request-safety-v1",
+  contract: "bounded-admin-json-request-safety-v3-protected-admin",
+  previousContract: "bounded-admin-json-request-safety-v2-review-mutations",
   defaultMaxBytes: 65536,
   jsonMediaTypeRequired: true,
   contentLengthPreflightRequired: true,
@@ -239,6 +241,7 @@ console.log(JSON.stringify({
   queryStringConfirmationAllowed: false,
   confirmationCoercionAllowed: false,
   requestFingerprintRequired: true,
+  protectedBroadAdminWritesBounded: true,
   sourceHealthActionsBounded: true,
   draftReviewBounded: true,
   opportunityReviewBounded: true,

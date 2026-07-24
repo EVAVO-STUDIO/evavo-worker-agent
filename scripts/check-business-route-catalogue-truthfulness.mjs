@@ -109,6 +109,7 @@ for (const token of [
 
 for (const token of [
   "$historicalBusinessReadRouteIds",
+  "$historicalBusinessReadPaths",
   "$historicalBusinessWriteRouteIds",
   "$disabledBusinessWriteRouteIds",
   "$disabledBusinessWritePaths",
@@ -118,6 +119,12 @@ for (const token of [
   "Historical Business read routes are clearly labelled and not recommended as ordinary Operations Hub actions.",
   "Historical Business review-write routes are not recommended as ordinary Operations Hub actions.",
   "All advertised Business Autopilot metadata-write routes use confirm_required and non-executing posture.",
+  "Verify historical Business read responses remain non-executable",
+  "$payload.historicalOnly -ne $true",
+  "$payload.executable -ne $false",
+  "$payload.deliverable -ne $false",
+  "$payload.authoritativeForExecution -ne $false",
+  "Historical Business read response is missing required non-execution flags",
   "function Assert-DisabledBusinessWrite",
   "-Method POST",
   "-Body '{\"confirm\":true}'",
@@ -154,7 +161,7 @@ if (!String(scripts["check:local"] || "").includes("npm run business:route-catal
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-route-catalogue-truthfulness-v8-response-grounded-historical-reads",
+  contract: "business-route-catalogue-truthfulness-v9-historical-read-smoke-gated",
   plannerUsesAuthoritativeBusinessCatalogue: true,
   plannerBusinessImportCountExpected: 1,
   plannerBusinessSpreadCountExpected: 1,
@@ -164,6 +171,7 @@ console.log(JSON.stringify({
   historicalReadsUseDedicatedCataloguePosture: true,
   historicalReadsRecommendedInOperationsHub: false,
   historicalReadVerificationChecksRequiredNonExecutionFlags: true,
+  historicalReadSmokeChecksRequiredNonExecutionFlags: true,
   historicalReviewWriteUsesDedicatedCataloguePosture: true,
   historicalReviewWriteRecommendedInOperationsHub: false,
   disabledDirectDraftWriteAdvertised: false,

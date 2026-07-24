@@ -15,6 +15,7 @@ const runDue = read("src/routes/opportunityRunDueAdmin.ts");
 const opportunityRunner = read("src/opportunityAutonomy.ts");
 const opportunityRuns = read("src/core/opportunityRuns.ts");
 const sourceHealthActions = read("src/routes/opportunitySourceHealthActionsAdmin.ts");
+const sourceHealthTest = read("tests/opportunitySourceHealthActionsSource.test.ts");
 const learning = read("src/routes/opportunityLearningAdmin.ts");
 const discovery = read("src/routes/opportunityDiscoveryAdmin.ts");
 const boundedJson = read("src/core/boundedJsonRequest.ts");
@@ -57,6 +58,7 @@ for (const [label, content] of [
 if (!opportunityRunner) errors.push("Missing confirmed manual opportunity runner");
 if (!opportunityRuns) errors.push("Missing opportunity run audit support");
 if (!boundedJson) errors.push("Missing bounded JSON request support");
+if (!sourceHealthTest) errors.push("Missing source-health behavioral source contract test");
 
 for (const token of [
   'BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1"',
@@ -251,6 +253,19 @@ for (const forbidden of [
 }
 
 for (const token of [
+  'test("source health actions require an authenticated bounded exact confirmation"',
+  'test("source health actions share the opportunity source exclusion key"',
+  'test("source health mutation and audit are one review-only D1 transaction"',
+  'test("source health failures remain bounded and non-executable"',
+  'test("concurrency documentation covers source health exclusion and audit semantics"',
+  "lease must follow confirmation",
+  "mutation must follow lease acquisition",
+  "VALUES (?, 'opportunity_source_health_action', ?, NULL, ?)",
+]) {
+  if (!sourceHealthTest.includes(token)) errors.push(`Source-health behavioral source contract is missing: ${token}`);
+}
+
+for (const token of [
   'pathname !== "/admin/opportunities/learning"',
   'request.method !== "GET"',
   "readOnly: true",
@@ -338,6 +353,7 @@ console.log(JSON.stringify({
   sourceHealthActionsAuditAndMutationAtomic: true,
   sourceHealthActionsHistoricalLeadIdOverloadAllowed: false,
   sourceHealthActionsExecutable: false,
+  sourceHealthBehavioralTestRequired: true,
   opportunityLearningUsesSharedAuthentication: true,
   opportunityLearningIsReadOnly: true,
   opportunityDiscoveryUsesSharedAuthentication: true,

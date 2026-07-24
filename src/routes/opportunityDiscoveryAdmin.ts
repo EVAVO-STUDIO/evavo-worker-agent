@@ -28,6 +28,7 @@ function fetchReceipt(fetched: PublicResearchFetchResult) {
     bodySha256: fetched.bodySha256,
     redirectCount: fetched.redirectCount,
     fetchedAtISO: fetched.fetchedAtISO,
+    timeoutScope: fetched.timeoutScope,
     error: fetched.error,
   };
 }
@@ -72,7 +73,7 @@ async function testSource(env: Env, id: string) {
     fetch: fetchReceipt(fetched),
     candidateCount,
     error,
-    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, publicWebOnly: true, boundedResponse: true },
+    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true },
   };
 }
 
@@ -88,7 +89,7 @@ async function previewSource(env: Env, id: string, requestUrl: URL) {
       mode: "opportunity_source_preview",
       error: fetched.error || "source_fetch_failed",
       fetch: fetchReceipt(fetched),
-      safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, publicWebOnly: true, boundedResponse: true },
+      safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true },
     };
   }
 
@@ -100,7 +101,7 @@ async function previewSource(env: Env, id: string, requestUrl: URL) {
     fetch: fetchReceipt(fetched),
     summary: summarizeOpportunityPreview(candidates),
     candidates,
-    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, reviewRequired: true, publicWebOnly: true, boundedResponse: true },
+    safety: { callsAI: false, sendsEmail: false, insertsOpportunities: false, reviewRequired: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true },
   };
 }
 
@@ -114,8 +115,9 @@ async function commitPreview(env: Env, id: string, body: any) {
   const limit = Math.max(1, Math.min(100, Number(body?.limit || 50)));
   const now = new Date().toISOString();
   const fetched = await fetchPublicResearchHtml(source.url);
+  const sourceFetch = fetchReceipt(fetched);
   if (!fetched.ok) {
-    return { ok: false, mode: "opportunity_commit_preview", error: fetched.error || "source_fetch_failed", inserted: 0, fetch: fetchReceipt(fetched) };
+    return { ok: false, mode: "opportunity_commit_preview", error: fetched.error || "source_fetch_failed", inserted: 0, fetch: sourceFetch };
   }
 
   const candidates = extractOpportunityCandidates(fetched.body, fetched.finalUrl || source.url, limit);
@@ -123,7 +125,14 @@ async function commitPreview(env: Env, id: string, body: any) {
   const skipped: any[] = [];
 
   for (const candidate of candidates) {
-    const result = await saveOpportunityCandidate(env, source, candidate, {
+    const candidateWithReceipt = {
+      ...candidate,
+      evidence: {
+        ...(candidate.evidence || {}),
+        sourceFetch,
+      },
+    };
+    const result = await saveOpportunityCandidate(env, source, candidateWithReceipt, {
       minScore,
       discoveredBy: "commit-preview",
       nowISO: now,
@@ -140,14 +149,14 @@ async function commitPreview(env: Env, id: string, body: any) {
     ok: true,
     mode: "opportunity_commit_preview",
     source: { id: source.id, url: source.url, label: source.label },
-    fetch: fetchReceipt(fetched),
+    fetch: sourceFetch,
     minScore,
     considered: candidates.length,
     insertedCount: inserted.length,
     skippedCount: skipped.length,
     inserted,
     skipped,
-    safety: { callsAI: false, sendsEmail: false, postsSocial: false, autoApplies: false, reviewRequired: true, publicWebOnly: true, boundedResponse: true },
+    safety: { callsAI: false, sendsEmail: false, postsSocial: false, autoApplies: false, reviewRequired: true, publicWebOnly: true, boundedResponse: true, fullOperationTimeout: true },
   };
 }
 

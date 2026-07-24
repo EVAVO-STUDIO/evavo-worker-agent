@@ -42,6 +42,8 @@ A research URL is accepted only when all of these conditions hold:
 
 The same validator is used when sources, query-hint results and discovered links enter research memory. Rejected URLs must not be stored as runnable source candidates.
 
+Rejected unsafe URL input is not echoed back in route responses or audit metadata. Rejection responses may report the submitted item index, the bounded reason code and `inputRedacted: true`.
+
 ## Redirect handling
 
 Automatic redirect following is disabled.
@@ -62,8 +64,10 @@ The default limits are:
 ```text
 maximum response bytes: 1,048,576
 maximum redirects: 4
-timeout per request: 12,000 milliseconds
+maximum full operation time: 12,000 milliseconds
 ```
+
+The timeout covers the complete redirect chain, response headers and streamed body read. It is not reset after each redirect or after response headers arrive.
 
 Callers may lower these limits. Caller overrides remain bounded by hard minimums and maximums in the shared helper.
 
@@ -83,7 +87,7 @@ This runtime boundary complements source-level URL and redirect validation. It d
 
 ## Evidence receipts
 
-Every successful bounded fetch produces a receipt containing:
+Every completed bounded fetch produces a receipt containing:
 
 ```text
 contract
@@ -96,12 +100,28 @@ bytes
 bodySha256
 elapsedMs
 fetchedAtISO
+timeoutScope
 error
 ```
+
+`timeoutScope` is always `full_operation` for this contract.
 
 Candidate and lead evidence should retain the relevant receipt or its material fields. The final URL and SHA-256 body hash identify the exact retrieved representation without storing the full response body in audit metadata.
 
 Source expansion commits link inserted lead discoveries to the source-run identifier. Historical or review records remain non-executable regardless of any stored URL, status or score.
+
+## Run truthfulness
+
+Research summaries distinguish network attempts from successful fetches. An attempted request must not be reported as a fetched page unless the bounded fetch succeeded.
+
+Runs report:
+
+- `skipped` when no eligible source or seed exists;
+- `failed` when all attempted source fetches fail;
+- `completed` with a bounded partial-failure code when at least one source succeeds and one or more fail;
+- `completed` without an error when all attempted sources succeed.
+
+Stored failure values are bounded reason codes. Raw runtime or database exception text must not become route output or research-run error metadata.
 
 ## Failure semantics
 
@@ -115,6 +135,7 @@ redirect_loop
 too_many_redirects
 research_fetch_timeout
 response_too_large
+response_read_failed
 unsupported_content_type
 http_<status>
 research_fetch_failed

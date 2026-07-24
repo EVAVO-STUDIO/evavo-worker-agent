@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Authenticated confirmation authorises one bounded manual research or review action. It does not imply that the same action may safely run multiple times concurrently.
+Authenticated confirmation authorises one bounded manual research, settings or review action. It does not imply that the same action may safely run multiple times concurrently.
 
-The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source research and source-health actions, duplicate query-hint resolution writes, competing review decisions and lost shared learning-score updates.
+The Worker uses atomic, expiring D1 leases to prevent duplicate broad research runs, conflicting per-source actions, duplicate query-hint resolution, competing settings writes, competing review decisions and lost shared learning-score updates.
 
 This control does not create background work, scheduled retries or external execution.
 
@@ -56,7 +56,7 @@ Current route TTLs are:
 
 ```text
 query-hint resolution: 300 seconds
-per-source actions, review actions, source-candidate commits and tiny batches: 600 seconds
+per-source actions, settings writes, review actions, source-candidate commits and tiny batches: 600 seconds
 broad opportunity, source-expansion and sitemap scans: 900 seconds
 ```
 
@@ -64,7 +64,7 @@ Expiry is a recovery boundary for interrupted requests. It is not a scheduler an
 
 A route always attempts to release its lease in a `finally` block. Release deletes the row only when the stored lease value exactly matches the current holder. An expired holder cannot delete a newer lease acquired for the same action.
 
-## Scope
+## Broad and source action scope
 
 Broad actions use distinct action keys, including:
 
@@ -79,7 +79,7 @@ opportunity-source-candidates-commit
 
 The source-candidate commit lease protects the bounded selection and save operation from a second concurrent commit. It does not permit arbitrary URLs: the route accepts at most 25 HTTPS URLs and the application service still requires each URL to belong to the reviewed candidate set.
 
-Opportunity source test, preview, commit-preview and source-health routes share a key based on the source identifier:
+Opportunity source test, preview, commit-preview and source-health routes share:
 
 ```text
 opportunity-source:<source-id>
@@ -94,7 +94,7 @@ That shared key prevents:
 
 A confirmed source-health action batches the `opportunity_sources` mutation and its `events` audit record in one D1 transaction. The audit uses `lead_id = NULL`; source review metadata is stored in the bounded event message rather than overloading the historical lead relationship.
 
-The historical source-management family uses a separate per-source key:
+The historical source-management family uses:
 
 ```text
 legacy-source:<source-id>
@@ -102,7 +102,7 @@ legacy-source:<source-id>
 
 This prevents a legacy source test, expansion commit, cooldown, retirement or activation from overwriting the same source concurrently.
 
-Query-hint URL resolution uses a per-hint key:
+Query-hint URL resolution uses:
 
 ```text
 query-hint-resolve:<hint-id>
@@ -110,15 +110,37 @@ query-hint-resolve:<hint-id>
 
 The candidate upserts and hint usage counters then commit in one D1 transaction. Query-hint generation and internal learning remain metadata-only and do not acquire a public-research network lease.
 
+## Settings exclusion
+
+The current autonomy settings route uses:
+
+```text
+autonomy-settings
+```
+
+The legacy bounded settings compatibility route uses:
+
+```text
+legacy-safe-settings
+```
+
+Each route validates exact confirmation before acquiring its lease. It then reads the current settings and commits the new bounded settings plus its audit event in one D1 batch while the lease is held.
+
+Read-only settings and overview routes do not acquire a lease and do not repair or mutate persisted values. They may report the names of fail-closed settings that have historical drift, but the read response itself remains side-effect free.
+
+Settings leases cannot enable scheduled execution, AI drafting, lead discovery, email sending, social posting, form submission or any other external action. Those capabilities remain forced off regardless of stored compatibility data.
+
 ## Review exclusion
 
-Draft reviews first acquire:
+Modern draft reviews first acquire:
 
 ```text
 draft-review:<draft-id>
 ```
 
-After the draft is read, they acquire a hashed `draft-strategy:` lease derived from the normalized strategy key. The record lease prevents duplicate concurrent decisions. The strategy lease prevents two different drafts from losing increments while changing the same shared score row.
+The legacy draft approve/reject compatibility route deliberately uses the same `draft-review:<draft-id>` key, so the old and new review surfaces cannot race each other.
+
+After a modern draft is read, its route acquires a hashed `draft-strategy:` lease derived from the normalized strategy key. The record lease prevents duplicate concurrent decisions. The strategy lease prevents two different drafts from losing increments while changing the same shared score row.
 
 Opportunity reviews first acquire:
 
@@ -128,9 +150,9 @@ opportunity-review:<opportunity-id>
 
 After the opportunity is read, they acquire a hashed `opportunity-strategy:` lease derived from opportunity type, category, country and region. The hash keeps the key bounded and avoids exposing the full learning scope in the lease row.
 
-Both review routes acquire the record lease before the shared-score lease and release in reverse order. Their database mutations and audit event are committed in one D1 batch while both leases are held.
+Modern review routes acquire the record lease before the shared-score lease and release in reverse order. Their database mutations and audit event are committed in one D1 batch while both leases are held. The legacy draft compatibility route commits lead status, draft status and audit in one D1 batch while its shared draft lease is held.
 
-A stored review status remains internal metadata. Neither lease authorises email, posting, applying, browser automation, AI execution or any other external action.
+A stored review status remains internal metadata. No review lease authorises email, posting, applying, browser automation, AI execution or any other external action.
 
 ## Conflict response
 

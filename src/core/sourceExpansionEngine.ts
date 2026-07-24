@@ -64,6 +64,24 @@ const STRATEGY_PATTERNS = [
 ];
 
 const BAD_URL_PATTERN = /(login|signin|register|cart|privacy|terms|facebook|instagram|linkedin|twitter|x\.com|youtube|tiktok|\.pdf$|\.jpg$|\.png$|\.zip$|mailto:|tel:)/i;
+const ALLOWED_EXPANSION_FAILURES = new Set([
+  "url_required",
+  "unsupported_url_protocol",
+  "url_credentials_not_allowed",
+  "non_public_research_host",
+  "non_standard_port_not_allowed",
+  "invalid_research_url",
+  "redirect_loop",
+  "redirect_location_missing",
+  "too_many_redirects",
+  "unsafe_redirect_target",
+  "unsupported_content_type",
+  "research_fetch_timeout",
+  "response_too_large",
+  "response_read_failed",
+  "research_fetch_failed",
+  "empty_response",
+]);
 
 function normalizeUrl(raw: string, base?: string) {
   const decision = validatePublicResearchUrl(raw.trim(), base);
@@ -82,6 +100,12 @@ function classifyConfidence(score: number): "low" | "medium" | "high" {
   if (score >= 78) return "high";
   if (score >= 55) return "medium";
   return "low";
+}
+
+function normalizeExpansionFailure(error: unknown): string {
+  const value = error instanceof Error ? error.message : String(error || "");
+  if (ALLOWED_EXPANSION_FAILURES.has(value) || /^http_\d{3}$/.test(value)) return value;
+  return "source_expansion_processing_failed";
 }
 
 async function tableExists(env: Env, tableName: string): Promise<boolean> {
@@ -351,6 +375,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
   const existingDomains = await existingSourceDomains(env);
   const seenCandidates: ExpansionCandidate[] = [];
   const fetchReceipts: Array<Record<string, unknown>> = [];
+  let fetchAttempts = 0;
   let pagesFetched = 0;
   let linksFound = 0;
   let candidatesFound = 0;
@@ -359,9 +384,10 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
   let candidatesRejected = 0;
   const skipped = 0;
   let failed = 0;
+  let lastFailureCode: string | null = null;
 
   for (const seed of seeds) {
-    if (pagesFetched >= maxFetches || seenCandidates.length >= maxCandidates) break;
+    if (fetchAttempts >= maxFetches || seenCandidates.length >= maxCandidates) break;
     const attemptId = uuid();
     const started = Date.now();
     let fetchStatus: number | null = null;
@@ -374,9 +400,9 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     let seedCandidatesRejected = 0;
     let error: string | null = null;
 
+    fetchAttempts += 1;
     try {
       const fetched = await fetchPublicResearchHtml(seed.url);
-      pagesFetched += 1;
       fetchStatus = fetched.status;
       contentType = fetched.contentType;
       bytes = fetched.bytes;
@@ -391,10 +417,12 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
         redirectCount: fetched.redirectCount,
         elapsedMs: fetched.elapsedMs,
         fetchedAtISO: fetched.fetchedAtISO,
+        timeoutScope: fetched.timeoutScope,
         error: fetched.error,
       };
       fetchReceipts.push({ seedId: seed.id, ...receipt });
       if (!fetched.ok) throw new Error(fetched.error || "research_fetch_failed");
+      pagesFetched += 1;
 
       const links = extractLinks(fetched.body, fetched.finalUrl || seed.url, maxLinksPerSeed);
       linksFound += links.length;
@@ -434,7 +462,8 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
       ).bind(nowISO(), new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), seedCandidatesFound, seedCandidatesFound ? 3 : 0, `Last selected: ${seed.selection_reason}`, nowISO(), seed.id).run();
     } catch (caught) {
       failed += 1;
-      error = caught instanceof Error ? caught.message : "source_expansion_processing_failed";
+      error = normalizeExpansionFailure(caught);
+      lastFailureCode = error;
       await env.DB.prepare(
         `UPDATE source_expansion_seeds SET
            last_run_at_iso = ?,
@@ -454,8 +483,15 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     ).bind(attemptId, runId, seed.id, seed.url, `${seed.strategy}|${seed.selection_reason || "selection_reason:unknown"}|fetch:public_research_fetch_v1`, fetchStatus, contentType, Date.now() - started, bytes, seedLinksFound, seedCandidatesFound, seedCandidatesNew, seedCandidatesUpdated, seedCandidatesRejected, error, nowISO()).run();
   }
 
+  const runStatus = failed > 0 && pagesFetched === 0 ? "failed" : "completed";
+  const runError = runStatus === "failed"
+    ? lastFailureCode || "all_selected_source_fetches_failed"
+    : failed > 0
+      ? `partial_source_failures:${failed}`
+      : null;
+
   await finishRun(env, runId, {
-    status: failed && !pagesFetched ? "failed" : "completed",
+    status: runStatus,
     seedsChecked: seeds.length,
     pagesFetched,
     linksFound,
@@ -465,17 +501,21 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
     candidatesRejected,
     skipped,
     failed,
+    error: runError,
   });
 
-  await logEvent(env, "source_expansion_run", `Confirmed source expansion run checked ${seeds.length} seed(s), found ${candidatesFound} candidate(s), new ${candidatesNew}.`);
+  await logEvent(env, "source_expansion_run", `Confirmed source expansion attempted ${fetchAttempts} seed(s), fetched ${pagesFetched} page(s), failed ${failed}, found ${candidatesFound} candidate(s), new ${candidatesNew}.`);
 
   return {
     ok: true,
     mode: "source_expansion_run",
     fetchContract: "public_research_fetch_v1",
     runId,
+    runStatus,
+    runError,
     seedsChecked: seeds.length,
     selectedSeeds: seeds.map((seed) => ({ id: seed.id, url: seed.url, strategy: seed.strategy, selectionScore: seed.selection_score, selectionReason: seed.selection_reason })),
+    fetchAttempts,
     pagesFetched,
     linksFound,
     candidatesFound,
@@ -491,6 +531,7 @@ export async function runSourceExpansion(env: Env, options: ExpansionOptions = {
       publicWebOnly: true,
       redirectsValidated: true,
       responseBytesBounded: true,
+      fullOperationTimeout: true,
       maxFetches,
       maxLinksPerSeed,
       maxCandidates,

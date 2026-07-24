@@ -1,6 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
-import { fetchPublicResearchText, validatePublicResearchUrl } from "./publicResearchFetch";
+import { PUBLIC_RESEARCH_FETCH_CONTRACT, fetchPublicResearchText, validatePublicResearchUrl } from "./publicResearchFetch";
 
 type SitemapSeed = {
   id: string;
@@ -27,8 +27,21 @@ type SitemapCandidate = {
   evidence: Record<string, unknown>;
 };
 
+type SitemapQueueItem = {
+  url: string;
+  seed: SitemapSeed;
+  depth: number;
+};
+
 const OPPORTUNITY_PATH_PATTERN = /(tender|tenders|procurement|supplier|suppliers|contract|contracts|grant|grants|funding|funds|investment|opportunit|rfp|eoi|panel|marketplace|creative|screen|innovation|digital)/i;
 const NOISE_PATH_PATTERN = /(login|signin|register|cart|privacy|terms|policy|cookie|contact|about|news|media|event|blog|\.pdf$|\.jpg$|\.png$|\.zip$)/i;
+const SITEMAP_DOCUMENT_PATTERN = /(?:sitemap|site-map)[^/?#]*\.xml(?:$|\?)/i;
+
+function boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
 
 function normalizeUrl(raw: string, base?: string) {
   const decision = validatePublicResearchUrl(raw.trim(), base);
@@ -106,16 +119,20 @@ function robotsSitemapUrls(robotsText: string, origin: string) {
   return Array.from(urls).slice(0, 5);
 }
 
-function extractSitemapLocs(xml: string, sitemapUrl: string, max: number) {
+function extractLocs(xml: string, sitemapUrl: string, max: number) {
   const locs = new Set<string>();
   const regex = /<loc>\s*([^<]+?)\s*<\/loc>/gi;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(xml)) && locs.size < max) {
     const url = normalizeUrl(match[1], sitemapUrl);
-    if (!url || NOISE_PATH_PATTERN.test(url)) continue;
-    if (OPPORTUNITY_PATH_PATTERN.test(url)) locs.add(url);
+    if (url) locs.add(url);
   }
   return Array.from(locs);
+}
+
+function isSitemapIndex(xml: string, locs: string[]): boolean {
+  if (/<sitemapindex\b/i.test(xml)) return true;
+  return locs.length > 0 && locs.every((url) => SITEMAP_DOCUMENT_PATTERN.test(url));
 }
 
 function candidateFromUrl(url: string, seed: SitemapSeed): SitemapCandidate | null {
@@ -144,7 +161,17 @@ function candidateFromUrl(url: string, seed: SitemapSeed): SitemapCandidate | nu
     region: seed.region || null,
     category,
     reasons,
-    evidence: { seedId: seed.id, seedUrl: seed.url, sitemapStrategy: true, discoveredAtISO: nowISO() },
+    evidence: {
+      seedId: seed.id,
+      seedUrl: seed.url,
+      sitemapStrategy: true,
+      discoveredAtISO: nowISO(),
+      reviewOnly: true,
+      executable: false,
+      deliverable: false,
+      authoritativeForExecution: false,
+      externalExecutionAllowed: false,
+    },
   };
 }
 
@@ -171,17 +198,23 @@ async function upsertCandidate(env: Env, candidate: SitemapCandidate, seed: Site
   return status;
 }
 
-function receipt(result: Awaited<ReturnType<typeof fetchPublicResearchText>>, kind: "robots" | "sitemap") {
+function receipt(result: Awaited<ReturnType<typeof fetchPublicResearchText>>, kind: "robots" | "sitemap", depth = 0) {
   return {
     kind,
+    depth,
     contract: result.contract,
     requestedUrl: result.requestedUrl,
     finalUrl: result.finalUrl,
     status: result.status,
     contentType: result.contentType,
+    contentLength: result.contentLength,
+    contentLanguage: result.contentLanguage,
+    etag: result.etag,
+    lastModified: result.lastModified,
     bytes: result.bytes,
     bodySha256: result.bodySha256,
     redirectCount: result.redirectCount,
+    redirectChain: result.redirectChain,
     elapsedMs: result.elapsedMs,
     fetchedAtISO: result.fetchedAtISO,
     timeoutScope: result.timeoutScope,
@@ -192,16 +225,21 @@ function receipt(result: Awaited<ReturnType<typeof fetchPublicResearchText>>, ki
 export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?: number; maxFetches?: number; maxSitemapUrls?: number; maxCandidates?: number } = {}) {
   const hasCandidates = await tableExists(env, "source_expansion_candidates");
   if (!hasCandidates) return { ok: false, error: "missing_migration", requiredMigration: "0007_source_expansion_memory.sql" };
-  const limitSeeds = Math.max(1, Math.min(10, Math.round(Number(options.limitSeeds || 3))));
-  const maxFetches = Math.max(1, Math.min(10, Math.round(Number(options.maxFetches || 4))));
-  const maxSitemapUrls = Math.max(5, Math.min(100, Math.round(Number(options.maxSitemapUrls || 50))));
-  const maxCandidates = Math.max(5, Math.min(100, Math.round(Number(options.maxCandidates || 30))));
+  const limitSeeds = boundedInteger(options.limitSeeds, 3, 1, 10);
+  const maxFetches = boundedInteger(options.maxFetches, 4, 1, 10);
+  const maxSitemapUrls = boundedInteger(options.maxSitemapUrls, 50, 5, 100);
+  const maxCandidates = boundedInteger(options.maxCandidates, 30, 5, 100);
   const seeds = await activeSeeds(env, limitSeeds);
   const existing = await existingDomains(env);
   const discovered: SitemapCandidate[] = [];
   const fetchReceipts: Array<Record<string, unknown>> = [];
+  const sitemapQueue: SitemapQueueItem[] = [];
+  const queued = new Set<string>();
+  const visited = new Set<string>();
   let fetches = 0;
   let successfulFetches = 0;
+  let sitemapDocumentsFetched = 0;
+  let childSitemapsQueued = 0;
   let sitemapUrlsFound = 0;
   let candidatesNewOrUpdated = 0;
   let duplicates = 0;
@@ -209,13 +247,14 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
   let lastFailureCode: string | null = null;
 
   for (const seed of seeds) {
-    if (fetches >= maxFetches || discovered.length >= maxCandidates) break;
+    if (fetches >= maxFetches) break;
     const origin = baseOrigin(seed.url);
     if (!origin) {
       failures += 1;
       lastFailureCode = "invalid_research_url";
       continue;
     }
+
     let sitemapUrls = robotsSitemapUrls("", origin);
     const robotsUrl = normalizeUrl(`${origin}/robots.txt`);
     if (robotsUrl && fetches < maxFetches) {
@@ -231,31 +270,54 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
       }
     }
 
-    for (const sitemapUrl of sitemapUrls) {
-      if (fetches >= maxFetches || discovered.length >= maxCandidates) break;
-      const response = await fetchPublicResearchText(sitemapUrl, { maxBytes: 1_048_576 });
-      fetches += 1;
-      const sitemapReceipt = receipt(response, "sitemap");
-      fetchReceipts.push({ seedId: seed.id, ...sitemapReceipt });
-      if (!response.ok) {
-        failures += 1;
-        lastFailureCode = response.error || "research_fetch_failed";
-        continue;
+    for (const url of sitemapUrls) {
+      if (queued.has(url)) continue;
+      queued.add(url);
+      sitemapQueue.push({ url, seed, depth: 0 });
+    }
+  }
+
+  while (sitemapQueue.length && fetches < maxFetches && discovered.length < maxCandidates) {
+    const next = sitemapQueue.shift()!;
+    if (visited.has(next.url)) continue;
+    visited.add(next.url);
+
+    const response = await fetchPublicResearchText(next.url, { maxBytes: 1_048_576 });
+    fetches += 1;
+    sitemapDocumentsFetched += 1;
+    const sitemapReceipt = receipt(response, "sitemap", next.depth);
+    fetchReceipts.push({ seedId: next.seed.id, ...sitemapReceipt });
+    if (!response.ok) {
+      failures += 1;
+      lastFailureCode = response.error || "research_fetch_failed";
+      continue;
+    }
+    successfulFetches += 1;
+
+    const effectiveSitemapUrl = response.finalUrl || next.url;
+    const locs = extractLocs(response.body, effectiveSitemapUrl, maxSitemapUrls);
+    if (isSitemapIndex(response.body, locs) && next.depth < 2) {
+      for (const child of locs) {
+        if (sitemapQueue.length + visited.size >= maxSitemapUrls) break;
+        if (queued.has(child) || visited.has(child) || !SITEMAP_DOCUMENT_PATTERN.test(child)) continue;
+        queued.add(child);
+        sitemapQueue.push({ url: child, seed: next.seed, depth: next.depth + 1 });
+        childSitemapsQueued += 1;
       }
-      successfulFetches += 1;
-      const effectiveSitemapUrl = response.finalUrl || sitemapUrl;
-      const locs = extractSitemapLocs(response.body, effectiveSitemapUrl, maxSitemapUrls);
-      sitemapUrlsFound += locs.length;
-      for (const loc of locs) {
-        if (discovered.length >= maxCandidates) break;
-        const candidate = candidateFromUrl(loc, seed);
-        if (!candidate) continue;
-        candidate.evidence = { ...candidate.evidence, sitemapFetch: sitemapReceipt };
-        const status = await upsertCandidate(env, candidate, seed, existing);
-        if (status === "duplicate_existing_source") duplicates += 1;
-        else candidatesNewOrUpdated += 1;
-        discovered.push(candidate);
-      }
+      continue;
+    }
+
+    const opportunityLocs = locs.filter((url) => !NOISE_PATH_PATTERN.test(url) && OPPORTUNITY_PATH_PATTERN.test(url));
+    sitemapUrlsFound += opportunityLocs.length;
+    for (const loc of opportunityLocs) {
+      if (discovered.length >= maxCandidates) break;
+      const candidate = candidateFromUrl(loc, next.seed);
+      if (!candidate) continue;
+      candidate.evidence = { ...candidate.evidence, sitemapFetch: sitemapReceipt, sitemapDepth: next.depth };
+      const status = await upsertCandidate(env, candidate, next.seed, existing);
+      if (status === "duplicate_existing_source") duplicates += 1;
+      else candidatesNewOrUpdated += 1;
+      discovered.push(candidate);
     }
   }
 
@@ -263,24 +325,28 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
     ? "skipped"
     : failures > 0 && successfulFetches === 0
       ? "failed"
-      : "completed";
+      : failures > 0
+        ? "partial"
+        : "completed";
   const runError = runStatus === "skipped"
     ? "no_active_seeds"
     : runStatus === "failed"
       ? lastFailureCode || "all_sitemap_fetches_failed"
-      : failures > 0
+      : runStatus === "partial"
         ? `partial_source_failures:${failures}`
         : null;
-  await logEvent(env, "source_expansion_sitemap_run", `Confirmed sitemap expansion attempted ${fetches} fetch(es), successful ${successfulFetches}, failed ${failures}, found ${discovered.length} candidate(s).`);
+  await logEvent(env, "source_expansion_sitemap_run", `Confirmed sitemap expansion ${runStatus}: attempted ${fetches} fetch(es), successful ${successfulFetches}, failed ${failures}, sitemap documents ${sitemapDocumentsFetched}, found ${discovered.length} candidate(s).`);
   return {
-    ok: true,
+    ok: runStatus !== "failed",
     mode: "source_expansion_sitemap_run",
-    fetchContract: "public_research_fetch_v1",
+    fetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
     runStatus,
     runError,
     seedsChecked: seeds.length,
     fetches,
     successfulFetches,
+    sitemapDocumentsFetched,
+    childSitemapsQueued,
     sitemapUrlsFound,
     candidatesFound: discovered.length,
     candidatesNewOrUpdated,
@@ -288,6 +354,11 @@ export async function runSitemapSourceExpansion(env: Env, options: { limitSeeds?
     failures,
     fetchReceipts: fetchReceipts.slice(0, 15),
     preview: discovered.slice(0, 25),
-    safety: { bounded: true, publicWebOnly: true, redirectsValidated: true, responseBytesBounded: true, fullOperationTimeout: true, maxFetches, maxSitemapUrls, maxCandidates, callsAI: false, sendsEmail: false, savesOpportunitySources: false, candidateSaveStillRequiresConfirmation: true },
+    reviewOnly: true,
+    executable: false,
+    deliverable: false,
+    authoritativeForExecution: false,
+    externalExecutionAllowed: false,
+    safety: { bounded: true, publicWebOnly: true, redirectsValidated: true, responseBytesBounded: true, fullOperationTimeout: true, maxFetches, maxSitemapUrls, maxCandidates, maxSitemapDepth: 2, callsAI: false, sendsEmail: false, savesOpportunitySources: false, candidateSaveStillRequiresConfirmation: true },
   };
 }

@@ -2,6 +2,7 @@ import { dailyTickWithAutonomy } from "./engineAutonomy";
 import type { Env } from "./db";
 import { logEvent } from "./db";
 import { isAdminRequestAuthorized } from "./core/adminAuthentication";
+import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "./core/boundedJsonRequest";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/adminProtected";
 import { handleTools } from "./routes/tools";
@@ -63,14 +64,16 @@ function sourceActionRequiresConfirmation(pathname: string, method: string): boo
 
 async function sourceActionConfirmationFailure(request: Request, pathname: string): Promise<Response | null> {
   if (!sourceActionRequiresConfirmation(pathname, request.method)) return null;
-  const url = new URL(request.url);
-  const body = await request.clone().json().catch(() => ({}));
-  const confirmed = url.searchParams.get("confirm") === "1" || body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
-  if (confirmed) return null;
+  const parsed = await readBoundedJsonObject(request.clone());
+  if (!parsed.ok) return jsonResponse(boundedJsonFailurePayload(parsed), { status: parsed.status });
+  if (isExplicitJsonConfirmation(parsed.value)) return null;
   return jsonResponse({
     ok: false,
     error: "confirm_required",
-    reason: "Source writes and bounded source-network actions require explicit confirmation. No AI, email, posting, form submission, browser automation, or third-party mutation is performed.",
+    requiredPayload: { confirm: true },
+    confirmationCoercionAllowed: false,
+    requestBodyContract: parsed.contract,
+    reason: "Source writes and bounded source-network actions require exact JSON confirmation. No AI, email, posting, form submission, browser automation, or third-party mutation is performed.",
   }, { status: 400 });
 }
 

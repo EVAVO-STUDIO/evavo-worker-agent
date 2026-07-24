@@ -9,9 +9,14 @@ This module is a pure producer. It does not send the request, open a network con
 ```text
 src/core/growthProposalPacket.ts
 src/core/growthProposalRequestSignature.ts
+src/core/growthProposalDeliveryKeyConfiguration.ts
 fixtures/growth-worker-proposal-v1.json
 fixtures/growth-worker-request-v1.json
+fixtures/growth-worker-key-registry-v1.json
 tests/growthProposalRequestSignature.test.ts
+tests/growthProposalDeliveryKeyConfiguration.test.ts
+tests/growthProposalDeliveryKeyConfigurationSource.test.ts
+docs/growth-proposal-delivery-key-configuration.md
 ```
 
 ## Contracts
@@ -28,6 +33,12 @@ Signed request:
 growth_worker_request_v1
 ```
 
+Tenant key registry:
+
+```text
+growth_worker_key_registry_v1
+```
+
 Reserved target:
 
 ```text
@@ -35,7 +46,7 @@ POST /api/private/growth/worker-proposals
 Content-Type: application/json
 ```
 
-The target route is not called by the signer. Deployment configuration and transport remain disabled until the receiving route, dedicated key loading, nonce persistence and end-to-end smoke coverage are reviewed together.
+The target route is not called by the signer. Deployment configuration and transport remain disabled until receiving-route review, explicit key loading, nonce persistence, rate limiting and end-to-end smoke coverage are completed together.
 
 ## Dedicated credential
 
@@ -51,7 +62,27 @@ It must not reuse:
 
 The bridge secret stays in Worker secret storage. It is passed into the signer by trusted server-side orchestration and is never returned in the signed request object, body, headers, logs or fixtures.
 
-The deterministic fixture uses a documented test-only secret inside the test file. The secret is not included in the fixture itself.
+The deterministic fixture uses documented test-only secrets. No production credential belongs in the repository or compatibility fixtures.
+
+## Tenant-scoped key selection
+
+`src/core/growthProposalDeliveryKeyConfiguration.ts` parses an explicitly supplied `growth_worker_key_registry_v1` registry and selects the one active key assigned to an organisation/workspace.
+
+The selector enforces:
+
+- exact configuration and key-entry fields;
+- tenant UUID scope;
+- exactly one active key per configured tenant;
+- at most one retiring key per tenant;
+- unique key IDs and no secret reuse;
+- bounded secret, registry and key counts;
+- bounded validity windows;
+- a short active/retiring overlap for rotation;
+- active-key selection only for new signing.
+
+A retiring key is never returned for new Worker request signing. It exists only so the receiver can accept a short rotation overlap.
+
+The selector does not read `Env`, `process.env`, Worker D1 or runtime configuration. It does not call the signer or transport. Key selection, signing and future delivery remain separate review boundaries.
 
 ## Canonical packet prerequisite
 
@@ -115,20 +146,24 @@ A legitimate retry must create a new:
 
 It preserves the same canonical proposal body and proposal idempotency key. The receiving database distinguishes a safe proposal replay from a captured-request replay.
 
-## Canonical fixture
+## Canonical fixtures
 
-`fixtures/growth-worker-request-v1.json` is the cross-repository compatibility fixture.
+`fixtures/growth-worker-request-v1.json` is the cross-repository signed-request compatibility fixture.
 
-The Worker test proves that:
+`fixtures/growth-worker-key-registry-v1.json` is the matching tenant key-rotation fixture.
 
-- the producer emits the exact fixture object;
+The Worker tests prove that:
+
+- the producer emits the exact signed-request fixture object;
 - compact body bytes equal `JSON.stringify` of the proposal fixture;
 - SHA-256 matches an independent Node computation;
 - HMAC-SHA256 matches an independent Node computation;
 - header names and values match the receiving contract;
-- the secret is absent from body and returned output.
+- the active tenant key selected from the registry reproduces the same request fixture;
+- retiring keys are not selected for new signing;
+- the secret is absent from body and returned signed-request output.
 
-`next-website` carries the same fixture under `tests/fixtures` and verifies it with its independent request verifier.
+`next-website` carries the same fixtures under `tests/fixtures` and independently verifies the request and key-registry contracts.
 
 ## Fail-closed rules
 
@@ -145,12 +180,24 @@ The signer rejects:
 - malformed body hashes in the canonical input builder;
 - invalid clocks.
 
+The key selector rejects:
+
+- unknown or missing registry fields;
+- duplicate key IDs;
+- reused secrets;
+- invalid tenant UUIDs;
+- no active key or multiple active keys for a tenant;
+- multiple retiring keys for a tenant;
+- future, expired or reversed key windows;
+- active keys too close to expiry;
+- retiring keys with an excessive overlap window;
+- registries that are oversized or structurally forged.
+
 ## Current limits
 
-The module does not yet:
+The modules do not yet:
 
-- load a bridge secret from `Env`;
-- select a tenant key configuration;
+- load the registry from Worker `Env`;
 - send an HTTP request;
 - retry transport failures;
 - record a Worker-side delivery audit event;
@@ -158,4 +205,4 @@ The module does not yet:
 - enable `bridgeEnabled`;
 - perform canonical promotion or external execution.
 
-Those responsibilities require separate contracts and must not be added to this pure signer module.
+Those responsibilities require separate contracts and must not be added to the pure packet builder, tenant key selector or signer modules.

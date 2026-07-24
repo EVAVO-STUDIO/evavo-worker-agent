@@ -1,5 +1,5 @@
 import { growthBridgeReadiness } from "./growthBridgeReadiness";
-import { listGrowthBusinessRouteInventory } from "./growthBusinessRouteInventory";
+import { listGrowthWorkerRouteInventory } from "./growthBusinessRouteInventory";
 
 export type GrowthCapabilityCategory = "research" | "analysis" | "drafting" | "browser" | "external_delivery" | "internal_ops" | "reporting";
 export type GrowthAutonomyLevel = 0 | 1 | 2 | 3 | 4 | 5;
@@ -74,7 +74,7 @@ export function listGrowthCapabilities() {
       autonomousCampaignsEnabled: false,
     },
     bridgeReadiness: growthBridgeReadiness,
-    routeInventory: listGrowthBusinessRouteInventory(),
+    routeInventory: listGrowthWorkerRouteInventory(),
     autonomyLevels: growthAutonomyLevels,
     capabilities: growthCapabilities,
     count: growthCapabilities.length,

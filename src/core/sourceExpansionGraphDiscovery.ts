@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { logEvent, nowISO, uuid } from "../db";
+import { fetchPublicResearchHtml, validatePublicResearchUrl } from "./publicResearchFetch";
 
 type GraphSeed = {
   id: string | null;
@@ -26,14 +27,8 @@ type GraphCandidate = {
 };
 
 function normalizeUrl(raw: string, base?: string) {
-  try {
-    const url = base ? new URL(raw, base) : new URL(raw);
-    if (!/^https?:$/.test(url.protocol)) return null;
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
+  const decision = validatePublicResearchUrl(raw, base);
+  return decision.ok && decision.url ? decision.url.replace(/\/+$/, "") : null;
 }
 
 function domainOf(raw: string) {
@@ -75,7 +70,7 @@ function isNoiseUrl(url: string) {
 
 function classifyGraphLink(url: string, seed: GraphSeed) {
   const lower = url.toLowerCase();
-  const reasons: string[] = ["graph_discovery:public_link" ];
+  const reasons: string[] = ["graph_discovery:public_link"];
   let score = 26;
   let sourceType = "relationship_graph_source";
   let category = seed.category || "opportunities";
@@ -168,47 +163,60 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
   let rejected = 0;
   let failed = 0;
   const found: GraphCandidate[] = [];
+  const fetchReceipts: Array<Record<string, unknown>> = [];
 
   for (const seed of seedRows) {
     if (pagesFetched >= maxFetches || found.length >= maxCandidates) break;
-    try {
-      const response = await fetch(seed.url, { headers: { accept: "text/html,application/xhtml+xml" } });
-      pagesFetched += 1;
-      if (!response.ok) { failed += 1; continue; }
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) { rejected += 1; continue; }
-      const html = await response.text();
-      const links = extractLinks(html, seed.url, maxLinksPerSeed);
-      linksFound += links.length;
-      for (const link of links) {
-        if (found.length >= maxCandidates) break;
-        if (isNoiseUrl(link)) { rejected += 1; continue; }
-        const domain = domainOf(link);
-        if (domain === domainOf(seed.url)) continue;
-        if (existing.has(domain)) { duplicates += 1; continue; }
-        const classified = classifyGraphLink(link, seed);
-        if (classified.score < 45) { rejected += 1; continue; }
-        const candidate: GraphCandidate = {
-          url: link,
-          domain,
-          label: labelFromUrl(link),
-          sourceType: classified.sourceType,
-          country: seed.country || null,
-          region: seed.region || null,
-          category: classified.category,
-          score: classified.score,
-          confidence: classified.confidence,
-          reasons: classified.reasons,
-          evidence: { sourceSeedUrl: seed.url, sourceSeedStrategy: seed.strategy || null, relationshipDomain: domain },
-        };
-        found.push(candidate);
-        const saved = await upsertCandidate(env, candidate, seed);
-        candidatesFound += 1;
-        if (saved.inserted) candidatesNew += 1;
-        if (saved.updated) candidatesUpdated += 1;
-      }
-    } catch {
-      failed += 1;
+    const fetched = await fetchPublicResearchHtml(seed.url);
+    pagesFetched += 1;
+    fetchReceipts.push({
+      seedId: seed.id,
+      requestedUrl: fetched.requestedUrl,
+      finalUrl: fetched.finalUrl,
+      status: fetched.status,
+      bytes: fetched.bytes,
+      bodySha256: fetched.bodySha256,
+      redirectCount: fetched.redirectCount,
+      error: fetched.error,
+      fetchedAtISO: fetched.fetchedAtISO,
+    });
+    if (!fetched.ok) { failed += 1; continue; }
+
+    const links = extractLinks(fetched.body, fetched.finalUrl || seed.url, maxLinksPerSeed);
+    linksFound += links.length;
+    for (const link of links) {
+      if (found.length >= maxCandidates) break;
+      if (isNoiseUrl(link)) { rejected += 1; continue; }
+      const domain = domainOf(link);
+      if (domain === domainOf(fetched.finalUrl || seed.url)) continue;
+      if (existing.has(domain)) { duplicates += 1; continue; }
+      const classified = classifyGraphLink(link, seed);
+      if (classified.score < 45) { rejected += 1; continue; }
+      const candidate: GraphCandidate = {
+        url: link,
+        domain,
+        label: labelFromUrl(link),
+        sourceType: classified.sourceType,
+        country: seed.country || null,
+        region: seed.region || null,
+        category: classified.category,
+        score: classified.score,
+        confidence: classified.confidence,
+        reasons: classified.reasons,
+        evidence: {
+          sourceSeedUrl: seed.url,
+          sourceFinalUrl: fetched.finalUrl,
+          sourceBodySha256: fetched.bodySha256,
+          sourceFetchedAtISO: fetched.fetchedAtISO,
+          sourceSeedStrategy: seed.strategy || null,
+          relationshipDomain: domain,
+        },
+      };
+      found.push(candidate);
+      const saved = await upsertCandidate(env, candidate, seed);
+      candidatesFound += 1;
+      if (saved.inserted) candidatesNew += 1;
+      if (saved.updated) candidatesUpdated += 1;
     }
   }
 
@@ -216,6 +224,7 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
   return {
     ok: true,
     mode: "source_expansion_relationship_graph_discovery",
+    fetchContract: "public_research_fetch_v1",
     seedsChecked: seedRows.length,
     pagesFetched,
     linksFound,
@@ -225,6 +234,7 @@ export async function runRelationshipGraphDiscovery(env: Env, options: { limitSe
     duplicates,
     rejected,
     failed,
+    fetchReceipts: fetchReceipts.slice(0, 10),
     candidates: found.slice(0, 25),
     safety: { writesTables: ["source_expansion_candidates", "events"], callsAI: false, sendsEmail: false, callsNetwork: true, publicWebOnly: true, respectsAccessControls: true },
   };

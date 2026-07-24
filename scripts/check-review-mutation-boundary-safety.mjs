@@ -226,7 +226,7 @@ requireTokens("source candidate application service", candidateCore, [
   'SOURCE_CANDIDATE_SAVE_CONTRACT = "opportunity_source_candidate_save_v2_atomic"',
   "function normalizePublicHttpsCandidateUrl",
   "validatePublicResearchUrl(raw)",
-  "const placeholders = uniqueUrls.map(() => \"?\").join(\", \')",
+  'const placeholders = uniqueUrls.map(() => "?").join(", ")',
   "WHERE url IN (${placeholders})",
   ".bind(...uniqueUrls).all<ExpansionCandidateMeta>()",
   "const statements: D1PreparedStatement[] = []",

@@ -13,7 +13,8 @@ function read(relativePath: string): string {
 
 const guard = read("scripts/check-growth-route-parity.mjs");
 const parser = read("src/core/growthWorkerRouteParity.ts");
-const fixture = read("fixtures/growth-worker-route-parity-v1.json");
+const fixtureRaw = read("fixtures/growth-worker-route-parity-v1.json");
+const fixture = JSON.parse(fixtureRaw) as Record<string, unknown>;
 const contract = read("docs/growth-route-parity.md");
 const behaviouralTest = read("tests/growthRouteParity.test.ts");
 
@@ -36,6 +37,7 @@ for (const token of [
   "externalExecutionEnabled: false",
   "canonicalGrowthPromotionEnabled: false",
   "next_website_ingestion_endpoint_not_implemented",
+  "worker_proposal_delivery_not_implemented",
   "cross_repo_contract_tests_not_implemented",
   "absent pages require the endpoint blocker; present pages require the Worker proposal delivery blocker",
   'const packageSource = readRequired("package.json")',
@@ -57,6 +59,9 @@ for (const token of [
   "GROWTH_WORKER_ROUTE_PARITY_CONTRACT_VERSION",
   "GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS",
   "GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS",
+  "GROWTH_WORKER_ROUTE_BLOCKERS_BY_PAGE_STATE",
+  "GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE",
+  "GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS",
   "worker_proposal_delivery_not_implemented",
   "growthWorkerRouteBlockersForPageState",
   "parseGrowthWorkerRouteParityContract",
@@ -98,14 +103,32 @@ for (const token of [
   '"requestVersion": "growth_worker_request_v1"',
   '"bridgeVersion": "growth_worker_bridge_v2"',
   '"inventoryVersion": "growth_worker_route_inventory_v2"',
-  '"pageState": "absent"',
   '"bridgeEnabled": false',
   '"deliveryEnabled": false',
-  "next_website_ingestion_endpoint_not_implemented",
   "cross_repo_contract_tests_not_implemented",
 ]) {
-  assert(fixture.includes(token), `fixture-${token}`);
+  assert(fixtureRaw.includes(token), `fixture-${token}`);
 }
+
+const blockersByState = {
+  absent: [
+    "next_website_ingestion_endpoint_not_implemented",
+    "cross_repo_contract_tests_not_implemented",
+  ],
+  present: [
+    "worker_proposal_delivery_not_implemented",
+    "cross_repo_contract_tests_not_implemented",
+  ],
+} as const;
+assert(fixture.pageState === "absent" || fixture.pageState === "present", "fixture-page-state-finite");
+assert(
+  JSON.stringify(fixture.blockers) === JSON.stringify(blockersByState[fixture.pageState]),
+  "fixture-current-blockers",
+);
+assert(
+  parser.includes(`GROWTH_WORKER_ROUTE_CURRENT_PAGE_STATE = "${fixture.pageState}"`),
+  "parser-current-state-matches-fixture",
+);
 
 for (const forbidden of [
   "ADMIN_TOKEN",
@@ -116,9 +139,8 @@ for (const forbidden of [
   "providerToken",
   "signature",
   "nonce",
-  "worker_proposal_delivery_not_implemented",
 ]) {
-  assert(!fixture.includes(forbidden), `fixture-forbids-${forbidden}`);
+  assert(!fixtureRaw.includes(forbidden), `fixture-forbids-${forbidden}`);
 }
 
 for (const token of [
@@ -137,7 +159,9 @@ for (const token of [
 
 for (const token of [
   "Growth route parity contract passed.",
-  "fixture-currently-absent",
+  "fixture-current-page-state",
+  "fixture-current-blockers",
+  "absent-state-accepted",
   "present-state-accepted",
   "present-removes-endpoint-blocker",
   "present-adds-delivery-blocker",
@@ -159,5 +183,5 @@ console.log("Growth route parity source contract passed.");
 console.log("- Worker guard uses bounded local source scanning and optional sibling verification only");
 console.log("- npm, check:local, safety completeness, helper parsing and read-only workflow wiring are source-tested");
 console.log("- one pure parser owns exact fields, canonical JSON, frozen output and conditional blocker sets");
-console.log("- behavioral fixtures prove both absent and present states while keeping bridge and delivery disabled");
+console.log("- source tests accept either reviewed current state only when fixture, parser and blocker set agree");
 console.log("- static fixture and parser parity remain distinct from live HTTP delivery and end-to-end smoke");

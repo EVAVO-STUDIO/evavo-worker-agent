@@ -3,6 +3,10 @@ import {
   GROWTH_WORKER_ROUTE_INVENTORY_VERSION,
   type GrowthWorkerRouteInventoryPendingGroup,
 } from "./growthBusinessRouteInventory";
+import {
+  GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS,
+  type GrowthWorkerRouteBlockingReason,
+} from "./growthWorkerRouteParity";
 
 export const GROWTH_BRIDGE_CONTRACT_VERSION = "growth_worker_bridge_v2" as const;
 
@@ -13,9 +17,7 @@ export type GrowthBridgePacketKind =
   | "analysis_recommendation"
   | "next_action_proposal";
 
-export type GrowthBridgeBlockingReason =
-  | "next_website_ingestion_endpoint_not_implemented"
-  | "cross_repo_contract_tests_not_implemented";
+export type GrowthBridgeBlockingReason = GrowthWorkerRouteBlockingReason;
 
 export type GrowthBridgeReadiness = Readonly<{
   contractVersion: typeof GROWTH_BRIDGE_CONTRACT_VERSION;
@@ -90,8 +92,5 @@ export const growthBridgeReadiness: GrowthBridgeReadiness = Object.freeze({
     "provider_write",
     "canonical_auto_promotion",
   ]),
-  blockingReasons: Object.freeze([
-    "next_website_ingestion_endpoint_not_implemented",
-    "cross_repo_contract_tests_not_implemented",
-  ]),
+  blockingReasons: GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS,
 });

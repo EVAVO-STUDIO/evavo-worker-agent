@@ -223,6 +223,7 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "manual-research-lease-safety-v2-complete-route-coverage",
+  previous_contract: "manual-research-lease-safety-v1",
   atomicSingleStatementAcquisitionRequired: true,
   readThenWriteAcquisitionAllowed: false,
   boundedLeaseTtlRequired: true,

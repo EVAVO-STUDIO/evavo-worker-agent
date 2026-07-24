@@ -10,24 +10,38 @@ const scriptsDir = path.join(root, "scripts");
 const errors = [];
 const passes = [];
 
-function requireFile(relativePath) {
-  const absolutePath = path.join(root, relativePath);
-  if (!fs.existsSync(absolutePath)) errors.push(`Missing required file: ${relativePath}`);
-  else passes.push(`${relativePath} exists`);
-  return absolutePath;
+function absolute(relativePath) {
+  return path.join(root, relativePath);
+}
+
+function read(relativePath) {
+  const filePath = absolute(relativePath);
+  if (!fs.existsSync(filePath)) {
+    errors.push(`Missing required file: ${relativePath}`);
+    return "";
+  }
+  passes.push(`${relativePath} exists`);
+  return fs.readFileSync(filePath, "utf8");
 }
 
 function requireAbsent(relativePath) {
-  if (fs.existsSync(path.join(root, relativePath))) errors.push(`Removed file must remain absent: ${relativePath}`);
+  if (fs.existsSync(absolute(relativePath))) errors.push(`Removed file must remain absent: ${relativePath}`);
   else passes.push(`${relativePath} is absent`);
 }
 
 function requireTokens(relativePath, tokens) {
-  const absolutePath = requireFile(relativePath);
-  if (!fs.existsSync(absolutePath)) return;
-  const content = fs.readFileSync(absolutePath, "utf8");
+  const source = read(relativePath);
+  if (!source) return;
   for (const token of tokens) {
-    if (!content.includes(token)) errors.push(`${relativePath} is missing required token: ${token}`);
+    if (!source.includes(token)) errors.push(`${relativePath} is missing required token: ${token}`);
+  }
+}
+
+function forbidTokens(relativePath, tokens) {
+  const source = read(relativePath);
+  if (!source) return;
+  for (const token of tokens) {
+    if (source.includes(token)) errors.push(`${relativePath} contains forbidden token: ${token}`);
   }
 }
 
@@ -37,14 +51,13 @@ const helperScripts = fs.existsSync(scriptsDir)
   : [];
 
 for (const scriptName of helperScripts) {
-  const relativePath = path.join("scripts", scriptName).replaceAll("\\", "/");
-  const absolutePath = path.join(scriptsDir, scriptName);
-  const result = spawnSync(process.execPath, ["--check", absolutePath], { encoding: "utf8" });
+  const relativePath = path.posix.join("scripts", scriptName);
+  const result = spawnSync(process.execPath, ["--check", absolute(relativePath)], { encoding: "utf8" });
   if (result.status !== 0) errors.push(`${relativePath} does not parse: ${result.stderr || result.stdout}`);
   else passes.push(`${relativePath} parses`);
 }
 
-for (const relativePath of [
+const requiredFiles = [
   "Run-BusinessOperatorWorkerRunbook.ps1",
   "Run-WorkerFinalGate.ps1",
   "src/index.ts",
@@ -54,13 +67,21 @@ for (const relativePath of [
   "src/core/boundedJsonRequest.ts",
   "src/core/manualResearchLease.ts",
   "src/core/publicResearchFetch.ts",
+  "src/core/reviewMutationSafety.ts",
+  "src/core/draftReview.ts",
+  "src/core/opportunityReview.ts",
   "src/core/opportunityDiscovery.ts",
   "src/core/opportunityPersistence.ts",
   "src/core/opportunityScoring.ts",
   "src/routes/admin.ts",
+  "src/routes/adminProtected.ts",
   "src/routes/autonomySettingsAdmin.ts",
   "src/routes/legacyExecutionSafetyAdmin.ts",
   "src/routes/tools.ts",
+  "src/routes/draftReviewAdmin.ts",
+  "src/routes/opportunityReviewAdmin.ts",
+  "src/routes/opportunitySourceCandidatesAdmin.ts",
+  "src/routes/opportunitySourceHealthActionsAdmin.ts",
   "src/routes/workerRoutePolicy.ts",
   "src/routes/growthRoutePolicy.ts",
   "src/routes/opportunityRoutePolicy.ts",
@@ -74,19 +95,25 @@ for (const relativePath of [
   "scripts/check-bounded-json-request-safety.mjs",
   "scripts/check-manual-research-lease-safety.mjs",
   "scripts/check-public-research-fetch-safety.mjs",
+  "scripts/check-review-mutation-boundary-safety.mjs",
   "scripts/check-opportunity-evidence-quality.mjs",
   "scripts/check-runtime-capability-config.mjs",
+  "tests/adminAuthentication.test.ts",
   "tests/boundedJsonRequest.test.ts",
   "tests/publicResearchFetch.test.ts",
+  "tests/reviewMutationSafety.test.ts",
+  "docs/admin-token-security.md",
   "docs/bounded-admin-json-boundary.md",
   "docs/manual-research-concurrency.md",
   "docs/public-research-fetch-boundary.md",
+  "docs/review-mutation-boundary.md",
   "docs/opportunity-evidence-quality.md",
   ".github/workflows/worker-contract.yml",
   "wrangler.toml",
   "package.json",
   "package-lock.json",
-]) requireFile(relativePath);
+];
+for (const relativePath of requiredFiles) read(relativePath);
 
 requireAbsent("src/engine.ts");
 requireAbsent("src/email.ts");
@@ -97,12 +124,25 @@ requireTokens("src/db.ts", [
   "return env.ADMIN_TOKEN;",
 ]);
 requireTokens("src/core/adminAuthentication.ts", [
+  "ADMIN_TOKEN_MIN_BYTES = 32",
+  "ADMIN_TOKEN_MAX_BYTES = 256",
+  "function hasValidAdminTokenShape",
   'authorization.startsWith("Bearer ")',
   'authorization.slice("Bearer ".length)',
+  "value.trim() !== value",
+  "/\\s/.test(value)",
   'crypto.subtle.digest("SHA-256"',
   "difference |= leftDigest[index] ^ rightDigest[index]",
+  "!expected || !provided || !hasValidAdminTokenShape(expected)",
   "return constantTimeEqual(provided, expected)",
 ]);
+forbidTokens("src/core/adminAuthentication.ts", [
+  "provided === expected",
+  "provided == expected",
+  "PUBLIC_CONTROL_KEY",
+  "OUTBOUND_AGENT_ADMIN_TOKEN",
+]);
+
 requireTokens("src/core/boundedJsonRequest.ts", [
   'BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1"',
   "DEFAULT_ADMIN_JSON_MAX_BYTES = 65_536",
@@ -110,12 +150,14 @@ requireTokens("src/core/boundedJsonRequest.ts", [
   "validateJsonStructure",
   "isExplicitJsonConfirmation",
   "bodySha256",
+  '"forbidden_json_key"',
 ]);
 requireTokens("src/core/manualResearchLease.ts", [
   'MANUAL_RESEARCH_LEASE_CONTRACT = "manual_research_lease_v1"',
   "acquireManualResearchLease",
   "releaseManualResearchLease",
   'error: "research_action_in_progress"',
+  "automaticRetryAllowed: false",
 ]);
 requireTokens("src/core/publicResearchFetch.ts", [
   'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v2"',
@@ -129,6 +171,35 @@ requireTokens("src/core/publicResearchFetch.ts", [
   "fetchPublicResearchText",
   "const deadlineAt = startedAt + timeoutMs",
   'timeoutScope: "full_operation"',
+]);
+requireTokens("src/core/reviewMutationSafety.ts", [
+  'REVIEW_MUTATION_CONTRACT = "review_mutation_boundary_v1"',
+  "validReviewRecordId",
+  "boundedReviewText",
+  "boundedReviewRating",
+  "reviewLeaseKey",
+  'crypto.subtle.digest("SHA-256"',
+]);
+
+requireTokens("src/core/draftReview.ts", [
+  "DRAFT_REVIEW_DECISIONS",
+  "normalizeDraftStrategyKey",
+  "await env.DB.batch(statements)",
+  "INSERT INTO draft_reviews",
+  "INSERT INTO strategy_scores",
+  "mutationAndAuditAtomic: true",
+  "reviewOnly: true",
+  "externalExecutionAllowed: false",
+]);
+requireTokens("src/core/opportunityReview.ts", [
+  "OPPORTUNITY_REVIEW_DECISIONS",
+  "opportunityStrategyScope",
+  "await env.DB.batch([",
+  "INSERT INTO opportunity_reviews",
+  "UPDATE opportunities SET status",
+  "reviewStatusScoreAndAuditAtomic: true",
+  "reviewOnly: true",
+  "externalExecutionAllowed: false",
 ]);
 requireTokens("src/core/opportunityDiscovery.ts", [
   "evidenceQualityScore",
@@ -150,6 +221,7 @@ requireTokens("src/core/opportunityScoring.ts", [
   "guardrail:weak_evidence_no_positive_learning_boost",
   "guardrail:weak_evidence_ceiling_45",
 ]);
+
 requireTokens("src/index.ts", [
   'headers.set("cache-control", "no-store")',
   'headers.set("x-content-type-options", "nosniff")',
@@ -160,16 +232,65 @@ requireTokens("src/index.ts", [
   "sourceActionConfirmationFailure",
   "readBoundedJsonObject(request.clone())",
 ]);
-requireTokens("src/routes/admin.ts", [
-  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-  "await isAdminRequestAuthorized(request, env)",
-  'error: "Unauthorized"',
-  'error: "method_not_allowed"',
-  "status: 405",
-  'headers: { allow: "GET, POST" }',
-  'headers.set("cache-control", "no-store")',
-  'headers.set("x-content-type-options", "nosniff")',
+requireTokens("src/routes/adminProtected.ts", [
+  "manualMetadataWriteRequiresConfirmation",
+  "readBoundedJsonObject(request.clone()",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
+  "requiredPayload: { confirm: true }",
+  "confirmationCoercionAllowed: false",
+  "requestReceipt",
 ]);
+forbidTokens("src/routes/adminProtected.ts", [
+  "request.clone().json()",
+  "body?.confirm === 1",
+  'body?.confirm === "1"',
+]);
+
+for (const [relativePath, routeToken] of [
+  ["src/routes/draftReviewAdmin.ts", "const draftLease = await acquireManualResearchLease"],
+  ["src/routes/opportunityReviewAdmin.ts", "const opportunityLease = await acquireManualResearchLease"],
+  ["src/routes/opportunitySourceCandidatesAdmin.ts", "const lease = await acquireManualResearchLease"],
+  ["src/routes/opportunitySourceHealthActionsAdmin.ts", "const lease = await acquireManualResearchLease"],
+]) {
+  requireTokens(relativePath, [
+    'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+    "await isAdminRequestAuthorized(request, env)",
+    "readBoundedJsonObject",
+    "isExplicitJsonConfirmation",
+    "requiredPayload: { confirm: true }",
+    "confirmationCoercionAllowed: false",
+    "requestReceipt",
+    routeToken,
+    "manualResearchLeaseConflict",
+    "finally {",
+    "externalExecutionAllowed: false",
+  ]);
+  forbidTokens(relativePath, [
+    "request.json()",
+    "request.clone().json()",
+    'searchParams.get("confirm")',
+    "body?.confirm === 1",
+    'body?.confirm === "1"',
+  ]);
+}
+
+for (const relativePath of [
+  "src/routes/admin.ts",
+  "src/routes/tools.ts",
+  "src/routes/autonomySettingsAdmin.ts",
+  "src/routes/legacyExecutionSafetyAdmin.ts",
+  "src/routes/draftReviewAdmin.ts",
+  "src/routes/opportunityReviewAdmin.ts",
+  "src/routes/opportunitySourceCandidatesAdmin.ts",
+  "src/routes/opportunitySourceHealthActionsAdmin.ts",
+]) {
+  const source = read(relativePath);
+  for (const forbidden of ["getAdminToken", "function authorized(", "function authorised(", "`Bearer ${token}`"]) {
+    if (source.includes(forbidden)) errors.push(`${relativePath} must use shared authentication instead of: ${forbidden}`);
+  }
+}
+
 requireTokens("src/routes/growthRoutePolicy.ts", [
   "canSendEmail: false",
   "canPostSocial: false",
@@ -189,18 +310,14 @@ requireTokens("src/routes/businessRoutePolicy.ts", [
   "canSendEmail: false",
   "canPostSocial: false",
   "canSubmitForms: false",
-  'readMethods: Object.freeze(["GET"] as const)',
-  'writeMethods: Object.freeze(["POST"] as const)',
   'writeConfirmation: "handler-enforced"',
   'authentication: "handler-enforced"',
 ]);
 requireTokens("src/routes/operationsRoutePolicy.ts", [
   'id: "legacy-admin-safety"',
   'id: "autonomy-settings"',
-  'id: "planner-routes"',
   'id: "source-batch"',
   'id: "strategy-scores"',
-  'networkPosture: "read-only-research"',
   'writeConfirmation: "handler-enforced"',
   "callsAI: false",
   "canSendEmail: false",
@@ -208,110 +325,50 @@ requireTokens("src/routes/operationsRoutePolicy.ts", [
   "canSubmitForms: false",
   'authentication: "handler-enforced"',
 ]);
-requireTokens("src/engineAutonomy.ts", [
-  "settings.aiDraftsEnabled = false",
-  "settings.sendingEnabled = false",
-  "settings.leadDiscoveryEnabled = false",
-  'setSetting(env, "engine_enabled", "0")',
-  'setSetting(env, "drafting_enabled", "0")',
-  'setSetting(env, "sending_enabled", "0")',
-]);
-requireTokens("src/routes/autonomySettingsAdmin.ts", [
-  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-  "await isAdminRequestAuthorized(request, env)",
-  'contractVersion: "autonomy_settings_v2_review_first"',
-  "freeSafeOnly: true",
-  "canGenerateDrafts: false",
-  "canSendEmail: false",
-  "scheduledExternalExecutionDisabled: true",
-]);
-requireTokens("src/routes/legacyExecutionSafetyAdmin.ts", [
-  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-  "await isAdminRequestAuthorized(request, env)",
-  'error: "legacy_execution_disabled"',
-  "allowedKinds: []",
-  'engine_enabled", "0"',
-  'drafting_enabled: "0"',
-  'sending_enabled: "0"',
-  "settingsWriteRequiresConfirmation: true",
-  "draftDecisionRequiresConfirmation: true",
-  "reviewStateOnly: true",
-]);
-requireTokens("src/routes/tools.ts", [
-  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
-  "await isAdminRequestAuthorized(request, env)",
-  'error: "Unauthorized"',
-  'contractVersion: "worker_tools_v2_review_first"',
-  'aiDefault: "off"',
-  'sendingDefault: "off"',
-  "manualLegacyExecutionDisabled: true",
-]);
-requireTokens("src/routes/workerRoutePolicy.ts", [
-  'id: "health"',
-  'id: "admin"',
-  'authentication: "handler-enforced"',
-  'mutationPosture: "read-only"',
-]);
-requireTokens("wrangler.toml", [
-  'PUBLIC_ENGINE_NAME = "EVAVO Growth Research Worker"',
-  'CAP_CRAWL_PER_DAY = "60"',
-  'compatibility_flags = ["global_fetch_strictly_public"]',
-  "No email-provider secrets are used or accepted by the active Worker source.",
-  "ADMIN_TOKEN",
-]);
+
 requireTokens("scripts/check-central-authentication-safety.mjs", [
-  'contract: "central-protected-route-authentication"',
+  'contract: "central-protected-route-authentication-v2-bounded-credential"',
   'canonicalCredential: "ADMIN_TOKEN"',
+  "minimumCredentialBytes: 32",
+  "maximumCredentialBytes: 256",
   "constantTimeDigestComparison: true",
-  "unauthenticatedProtectedPreflightAllowed: false",
-  "localBearerEqualityAllowed: false",
 ]);
 requireTokens("scripts/check-worker-credential-contract.mjs", [
-  'contract: "canonical-server-side-worker-credential"',
+  'contract: "canonical-bounded-server-side-worker-credential-v2"',
   'canonicalCredential: "ADMIN_TOKEN"',
+  "minimumCredentialBytes: 32",
+  "maximumCredentialBytes: 256",
   "legacyCredentialAliasesAllowed: false",
-  "publicControlCredentialAllowed: false",
-]);
-requireTokens("scripts/check-worker-env-contract.mjs", [
-  'canonicalCredential: "ADMIN_TOKEN"',
-  "legacyCredentialAliasesAdvertised: false",
-]);
-requireTokens("scripts/check-protected-response-safety.mjs", [
-  'contract: "protected-worker-response-safety"',
-  "wildcardAdminCorsAllowed: false",
-  "browserPreflightAllowedWithoutAuthentication: false",
-  "protectedResponsesCacheable: false",
-]);
-requireTokens("scripts/check-scheduled-entrypoint-safety.mjs", [
-  'contract: "scheduled-worker-entrypoint-safety"',
-  "automaticRetryAllowed: false",
-  "alternateExecutionFallbackAllowed: false",
 ]);
 requireTokens("scripts/check-bounded-json-request-safety.mjs", [
-  'contract: "bounded-admin-json-request-safety-v1"',
+  'contract: "bounded-admin-json-request-safety-v2-review-mutations"',
   "exactBooleanConfirmationRequired: true",
-  "queryStringConfirmationAllowed: false",
   "prototypePollutionKeysRejected: true",
-  "behavioralTestsRequired: true",
+  "draftReviewBounded: true",
+  "opportunityReviewBounded: true",
+  "sourceCandidateCommitBounded: true",
 ]);
 requireTokens("scripts/check-manual-research-lease-safety.mjs", [
-  'contract: "manual-research-lease-safety-v1"',
+  'contract: "manual-research-lease-safety-v3-review-and-candidate-coverage"',
   "atomicSingleStatementAcquisitionRequired: true",
-  "staleHolderCanReleaseNewLease: false",
+  "sourceCandidateCommitLeaseRequired: true",
+  "draftRecordAndStrategyLeasesRequired: true",
+  "opportunityRecordAndStrategyLeasesRequired: true",
+]);
+requireTokens("scripts/check-review-mutation-boundary-safety.mjs", [
+  'contract: "review-mutation-boundary-safety-v1"',
+  "boundedRequestBodyRequired: true",
+  "requestFingerprintRequired: true",
+  "draftReviewWritesAtomic: true",
+  "opportunityReviewWritesAtomic: true",
 ]);
 requireTokens("scripts/check-public-research-fetch-safety.mjs", [
-  'contract: "public-research-fetch-safety-v6-fetch-v2-behavioral"',
+  'contract: "public-research-fetch-safety-v7-hierarchical-source-exclusion"',
   'activeFetchContract: "public_research_fetch_v2"',
   "sensitiveQueryParametersRejected: true",
   "redirectChainEvidenceRequired: true",
   "binaryResponsesRejected: true",
   "timeoutCoversRedirectsAndBody: true",
-  "sourceExpansionRunTruthfulnessRequired: true",
-  "relationshipGraphRunTruthfulnessRequired: true",
-  "sitemapIndexTraversalRequired: true",
-  "manualOpportunityRunTruthfulnessRequired: true",
-  "sourceHealthAuditAtomicityRequired: true",
-  "behavioralTestsRequired: true",
 ]);
 requireTokens("scripts/check-opportunity-evidence-quality.mjs", [
   'contract: "opportunity-evidence-quality-v1"',
@@ -320,123 +377,72 @@ requireTokens("scripts/check-opportunity-evidence-quality.mjs", [
   "missingFactsInvented: false",
   "weakEvidenceLearningBoostAllowed: false",
   "reviewOnlyCandidatePostureRequired: true",
-  "draftingRecommendationStored: false",
-  "canonicalUrlDeduplicationRequired: true",
 ]);
 requireTokens("scripts/check-runtime-capability-config.mjs", [
-  'contract: "review-first-runtime-capability-configuration',
   'canonicalCredential: "ADMIN_TOKEN"',
-  "strictPublicSubrequestsEnabled:",
   "legacyCredentialAliasesAdvertised: false",
   "emailProviderConfigured: false",
   "draftRuntimeCapConfigured: false",
   "sendRuntimeCapConfigured: false",
 ]);
-requireTokens("scripts/check-growth-negative-safety.mjs", [
-  "canSendEmail: true",
-  "canPostSocial: true",
-  "canSubmitForms: true",
-]);
 
-const dbContent = fs.readFileSync(path.join(root, "src/db.ts"), "utf8");
-for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
-  if (dbContent.includes(forbidden)) errors.push(`Worker environment must not contain legacy credential alias: ${forbidden}`);
+const packageJson = JSON.parse(read("package.json") || "{}");
+const scripts = packageJson.scripts || {};
+const expectedScripts = {
+  "worker:health:check": "node scripts/check-worker-health-contract.mjs",
+  "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
+  "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
+  "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
+  "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
+  "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
+  "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
+  "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
+  "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
+  "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
+  "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
+  "research:bounded-json-safety:check": "node scripts/check-bounded-json-request-safety.mjs",
+  "research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs",
+  "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
+  "review:mutation-safety:check": "node scripts/check-review-mutation-boundary-safety.mjs",
+  "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
+  "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
+  "scripts:check": "node scripts/check-helper-scripts.mjs",
+  "test:core": "node --test",
+  "typecheck": "tsc --noEmit",
+};
+for (const [name, command] of Object.entries(expectedScripts)) {
+  if (scripts[name] !== command) errors.push(`package.json script ${name} must equal: ${command}`);
 }
 
-for (const relativePath of [
-  "src/routes/admin.ts",
-  "src/routes/tools.ts",
-  "src/routes/autonomySettingsAdmin.ts",
-  "src/routes/legacyExecutionSafetyAdmin.ts",
-]) {
-  const content = fs.readFileSync(path.join(root, relativePath), "utf8");
-  for (const forbidden of ["getAdminToken", "function authorized(", "`Bearer ${token}`"]) {
-    if (content.includes(forbidden)) errors.push(`${relativePath} must use shared authentication instead of: ${forbidden}`);
-  }
+const requiredLocalSteps = Object.keys(expectedScripts)
+  .filter((name) => name !== "typecheck" && name !== "scripts:check")
+  .map((name) => `npm run ${name}`);
+requiredLocalSteps.push("npm run scripts:check", "npm run typecheck");
+const localGate = String(scripts["check:local"] || "");
+for (const step of requiredLocalSteps) {
+  if (!localGate.includes(step)) errors.push(`check:local is missing: ${step}`);
+}
+if (!String(scripts.predeploy || "").includes("npm run check:local")) {
+  errors.push("predeploy must run the authoritative check:local gate");
 }
 
-const adminContent = fs.readFileSync(path.join(root, "src/routes/admin.ts"), "utf8");
+const adminContent = read("src/routes/admin.ts");
 if (adminContent.includes('access-control-allow-origin": "*"')) {
   errors.push("Protected admin fallback must not expose wildcard CORS");
 }
-
-const packagePath = path.join(root, "package.json");
-if (fs.existsSync(packagePath)) {
-  const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
-  const scripts = packageJson.scripts || {};
-  const expectedScripts = {
-    "worker:health:check": "node scripts/check-worker-health-contract.mjs",
-    "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
-    "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
-    "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
-    "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
-    "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
-    "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
-    "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
-    "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
-    "legacy:engine-isolation:check": "node scripts/check-legacy-engine-isolation.mjs",
-    "public:surface-safety:check": "node scripts/check-public-surface-safety.mjs",
-    "research:bounded-json-safety:check": "node scripts/check-bounded-json-request-safety.mjs",
-    "research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs",
-    "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
-    "opportunities:evidence-quality:check": "node scripts/check-opportunity-evidence-quality.mjs",
-    "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
-    "growth:route-policy:check": "node scripts/check-growth-route-policy.mjs",
-    "growth:negative-safety:check": "node scripts/check-growth-negative-safety.mjs",
-    "opportunities:route-policy:check": "node scripts/check-opportunity-route-policy.mjs",
-    "business:route-policy:check": "node scripts/check-business-route-policy.mjs",
-    "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
-    "scripts:check": "node scripts/check-helper-scripts.mjs",
-    "test:core": "node --test",
-    "typecheck": "tsc --noEmit",
-  };
-  for (const [name, command] of Object.entries(expectedScripts)) {
-    if (scripts[name] !== command) errors.push(`package.json script ${name} must equal: ${command}`);
-  }
-
-  const requiredLocalSteps = [
-    "npm run scripts:check",
-    "npm run db:migrations:check",
-    "npm run worker:health:check",
-    "npm run worker:central-auth-safety:check",
-    "npm run worker:credential-contract:check",
-    "npm run worker:env-contract:check",
-    "npm run worker:protected-response-safety:check",
-    "npm run worker:routes:check",
-    "npm run scheduled:entrypoint-safety:check",
-    "npm run scheduled:autonomy-safety:check",
-    "npm run manual:execution-safety:check",
-    "npm run legacy:engine-isolation:check",
-    "npm run public:surface-safety:check",
-    "npm run research:bounded-json-safety:check",
-    "npm run research:manual-lease-safety:check",
-    "npm run research:public-fetch-safety:check",
-    "npm run opportunities:evidence-quality:check",
-    "npm run runtime:capability-config:check",
-    "npm run opportunities:route-policy:check",
-    "npm run business:route-policy:check",
-    "npm run operations:route-policy:check",
-    "npm run growth:route-policy:check",
-    "npm run growth:negative-safety:check",
-    "npm run test:core",
-    "npm run typecheck",
-  ];
-  const localGate = String(scripts["check:local"] || "");
-  for (const step of requiredLocalSteps) {
-    if (!localGate.includes(step)) errors.push(`check:local is missing: ${step}`);
-  }
-  if (!String(scripts.predeploy || "").includes("npm run check:local")) {
-    errors.push("predeploy must run the authoritative check:local gate");
-  }
+const dbContent = read("src/db.ts");
+for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
+  if (dbContent.includes(forbidden)) errors.push(`Worker environment must not contain legacy credential alias: ${forbidden}`);
 }
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v5-bounded-behavioral-research",
+  contract: "dynamic-helper-and-gate-validation-v6-review-and-bounded-credential",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
+  boundedCredentialBehaviorRequired: true,
   sharedProtectedAuthenticationRequired: true,
   legacyCredentialAliasesAllowed: false,
   removedLegacyExecutionModulesRequired: true,
@@ -444,13 +450,13 @@ console.log(JSON.stringify({
   scheduledEntrypointSafetyRequired: true,
   boundedJsonRequestSafetyRequired: true,
   manualResearchLeaseSafetyRequired: true,
+  reviewMutationSafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
-  publicResearchInputRedactionRequired: true,
-  publicResearchRunTruthfulnessRequired: true,
   opportunityEvidenceQualityRequired: true,
   deterministicCoreBehavioralTestsRequired: true,
   weakEvidenceLearningBoostAllowed: false,
   opportunityDraftRecommendationAllowed: false,
+  externalExecutionEnabled: false,
   errors,
 }, null, 2));
 

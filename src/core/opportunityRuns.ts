@@ -1,7 +1,7 @@
 import type { Env } from "../db";
 import { uuid } from "../db";
 
-type RunStatus = "running" | "completed" | "failed" | "skipped";
+export type OpportunityRunStatus = "running" | "completed" | "partial" | "failed" | "skipped";
 
 export type OpportunityRunSummary = {
   sourcesChecked: number;
@@ -54,7 +54,7 @@ export async function startOpportunityRun(env: Env, runType: string, settings: u
   return id;
 }
 
-export async function finishOpportunityRun(env: Env, runId: string | null, status: RunStatus, summary: OpportunityRunSummary, error: string | null = null): Promise<void> {
+export async function finishOpportunityRun(env: Env, runId: string | null, status: Exclude<OpportunityRunStatus, "running">, summary: OpportunityRunSummary, error: string | null = null): Promise<void> {
   if (!runId || !(await hasOpportunityRunAuditTables(env))) return;
   await env.DB.prepare(
     `UPDATE opportunity_runs
@@ -75,9 +75,8 @@ export async function finishOpportunityRun(env: Env, runId: string | null, statu
   ).run();
 }
 
-export async function recordSourceRunResult(env: Env, result: SourceRunResult): Promise<void> {
-  if (!result.runId || !(await hasOpportunityRunAuditTables(env))) return;
-  await env.DB.prepare(
+export function prepareSourceRunResult(env: Env, result: SourceRunResult): D1PreparedStatement {
+  return env.DB.prepare(
     `INSERT INTO opportunity_run_source_results (
       id, run_id, source_id, source_url, fetch_status, content_type, elapsed_ms, bytes,
       candidates_found, candidates_saved, candidates_rejected, duplicates, error, created_at_iso
@@ -97,7 +96,12 @@ export async function recordSourceRunResult(env: Env, result: SourceRunResult): 
     result.duplicates || 0,
     result.error || null,
     new Date().toISOString(),
-  ).run();
+  );
+}
+
+export async function recordSourceRunResult(env: Env, result: SourceRunResult): Promise<void> {
+  if (!result.runId || !(await hasOpportunityRunAuditTables(env))) return;
+  await prepareSourceRunResult(env, result).run();
 }
 
 export async function recordCandidateRejection(env: Env, input: CandidateRejectionInput): Promise<void> {

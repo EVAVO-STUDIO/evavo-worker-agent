@@ -1,4 +1,4 @@
-export const PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v1";
+export const PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v2";
 export const DEFAULT_PUBLIC_RESEARCH_MAX_BYTES = 1_048_576;
 export const DEFAULT_PUBLIC_RESEARCH_MAX_REDIRECTS = 4;
 export const DEFAULT_PUBLIC_RESEARCH_TIMEOUT_MS = 12_000;
@@ -9,6 +9,14 @@ export type PublicResearchUrlDecision = {
   error: string | null;
 };
 
+export type PublicResearchTransport = (input: string, init: RequestInit) => Promise<Response>;
+
+export type PublicResearchRedirectHop = {
+  from: string;
+  status: number;
+  to: string;
+};
+
 export type PublicResearchFetchOptions = {
   maxBytes?: number;
   maxRedirects?: number;
@@ -16,6 +24,7 @@ export type PublicResearchFetchOptions = {
   accept?: string;
   acceptLanguage?: string;
   contentKind?: "html" | "text";
+  transport?: PublicResearchTransport;
 };
 
 export type PublicResearchFetchResult = {
@@ -24,8 +33,13 @@ export type PublicResearchFetchResult = {
   requestedUrl: string | null;
   finalUrl: string | null;
   redirectCount: number;
+  redirectChain: PublicResearchRedirectHop[];
   status: number;
   contentType: string;
+  contentLength: number | null;
+  etag: string | null;
+  lastModified: string | null;
+  contentLanguage: string | null;
   body: string;
   bytes: number;
   bodySha256: string | null;
@@ -51,6 +65,29 @@ const BLOCKED_EXACT_HOSTS = new Set([
   "localhost",
   "localhost.localdomain",
   "metadata.google.internal",
+]);
+
+const SENSITIVE_QUERY_KEYS = new Set([
+  "access_token",
+  "api_key",
+  "apikey",
+  "auth",
+  "authorization",
+  "client_secret",
+  "jwt",
+  "password",
+  "passwd",
+  "secret",
+  "session",
+  "sessionid",
+  "signature",
+  "sig",
+  "token",
+  "x-amz-credential",
+  "x-amz-security-token",
+  "x-amz-signature",
+  "x-goog-credential",
+  "x-goog-signature",
 ]);
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -105,6 +142,15 @@ function isBlockedHostname(hostname: string): boolean {
   return false;
 }
 
+function hasSensitiveQueryParameter(url: URL): boolean {
+  for (const key of url.searchParams.keys()) {
+    const normalized = key.trim().toLowerCase();
+    if (SENSITIVE_QUERY_KEYS.has(normalized)) return true;
+    if (/(?:^|[_-])(?:access[_-]?token|api[_-]?key|client[_-]?secret|password|signature|session[_-]?token)$/.test(normalized)) return true;
+  }
+  return false;
+}
+
 export function validatePublicResearchUrl(raw: unknown, baseUrl?: string): PublicResearchUrlDecision {
   const input = String(raw || "").trim();
   if (!input) return { ok: false, url: null, error: "url_required" };
@@ -128,6 +174,10 @@ export function validatePublicResearchUrl(raw: unknown, baseUrl?: string): Publi
       return { ok: false, url: null, error: "non_standard_port_not_allowed" };
     }
 
+    if (hasSensitiveQueryParameter(url)) {
+      return { ok: false, url: null, error: "sensitive_query_parameter_not_allowed" };
+    }
+
     url.hash = "";
     return { ok: true, url: url.toString(), error: null };
   } catch {
@@ -141,9 +191,20 @@ function boundedInteger(value: unknown, fallback: number, min: number, max: numb
   return Math.max(min, Math.min(max, Math.round(parsed)));
 }
 
+function parseContentLength(value: string | null): number | null {
+  if (!value || !/^\d+$/.test(value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function boundedHeader(response: Response, name: string, maxLength: number): string | null {
+  const value = response.headers.get(name)?.trim();
+  return value ? value.slice(0, maxLength) : null;
+}
+
 async function readBodyBounded(response: Response, maxBytes: number): Promise<{ ok: boolean; bytes: Uint8Array; error: string | null }> {
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+  const declaredLength = parseContentLength(response.headers.get("content-length"));
+  if (declaredLength !== null && declaredLength > maxBytes) {
     await response.body?.cancel().catch(() => undefined);
     return { ok: false, bytes: new Uint8Array(), error: "response_too_large" };
   }
@@ -183,6 +244,17 @@ async function readBodyBounded(response: Response, maxBytes: number): Promise<{ 
   return { ok: true, bytes: combined, error: null };
 }
 
+function isProbablyBinary(bytes: Uint8Array): boolean {
+  const sample = bytes.subarray(0, Math.min(bytes.byteLength, 512));
+  if (!sample.byteLength) return false;
+  let suspiciousControls = 0;
+  for (const value of sample) {
+    if (value === 0) return true;
+    if ((value < 0x09 || (value > 0x0d && value < 0x20)) && value !== 0x1b) suspiciousControls += 1;
+  }
+  return suspiciousControls / sample.byteLength > 0.05;
+}
+
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
@@ -191,20 +263,26 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 function failedResult(
   requestedUrl: string | null,
   finalUrl: string | null,
-  redirectCount: number,
+  redirectChain: PublicResearchRedirectHop[],
   startedAt: number,
   error: string,
   status = 0,
   contentType = "",
+  response?: Response,
 ): PublicResearchFetchResult {
   return {
     ok: false,
     contract: PUBLIC_RESEARCH_FETCH_CONTRACT,
     requestedUrl,
     finalUrl,
-    redirectCount,
+    redirectCount: redirectChain.length,
+    redirectChain,
     status,
     contentType,
+    contentLength: response ? parseContentLength(response.headers.get("content-length")) : null,
+    etag: response ? boundedHeader(response, "etag", 512) : null,
+    lastModified: response ? boundedHeader(response, "last-modified", 128) : null,
+    contentLanguage: response ? boundedHeader(response, "content-language", 128) : null,
     body: "",
     bytes: 0,
     bodySha256: null,
@@ -225,68 +303,70 @@ function contentTypeAllowed(contentType: string, contentKind: "html" | "text"): 
 async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResearchFetchOptions): Promise<PublicResearchFetchResult> {
   const startedAt = Date.now();
   const initial = validatePublicResearchUrl(rawUrl);
-  if (!initial.ok || !initial.url) return failedResult(null, null, 0, startedAt, initial.error || "invalid_research_url");
+  if (!initial.ok || !initial.url) return failedResult(null, null, [], startedAt, initial.error || "invalid_research_url");
 
   const maxBytes = boundedInteger(options.maxBytes, DEFAULT_PUBLIC_RESEARCH_MAX_BYTES, 16_384, 5_242_880);
   const maxRedirects = boundedInteger(options.maxRedirects, DEFAULT_PUBLIC_RESEARCH_MAX_REDIRECTS, 0, 8);
   const timeoutMs = boundedInteger(options.timeoutMs, DEFAULT_PUBLIC_RESEARCH_TIMEOUT_MS, 1_000, 30_000);
   const deadlineAt = startedAt + timeoutMs;
   const contentKind = options.contentKind || "html";
+  const transport = options.transport || fetch;
   const requestedUrl = initial.url;
   let currentUrl = initial.url;
-  let redirectCount = 0;
+  const redirectChain: PublicResearchRedirectHop[] = [];
   const visited = new Set<string>();
 
   while (true) {
-    if (visited.has(currentUrl)) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "redirect_loop");
+    if (visited.has(currentUrl)) return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, "redirect_loop");
     visited.add(currentUrl);
 
     const remainingMs = deadlineAt - Date.now();
-    if (remainingMs <= 0) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "research_fetch_timeout");
+    if (remainingMs <= 0) return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, "research_fetch_timeout");
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort("research_fetch_timeout"), remainingMs);
     let phase: "headers" | "body" = "headers";
 
     try {
-      const response = await fetch(currentUrl, {
+      const response = await transport(currentUrl, {
         method: "GET",
         redirect: "manual",
         signal: controller.signal,
         headers: {
           accept: options.accept || (contentKind === "html" ? "text/html,application/xhtml+xml;q=0.9" : "text/plain,application/xml,text/xml,application/json;q=0.9"),
           "accept-language": options.acceptLanguage || "en-AU,en;q=0.9",
-          "user-agent": "EVAVO-Growth-Research-Worker/1.0 (+https://evavo.com.au)",
+          "user-agent": "EVAVO-Growth-Research-Worker/2.0 (+https://evavo.com.au)",
         },
       });
 
       if (REDIRECT_STATUSES.has(response.status)) {
         const location = response.headers.get("location");
         await response.body?.cancel().catch(() => undefined);
-        if (!location) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "redirect_location_missing", response.status);
-        if (redirectCount >= maxRedirects) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "too_many_redirects", response.status);
+        if (!location) return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, "redirect_location_missing", response.status, "", response);
+        if (redirectChain.length >= maxRedirects) return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, "too_many_redirects", response.status, "", response);
         const next = validatePublicResearchUrl(location, currentUrl);
         if (!next.ok || !next.url) {
-          return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, next.error || "unsafe_redirect_target", response.status);
+          return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, next.error || "unsafe_redirect_target", response.status, "", response);
         }
+        redirectChain.push({ from: currentUrl, status: response.status, to: next.url });
         currentUrl = next.url;
-        redirectCount += 1;
         continue;
       }
 
       const contentType = String(response.headers.get("content-type") || "").toLowerCase();
       if (!contentTypeAllowed(contentType, contentKind)) {
         await response.body?.cancel().catch(() => undefined);
-        return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, "unsupported_content_type", response.status, contentType);
+        return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, "unsupported_content_type", response.status, contentType, response);
       }
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, `http_${response.status}`, response.status, contentType);
+        return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, `http_${response.status}`, response.status, contentType, response);
       }
 
       phase = "body";
       const bounded = await readBodyBounded(response, maxBytes);
-      if (!bounded.ok) return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, bounded.error || "response_read_failed", response.status, contentType);
+      if (!bounded.ok) return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, bounded.error || "response_read_failed", response.status, contentType, response);
+      if (isProbablyBinary(bounded.bytes)) return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, "binary_response_rejected", response.status, contentType, response);
 
       const body = new TextDecoder("utf-8", { fatal: false }).decode(bounded.bytes);
       return {
@@ -294,9 +374,14 @@ async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResear
         contract: PUBLIC_RESEARCH_FETCH_CONTRACT,
         requestedUrl,
         finalUrl: currentUrl,
-        redirectCount,
+        redirectCount: redirectChain.length,
+        redirectChain,
         status: response.status,
         contentType,
+        contentLength: parseContentLength(response.headers.get("content-length")),
+        etag: boundedHeader(response, "etag", 512),
+        lastModified: boundedHeader(response, "last-modified", 128),
+        contentLanguage: boundedHeader(response, "content-language", 128),
         body,
         bytes: bounded.bytes.byteLength,
         bodySha256: await sha256Hex(bounded.bytes),
@@ -311,7 +396,7 @@ async function fetchPublicResearchContent(rawUrl: unknown, options: PublicResear
         : phase === "body"
           ? "response_read_failed"
           : "research_fetch_failed";
-      return failedResult(requestedUrl, currentUrl, redirectCount, startedAt, reason);
+      return failedResult(requestedUrl, currentUrl, redirectChain, startedAt, reason);
     } finally {
       clearTimeout(timeout);
     }

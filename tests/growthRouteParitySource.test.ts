@@ -12,6 +12,7 @@ function read(relativePath: string): string {
 }
 
 const guard = read("scripts/check-growth-route-parity.mjs");
+const workflowParity = read("scripts/check-worker-contract-workflow.mjs");
 const parser = read("src/core/growthWorkerRouteParity.ts");
 const fixtureRaw = read("fixtures/growth-worker-route-parity-v1.json");
 const fixture = JSON.parse(fixtureRaw) as Record<string, unknown>;
@@ -54,6 +55,25 @@ for (const token of [
 ]) {
   assert(guard.includes(token), `guard-${token}`);
 }
+
+for (const token of [
+  'contract: "worker-contract-workflow-v7-growth-route-parity"',
+  'growthParity: resolve("scripts", "check-growth-route-parity.mjs")',
+  '"Verify Growth route parity"',
+  '"npm run growth:route-parity:check"',
+  '["Growth route parity", sources.growthParity',
+  '"growth:route-parity:check": "node scripts/check-growth-route-parity.mjs"',
+  "growthRouteParityGateRequired: true",
+  "growthRouteParityBeforeTestsRequired: true",
+]) {
+  assert(workflowParity.includes(token), `workflow-parity-${token}`);
+}
+const workflowGrowthIndex = workflowParity.indexOf('"npm run growth:route-parity:check"');
+const workflowTestsIndex = workflowParity.indexOf('"npm run test:core"', workflowGrowthIndex + 1);
+const workflowLocalIndex = workflowParity.indexOf('"npm run check:local"', workflowTestsIndex + 1);
+assert(workflowGrowthIndex >= 0, "workflow-parity-growth-step-present");
+assert(workflowTestsIndex > workflowGrowthIndex, "workflow-parity-growth-before-tests");
+assert(workflowLocalIndex > workflowTestsIndex, "workflow-parity-tests-before-complete-gate");
 
 for (const token of [
   "GROWTH_WORKER_ROUTE_PARITY_CONTRACT_VERSION",
@@ -181,6 +201,7 @@ for (const token of [
 
 console.log("Growth route parity source contract passed.");
 console.log("- Worker guard uses bounded local source scanning and optional sibling verification only");
+console.log("- Worker workflow meta-check independently requires Growth parity before tests and the complete local gate");
 console.log("- npm, check:local, safety completeness, helper parsing and read-only workflow wiring are source-tested");
 console.log("- one pure parser owns exact fields, canonical JSON, frozen output and conditional blocker sets");
 console.log("- source tests accept either reviewed current state only when fixture, parser and blocker set agree");

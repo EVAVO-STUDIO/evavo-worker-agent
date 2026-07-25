@@ -1,0 +1,36 @@
+name: AIQS parser bootstrap
+
+on:
+  push:
+    branches:
+      - tmp/aiqs-open-dwg-parser-relay-20260725
+
+permissions:
+  contents: read
+
+jobs:
+  package-parsers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download pinned public parser packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bootstrap
+          curl --fail --location --retry 3 \
+            'https://files.pythonhosted.org/packages/0d/42/d5b9dd3b0c8c3a72a54319f5095d4d9085bcdf747040f0611655c5a0cdcf/ezdwg-0.11.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl' \
+            -o bootstrap/ezdwg-0.11.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+          echo '24c3952a8f5e40622ee2329af9d83082c26e60373011b6f2880e2abf9456e3e7  bootstrap/ezdwg-0.11.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl' | sha256sum --check
+          curl --fail --location --retry 3 \
+            'https://registry.npmjs.org/@node-projects/acad-ts/-/acad-ts-2.4.0.tgz' \
+            -o bootstrap/acad-ts-2.4.0.tgz
+          sha256sum bootstrap/* > bootstrap/SHA256SUMS.txt
+
+      - name: Upload parser bootstrap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqs-open-dwg-parsers
+          path: bootstrap/
+          if-no-files-found: error
+          retention-days: 1

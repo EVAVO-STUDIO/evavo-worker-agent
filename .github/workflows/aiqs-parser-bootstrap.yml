@@ -1,6 +1,9 @@
 name: AIQS parser bootstrap
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - tmp/aiqs-open-dwg-parser-relay-20260725

@@ -12,6 +12,8 @@ export type GrowthRoutePolicy = Readonly<{
   priority: number;
   paths?: readonly string[];
   prefix?: string;
+  readMethods: readonly "GET"[];
+  writeMethods: readonly "POST"[];
   authentication: "handler-enforced";
   mutationPosture: "read-only" | "mixed-internal";
   confirmation: "not-required" | "handler-enforced";
@@ -22,32 +24,46 @@ export type GrowthRoutePolicy = Readonly<{
   canSubmitForms: false;
 }>;
 
-const exact = (handlerId: GrowthRouteHandlerId, priority: number, paths: readonly string[], mutationPosture: GrowthRoutePolicy["mutationPosture"], confirmation: GrowthRoutePolicy["confirmation"]): GrowthRoutePolicy =>
-  Object.freeze({
-    handlerId,
-    priority,
-    paths: Object.freeze([...paths]),
-    authentication: "handler-enforced",
-    mutationPosture,
-    confirmation,
-    callsExternalNetwork: false,
-    callsAI: false,
-    canSendEmail: false,
-    canPostSocial: false,
-    canSubmitForms: false,
-  });
+const GET_ONLY = Object.freeze(["GET"] as const);
+const POST_ONLY = Object.freeze(["POST"] as const);
+const NO_READS = Object.freeze([] as const);
+const NO_WRITES = Object.freeze([] as const);
+
+const exact = (
+  handlerId: GrowthRouteHandlerId,
+  priority: number,
+  paths: readonly string[],
+  readMethods: GrowthRoutePolicy["readMethods"],
+  writeMethods: GrowthRoutePolicy["writeMethods"],
+  mutationPosture: GrowthRoutePolicy["mutationPosture"],
+  confirmation: GrowthRoutePolicy["confirmation"],
+): GrowthRoutePolicy => Object.freeze({
+  handlerId,
+  priority,
+  paths: Object.freeze([...paths]),
+  readMethods: Object.freeze([...readMethods]),
+  writeMethods: Object.freeze([...writeMethods]),
+  authentication: "handler-enforced",
+  mutationPosture,
+  confirmation,
+  callsExternalNetwork: false,
+  callsAI: false,
+  canSendEmail: false,
+  canPostSocial: false,
+  canSubmitForms: false,
+});
 
 export const GROWTH_ROUTE_POLICIES: readonly GrowthRoutePolicy[] = Object.freeze([
   exact("approval-requests", 10, [
     "/admin/growth/approval-requests",
     "/admin/growth/approval-requests/status",
-  ], "mixed-internal", "handler-enforced"),
+  ], GET_ONLY, POST_ONLY, "mixed-internal", "handler-enforced"),
   exact("operator-artifacts", 15, [
     "/admin/growth/operator/artifacts",
-  ], "mixed-internal", "not-required"),
+  ], NO_READS, POST_ONLY, "mixed-internal", "handler-enforced"),
   exact("capabilities", 20, [
     "/admin/growth/capabilities",
-  ], "read-only", "not-required"),
+  ], GET_ONLY, NO_WRITES, "read-only", "not-required"),
   exact("blackboard", 30, [
     "/admin/growth/blackboard",
     "/admin/growth/blackboard/facts",
@@ -55,7 +71,7 @@ export const GROWTH_ROUTE_POLICIES: readonly GrowthRoutePolicy[] = Object.freeze
     "/admin/growth/blackboard/relationships",
     "/admin/growth/blackboard/signals",
     "/admin/growth/blackboard/assets",
-  ], "mixed-internal", "handler-enforced"),
+  ], GET_ONLY, POST_ONLY, "mixed-internal", "handler-enforced"),
   exact("strategy-memory", 40, [
     "/admin/growth/strategy-memory",
     "/admin/growth/objectives",
@@ -64,7 +80,7 @@ export const GROWTH_ROUTE_POLICIES: readonly GrowthRoutePolicy[] = Object.freeze
     "/admin/growth/offers",
     "/admin/growth/positioning",
     "/admin/growth/runtime-constraints",
-  ], "mixed-internal", "handler-enforced"),
+  ], GET_ONLY, POST_ONLY, "mixed-internal", "handler-enforced"),
   exact("campaign-intelligence", 50, [
     "/admin/growth/autonomy",
     "/admin/growth/cycle",
@@ -78,11 +94,13 @@ export const GROWTH_ROUTE_POLICIES: readonly GrowthRoutePolicy[] = Object.freeze
     "/admin/growth/metrics",
     "/admin/growth/evidence",
     "/admin/growth/learning",
-  ], "mixed-internal", "handler-enforced"),
+  ], GET_ONLY, POST_ONLY, "mixed-internal", "handler-enforced"),
   Object.freeze({
     handlerId: "growth-fallback",
     priority: 60,
     prefix: "/admin/growth",
+    readMethods: GET_ONLY,
+    writeMethods: POST_ONLY,
     authentication: "handler-enforced",
     mutationPosture: "mixed-internal",
     confirmation: "handler-enforced",

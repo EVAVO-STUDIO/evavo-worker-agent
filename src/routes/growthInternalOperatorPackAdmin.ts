@@ -2,6 +2,11 @@ import type { Env } from "../db";
 import { logEvent } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import {
+  boundedJsonFailurePayload,
+  isExplicitJsonConfirmation,
+  readBoundedJsonObject,
+} from "../core/boundedJsonRequest";
+import {
   claimGrowthActivityBudget,
   completeGrowthActivityBudgetClaim,
   type GrowthActivityBudgetLedgerClaim,
@@ -22,11 +27,15 @@ export const GROWTH_INTERNAL_OPERATOR_PACK_ROUTE_VERSION =
 
 const SIGNAL_LIMIT = 20;
 const ACTION_LIMIT = 20;
+const CONFIRMATION_MAX_BYTES = 256;
 
 type JsonResponse = (data: unknown, init?: ResponseInit) => Response;
+type ConfirmationBody = Record<string, unknown> & { confirm?: unknown };
 
 const SAFETY = Object.freeze({
   ownerAuthenticationRequired: true,
+  exactConfirmationRequired: true,
+  requestBodyBounded: true,
   persistentBudgetAdmissionRequired: true,
   internalBudgetAccountingWritesOnly: true,
   readsSavedReviewModelsOnly: true,
@@ -57,10 +66,12 @@ function safeError(
   }, { status });
 }
 
-async function sha256(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+function exactConfirmation(value: ConfirmationBody): boolean {
+  return (
+    isExplicitJsonConfirmation(value) &&
+    Object.keys(value).length === 1 &&
+    Object.prototype.hasOwnProperty.call(value, "confirm")
+  );
 }
 
 function claimId(): string {
@@ -122,22 +133,42 @@ export async function handleGrowthInternalOperatorPackAdmin(
   if (request.method === "OPTIONS") {
     return json(
       { ok: false, error: "method_not_allowed" },
-      { status: 405, headers: { allow: "GET" } },
+      { status: 405, headers: { allow: "POST" } },
     );
   }
   if (pathname !== GROWTH_INTERNAL_OPERATOR_PACK_ROUTE) {
     return json({ ok: false, error: "not_found" }, { status: 404 });
   }
-  if (request.method !== "GET") {
+  if (request.method !== "POST") {
     return json(
       { ok: false, error: "method_not_allowed" },
-      { status: 405, headers: { allow: "GET" } },
+      { status: 405, headers: { allow: "POST" } },
     );
   }
 
   const url = new URL(request.url);
   if ([...url.searchParams.keys()].length !== 0) {
     return safeError(json, 400, "query_not_supported");
+  }
+
+  const parsed = await readBoundedJsonObject<ConfirmationBody>(request, {
+    maxBytes: CONFIRMATION_MAX_BYTES,
+    maxDepth: 1,
+    maxNodes: 16,
+    maxArrayLength: 1,
+    maxStringLength: 16,
+    maxKeyLength: 16,
+  });
+  if (!parsed.ok) return json(boundedJsonFailurePayload(parsed), { status: parsed.status });
+  if (!exactConfirmation(parsed.value)) {
+    return json({
+      ok: false,
+      error: "confirm_required",
+      requiredPayload: { confirm: true },
+      confirmationCoercionAllowed: false,
+      requestBodyContract: parsed.contract,
+      safety: SAFETY,
+    }, { status: 400 });
   }
   if (!env?.DB) return safeError(json, 503, "growth_activity_budget_unavailable");
 
@@ -149,11 +180,13 @@ export async function handleGrowthInternalOperatorPackAdmin(
   try {
     const admission = await claimGrowthActivityBudget(env, {
       claimId: claimId(),
-      requestBodySha256: await sha256(`GET\n${GROWTH_INTERNAL_OPERATOR_PACK_ROUTE}\n`),
+      requestBodySha256: parsed.bodySha256,
       intensity: activity.intensity,
       action: "owner_brief_generate",
       invocation: "manual",
       requestedUnits: 1,
+      ownerApproved: true,
+      explicitlyConfirmed: true,
       now: generatedAt,
     });
     if (!admission.accepted) {
@@ -198,6 +231,8 @@ export async function handleGrowthInternalOperatorPackAdmin(
       ok: true,
       mode: "growth_internal_operator_pack",
       contractVersion: GROWTH_INTERNAL_OPERATOR_PACK_ROUTE_VERSION,
+      exactBooleanConfirmation: true,
+      confirmationCoercionAllowed: false,
       pack,
       activity: Object.freeze({
         contractVersion: activity.contractVersion,

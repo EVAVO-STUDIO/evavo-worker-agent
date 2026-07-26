@@ -96,15 +96,15 @@ function ownershipForGrowth(policy: GrowthRoutePolicy): GrowthWorkerRouteInvento
 }
 
 function growthEntry(policy: GrowthRoutePolicy): GrowthWorkerRouteInventoryEntry {
-  const readOnly = policy.mutationPosture === "read-only";
+  const writes = policy.writeMethods.includes("POST");
   return Object.freeze({
     routeFamily: "growth",
     handlerId: policy.handlerId,
     priority: policy.priority,
     ownership: ownershipForGrowth(policy),
-    readMethods: GET_ONLY,
-    writeMethods: readOnly ? NO_WRITES : POST_ONLY,
-    postClassification: readOnly ? "not-supported" : "internal-mutation",
+    readMethods: Object.freeze([...policy.readMethods]),
+    writeMethods: Object.freeze([...policy.writeMethods]),
+    postClassification: writes ? "internal-mutation" : "not-supported",
     authentication: policy.authentication,
     confirmation: policy.confirmation,
     networkPosture: "none",

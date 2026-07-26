@@ -40,7 +40,7 @@ saved as internal review metadata only
 
 Scheduled processing must not fetch pages, discover opportunities, expand sources or execute queued network work.
 
-The D1 `growth_fetch_queue` table and its admin route are non-executing metadata. They can record reviewed intent and bounds, but no active queue consumer, scheduler or alternate retry executor may turn those rows into background crawling.
+The D1 `growth_fetch_queue` table and its admin route are non-executing metadata. They can record reviewed intent and bounds, but no active queue consumer, scheduler or alternate retry executor may turn those rows into background crawling. There is no crawler execution yet behind this metadata boundary.
 
 ## Internal write contract
 
@@ -67,7 +67,7 @@ Successful writes return only a reduced receipt confirming that a body hash was 
 
 ## Run stages
 
-### 1. Create an offline research plan
+### 1. Plan research
 
 Record:
 
@@ -101,7 +101,7 @@ competitor or client-like sites
 
 Search-query plans and source-type plans remain internal metadata until a confirmed manual research action is performed.
 
-### 3. Save candidate metadata
+### 3. Register source candidates
 
 Candidate records require a real public domain, public HTTP or HTTPS URL, source type and discovery method. The route must not invent `unknown.local`, `example.invalid` or other placeholder evidence.
 
@@ -153,7 +153,7 @@ explicit operator confirmation
 
 Unknown or unsafe policy means do not fetch.
 
-### 5. Record bounded fetch intent
+### 5. Queue fetch work as non-executing metadata
 
 The protected fetch-queue admin route may save one non-executing metadata row containing:
 
@@ -226,7 +226,7 @@ research_safety_score
 
 Every score must be grounded in stored evidence.
 
-### 9. Record an internal decision
+### 9. Record agent decision metadata
 
 Accepted internal decision types are:
 
@@ -247,7 +247,7 @@ Feedback requires a feedback type, bounded note and identified reviewer. It may 
 
 Feedback does not approve external action and cannot promote a candidate into canonical Growth automatically.
 
-### 11. Prepare an operator review pack
+### 11. Prepare approval pack for operator review
 
 A review pack may include:
 

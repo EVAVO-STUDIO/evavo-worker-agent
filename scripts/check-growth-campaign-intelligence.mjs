@@ -33,6 +33,7 @@ const requiredFiles = [
   "src/core/growthInternalWriteRequest.ts",
   "src/routes/growthCampaignIntelligenceAdmin.ts",
   "tests/growthCampaignIntelligenceWriteBoundary.test.ts",
+  "tests/growthCampaignIntelligenceErrorClassification.test.ts",
   "scripts/print-growth-campaign-intelligence-smoke-commands.mjs",
   "docs/growth-campaign-intelligence.md",
   "package.json",
@@ -129,6 +130,7 @@ requireTokens("Growth campaign intelligence route", route, [
   'error: "query_not_supported"',
   "requestReceipt: requestReceipt(parsed)",
   "bodySha256Available: true",
+  "/^GROWTH_(CAMPAIGN|EXPERIMENT|METRIC|EVIDENCE|LEARNING)_/",
   "growth_campaign_intelligence_invalid_request",
   "growth_campaign_intelligence_failed",
   "/admin/growth/cycle/record",
@@ -148,6 +150,7 @@ forbidTokens("Growth campaign intelligence route", route, [
   "body?.confirm",
   'body.confirm === "1"',
   "body.confirm === 1",
+  'message.startsWith("GROWTH_CAMPAIGN_")',
   "queryConfirmationAllowed: true",
   "confirmationCoercionAllowed: true",
   "sensitiveInputKeysAllowed: true",
@@ -155,8 +158,8 @@ forbidTokens("Growth campaign intelligence route", route, [
   "return json(normalized, { status: 500 })",
 ]);
 
-const tests = read("tests/growthCampaignIntelligenceWriteBoundary.test.ts");
-requireTokens("Growth campaign write boundary tests", tests, [
+const boundaryTests = read("tests/growthCampaignIntelligenceWriteBoundary.test.ts");
+requireTokens("Growth campaign write boundary tests", boundaryTests, [
   "campaign list uses the documented fallback limit when the query is absent",
   "query-string confirmation is rejected before body parsing or D1 access",
   "coerced confirmation and sensitive input keys fail before D1 access",
@@ -168,6 +171,18 @@ requireTokens("Growth campaign write boundary tests", tests, [
   '"growth_campaign_intelligence_invalid_request"',
   '"growth_internal_write_request_v1"',
   'assert(!("message" in payload))',
+]);
+
+const classificationTests = read("tests/growthCampaignIntelligenceErrorClassification.test.ts");
+requireTokens("Growth campaign error classification tests", classificationTests, [
+  "experiment route validation is classified as a finite client input failure",
+  "metric route validation is classified as a finite client input failure",
+  "evidence route validation is classified as a finite client input failure",
+  "learning route validation is classified as a finite client input failure",
+  'assert.equal(response.status, 400)',
+  '"growth_campaign_intelligence_invalid_request"',
+  'assert(!("message" in payload))',
+  "D1 must not be reached for rejected route input",
 ]);
 
 const smoke = read("scripts/print-growth-campaign-intelligence-smoke-commands.mjs");
@@ -185,6 +200,11 @@ requireTokens("Growth campaign intelligence documentation", documentation, [
   "/admin/growth/operator",
   "growth_operator_cycle_v3_strategy_blackboard_read_only",
   "growth_autonomous_runtime_v3_strategy_blackboard",
+  "growth_internal_write_request_v1",
+  "POST query parameters are rejected.",
+  "Conflicting outer and inner identifiers fail closed.",
+  "without raw database messages",
+  "Absent list-limit query parameters use the documented route fallback",
 ]);
 
 const packageJson = JSON.parse(read("package.json"));
@@ -209,6 +229,7 @@ if (errors.length) {
 console.log("Growth campaign intelligence check passed.");
 console.log("- campaign, experiment, metric, evidence, learning, cycle and decision writes use one bounded exact-confirmation contract");
 console.log("- query confirmation, Boolean coercion, sensitive input keys, mixed wrappers and conflicting identifiers fail closed");
+console.log("- uppercase route-validation families are classified as finite 400 input failures rather than false service outages");
 console.log("- missing list limits use their documented fallbacks instead of collapsing to one record");
 console.log("- database and migration failures are reduced without returning raw error messages");
 console.log("- all campaign intelligence operations remain internal metadata only with AI and external execution disabled");

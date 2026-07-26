@@ -16,7 +16,10 @@ const campaignIntelligence = read("src/routes/growthCampaignIntelligenceAdmin.ts
 const blackboard = read("src/routes/growthBlackboardAdmin.ts");
 const growthFallback = read("src/routes/growthAdmin.ts");
 const growthFallbackWrapper = read("src/routes/growthAdminProtected.ts");
+const growthAudit = read("src/core/growthAudit.ts");
+const growthBrief = read("src/core/growthBrief.ts");
 const growthFallbackTest = read("tests/growthAdminFallbackSafety.test.ts");
+const growthAuditSummaryTest = read("tests/growthAuditSummary.test.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
 const protectedHandlers = [
@@ -171,8 +174,13 @@ if (wrapperAuth < 0 || wrapperOptions < 0 || wrapperDelegate < 0 || !(wrapperAut
 for (const token of [
   'import { Env, todayUTC } from "../db"',
   'from "../core/boundedJsonRequest"',
+  "listGrowthAuditEventSummaries",
+  "toGrowthAuditEventSummary",
   "MAX_GROWTH_ADMIN_BODY_BYTES = 32_768",
   "SENSITIVE_GROWTH_INPUT_KEYS",
+  "SENSITIVE_GROWTH_INPUT_KEY_FRAGMENTS",
+  "isSensitiveInputKey",
+  "normalized.includes(fragment)",
   "containsSensitiveInputKey",
   "readBoundedJsonObject<Record<string, any>>(request",
   "boundedJsonFailurePayload(parsed)",
@@ -184,9 +192,11 @@ for (const token of [
   "exactBooleanConfirmationRequired: true",
   "sensitiveInputKeysAllowed: false",
   "rawErrorsExposed: false",
+  "auditSnapshotsExposed: false",
   "rawErrorExposed: false",
   'diagnosticCode = missingGrowthTable',
   "inputSnapshot: auditInput(",
+  "audit: toGrowthAuditEventSummary(audit)",
 ]) {
   if (!growthFallback.includes(token)) errors.push(`Growth fallback is missing hardened-boundary token: ${token}`);
 }
@@ -204,6 +214,8 @@ for (const forbidden of [
   'body?.confirm === "1"',
   "message,",
   "message: message",
+  "events: await listGrowthAuditEvents",
+  "audit,\n        safety:",
   "requestBodySha256: parsed.requestBodySha256,\n        safety:",
 ]) {
   if (growthFallback.includes(forbidden)) errors.push(`Growth fallback contains forbidden legacy token: ${forbidden}`);
@@ -231,19 +243,66 @@ for (const call of [
 }
 
 for (const token of [
+  "GrowthAuditEventSummary",
+  "toGrowthAuditEventSummary",
+  "hasInputSnapshot",
+  "hasOutputSnapshot",
+  "hasSafetyResult",
+  "hasBudgetResult",
+  "listGrowthAuditEventSummaries",
+]) {
+  if (!growthAudit.includes(token)) errors.push(`Growth audit summary boundary is missing: ${token}`);
+}
+for (const forbidden of [
+  "inputSnapshot: row.input_snapshot",
+  "outputSnapshot: row.output_snapshot",
+  "safetyResult: row.safety_result",
+  "budgetResult: row.budget_result",
+]) {
+  if (growthAudit.includes(forbidden)) errors.push(`Growth audit summary exposes forbidden snapshot field: ${forbidden}`);
+}
+
+for (const token of [
+  "listGrowthAuditEventSummaries",
+  "latestAuditEvents: auditEvents",
+  "auditSnapshotsExposed: false",
+]) {
+  if (!growthBrief.includes(token)) errors.push(`Growth brief audit reduction is missing: ${token}`);
+}
+if (growthBrief.includes("listGrowthAuditEvents")) {
+  errors.push("Growth brief must not expose raw audit events");
+}
+
+for (const token of [
   'test("Growth fallback uses shared authentication before request parsing or persistence"',
   'test("query confirmation cannot replace exact JSON confirmation"',
   'test("coerced confirmation is rejected before persistence"',
-  'test("credential-shaped nested fields are rejected before audit or persistence"',
+  "oauthAccessToken",
+  "providerApiKey",
+  "serviceRoleSecret",
   'test("non-JSON fallback writes fail through the bounded request contract"',
   'test("unexpected database failures are reduced to finite diagnostics"',
   "forbidden_growth_input_key",
   "json_content_type_required",
   "rawErrorExposed",
+  "auditSnapshotsExposed",
   "requestBodySha256",
   "database-secret-detail-must-not-reach-response",
 ]) {
   if (!growthFallbackTest.includes(token)) errors.push(`Growth fallback test is missing: ${token}`);
+}
+
+for (const token of [
+  'test("Growth audit summaries preserve references while discarding snapshots"',
+  'test("empty stored snapshot objects become false presence flags"',
+  "input-secret-must-not-project",
+  "output-secret-must-not-project",
+  "requestBodySha256",
+  "input_snapshot",
+  "output_snapshot",
+  "Object.isFrozen(summary)",
+]) {
+  if (!growthAuditSummaryTest.includes(token)) errors.push(`Growth audit summary test is missing: ${token}`);
 }
 
 const expectedCommand = "node scripts/check-growth-subhandler-auth-safety.mjs";
@@ -273,6 +332,8 @@ console.log(JSON.stringify({
   growthFallbackRequiresExactBooleanConfirmation: true,
   growthFallbackRejectsSensitiveInputKeys: true,
   growthFallbackExposesRawErrors: false,
+  growthFallbackExposesAuditSnapshots: false,
+  growthBriefExposesAuditSnapshots: false,
   externalStateChangeAllowed: false,
   callsAI: false,
   callsNetwork: false,

@@ -37,6 +37,8 @@ It does **not** provide outbound execution.
 - Historical draft-shaped and approval-shaped records are non-deliverable, non-executable and non-authoritative.
 - Public routes expose aggregate, non-sensitive status only.
 - The browser must never receive the Worker admin token.
+- Tracked source is scanned for environment files, private keys, live provider-token shapes, credential-bearing URLs and non-placeholder sensitive assignments.
+- Local `.env`, `.dev.vars` and Wrangler state remain ignored; only reviewed placeholder templates may be tracked.
 
 ## Active architecture
 
@@ -51,6 +53,22 @@ The Worker is organised around typed route-policy registries:
 - autonomy and legacy-safety routes
 
 Each policy records authentication, mutation, confirmation, network and prohibited-capability posture. The Worker dispatcher delegates through those registries rather than maintaining an unstructured pathname chain.
+
+## Source-secret and repository posture
+
+The Worker must remain free of deployable credentials regardless of who can read its source. The focused command is:
+
+```powershell
+npm run worker:source-secret-safety:check
+```
+
+The guard scans tracked text files without printing matched values. It rejects real environment files, private-key material, common live provider-token shapes, credential-bearing URLs, npm authentication tokens and non-placeholder assignments to sensitive variables.
+
+Use [`.dev.vars.example`](.dev.vars.example) as the local template. Copy it to the ignored `.dev.vars` file and replace placeholders only in that local file. `ADMIN_TOKEN` remains a Cloudflare server-side secret and must never be committed, exposed to browser code or placed in client-visible configuration.
+
+GitHub currently reports this repository as **public**. Repository visibility is an administrative GitHub setting and cannot be enforced by Worker source code. If EVAVO's governance intent is private source hosting, an administrator must change the repository visibility in GitHub settings and review the effects on forks, Actions, rulesets and integrations. This source-hardening pass did not change that setting.
+
+The authoritative detailed contract is [`docs/worker-source-secret-posture.md`](docs/worker-source-secret-posture.md).
 
 ## Bounded request boundary
 
@@ -116,6 +134,7 @@ The authoritative detailed contract is [`docs/opportunity-evidence-quality.md`](
 
 ## Current operating documents
 
+- [`docs/worker-source-secret-posture.md`](docs/worker-source-secret-posture.md)
 - [`docs/bounded-admin-json-boundary.md`](docs/bounded-admin-json-boundary.md)
 - [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md)
 - [`docs/opportunity-evidence-quality.md`](docs/opportunity-evidence-quality.md)
@@ -177,6 +196,7 @@ npm run check:local
 Important focused checks include:
 
 ```powershell
+npm run worker:source-secret-safety:check
 npm run safety:gates:check
 npm run docs:operating-posture:check
 npm run docs:readme-truthfulness:check
@@ -210,7 +230,7 @@ npm run typecheck
 
 The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.
 
-The GitHub Actions Worker contract workflow runs focused request, fetch and evidence checks, deterministic Node tests and the authoritative `check:local` chain with read-only repository permissions. It does not deploy and does not request Worker credentials.
+The GitHub Actions Worker contract workflow runs the tracked-source secret check, focused request, fetch and evidence checks, deterministic Node tests and the authoritative `check:local` chain with read-only repository permissions. It does not deploy and does not request Worker credentials.
 
 ## Deployment
 

@@ -2,9 +2,12 @@ import type { Env } from "../db";
 import { logEvent } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "../core/boundedJsonRequest";
+import { GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION } from "../core/growthActivityBudgetLedger";
+import { resolveGrowthActivitySettings } from "../core/growthActivityBudgetSettings";
 import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
 import { readAutonomySettings } from "../engineAutonomy";
 import { runOpportunityAutonomy } from "../opportunityAutonomy";
+
 
 type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -32,6 +35,8 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
         sendsEmail: false,
         postsExternally: false,
         savesReviewItemsOnly: true,
+        persistentBudgetAdmissionRequired: true,
+        automaticRetryAllowed: false,
       },
     }, { status: 400 });
   }
@@ -50,13 +55,45 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
 
   try {
     const settings = await readAutonomySettings(env);
-    if (!settings.opportunityDiscoveryEnabled) {
-      await logEvent(env, "opportunity_run_due_skip", "Manual opportunity run skipped because opportunity discovery is disabled.");
-      return json({ ok: false, error: "opportunity_discovery_disabled", settings, requestReceipt });
+    const activity = resolveGrowthActivitySettings(settings);
+    if (!activity.manualResearchConfigured) {
+      await logEvent(env, "opportunity_run_due_skip", "Manual opportunity run skipped because the engine, opportunity discovery or selected Growth activity profile is disabled.");
+      return json({
+        ok: false,
+        error: "manual_research_not_configured",
+        requestReceipt,
+        settings: {
+          mode: settings.mode,
+          engineEnabled: settings.engineEnabled,
+          freeSafeOnly: settings.freeSafeOnly,
+          opportunityDiscoveryEnabled: settings.opportunityDiscoveryEnabled,
+        },
+        activity: {
+          contractVersion: activity.contractVersion,
+          intensity: activity.intensity,
+          selectedBy: activity.selectedBy,
+          manualResearchConfigured: activity.manualResearchConfigured,
+          effectiveSourceLimitPerRun: activity.effectiveSourceLimitPerRun,
+          effectiveMinimumOpportunityScore: activity.effectiveMinimumOpportunityScore,
+          persistentBudgetAdmissionRequired: true,
+        },
+        safety: {
+          callsAI: false,
+          sendsEmail: false,
+          postsExternally: false,
+          savesReviewItemsOnly: true,
+          persistentBudgetAdmissionRequired: true,
+          automaticRetryAllowed: false,
+        },
+      });
     }
 
-    const summary = await runOpportunityAutonomy(env, settings);
-    await logEvent(env, "opportunity_run_due_ok", `Manual opportunity run finished with ${summary.runStatus} | sources ${summary.sourcesChecked} | successful ${summary.successfulSources} | saved ${summary.saved} | failed ${summary.failed}`);
+    const summary = await runOpportunityAutonomy(env, settings, {
+      requestBodySha256: parsed.bodySha256,
+      ownerApproved: true,
+      explicitlyConfirmed: true,
+    });
+    await logEvent(env, "opportunity_run_due_ok", `Manual opportunity run finished with ${summary.runStatus} | activity ${summary.budget.intensity} | sources ${summary.sourcesChecked} | admitted ${summary.budget.admittedSourceClaims} | budget-denied ${summary.budget.policyDeniedSourceClaims + summary.budget.raceDeniedSourceClaims} | successful ${summary.successfulSources} | saved ${summary.saved} | failed ${summary.failed}`);
 
     return json({
       ok: summary.runStatus !== "failed",
@@ -65,11 +102,23 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
       requestReceipt,
       settings: {
         mode: settings.mode,
+        engineEnabled: settings.engineEnabled,
         freeSafeOnly: settings.freeSafeOnly,
         opportunityDiscoveryEnabled: settings.opportunityDiscoveryEnabled,
         dailySourceLimit: settings.dailySourceLimit,
         maxNetworkCallsPerRun: settings.maxNetworkCallsPerRun,
         minOpportunityScore: settings.minOpportunityScore,
+      },
+      activity: {
+        contractVersion: activity.contractVersion,
+        ledgerContractVersion: GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION,
+        intensity: activity.intensity,
+        selectedBy: activity.selectedBy,
+        legacyControlsAreSecondaryCaps: activity.legacyControlsAreSecondaryCaps,
+        effectiveSourceLimitPerRun: activity.effectiveSourceLimitPerRun,
+        effectiveMinimumOpportunityScore: activity.effectiveMinimumOpportunityScore,
+        persistentBudgetAdmissionRequired: true,
+        migrationRequired: "0023_growth_activity_budget_ledger.sql",
       },
       summary,
       safety: {
@@ -79,6 +128,8 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
         autoApplies: false,
         savesReviewItemsOnly: true,
         concurrentDuplicateRunAllowed: false,
+        persistentBudgetAdmissionRequired: true,
+        accountWideCloudUsageKnown: false,
         automaticRetryAllowed: false,
       },
     });

@@ -162,14 +162,40 @@ requireTokens("Growth activity budget documentation", docs, [
   "Keep unsolicited mass outreach, fake engagement and uncontrolled forum commenting out of scope.",
 ]);
 
-requireTokens("Existing Growth capability posture", capabilities, [
-  "scheduledExecutionEnabled: false",
+requireTokens("Growth capability activity budget exposure", capabilities, [
+  'from "./growthActivityBudget"',
+  "GROWTH_ACTIVITY_BUDGET_VERSION",
+  "GROWTH_ACTIVITY_HARD_LIMITS",
+  "listGrowthActivityProfiles",
+  "activityBudget: {",
+  'defaultIntensity: "light"',
+  "profiles: listGrowthActivityProfiles()",
+  "hardLimits: GROWTH_ACTIVITY_HARD_LIMITS",
+  "zeroPaidServiceBudget: true",
+  "persistentUsageLedgerImplemented: false",
+  "manualResearchAdmissionIntegrated: false",
+  "accountWideCloudUsageKnown: false",
   "scheduledExternalResearchEnabled: false",
+  "aiEnabled: false",
+  "browserEnabled: false",
+  "externalExecutionEnabled: false",
+  "scheduledExecutionEnabled: false",
+  "manualResearchRequiresAuthentication: true",
+  "manualResearchRequiresConfirmation: true",
   "draftingEnabled: false",
   "browserExecutionEnabled: false",
   "externalDeliveryEnabled: false",
   "autonomousCampaignsEnabled: false",
 ]);
+forbidTokens("Growth capability activity budget exposure", capabilities, [
+  "persistentUsageLedgerImplemented: true",
+  "manualResearchAdmissionIntegrated: true",
+  "scheduledExternalResearchEnabled: true",
+  "aiEnabled: true",
+  "browserEnabled: true",
+  "externalExecutionEnabled: true",
+]);
+
 requireTokens("Existing autonomy settings posture", autonomySettings, [
   'type AutonomyMode = "observe_only" | "free_safe_autonomy" | "assisted_discovery"',
   "freeSafeOnly: true",
@@ -204,6 +230,7 @@ console.log("Growth activity budget check passed.");
 console.log("- paused, light, balanced, high and exact custom profiles remain inside one immutable zero-paid-service hard envelope");
 console.log("- scheduled public research, AI, browser runtime, paid services and external state changes remain hard-disabled at every intensity");
 console.log("- public research requires a fresh persistent usage snapshot, owner approval, exact confirmation, domain caps, cooldown and failure-circuit checks");
+console.log("- the protected capability registry exposes profile and hard-limit posture without claiming the ledger or network admission integration already exists");
 console.log("- behavioral fixtures cover named profiles, custom limits, exhaustion, stale usage and future email/social/calendar/provider actions");
 console.log("- current capability, autonomy, scheduled and Cloudflare configuration files remain aligned with the review-first posture");
 console.log("- this source contract does not claim persistent D1 budget enforcement until the usage ledger is implemented");

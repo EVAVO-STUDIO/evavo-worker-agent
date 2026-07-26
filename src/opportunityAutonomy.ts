@@ -12,6 +12,12 @@ import {
 import { acquireManualResearchLease, releaseManualResearchLease } from "./core/manualResearchLease";
 import { extractOpportunityCandidates } from "./core/opportunityDiscovery";
 import { saveOpportunityCandidate } from "./core/opportunityPersistence";
+import {
+  OPPORTUNITY_SOURCE_SELECTION_VERSION,
+  opportunitySourceExplorationSlots,
+  selectOpportunitySources,
+  type OpportunitySourceSelectionResult,
+} from "./core/opportunitySourceSelection";
 import { finishOpportunityRun, prepareSourceRunResult, recordCandidateRejection, startOpportunityRun, type OpportunityRunSummary, type SourceRunResult } from "./core/opportunityRuns";
 import { PUBLIC_RESEARCH_FETCH_CONTRACT, fetchPublicResearchHtml } from "./core/publicResearchFetch";
 
@@ -39,6 +45,11 @@ type OpportunitySource = {
   country?: string | null;
   region?: string | null;
   category?: string | null;
+  priority: number;
+  successCount: number;
+  failureCount: number;
+  opportunityCount: number;
+  lastRunAtIso: string | null;
 };
 
 type BudgetRunSummary = {
@@ -69,33 +80,90 @@ async function tableExists(env: Env, tableName: string): Promise<boolean> {
   return Boolean(row?.name);
 }
 
-async function dueSources(env: Env, limit: number): Promise<OpportunitySource[]> {
-  const now = new Date().toISOString();
+async function dueSources(
+  env: Env,
+  limit: number,
+  intensity: "paused" | "light" | "balanced" | "high",
+): Promise<OpportunitySourceSelectionResult<OpportunitySource>> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const poolLimit = Math.min(60, Math.max(limit, limit * 4));
   const rows = await env.DB.prepare(
-    `SELECT id, url, label, source_type, country, region, category
-     FROM opportunity_sources
-     WHERE status = 'active'
-       AND (next_run_at_iso IS NULL OR next_run_at_iso <= ?)
-       AND (cooldown_until_iso IS NULL OR cooldown_until_iso <= ?)
-     ORDER BY priority DESC, COALESCE(last_run_at_iso, '') ASC
+    `SELECT
+       source.id,
+       source.url,
+       source.label,
+       source.source_type,
+       source.country,
+       source.region,
+       source.category,
+       source.priority,
+       source.success_count AS successCount,
+       source.failure_count AS failureCount,
+       source.last_run_at_iso AS lastRunAtIso,
+       COALESCE((
+         SELECT COUNT(*)
+         FROM opportunities opportunity
+         WHERE opportunity.source_id = source.id
+       ), 0) AS opportunityCount
+     FROM opportunity_sources source
+     WHERE source.status = 'active'
+       AND (source.next_run_at_iso IS NULL OR source.next_run_at_iso <= ?)
+       AND (source.cooldown_until_iso IS NULL OR source.cooldown_until_iso <= ?)
+     ORDER BY source.priority DESC, COALESCE(source.last_run_at_iso, '') ASC, source.id ASC
      LIMIT ?`
-  ).bind(now, now, limit).all<OpportunitySource>();
-  return rows.results || [];
+  ).bind(nowIso, nowIso, poolLimit).all<OpportunitySource>();
+  return selectOpportunitySources({
+    sources: rows.results || [],
+    limit,
+    explorationSlots: opportunitySourceExplorationSlots(intensity, limit),
+    now,
+  });
 }
 
-function prepareSourceUpdate(env: Env, sourceId: string, ok: boolean, error: string | null): D1PreparedStatement {
+function prepareSourceUpdate(
+  env: Env,
+  sourceId: string,
+  result: SourceRunResult,
+  ok: boolean,
+): D1PreparedStatement {
   const now = new Date().toISOString();
-  const nextHours = ok ? 24 : 6;
+  const nextHours = ok
+    ? Number(result.candidatesSaved || 0) > 0
+      ? 24
+      : 72
+    : 48;
   const nextRun = new Date(Date.now() + nextHours * 60 * 60 * 1000).toISOString();
+  const cooldownUntil = ok ? null : nextRun;
   return env.DB.prepare(
     `UPDATE opportunity_sources
-     SET success_count = success_count + ?, failure_count = failure_count + ?, last_run_at_iso = ?, next_run_at_iso = ?, last_error = ?, updated_at_iso = ?
+     SET success_count = success_count + ?,
+         failure_count = failure_count + ?,
+         last_run_at_iso = ?,
+         next_run_at_iso = ?,
+         cooldown_until_iso = ?,
+         last_error = ?,
+         updated_at_iso = ?
      WHERE id = ?`
-  ).bind(ok ? 1 : 0, ok ? 0 : 1, now, nextRun, error, now, sourceId);
+  ).bind(
+    ok ? 1 : 0,
+    ok ? 0 : 1,
+    now,
+    nextRun,
+    cooldownUntil,
+    result.error || null,
+    now,
+    sourceId,
+  );
 }
 
-async function commitSourceOutcome(env: Env, runId: string | null, result: SourceRunResult, ok: boolean): Promise<void> {
-  const sourceUpdate = prepareSourceUpdate(env, result.sourceId || "", ok, result.error || null);
+async function commitSourceOutcome(
+  env: Env,
+  runId: string | null,
+  result: SourceRunResult,
+  ok: boolean,
+): Promise<void> {
+  const sourceUpdate = prepareSourceUpdate(env, result.sourceId || "", result, ok);
   if (runId) {
     await env.DB.batch([sourceUpdate, prepareSourceRunResult(env, result)]);
   } else {
@@ -202,6 +270,7 @@ export async function runOpportunityAutonomy(
       effectiveMinimumOpportunityScore: activitySettings.effectiveMinimumOpportunityScore,
       persistentAdmissionRequired: true,
     },
+    sourceSelectionContract: OPPORTUNITY_SOURCE_SELECTION_VERSION,
     researchFetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
   });
   let successfulSources = 0;
@@ -245,14 +314,25 @@ export async function runOpportunityAutonomy(
       return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "zero_effective_activity_limit", successfulSources, sourceLeaseConflicts, budget };
     }
 
-    const sources = await dueSources(env, limit);
-    if (!sources.length) {
+    const sourceSelection = await dueSources(env, limit, activitySettings.intensity);
+    if (!sourceSelection.selected.length) {
       await logEvent(env, "opportunity_tick_skip", "No due opportunity sources for confirmed manual review.");
       await finishOpportunityRun(env, runId, "skipped", summary, "no_due_sources");
-      return { ...summary, runId, runType: "manual_confirmed", runStatus: "skipped", runError: "no_due_sources", successfulSources, sourceLeaseConflicts, budget };
+      return {
+        ...summary,
+        runId,
+        runType: "manual_confirmed",
+        runStatus: "skipped",
+        runError: "no_due_sources",
+        successfulSources,
+        sourceLeaseConflicts,
+        budget,
+        sourceSelection,
+      };
     }
 
-    for (const source of sources) {
+    for (const selectedSource of sourceSelection.selected) {
+      const source = selectedSource.source;
       const sourceActionKey = `opportunity-source:${source.id}`;
       const sourceLease = await acquireManualResearchLease(env, sourceActionKey, 600);
       if (!sourceLease) {
@@ -347,6 +427,12 @@ export async function runOpportunityAutonomy(
             redirectChain: fetched.redirectChain,
             fetchedAtISO: fetched.fetchedAtISO,
             timeoutScope: fetched.timeoutScope,
+            sourceSelection: {
+              contractVersion: sourceSelection.contractVersion,
+              mode: selectedSource.mode,
+              score: selectedSource.score,
+              metrics: selectedSource.metrics,
+            },
           };
           const candidates = extractOpportunityCandidates(fetched.body, fetched.finalUrl || source.url, 50);
           candidatesFound = candidates.length;
@@ -452,7 +538,11 @@ export async function runOpportunityAutonomy(
             : runStatus === "partial"
               ? `partial_source_outcomes:failed:${summary.failed}:busy:${sourceLeaseConflicts}:budget:${budget.policyDeniedSourceClaims + budget.raceDeniedSourceClaims}`
               : null;
-    await logEvent(env, "opportunity_tick_ok", `Confirmed manual opportunity run ${runStatus} | activity ${budget.intensity} | checked ${summary.sourcesChecked} | admitted ${budget.admittedSourceClaims} | budget-denied ${budget.policyDeniedSourceClaims + budget.raceDeniedSourceClaims} | successful ${successfulSources} | busy ${sourceLeaseConflicts} | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | rejected ${summary.rejected} | failed ${summary.failed} | run ${runId || "audit_disabled"}`);
+    await logEvent(
+      env,
+      "opportunity_tick_ok",
+      `Confirmed manual opportunity run ${runStatus} | activity ${budget.intensity} | source-pool ${sourceSelection.considered} | explored ${sourceSelection.explorationSelected} | exploited ${sourceSelection.exploitationSelected} | checked ${summary.sourcesChecked} | admitted ${budget.admittedSourceClaims} | budget-denied ${budget.policyDeniedSourceClaims + budget.raceDeniedSourceClaims} | successful ${successfulSources} | busy ${sourceLeaseConflicts} | candidates ${summary.candidatesFound} | saved ${summary.saved} | duplicates ${summary.duplicates} | skipped ${summary.skipped} | rejected ${summary.rejected} | failed ${summary.failed} | run ${runId || "audit_disabled"}`,
+    );
     await finishOpportunityRun(env, runId, runStatus, summary, runError);
     return {
       ...summary,
@@ -463,6 +553,14 @@ export async function runOpportunityAutonomy(
       successfulSources,
       sourceLeaseConflicts,
       budget,
+      sourceSelection: {
+        contractVersion: sourceSelection.contractVersion,
+        considered: sourceSelection.considered,
+        selected: sourceSelection.selected.length,
+        explorationSlots: sourceSelection.explorationSlots,
+        explorationSelected: sourceSelection.explorationSelected,
+        exploitationSelected: sourceSelection.exploitationSelected,
+      },
       fetchContract: PUBLIC_RESEARCH_FETCH_CONTRACT,
       fullOperationTimeout: true,
       sourceHealthAndAuditAtomic: true,

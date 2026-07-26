@@ -14,6 +14,9 @@ const approvalRequests = read("src/routes/growthApprovalRequestsAdmin.ts");
 const strategyMemory = read("src/routes/growthStrategyMemoryAdmin.ts");
 const campaignIntelligence = read("src/routes/growthCampaignIntelligenceAdmin.ts");
 const blackboard = read("src/routes/growthBlackboardAdmin.ts");
+const growthFallback = read("src/routes/growthAdmin.ts");
+const growthFallbackWrapper = read("src/routes/growthAdminProtected.ts");
+const growthFallbackTest = read("tests/growthAdminFallbackSafety.test.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
 const protectedHandlers = [
@@ -147,6 +150,102 @@ for (const token of [
   if (!blackboard.includes(token)) errors.push(`Growth blackboard bound or route is missing: ${token}`);
 }
 
+for (const token of [
+  'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  "await isAdminRequestAuthorized(request, env)",
+  "return handleGrowthAdminImplementation(request, env, pathname, json)",
+  'request.method === "OPTIONS"',
+  'allow: "GET, POST"',
+]) {
+  if (!growthFallbackWrapper.includes(token)) {
+    errors.push(`Growth fallback wrapper is missing shared-authentication token: ${token}`);
+  }
+}
+const wrapperAuth = growthFallbackWrapper.indexOf("await isAdminRequestAuthorized(request, env)");
+const wrapperOptions = growthFallbackWrapper.indexOf('request.method === "OPTIONS"');
+const wrapperDelegate = growthFallbackWrapper.indexOf("return handleGrowthAdminImplementation(request, env, pathname, json)");
+if (wrapperAuth < 0 || wrapperOptions < 0 || wrapperDelegate < 0 || !(wrapperAuth < wrapperOptions && wrapperOptions < wrapperDelegate)) {
+  errors.push("Growth fallback wrapper must authenticate before OPTIONS handling and delegation");
+}
+
+for (const token of [
+  'import { Env, todayUTC } from "../db"',
+  'from "../core/boundedJsonRequest"',
+  "MAX_GROWTH_ADMIN_BODY_BYTES = 32_768",
+  "SENSITIVE_GROWTH_INPUT_KEYS",
+  "containsSensitiveInputKey",
+  "readBoundedJsonObject<Record<string, any>>(request",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
+  'error: "forbidden_growth_input_key"',
+  "requestBodySha256: parsed.bodySha256",
+  "confirmationCoercionAllowed: false",
+  "boundedJsonRequired: true",
+  "exactBooleanConfirmationRequired: true",
+  "sensitiveInputKeysAllowed: false",
+  "rawErrorsExposed: false",
+  "rawErrorExposed: false",
+  'diagnosticCode = missingGrowthTable',
+  "inputSnapshot: auditInput(",
+]) {
+  if (!growthFallback.includes(token)) errors.push(`Growth fallback is missing hardened-boundary token: ${token}`);
+}
+
+for (const forbidden of [
+  "getAdminToken",
+  "function authorized(",
+  "function authorised(",
+  "authorization ===",
+  "authorization ==",
+  "`Bearer ${token}`",
+  "request.json()",
+  'url.searchParams.get("confirm")',
+  "body?.confirm === 1",
+  'body?.confirm === "1"',
+  "message,",
+  "message: message",
+  "requestBodySha256: parsed.requestBodySha256,\n        safety:",
+]) {
+  if (growthFallback.includes(forbidden)) errors.push(`Growth fallback contains forbidden legacy token: ${forbidden}`);
+}
+
+for (const call of [
+  "upsertGrowthGoal(env,",
+  "upsertGrowthChannel(env,",
+  "upsertGrowthSignal(env,",
+  "upsertGrowthAction(env,",
+  "planGrowthActionFromSignal(env,",
+  "updateGrowthSignalStatus(",
+  "updateGrowthActionStatus(",
+]) {
+  const callPosition = growthFallback.indexOf(call);
+  if (callPosition < 0) {
+    errors.push(`Growth fallback is missing persistence call: ${call}`);
+    continue;
+  }
+  const parsePosition = growthFallback.lastIndexOf("const parsed = await readConfirmedBody(request, json)", callPosition);
+  const successPosition = growthFallback.lastIndexOf("if (!parsed.ok) return parsed.response", callPosition);
+  if (parsePosition < 0 || successPosition < 0 || !(parsePosition < successPosition && successPosition < callPosition)) {
+    errors.push(`Growth fallback must complete bounded exact confirmation before persistence call: ${call}`);
+  }
+}
+
+for (const token of [
+  'test("Growth fallback uses shared authentication before request parsing or persistence"',
+  'test("query confirmation cannot replace exact JSON confirmation"',
+  'test("coerced confirmation is rejected before persistence"',
+  'test("credential-shaped nested fields are rejected before audit or persistence"',
+  'test("non-JSON fallback writes fail through the bounded request contract"',
+  'test("unexpected database failures are reduced to finite diagnostics"',
+  "forbidden_growth_input_key",
+  "json_content_type_required",
+  "rawErrorExposed",
+  "requestBodySha256",
+  "database-secret-detail-must-not-reach-response",
+]) {
+  if (!growthFallbackTest.includes(token)) errors.push(`Growth fallback test is missing: ${token}`);
+}
+
 const expectedCommand = "node scripts/check-growth-subhandler-auth-safety.mjs";
 if (packageJson.scripts?.["growth:subhandler-auth-safety:check"] !== expectedCommand) {
   errors.push(`package.json must expose growth:subhandler-auth-safety:check as ${expectedCommand}`);
@@ -169,6 +268,11 @@ console.log(JSON.stringify({
   blackboardUsesSharedAuthentication: true,
   blackboardWritesRequireConfirmation: true,
   blackboardReadLimitsBounded: true,
+  growthFallbackUsesSharedAuthentication: true,
+  growthFallbackUsesBoundedJson: true,
+  growthFallbackRequiresExactBooleanConfirmation: true,
+  growthFallbackRejectsSensitiveInputKeys: true,
+  growthFallbackExposesRawErrors: false,
   externalStateChangeAllowed: false,
   callsAI: false,
   callsNetwork: false,

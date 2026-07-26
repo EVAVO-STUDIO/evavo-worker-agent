@@ -60,6 +60,7 @@ const requiredSafetyCommands = {
   "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
   "worker:dependabot-config:check": "node scripts/check-dependabot-config.mjs",
   "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
+  "worker:source-secret-safety:check": "node scripts/check-worker-source-secrets.mjs",
   "worker:workflow-action-pinning:check": "node scripts/check-workflow-action-pinning.mjs",
   "test:core": "node --test",
 };
@@ -114,6 +115,7 @@ for (const relativePath of [
   "scripts/check-worker-credential-contract.mjs",
   "scripts/check-dependabot-config.mjs",
   "scripts/check-package-service-identity.mjs",
+  "scripts/check-worker-source-secrets.mjs",
   "scripts/check-workflow-action-pinning.mjs",
   "tests/adminAuthentication.test.ts",
   "tests/boundedJsonRequest.test.ts",
@@ -123,9 +125,11 @@ for (const relativePath of [
   "tests/growthRouteParity.test.ts",
   "tests/growthRouteParitySource.test.ts",
   "fixtures/growth-worker-route-parity-v1.json",
+  ".dev.vars.example",
   "docs/admin-token-security.md",
   "docs/review-mutation-boundary.md",
   "docs/growth-route-parity.md",
+  "docs/worker-source-secret-posture.md",
 ]) {
   if (!fs.existsSync(path.join(root, relativePath))) errors.push(`Missing safety contract or behavioral test: ${relativePath}`);
 }
@@ -137,7 +141,7 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "safety-gate-completeness-v7-growth-route-parity",
+  contract: "safety-gate-completeness-v8-source-secrets",
   generatedRouteIntegrityRequired: true,
   growthRouteParityRequired: true,
   readmeOperatingPostureRequired: true,
@@ -182,6 +186,8 @@ console.log(JSON.stringify({
   dormantAiBindingRequired: true,
   centralAuthenticationSafetyRequired: true,
   boundedCredentialBehaviorRequired: true,
+  workerTrackedSourceSecretSafetyRequired: true,
+  safeWorkerVariableTemplateRequired: true,
   dependabotConfigurationRequired: true,
   packageServiceIdentityRequired: true,
   workflowActionPinningRequired: true,

@@ -8,10 +8,9 @@ const ADMIN_TOKEN = "test-only-growth-fallback-admin-token-000000000000000000000
 const SECRET_DATABASE_ERROR = "database-secret-detail-must-not-reach-response";
 
 function json(data: unknown, init: ResponseInit = {}): Response {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
-  });
+  const headers = new Headers(init.headers);
+  headers.set("content-type", "application/json");
+  return new Response(JSON.stringify(data), { ...init, headers });
 }
 
 function request(
@@ -91,24 +90,31 @@ test("coerced confirmation is rejected before persistence", async () => {
   assert.equal(databaseTouched(), false);
 });
 
-test("credential-shaped nested fields are rejected before audit or persistence", async () => {
-  const { env, databaseTouched } = environment();
-  const response = await handleGrowthAdmin(
-    request(
+for (const [label, sensitiveField] of [
+  ["exact access token", { accessToken: "must-not-store" }],
+  ["prefixed OAuth access token", { oauthAccessToken: "must-not-store" }],
+  ["provider API key", { providerApiKey: "must-not-store" }],
+  ["nested service role secret", { integration: { serviceRoleSecret: "must-not-store" } }],
+] as const) {
+  test(`credential-shaped nested fields are rejected before audit or persistence: ${label}`, async () => {
+    const { env, databaseTouched } = environment();
+    const response = await handleGrowthAdmin(
+      request(
+        "/admin/growth/strategy",
+        { confirm: true, goal: { title: "Example goal", ...sensitiveField } },
+        { token: ADMIN_TOKEN },
+      ),
+      env,
       "/admin/growth/strategy",
-      { confirm: true, goal: { title: "Example goal", accessToken: "must-not-store" } },
-      { token: ADMIN_TOKEN },
-    ),
-    env,
-    "/admin/growth/strategy",
-    json,
-  );
-  const body = await payload(response);
-  assert.equal(response.status, 400);
-  assert.equal(body.error, "forbidden_growth_input_key");
-  assert.equal(databaseTouched(), false);
-  assert(!JSON.stringify(body).includes("must-not-store"));
-});
+      json,
+    );
+    const body = await payload(response);
+    assert.equal(response.status, 400);
+    assert.equal(body.error, "forbidden_growth_input_key");
+    assert.equal(databaseTouched(), false);
+    assert(!JSON.stringify(body).includes("must-not-store"));
+  });
+}
 
 test("non-JSON fallback writes fail through the bounded request contract", async () => {
   const { env, databaseTouched } = environment();
@@ -147,13 +153,17 @@ test("unexpected database failures are reduced to finite diagnostics", async () 
   assert.equal(body.error, "growth_admin_failed");
   assert.equal(body.diagnosticCode, "growth_admin_failed");
   assert.equal(body.rawErrorExposed, false);
+  assert.equal(body.auditSnapshotsExposed, false);
   assert(!text.includes(SECRET_DATABASE_ERROR));
   assert(!text.includes("requestBodySha256"));
+  assert(!text.includes("input_snapshot"));
+  assert(!text.includes("output_snapshot"));
   const safety = body.safety as Record<string, unknown>;
   assert.equal(safety.boundedJsonRequired, true);
   assert.equal(safety.exactBooleanConfirmationRequired, true);
   assert.equal(safety.confirmationCoercionAllowed, false);
   assert.equal(safety.sensitiveInputKeysAllowed, false);
   assert.equal(safety.rawErrorsExposed, false);
+  assert.equal(safety.auditSnapshotsExposed, false);
   assert.equal(safety.externalStateChange, false);
 });

@@ -1,6 +1,6 @@
 import { Env, todayUTC } from "../db";
 import { assessGrowthBudget, getOrCreateGrowthBudgetLedger } from "./growthAutonomy";
-import { listGrowthAuditEvents } from "./growthAudit";
+import { listGrowthAuditEventSummaries } from "./growthAudit";
 import { listGrowthActions, listGrowthSignals } from "./growthEngagementReadModels";
 
 function countByStatus<T extends { status?: string }>(items: T[], statuses: string[]): number {
@@ -14,7 +14,7 @@ export async function getGrowthBrief(env: Env, profileId = "free_safe") {
   const budgetAssessment = assessGrowthBudget(budget, budget.profile_id);
   const signals = await listGrowthSignals(env, 50);
   const actions = await listGrowthActions(env, 50);
-  const auditEvents = await listGrowthAuditEvents(env, 10);
+  const auditEvents = await listGrowthAuditEventSummaries(env, 10);
 
   const signalSummary = {
     total: signals.length,
@@ -51,6 +51,7 @@ export async function getGrowthBrief(env: Env, profileId = "free_safe") {
     signalSummary,
     actionSummary,
     latestAuditEvents: auditEvents,
+    auditSnapshotsExposed: false,
     suggestedFocus,
     safety: {
       readOnly: true,

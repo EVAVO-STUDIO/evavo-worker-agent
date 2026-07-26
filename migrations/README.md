@@ -113,3 +113,7 @@ npm run db:migration:one -- 0011_source_expansion_strategy_origin_yield_backfill
 - `0023_growth_activity_budget_ledger.sql` atomically admits activity against one daily counter row, stores only hashed domain keys, forbids paid/AI/browser/external-action budgets, prevents claim deletion, and permits only one final completed or failed outcome.
 - The `0023` ledger reserves conservative capacity before work begins. It does not claim to measure unrelated Cloudflare account activity and must remain below the reviewed Worker, D1 and Queue planning envelope.
 - No one-time migration should be reapplied merely because a report looks stale. Inspect schema and saved metadata first.
+
+## Growth zero-source autonomous discovery data model
+
+Migration `0020_growth_autonomous_discovery.sql` adds the zero-source autonomous discovery data model used for internal plans, candidate metadata, review decisions and feedback. The migration does not enable crawling, sending, posting, form submission, AI calls, or external execution. Runtime policy and authenticated, exact-confirmation route contracts remain authoritative.

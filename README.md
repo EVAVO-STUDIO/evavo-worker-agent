@@ -224,6 +224,9 @@ npm run operations:route-policy:check
 npm run planner:catalogue-truthfulness:check
 npm run growth:route-policy:check
 npm run growth:negative-safety:check
+npm run growth:backend:aggregate:check
+npm run growth:backend:check:local
+npm run worker:final-gate:print
 npm run test:core
 npm run typecheck
 ```

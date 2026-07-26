@@ -95,12 +95,14 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
       ownerApproved: true,
       explicitlyConfirmed: true,
     });
-    const sourceSelection = summary.sourceSelection ?? {
-      considered: 0,
-      selected: 0,
-      explorationSelected: 0,
-      exploitationSelected: 0,
-    };
+    const sourceSelection = "sourceSelection" in summary && summary.sourceSelection
+      ? summary.sourceSelection
+      : {
+          considered: 0,
+          selected: 0,
+          explorationSelected: 0,
+          exploitationSelected: 0,
+        };
     await logEvent(
       env,
       "opportunity_run_due_ok",

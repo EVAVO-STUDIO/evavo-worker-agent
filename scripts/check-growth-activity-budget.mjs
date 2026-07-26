@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -36,6 +37,7 @@ const budget = read("src/core/growthActivityBudget.ts");
 const tests = read("tests/growthActivityBudget.test.ts");
 const docs = read("docs/growth-activity-budget.md");
 const capabilities = read("src/core/growthCapabilities.ts");
+const ledgerGuard = read("scripts/check-growth-activity-budget-ledger.mjs");
 const autonomySettings = read("src/routes/autonomySettingsAdmin.ts");
 const scheduledEngine = read("src/engineAutonomy.ts");
 const wrangler = read("wrangler.toml");
@@ -164,7 +166,9 @@ requireTokens("Growth activity budget documentation", docs, [
 
 requireTokens("Growth capability activity budget exposure", capabilities, [
   'from "./growthActivityBudget"',
+  'from "./growthActivityBudgetLedger"',
   "GROWTH_ACTIVITY_BUDGET_VERSION",
+  "GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION",
   "GROWTH_ACTIVITY_HARD_LIMITS",
   "listGrowthActivityProfiles",
   "activityBudget: {",
@@ -172,7 +176,8 @@ requireTokens("Growth capability activity budget exposure", capabilities, [
   "profiles: listGrowthActivityProfiles()",
   "hardLimits: GROWTH_ACTIVITY_HARD_LIMITS",
   "zeroPaidServiceBudget: true",
-  "persistentUsageLedgerImplemented: false",
+  "persistentUsageLedgerContractImplemented: true",
+  "persistentUsageLedgerMigrationApplied: false",
   "manualResearchAdmissionIntegrated: false",
   "accountWideCloudUsageKnown: false",
   "scheduledExternalResearchEnabled: false",
@@ -188,12 +193,17 @@ requireTokens("Growth capability activity budget exposure", capabilities, [
   "autonomousCampaignsEnabled: false",
 ]);
 forbidTokens("Growth capability activity budget exposure", capabilities, [
-  "persistentUsageLedgerImplemented: true",
+  "persistentUsageLedgerMigrationApplied: true",
   "manualResearchAdmissionIntegrated: true",
   "scheduledExternalResearchEnabled: true",
   "aiEnabled: true",
   "browserEnabled: true",
   "externalExecutionEnabled: true",
+]);
+requireTokens("Growth budget ledger source guard", ledgerGuard, [
+  "Growth activity budget ledger check passed.",
+  "one trigger-protected D1 insert is the final concurrency authority",
+  "migration inventory and capability posture remain truthful",
 ]);
 
 requireTokens("Existing autonomy settings posture", autonomySettings, [
@@ -226,11 +236,18 @@ if (errors.length) {
   process.exit(1);
 }
 
+const ledgerResult = spawnSync(
+  process.execPath,
+  ["scripts/check-growth-activity-budget-ledger.mjs"],
+  { cwd: root, encoding: "utf8", shell: false, stdio: "inherit" },
+);
+if (ledgerResult.status !== 0) process.exit(ledgerResult.status ?? 1);
+
 console.log("Growth activity budget check passed.");
 console.log("- paused, light, balanced, high and exact custom profiles remain inside one immutable zero-paid-service hard envelope");
 console.log("- scheduled public research, AI, browser runtime, paid services and external state changes remain hard-disabled at every intensity");
 console.log("- public research requires a fresh persistent usage snapshot, owner approval, exact confirmation, domain caps, cooldown and failure-circuit checks");
-console.log("- the protected capability registry exposes profile and hard-limit posture without claiming the ledger or network admission integration already exists");
+console.log("- the protected capability registry exposes profile, ledger-contract and hard-limit posture without claiming migration application or network admission integration");
 console.log("- behavioral fixtures cover named profiles, custom limits, exhaustion, stale usage and future email/social/calendar/provider actions");
 console.log("- current capability, autonomy, scheduled and Cloudflare configuration files remain aligned with the review-first posture");
-console.log("- this source contract does not claim persistent D1 budget enforcement until the usage ledger is implemented");
+console.log("- the ledger contract is implemented, while D1 application and manual research integration remain separately truthful milestones");

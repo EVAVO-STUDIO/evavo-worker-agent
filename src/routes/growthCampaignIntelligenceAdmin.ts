@@ -263,7 +263,7 @@ function normalizedFailure(error: unknown): Readonly<{
   const message = error instanceof Error ? error.message : String(error ?? "");
   const missingGrowthTable = /no such table: growth_/i.test(message);
   const inputFailure =
-    message.startsWith("GROWTH_CAMPAIGN_") ||
+    /^GROWTH_(CAMPAIGN|EXPERIMENT|METRIC|EVIDENCE|LEARNING)_/.test(message) ||
     /^growth_(campaign|experiment|metric|evidence|learning|decision)_/.test(message);
   return Object.freeze({
     status: inputFailure ? 400 : 503,

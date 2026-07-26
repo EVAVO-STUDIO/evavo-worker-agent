@@ -16,6 +16,15 @@ const EXCLUDED_DIRECTORIES = new Set([
   "dist",
   "coverage",
 ]);
+const CREDENTIAL_URL_PATTERN = /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|https?):\/\/[^\s/:@]+:[^\s/@]+@[^\s"'`<>]+/gi;
+const RESERVED_FIXTURE_HOSTS = new Set([
+  "example.com",
+  "example.org",
+  "example.net",
+  "localhost",
+  "127.0.0.1",
+  "::1",
+]);
 
 function normalizePath(value) {
   return value.replaceAll("\\", "/").replace(/^\.\//, "");
@@ -111,6 +120,20 @@ function placeholderValue(value) {
   );
 }
 
+function isReservedFixtureCredentialUrl(raw) {
+  try {
+    const hostname = new URL(raw).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return (
+      RESERVED_FIXTURE_HOSTS.has(hostname) ||
+      hostname.endsWith(".example") ||
+      hostname.endsWith(".test") ||
+      hostname.endsWith(".invalid")
+    );
+  } catch {
+    return false;
+  }
+}
+
 const signatureRules = [
   ["private-key-material", /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/],
   ["github-classic-token", /\bgh[pousr]_[A-Za-z0-9]{20,}\b/],
@@ -121,10 +144,6 @@ const signatureRules = [
   ["resend-live-key", /\bre_[0-9A-Za-z]{20,}\b/],
   ["slack-token", /\bxox[baprs]-[0-9A-Za-z-]{20,}\b/],
   ["supabase-secret-key", /\bsb_secret_[0-9A-Za-z_-]{20,}\b/],
-  [
-    "credential-bearing-url",
-    /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|https?):\/\/[^\s/:@]+:[^\s/@]+@[^\s]+/i,
-  ],
 ];
 
 const sensitiveAssignment = new RegExp(
@@ -135,6 +154,13 @@ const sensitiveAssignment = new RegExp(
 function scanText(relativePath, source) {
   for (const [rule, pattern] of signatureRules) {
     if (pattern.test(source)) errors.push(`${relativePath}: ${rule}`);
+  }
+
+  CREDENTIAL_URL_PATTERN.lastIndex = 0;
+  for (const match of source.matchAll(CREDENTIAL_URL_PATTERN)) {
+    if (!isReservedFixtureCredentialUrl(match[0])) {
+      errors.push(`${relativePath}: credential-bearing-url`);
+    }
   }
 
   for (const line of source.split(/\r?\n/)) {
@@ -153,6 +179,16 @@ function scanText(relativePath, source) {
         errors.push(`${relativePath}: npm authentication token`);
       }
     }
+  }
+}
+
+for (const fixture of [
+  { value: "https://user:password@example.com/path", allowed: true },
+  { value: "postgres://user:password@db.example.invalid/app", allowed: true },
+  { value: "mysql://user:password@production.internal/app", allowed: false },
+]) {
+  if (isReservedFixtureCredentialUrl(fixture.value) !== fixture.allowed) {
+    errors.push(`credential URL fixture classification failed: ${fixture.value}`);
   }
 }
 
@@ -277,14 +313,15 @@ console.log(
     {
       passed: errors.length === 0,
       activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-      contract: "worker-tracked-source-secret-safety-v2-self-verifying",
+      contract: "worker-tracked-source-secret-safety-v3-fixture-aware",
       trackedFilesInspected: files.length,
       maximumScannedFileBytes: MAX_SCANNED_FILE_BYTES,
       trackedEnvironmentFilesAllowed: [...ALLOWED_ENV_FILES],
       realEnvironmentFilesTracked: false,
       privateKeyMaterialAllowed: false,
       liveProviderTokensAllowed: false,
-      credentialBearingUrlsAllowed: false,
+      nonReservedCredentialBearingUrlsAllowed: false,
+      reservedFixtureCredentialUrlsAllowed: true,
       rawSecretValuesPrinted: false,
       localGateRunsBeforeAggregateChecks: true,
       safetyCompletenessRequired: true,

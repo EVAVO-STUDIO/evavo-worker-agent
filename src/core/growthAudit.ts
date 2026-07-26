@@ -28,8 +28,45 @@ export interface GrowthAuditEventRow {
   created_at: string;
 }
 
+export type GrowthAuditEventSummary = Readonly<{
+  id: string;
+  eventType: string;
+  entityType: string;
+  entityId: string | null;
+  actor: string;
+  automationMode: string | null;
+  reason: string | null;
+  createdAt: string;
+  hasInputSnapshot: boolean;
+  hasOutputSnapshot: boolean;
+  hasSafetyResult: boolean;
+  hasBudgetResult: boolean;
+}>;
+
 function toJson(value: unknown): string {
   return JSON.stringify(value ?? {});
+}
+
+function hasMeaningfulSnapshot(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed !== "" && trimmed !== "{}" && trimmed !== "[]" && trimmed !== "null";
+}
+
+export function toGrowthAuditEventSummary(row: GrowthAuditEventRow): GrowthAuditEventSummary {
+  return Object.freeze({
+    id: row.id,
+    eventType: row.event_type,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    actor: row.actor,
+    automationMode: row.automation_mode,
+    reason: row.reason,
+    createdAt: row.created_at,
+    hasInputSnapshot: hasMeaningfulSnapshot(row.input_snapshot),
+    hasOutputSnapshot: hasMeaningfulSnapshot(row.output_snapshot),
+    hasSafetyResult: hasMeaningfulSnapshot(row.safety_result),
+    hasBudgetResult: hasMeaningfulSnapshot(row.budget_result),
+  });
 }
 
 export async function logGrowthAuditEvent(env: Env, input: GrowthAuditEventInput): Promise<GrowthAuditEventRow> {
@@ -80,4 +117,13 @@ export async function listGrowthAuditEvents(env: Env, limit = 50, entityType?: s
     ? await stmt.bind(entityType, safeLimit).all<GrowthAuditEventRow>()
     : await stmt.bind(safeLimit).all<GrowthAuditEventRow>();
   return result.results || [];
+}
+
+export async function listGrowthAuditEventSummaries(
+  env: Env,
+  limit = 50,
+  entityType?: string,
+): Promise<GrowthAuditEventSummary[]> {
+  const rows = await listGrowthAuditEvents(env, limit, entityType);
+  return rows.map(toGrowthAuditEventSummary);
 }

@@ -132,7 +132,7 @@ requireTokens("Growth zero-cost documentation", documentation, [
   "requiredCloudflarePlan: workers_free",
   "absoluteZeroCostGuaranteed: false",
   "EVAVO reservation ceiling",
-  "High means more bounded internal work and confirmed public research.",
+  "`High` means more bounded internal work and confirmed public research.",
   "Requirements before enabling free AI or browser capacity",
   "External communication and social channels",
   "node scripts/check-growth-zero-cost-envelope.mjs",

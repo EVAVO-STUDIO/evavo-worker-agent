@@ -1,5 +1,6 @@
 export type GrowthRouteHandlerId =
   | "approval-requests"
+  | "operator-artifacts"
   | "capabilities"
   | "blackboard"
   | "strategy-memory"
@@ -41,6 +42,9 @@ export const GROWTH_ROUTE_POLICIES: readonly GrowthRoutePolicy[] = Object.freeze
     "/admin/growth/approval-requests",
     "/admin/growth/approval-requests/status",
   ], "mixed-internal", "handler-enforced"),
+  exact("operator-artifacts", 15, [
+    "/admin/growth/operator/artifacts",
+  ], "mixed-internal", "not-required"),
   exact("capabilities", 20, [
     "/admin/growth/capabilities",
   ], "read-only", "not-required"),

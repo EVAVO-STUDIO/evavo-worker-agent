@@ -39,6 +39,7 @@ const tests = read("tests/growthActivityBudgetLedger.test.ts");
 const inventory = read("scripts/check-migrations-present.mjs");
 const migrationReadme = read("migrations/README.md");
 const capabilities = read("src/core/growthCapabilities.ts");
+const packageJson = JSON.parse(read("package.json"));
 
 requireTokens("Growth activity budget ledger", ledger, [
   'GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION =\n  "growth_activity_budget_ledger_v1"',
@@ -175,6 +176,22 @@ forbidTokens("Growth capability budget ledger posture", capabilities, [
   "manualResearchAdmissionIntegrated: true",
 ]);
 
+if (packageJson.scripts?.["growth:activity-budget:check"] !== "node scripts/check-growth-activity-budget.mjs") {
+  errors.push("package.json must expose growth:activity-budget:check through the aggregate budget guard.");
+}
+const localGate = String(packageJson.scripts?.["check:local"] ?? "");
+if (!localGate.includes("npm run growth:activity-budget:check")) {
+  errors.push("check:local must execute growth:activity-budget:check.");
+}
+if (
+  localGate.indexOf("npm run growth:negative-safety:check") >=
+  localGate.indexOf("npm run growth:activity-budget:check") ||
+  localGate.indexOf("npm run growth:activity-budget:check") >=
+  localGate.indexOf("npm run growth:capabilities:check")
+) {
+  errors.push("check:local must run Growth negative safety, then activity budget, then capability truthfulness.");
+}
+
 if (errors.length) {
   console.error(`${CHECK_NAME} failed:\n`);
   for (const error of errors) console.error(`- ${error}`);
@@ -187,4 +204,5 @@ console.log("- daily, per-run, distinct-domain, per-domain, cooldown and failure
 console.log("- target domains are stored only as SHA-256 hashes and claim identifiers are immutable, one-time and runtime-branded");
 console.log("- claims reserve usage before work, never release reserved cost automatically and allow one completed or failed outcome");
 console.log("- migration inventory and capability posture remain truthful: contract implemented, migration and manual research integration not yet claimed");
+console.log("- the aggregate budget guard is included between Growth negative safety and capability truthfulness in check:local");
 console.log("- AI, browser, paid services, sending, posting, forms, calendars, provider writes and external execution remain unavailable");

@@ -41,7 +41,9 @@ test("free-safe autonomy maps to Light and legacy values cannot enlarge the prof
   assert.equal(resolved.intensity, "light");
   assert.equal(resolved.selectedBy, "free_safe_autonomy");
   assert.equal(resolved.manualResearchConfigured, true);
-  assert.equal(resolved.effectiveSourceLimitPerRun, 1);
+  assert.equal(resolved.effectiveSourceLimitPerRun, 3);
+  assert.equal(resolved.profile.limits.manualResearchRunsPerDay, 1);
+  assert.equal(resolved.profile.limits.externalFetchesPerRun, 3);
   assert.equal(resolved.effectiveMinimumOpportunityScore, 65);
   assert.equal(resolved.legacyControlsAreSecondaryCaps, true);
   assert.equal(resolved.scheduledExternalResearchEnabled, false);
@@ -57,19 +59,44 @@ test("assisted discovery uses Balanced only inside the balanced legacy envelope"
     minOpportunityScore: 55,
   });
   assert.equal(balanced.intensity, "balanced");
-  assert.equal(balanced.effectiveSourceLimitPerRun, 2);
+  assert.equal(balanced.effectiveSourceLimitPerRun, 8);
+  assert.equal(balanced.profile.limits.manualResearchRunsPerDay, 2);
+  assert.equal(balanced.profile.limits.externalFetchesPerRun, 8);
   assert.equal(balanced.effectiveMinimumOpportunityScore, 55);
 
-  for (const settings of [
-    { ...BASE, mode: "assisted_discovery", dailySourceLimit: 16, maxNetworkCallsPerRun: 8, minOpportunityScore: 55 },
-    { ...BASE, mode: "assisted_discovery", dailySourceLimit: 15, maxNetworkCallsPerRun: 9, minOpportunityScore: 55 },
-    { ...BASE, mode: "assisted_discovery", dailySourceLimit: 15, maxNetworkCallsPerRun: 8, minOpportunityScore: 54 },
-  ]) {
+  for (const [settings, expectedLimit] of [
+    [
+      { ...BASE, mode: "assisted_discovery", dailySourceLimit: 16, maxNetworkCallsPerRun: 8, minOpportunityScore: 55 },
+      8,
+    ],
+    [
+      { ...BASE, mode: "assisted_discovery", dailySourceLimit: 15, maxNetworkCallsPerRun: 9, minOpportunityScore: 55 },
+      9,
+    ],
+    [
+      { ...BASE, mode: "assisted_discovery", dailySourceLimit: 15, maxNetworkCallsPerRun: 8, minOpportunityScore: 54 },
+      8,
+    ],
+  ] as const) {
     const high = resolveGrowthActivitySettings(settings);
     assert.equal(high.intensity, "high");
-    assert.equal(high.effectiveSourceLimitPerRun, 4);
+    assert.equal(high.effectiveSourceLimitPerRun, expectedLimit);
     assert.equal(high.effectiveMinimumOpportunityScore, 45);
   }
+});
+
+test("run frequency never masquerades as per-run source capacity", () => {
+  const high = resolveGrowthActivitySettings({
+    ...BASE,
+    mode: "assisted_discovery",
+    dailySourceLimit: 100,
+    maxNetworkCallsPerRun: 250,
+    minOpportunityScore: 1,
+  });
+  assert.equal(high.intensity, "high");
+  assert.equal(high.profile.limits.manualResearchRunsPerDay, 4);
+  assert.equal(high.profile.limits.externalFetchesPerRun, 15);
+  assert.equal(high.effectiveSourceLimitPerRun, 15);
 });
 
 test("legacy caps may reduce but never increase named profile capacity", () => {
@@ -81,6 +108,12 @@ test("legacy caps may reduce but never increase named profile capacity", () => {
   assert.equal(reduced.intensity, "light");
   assert.equal(reduced.effectiveSourceLimitPerRun, 0);
   assert.equal(reduced.manualResearchConfigured, false);
+
+  const networkReduced = resolveGrowthActivitySettings({
+    ...BASE,
+    maxNetworkCallsPerRun: 2,
+  });
+  assert.equal(networkReduced.effectiveSourceLimitPerRun, 2);
 
   const score = resolveGrowthActivitySettings({ ...BASE, minOpportunityScore: 90 });
   assert.equal(score.effectiveMinimumOpportunityScore, 90);

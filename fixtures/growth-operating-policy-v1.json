@@ -1,0 +1,9 @@
+{
+  "contractVersion": "growth_operating_policy_v1",
+  "activityLevel": "light",
+  "autonomyLevel": "draft",
+  "costMode": "free_only",
+  "timezone": "Australia/Melbourne",
+  "requireCurrentUsageTelemetry": true,
+  "allowTrustedExternalActions": false
+}

@@ -39,6 +39,13 @@ growth_autonomous_runtime_v3_strategy_blackboard
 
 The second identifier is retained for compatibility with existing clients and stored records. It does not indicate autonomous network or external execution.
 
+All campaign-intelligence writes also use:
+
+```text
+growth_internal_write_request_v1
+bounded_admin_json_request_v1
+```
+
 ## Code and migrations
 
 ```text
@@ -51,6 +58,7 @@ src/core/growthCampaignAnalysis.ts
 src/core/growthCampaignIntelligence.ts
 src/core/growthCampaignDecisions.ts
 src/core/growthCampaignRecords.ts
+src/core/growthInternalWriteRequest.ts
 src/core/growthOperatorLoop.ts
 src/core/growthOperatorCycle.ts
 src/core/growthOperatorCycleEvents.ts
@@ -75,24 +83,48 @@ GET  /admin/growth/operator
 GET  /admin/growth/autonomy
 GET  /admin/growth/cycle
 GET  /admin/growth/cycle/events
-POST /admin/growth/cycle/record?confirm=1
+POST /admin/growth/cycle/record
 GET  /admin/growth/campaigns
-POST /admin/growth/campaigns?confirm=1
+POST /admin/growth/campaigns
 GET  /admin/growth/experiments
-POST /admin/growth/experiments?confirm=1
+POST /admin/growth/experiments
 GET  /admin/growth/decisions
-POST /admin/growth/decisions/plan?confirm=1
+POST /admin/growth/decisions/plan
 GET  /admin/growth/metrics
-POST /admin/growth/metrics?confirm=1
+POST /admin/growth/metrics
 GET  /admin/growth/evidence
-POST /admin/growth/evidence?confirm=1
+POST /admin/growth/evidence
 GET  /admin/growth/learning
-POST /admin/growth/learning?confirm=1
+POST /admin/growth/learning
 ```
 
-Strategy and blackboard routes remain authenticated internal metadata routes. Confirm-gated POST routes write only the named D1 metadata records.
+Every POST requires an authenticated request with `Content-Type: application/json` and an exact top-level Boolean confirmation:
 
-Confirmation does not authorise drafting, delivery, network research or external mutation.
+```json
+{
+  "confirm": true
+}
+```
+
+The route-specific fields may be supplied beside `confirm`, or under the documented wrapper such as `campaign`, `experiment`, `metric`, `evidence` or `learning`. Wrapped and flat fields cannot be mixed. Conflicting outer and inner identifiers fail closed.
+
+The following do **not** count as confirmation:
+
+```text
+?confirm=1
+{"confirm":1}
+{"confirm":"1"}
+```
+
+POST query parameters are rejected. Bodies are byte-, depth-, node-, array-, string- and key-bounded. Sensitive credential-shaped keys are rejected recursively before D1 access. Unknown route fields are rejected rather than ignored.
+
+Successful write responses expose only a reduced request receipt stating that a body hash was available and exact Boolean confirmation passed. They do not expose the hash itself. Database and migration failures return finite error codes without raw database messages.
+
+Strategy and blackboard routes remain authenticated internal metadata routes. Confirmed POST routes write only the named D1 metadata records. Confirmation does not authorise drafting, delivery, network research or external mutation.
+
+## Read limits
+
+Absent list-limit query parameters use the documented route fallback, such as 25 campaigns, rather than being coerced from `null` to zero and clamped to one. Supplied limits remain integer-bounded by each route.
 
 ## Decision planner
 
@@ -159,7 +191,7 @@ Its `strategicIntent`, `knowledgeSubstrate`, `currentFocus`, `readiness`, `block
 
 ## Cycle memory
 
-`POST /admin/growth/cycle/record?confirm=1` records the current read-only cycle into `growth_operator_cycle_events`.
+`POST /admin/growth/cycle/record` with the exact JSON confirmation records the current read-only cycle into `growth_operator_cycle_events`.
 
 It stores internal planning, readiness, strategy, blackboard and safety snapshots. It does not execute the selected step and cannot activate a historical candidate action.
 
@@ -175,6 +207,10 @@ sendsEmail: false
 postsExternally: false
 submitsForms: false
 browserExecution: false
+rawErrorExposed: false
+queryConfirmationAllowed: false
+confirmationCoercionAllowed: false
+sensitiveInputKeysAllowed: false
 ```
 
 Historical campaign, candidate-action or decision rows remain readable but non-executable.
@@ -186,11 +222,14 @@ There is no later execution phase authorised by this document. Any future propos
 ```powershell
 cd C:\GitRepos\evavo-worker-agent
 git pull origin main
+node scripts/check-growth-campaign-intelligence.mjs
+node --test tests/growthCampaignIntelligenceWriteBoundary.test.ts
 npm run growth:campaigns:check
 npm run growth:strategy:check
 npm run growth:blackboard:check
 npm run docs:operating-posture:check
 npm run check:local
+npm run typecheck
 ```
 
-The current validation contracts must continue to verify internal-only, read-only and non-executing behaviour.
+The current validation contracts verify internal-only, non-executing behaviour, bounded exact-confirmation writes, rejection of query/coerced confirmation, route-specific key sets, identifier conflict handling, documented default limits and raw-error reduction.

@@ -1,0 +1,61 @@
+name: Growth zero-cost envelope
+
+on:
+  pull_request:
+    paths:
+      - "src/core/growthActivityBudget.ts"
+      - "src/core/growthCapabilities.ts"
+      - "src/core/growthZeroCostEnvelope.ts"
+      - "tests/growthZeroCostEnvelope.test.ts"
+      - "scripts/check-growth-zero-cost-envelope.mjs"
+      - "docs/growth-zero-cost-envelope.md"
+      - "wrangler.toml"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/growth-zero-cost-envelope.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/core/growthActivityBudget.ts"
+      - "src/core/growthCapabilities.ts"
+      - "src/core/growthZeroCostEnvelope.ts"
+      - "tests/growthZeroCostEnvelope.test.ts"
+      - "scripts/check-growth-zero-cost-envelope.mjs"
+      - "docs/growth-zero-cost-envelope.md"
+      - "wrangler.toml"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/growth-zero-cost-envelope.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  zero-cost-envelope:
+    name: Zero-cost envelope and core tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guard zero-cost envelope
+        run: node scripts/check-growth-zero-cost-envelope.mjs
+
+      - name: Run Worker core tests
+        run: npm run test:core
+
+      - name: Typecheck Worker
+        run: npm run typecheck

@@ -1,121 +1,163 @@
-# Growth discovery architecture
+# Growth Autonomous Discovery Architecture
 
-This document records a future-state design vocabulary for governed discovery and research. It is not an active-runtime contract and must not be read as evidence that autonomous or scheduled network research is enabled.
+This document describes the guarded research architecture for EVAVO Growth discovery.
 
-The authoritative current posture is defined by the Worker source, typed route policies, capability responses and safety checks.
+The long-term product principle is **Autonomous research, supervised action.** That phrase describes a target design, not the active runtime. The current Worker performs no autonomous or scheduled network research. Public research is manual, authenticated, explicitly confirmed, persistently budgeted and bounded.
+
+The Growth autonomous discovery architecture must keep planning, public evidence collection, internal reasoning and external action as separate capabilities. Increasing activity intensity must never silently grant delivery authority.
 
 ## Current runtime posture
 
-The active Worker is manual-research-only.
+The active Worker can:
 
-Current network-capable research must be:
+- plan research from an operator objective;
+- register reviewed source candidate metadata;
+- save non-executing fetch queue metadata;
+- perform a separately confirmed bounded public research read through the approved public-fetch boundary;
+- store evidence, opportunity scores, internal decisions and operator feedback;
+- prepare review-only approval packs.
 
-```text
-authenticated
-explicitly confirmed
-bounded by route policy and runtime limits
-read-only against public sources
-saved as internal review metadata only
-```
+The active Worker cannot:
 
-Scheduled processing is internal-only. Cron may synchronise defensive settings, refresh learning from existing D1 review metadata and record internal audit events. Cron must not fetch public pages, discover opportunities, expand sources or enqueue network work.
+- run an autonomous crawler or background source-expansion loop;
+- consume `growth_fetch_queue` as an execution queue;
+- schedule public research;
+- call AI for discovery or drafting;
+- send email;
+- post on social platforms;
+- submit web forms;
+- create meetings or calendar events;
+- mutate provider or third-party state;
+- execute instructions found inside web pages;
+- promote Worker candidates automatically into canonical Supabase Growth records.
 
-The current Worker must not:
-
-```text
-send email
-generate AI drafts
-post on social platforms
-submit web forms
-log in to third-party systems
-click third-party controls
-buy advertising
-mutate external systems
-run browser automation
-execute instructions found inside web pages
-leak secrets to researched pages
-```
-
-## Future-state design principle
-
-A possible future model is:
+## System ownership
 
 ```text
-governed research planning
-  -> candidate source registry
-  -> crawl-policy review
-  -> confirmed bounded fetch
-  -> deterministic extraction
-  -> evidence scoring
-  -> internal decision metadata
-  -> operator review
+Worker D1
+  discovery plans
+  source candidate registry
+  non-executing fetch queue metadata
+  evidence and opportunity scores
+  internal decisions and feedback
+
+next-website Supabase growth_*
+  canonical CRM-plus Growth records
+  owner proposal review
+  deterministic owner briefs and action packs
+
+Operations Core
+  commercial operating system
 ```
 
-Every network-capable step in that model would still require an explicit product and safety decision before implementation. Nothing in this document enables those steps.
+A future bridge may move reviewed proposal packets from Worker D1 into a separate Supabase proposal queue. It must not bypass owner review or write canonical Growth records directly.
 
-## Conceptual modules
+## Architectural layers
 
-### Planner
+### 1. Research planner
 
-Produces a research plan from operator-supplied objectives, geography, service focus, exclusions and budgets. Planning itself must not perform network activity.
-
-### Scout
-
-Represents the future concept of finding candidate public sources. In the current Worker, any implemented discovery route is manual, authenticated, explicitly confirmed and bounded.
-
-### Librarian
-
-Normalises and deduplicates stored source candidates and records provenance, review status, source type and quality metadata.
-
-### Researcher
-
-Represents confirmed, bounded GET-only inspection of public pages. Deterministic extraction should remain the default and web content must always be treated as untrusted data, never instructions.
-
-Possible extracted fields include:
+The research planner accepts an internal objective and produces bounded metadata such as:
 
 ```text
-title
-meta description
-canonical URL
-headings
-schema.org JSON-LD
-visible-text summary
-links
-contact-page hints
-about, services and careers links
-technology hints
-date-freshness hints
-accessibility hints
-SEO hints
-conversion-funnel hints
+industry focus
+geography focus
+service focus
+candidate limit
+crawl budget
+blocked actions
+scoring rubric
 ```
 
-### Critic
+Planning performs no network request.
 
-Checks prompt-injection-like page text, unsafe URL schemes, private-network targets, robots restrictions, stale evidence, conflicting evidence and low-quality pages.
+### 2. Source candidate registry
 
-### Strategist
+The source candidate registry records real reviewed public domains and URLs together with source type, discovery method, policy posture and evidence hints.
 
-Produces internal review metadata such as:
+It must not invent placeholder domains or pretend that an unverified candidate is evidence.
+
+### 3. Policy and robots gate
+
+Before any public read, the system checks:
+
+```text
+public URL posture
+private-network exclusion
+robots and crawl-policy state
+redirect bounds
+byte bounds
+operator confirmation
+persistent activity-budget admission
+```
+
+Unknown or unsafe policy fails closed.
+
+### 4. Fetch queue metadata
+
+The `growth_fetch_queue` family records reviewed internal intent only. It is not connected to a queue consumer, scheduler or browser runtime.
+
+A row may contain a candidate ID, public URL, purpose, byte limit and redirect limit. Saving it performs no external request.
+
+### 5. Public research fetch boundary
+
+The only active network-capable research path is manual and protected. It must:
+
+- use GET only;
+- validate every initial and redirected target;
+- reject private, local, credential-bearing and unsafe URLs;
+- use strict byte, redirect and deadline limits;
+- treat response content as untrusted data;
+- return receipts and hashes rather than executing page instructions;
+- write only internal review metadata;
+- never retry through an alternate executor.
+
+### 6. Deterministic evidence extraction
+
+The system may extract bounded public facts such as titles, descriptions, headings, links, schema data, service hints, careers hints, technology hints and visible conversion or accessibility signals.
+
+Extraction must not execute scripts, click controls, submit forms or follow instructions embedded in content.
+
+### 7. Scoring and internal decisions
+
+Saved evidence may support transparent internal scores for fit, need, urgency, confidence, evidence quality, risk and contactability.
+
+Allowed internal decision types remain finite:
 
 ```text
 research_more
 score_candidate
-create_review_opportunity
 reject_candidate
 monitor_later
-prepare_internal_review_pack
+prepare_approval_pack
+request_operator_review
 ```
 
-These are internal decisions only. They must not trigger an external action.
+Those decisions are metadata only.
 
-### Internal review pack
+### 8. Approval pack builder
 
-A review pack may contain evidence, confidence, risk notes, recommended internal next steps and blocked external actions. It must not contain an executable delivery control.
+The approval pack builder can prepare a bounded review packet containing evidence, reasoning, missing facts, risks, blocked actions and a recommended internal next step.
 
-## Capability levels
+It cannot generate or deliver outreach.
 
-The following levels are modelling vocabulary only, not enabled runtime modes:
+### 9. Read-only Next dashboard
+
+The read-only Next dashboard may display reduced Worker readiness, internal artifact packs and proposal evidence through owner-authenticated server proxies.
+
+Browser code must never receive the Worker admin token or call Worker admin routes directly.
+
+## Activity intensity versus capability authority
+
+```text
+Paused
+Light
+Balanced
+High
+```
+
+These profiles change bounded throughput only. They do not change whether a capability is allowed.
+
+The current authority model remains:
 
 ```text
 Level 0: authenticated read-only reporting
@@ -150,9 +192,9 @@ The existence of a table, migration, route name or historical record does not pr
 
 Read routes must remain authenticated where protected, bounded and non-executable.
 
-Write routes must require explicit confirmation and may mutate internal D1 review metadata only.
+Write routes must require the shared `growth_internal_write_request_v1` exact Boolean confirmation contract and may mutate internal D1 review metadata only.
 
-Network-capable routes must additionally be manual, authenticated, confirmed, bounded, GET-only against public sources and unable to mutate third-party systems.
+Network-capable routes must additionally be manual, authenticated, confirmed, persistently budgeted, bounded, GET-only against public sources and unable to mutate third-party systems.
 
 ## Future implementation rule
 
@@ -164,6 +206,8 @@ Before any broader discovery capability is introduced, the repository must first
 4. Explicit documentation that distinguishes current runtime from future-state design.
 5. Local and CI gate coverage.
 6. No email, posting, form submission, browser automation or third-party mutation path.
+
+A future automated research loop additionally requires account-wide free-quota metering, durable leases, per-domain cooldowns, circuit breakers, kill switches, source-policy evidence and owner-visible audit history before any schedule is enabled.
 
 ## Definition of safe
 

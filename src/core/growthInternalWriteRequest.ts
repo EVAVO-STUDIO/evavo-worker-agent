@@ -67,7 +67,7 @@ function isSensitiveKey(value: string): boolean {
     SENSITIVE_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
 }
 
-function containsSensitiveKey(value: unknown): boolean {
+export function containsSensitiveGrowthInputKey(value: unknown): boolean {
   const stack: unknown[] = [value];
   while (stack.length) {
     const current = stack.pop();
@@ -84,13 +84,13 @@ function containsSensitiveKey(value: unknown): boolean {
   return false;
 }
 
-function deepFreezeJson<T>(value: T): T {
+export function deepFreezeGrowthJson<T>(value: T): T {
   if (Array.isArray(value)) {
-    for (const item of value) deepFreezeJson(item);
+    for (const item of value) deepFreezeGrowthJson(item);
     return Object.freeze(value) as T;
   }
   if (value && typeof value === "object") {
-    for (const child of Object.values(value as JsonRecord)) deepFreezeJson(child);
+    for (const child of Object.values(value as JsonRecord)) deepFreezeGrowthJson(child);
     return Object.freeze(value) as T;
   }
   return value;
@@ -152,7 +152,7 @@ export async function readGrowthInternalWriteRequest(
   if (!isExplicitJsonConfirmation(parsed.value)) {
     return failure(400, "confirm_required", { requiredPayload: true });
   }
-  if (containsSensitiveKey(parsed.value)) {
+  if (containsSensitiveGrowthInputKey(parsed.value)) {
     return failure(400, "forbidden_growth_input_key");
   }
 
@@ -161,7 +161,7 @@ export async function readGrowthInternalWriteRequest(
     ok: true,
     contractVersion: GROWTH_INTERNAL_WRITE_REQUEST_VERSION,
     boundedJsonContract: parsed.contract,
-    body: deepFreezeJson(body),
+    body: deepFreezeGrowthJson(body),
     bodySha256: parsed.bodySha256,
     bytes: parsed.bytes,
     exactBooleanConfirmation: true,

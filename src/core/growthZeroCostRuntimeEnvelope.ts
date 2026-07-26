@@ -56,6 +56,15 @@ function profileValue(value: unknown): GrowthZeroCostRuntimeProfile {
   return value as GrowthZeroCostRuntimeProfile;
 }
 
+function summaryForProfile(
+  profile: GrowthZeroCostRuntimeProfile,
+  source: GrowthActivityProfile,
+): string {
+  return profile === "paused"
+    ? "No public research is admitted. Existing evidence and records remain readable."
+    : source.description;
+}
+
 function projectProfile(
   source: GrowthActivityProfile,
 ): GrowthZeroCostRuntimeEnvelope {
@@ -65,7 +74,7 @@ function projectProfile(
     contractVersion: GROWTH_ZERO_COST_RUNTIME_ENVELOPE_VERSION,
     profile,
     label: source.label,
-    summary: source.description,
+    summary: summaryForProfile(profile, source),
     manualResearchRunsPerDay: limits.manualResearchRunsPerDay,
     externalFetchesPerDay: limits.externalFetchesPerDay,
     externalFetchesPerRun: limits.externalFetchesPerRun,

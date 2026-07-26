@@ -8,6 +8,10 @@ The registry is a control-plane and reporting feature. It describes available in
 
 ```text
 src/core/growthCapabilities.ts
+src/core/growthActivityBudget.ts
+src/core/growthActivityBudgetLedger.ts
+src/core/growthActivityBudgetSettings.ts
+src/core/opportunitySourceSelection.ts
 src/core/growthBridgeReadiness.ts
 src/core/growthWorkerRouteParity.ts
 src/core/growthBusinessRouteInventory.ts
@@ -28,10 +32,15 @@ The registry is a static typed source of truth. It does not accept runtime overr
 
 - Scheduled external execution is disabled.
 - Manual public research is authenticated, explicitly confirmed and bounded.
+- Every confirmed public fetch passes through the persistent Growth activity-budget ledger before network access.
+- Manual opportunity research uses `opportunity_source_selection_v1` to rank a bounded due-source pool from priority, reliability, saved-opportunity yield, failure pressure and staleness.
+- A small exploration allowance is taken from the same finite source budget; it never enlarges a run.
 - Manual research performs public GET-only inspection and saves review items or internal metadata only.
 - Draft generation is disabled.
 - Browser execution is disabled.
 - Email sending, social posting, form submission and external state mutation are disabled.
+
+The current capability registry reports the manual research integration as implemented. It does not claim that migration `0023_growth_activity_budget_ledger.sql` has been applied to a deployed D1 database or that unrelated account-wide Cloudflare usage is known.
 
 ## Autonomy modelling levels
 
@@ -69,7 +78,50 @@ planned
 blocked
 ```
 
+`research_public_website` is `available` only in the authenticated, exact-confirmation, persistent-budget, review-only posture described above. It is not scheduled research and does not create an external state change.
+
 An entry marked `blocked` has no executable runtime implementation.
+
+## Zero-cost activity and source selection
+
+The protected registry exposes:
+
+```text
+growth_activity_budget_v1
+growth_activity_budget_ledger_v1
+opportunity_source_selection_v1
+```
+
+Current truthfulness fields include:
+
+```text
+zeroPaidServiceBudget: true
+persistentUsageLedgerContractImplemented: true
+persistentUsageLedgerMigrationApplied: false
+manualResearchAdmissionIntegrated: true
+adaptiveSourceSelectionIntegrated: true
+accountWideCloudUsageKnown: false
+scheduledExternalResearchEnabled: false
+aiEnabled: false
+browserEnabled: false
+externalExecutionEnabled: false
+```
+
+Run frequency and source capacity are separate units. The persistent ledger enforces the number of confirmed research runs per day. The activity setting resolver limits the number of sources in one run using only source/fetch caps.
+
+The named per-run ceilings are:
+
+```text
+Light      3
+Balanced   8
+High      15
+```
+
+Legacy daily-source and network-call settings may reduce those ceilings but cannot enlarge them.
+
+The selector reads at most 60 due source rows, then selects no more than the already-authorised per-run limit. Failed sources wait 48 hours. Successful sources with no saved candidate wait 72 hours. Successful sources that save candidates may be reconsidered after 24 hours.
+
+See `docs/opportunity-source-selection.md` for the complete scoring, exploration, validation and evidence-provenance contract.
 
 ## Bridge readiness
 
@@ -154,7 +206,7 @@ external-dry-run
 retired-write-fail-closed
 ```
 
-`external-dry-run` means bounded, confirmed, read-only public research that may save internal review metadata. It does not mean third-party mutation, delivery or autonomous execution.
+`external-dry-run` means bounded, confirmed, read-only public research that may save review metadata. It does not mean third-party mutation, delivery or autonomous execution.
 
 The inventory records:
 
@@ -229,6 +281,7 @@ manualResearchRequiresAuthentication: true
 manualResearchRequiresConfirmation: true
 manualResearchIsBounded: true
 manualResearchSavesReviewItemsOnly: true
+adaptiveSourceSelectionEnabled: true
 draftingEnabled: false
 browserExecutionEnabled: false
 externalDeliveryEnabled: false

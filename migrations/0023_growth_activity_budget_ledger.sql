@@ -126,7 +126,11 @@ BEGIN
     COALESCE((SELECT json_extract(counters_json, '$.externalFetches') FROM growth_activity_budget_usage_daily WHERE utc_day = NEW.utc_day), 0)
       + json_extract(NEW.cost_json, '$.externalFetches') > json_extract(NEW.limits_json, '$.externalFetchesPerDay') OR
     COALESCE((SELECT json_extract(counters_json, '$.distinctDomains') FROM growth_activity_budget_usage_daily WHERE utc_day = NEW.utc_day), 0)
-      + json_extract(NEW.cost_json, '$.distinctDomains') > json_extract(NEW.limits_json, '$.distinctDomainsPerDay') OR
+      + CASE WHEN
+          NEW.target_domain_hash IS NOT NULL
+          AND json_extract(NEW.cost_json, '$.externalFetches') > 0
+          AND COALESCE((SELECT json_type(domain_fetches_json, '$."' || NEW.target_domain_hash || '"') FROM growth_activity_budget_usage_daily WHERE utc_day = NEW.utc_day), 'missing') = 'missing'
+        THEN 1 ELSE 0 END > json_extract(NEW.limits_json, '$.distinctDomainsPerDay') OR
     COALESCE((SELECT json_extract(counters_json, '$.candidateWrites') FROM growth_activity_budget_usage_daily WHERE utc_day = NEW.utc_day), 0)
       + json_extract(NEW.cost_json, '$.candidateWrites') > json_extract(NEW.limits_json, '$.candidateWritesPerDay') OR
     COALESCE((SELECT json_extract(counters_json, '$.proposalWrites') FROM growth_activity_budget_usage_daily WHERE utc_day = NEW.utc_day), 0)
@@ -187,7 +191,9 @@ BEGIN
     updated_at_iso
   ) VALUES (
     NEW.utc_day,
-    NEW.cost_json,
+    CASE WHEN NEW.target_domain_hash IS NOT NULL AND json_extract(NEW.cost_json, '$.externalFetches') > 0
+      THEN json_set(NEW.cost_json, '$.distinctDomains', 1)
+      ELSE json_set(NEW.cost_json, '$.distinctDomains', 0) END,
     CASE WHEN NEW.target_domain_hash IS NOT NULL AND json_extract(NEW.cost_json, '$.externalFetches') > 0
       THEN json_object(NEW.target_domain_hash, json_extract(NEW.cost_json, '$.externalFetches')) ELSE '{}' END,
     '{}',
@@ -202,7 +208,11 @@ BEGIN
       '$.manualResearchRuns', json_extract(growth_activity_budget_usage_daily.counters_json, '$.manualResearchRuns') + json_extract(NEW.cost_json, '$.manualResearchRuns'),
       '$.scheduledExternalResearchRuns', json_extract(growth_activity_budget_usage_daily.counters_json, '$.scheduledExternalResearchRuns') + json_extract(NEW.cost_json, '$.scheduledExternalResearchRuns'),
       '$.externalFetches', json_extract(growth_activity_budget_usage_daily.counters_json, '$.externalFetches') + json_extract(NEW.cost_json, '$.externalFetches'),
-      '$.distinctDomains', json_extract(growth_activity_budget_usage_daily.counters_json, '$.distinctDomains') + json_extract(NEW.cost_json, '$.distinctDomains'),
+      '$.distinctDomains', json_extract(growth_activity_budget_usage_daily.counters_json, '$.distinctDomains') + CASE WHEN
+        NEW.target_domain_hash IS NOT NULL
+        AND json_extract(NEW.cost_json, '$.externalFetches') > 0
+        AND json_type(growth_activity_budget_usage_daily.domain_fetches_json, '$."' || NEW.target_domain_hash || '"') IS NULL
+        THEN 1 ELSE 0 END,
       '$.candidateWrites', json_extract(growth_activity_budget_usage_daily.counters_json, '$.candidateWrites') + json_extract(NEW.cost_json, '$.candidateWrites'),
       '$.proposalWrites', json_extract(growth_activity_budget_usage_daily.counters_json, '$.proposalWrites') + json_extract(NEW.cost_json, '$.proposalWrites'),
       '$.reportsGenerated', json_extract(growth_activity_budget_usage_daily.counters_json, '$.reportsGenerated') + json_extract(NEW.cost_json, '$.reportsGenerated'),

@@ -107,15 +107,53 @@ function exactKeys(record: UnknownRecord, allowed: ReadonlySet<string>, code: st
 }
 
 function boundedRequiredText(value: unknown, code: string, maximum = 128): string {
-  if (typeof value !== "string" || value.trim() !== value || !value || value.length > maximum || /\p{Cc}/u.test(value)) {
-    throw new Error(code);
-  }
+  if (
+    typeof value !== "string" ||
+    value.trim() !== value ||
+    !value ||
+    value.length > maximum ||
+    /\p{Cc}/u.test(value)
+  ) throw new Error(code);
   return value;
 }
 
 function boundedOptionalText(value: unknown, code: string, maximum: number): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   return boundedRequiredText(value, code, maximum);
+}
+
+function requiredTextFrom(
+  primary: unknown,
+  fallback: unknown,
+  defaultValue: string,
+  code: string,
+  maximum: number,
+): string {
+  return boundedRequiredText(primary ?? fallback ?? defaultValue, code, maximum);
+}
+
+function optionalTextFrom(
+  primary: unknown,
+  fallback: unknown,
+  code: string,
+  maximum: number,
+): string | null | undefined {
+  const value = primary ?? fallback;
+  if (value === null) return null;
+  return boundedOptionalText(value, code, maximum);
+}
+
+function stringArrayFrom(
+  primary: unknown,
+  fallback: unknown,
+  code: string,
+): string[] {
+  const value = primary ?? fallback;
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(code);
+  }
+  return [...value];
 }
 
 function migrationError(error: unknown) {
@@ -196,28 +234,78 @@ export async function handleGrowthApprovalRequestsAdmin(
       exactKeys(pack, CREATE_PACK_KEYS, "GROWTH_APPROVAL_PACK_KEYS_INVALID");
 
       const saved = await saveGrowthApprovalRequest(env, {
-        source: String(pack.source ?? body.source ?? "growth_operator"),
-        step: String(pack.step ?? pack.title ?? body.step ?? "unknown_step"),
-        route: String(pack.route ?? body.route ?? "/admin/growth/unknown"),
-        method: String(pack.method ?? body.method ?? "POST"),
+        source: requiredTextFrom(
+          pack.source,
+          body.source,
+          "growth_operator",
+          "GROWTH_APPROVAL_SOURCE_INVALID",
+          128,
+        ),
+        step: requiredTextFrom(
+          pack.step ?? pack.title,
+          body.step,
+          "unknown_step",
+          "GROWTH_APPROVAL_STEP_INVALID",
+          128,
+        ),
+        route: requiredTextFrom(
+          pack.route,
+          body.route,
+          "/admin/growth/unknown",
+          "GROWTH_APPROVAL_ROUTE_INVALID",
+          512,
+        ),
+        method: requiredTextFrom(
+          pack.method,
+          body.method,
+          "POST",
+          "GROWTH_APPROVAL_METHOD_INVALID",
+          16,
+        ),
         requiresConfirm: true,
-        dashboardAnchor: pack.dashboardAnchor ?? body.dashboardAnchor as string | null | undefined,
-        setupGap: pack.setupGap ?? body.setupGap as string | null | undefined,
-        targetCampaignId: pack.targetCampaignId ?? body.targetCampaignId as string | null | undefined,
-        targetCampaignName: pack.targetCampaignName ?? body.targetCampaignName as string | null | undefined,
+        dashboardAnchor: optionalTextFrom(
+          pack.dashboardAnchor,
+          body.dashboardAnchor,
+          "GROWTH_APPROVAL_DASHBOARD_ANCHOR_INVALID",
+          256,
+        ),
+        setupGap: optionalTextFrom(
+          pack.setupGap,
+          body.setupGap,
+          "GROWTH_APPROVAL_SETUP_GAP_INVALID",
+          1_000,
+        ),
+        targetCampaignId: optionalTextFrom(
+          pack.targetCampaignId,
+          body.targetCampaignId,
+          "GROWTH_APPROVAL_CAMPAIGN_ID_INVALID",
+          128,
+        ),
+        targetCampaignName: optionalTextFrom(
+          pack.targetCampaignName,
+          body.targetCampaignName,
+          "GROWTH_APPROVAL_CAMPAIGN_NAME_INVALID",
+          256,
+        ),
         payloadHint: recordValue(
           pack.payloadHint ?? pack.payload ?? body.payloadHint ?? body.payload ?? {},
           "GROWTH_APPROVAL_PAYLOAD_INVALID",
         ),
-        reviewChecklist: Array.isArray(pack.reviewChecklist ?? body.reviewChecklist)
-          ? pack.reviewChecklist ?? body.reviewChecklist as string[]
-          : [],
-        explicitBlocks: Array.isArray(pack.explicitBlocks ?? body.explicitBlocks)
-          ? pack.explicitBlocks ?? body.explicitBlocks as string[]
-          : [],
-        auditReason: Array.isArray(pack.auditReason ?? body.auditReason)
-          ? pack.auditReason ?? body.auditReason as string[]
-          : [],
+        reviewChecklist: stringArrayFrom(
+          pack.reviewChecklist,
+          body.reviewChecklist,
+          "GROWTH_APPROVAL_CHECKLIST_INVALID",
+        ),
+        explicitBlocks: stringArrayFrom(
+          pack.explicitBlocks,
+          body.explicitBlocks,
+          "GROWTH_APPROVAL_BLOCKS_INVALID",
+        ),
+        auditReason: stringArrayFrom(
+          pack.auditReason,
+          body.auditReason,
+          "GROWTH_APPROVAL_AUDIT_REASON_INVALID",
+        ),
         safety: null,
       }, boundedOptionalText(body.id ?? pack.id, "GROWTH_APPROVAL_ID_INVALID", 128));
 

@@ -10,6 +10,8 @@ on:
       - "docs/**"
       - "migrations/**"
       - "README.md"
+      - ".gitignore"
+      - ".dev.vars.example"
       - "**/*.ps1"
       - "package.json"
       - "package-lock.json"
@@ -26,6 +28,8 @@ on:
       - "docs/**"
       - "migrations/**"
       - "README.md"
+      - ".gitignore"
+      - ".dev.vars.example"
       - "**/*.ps1"
       - "package.json"
       - "package-lock.json"
@@ -61,6 +65,9 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Verify tracked-source secret safety
+        run: npm run worker:source-secret-safety:check
 
       - name: Verify Worker workflow parity
         run: node scripts/check-worker-contract-workflow.mjs

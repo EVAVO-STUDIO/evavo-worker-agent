@@ -6,6 +6,7 @@ import {
 import { GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION } from "./growthActivityBudgetLedger";
 import { growthBridgeReadiness } from "./growthBridgeReadiness";
 import { listGrowthWorkerRouteInventory } from "./growthBusinessRouteInventory";
+import { GROWTH_INTERNAL_OPERATOR_PACK_VERSION } from "./growthInternalOperatorPack";
 import { growthZeroCostEnvelope } from "./growthZeroCostEnvelope";
 import { OPPORTUNITY_SOURCE_SELECTION_VERSION } from "./opportunitySourceSelection";
 
@@ -47,6 +48,7 @@ export const growthAutonomyLevels = [
 export const growthCapabilities: GrowthCapability[] = [
   { id: "research_public_website", label: "Research public website", description: "Review public website content and capture useful evidence for Growth analysis.", category: "research", autonomyLevelRequired: 0, callsNetwork: true, callsAI: false, touchesExternalChannel: false, externalStateChange: false, requiresApproval: true, requiresEvidence: true, requiresContactSource: false, requiresSuppressionCheck: false, costRisk: "low", reputationRisk: "low", allowedInFreeSafeMode: true, currentImplementation: "available", notes: ["Manual, authenticated and exact-confirmation-gated only.", "Every source fetch requires persistent Growth activity-budget admission.", "Adaptive selection uses bounded source history and a small exploration allowance.", "Scheduled external research is disabled.", "Public content only; no private or restricted areas."] },
   { id: "score_growth_signal", label: "Score growth signal", description: "Score a saved Growth signal for EVAVO fit, urgency, channel suitability, and likely value.", category: "analysis", autonomyLevelRequired: 0, callsNetwork: false, callsAI: false, touchesExternalChannel: false, externalStateChange: false, requiresApproval: false, requiresEvidence: false, requiresContactSource: false, requiresSuppressionCheck: false, costRisk: "none", reputationRisk: "none", allowedInFreeSafeMode: true, currentImplementation: "available", notes: ["Runs from saved metadata.", "Does not contact anyone."] },
+  { id: "generate_internal_operator_pack", label: "Generate internal operator pack", description: "Generate a deterministic focus queue, signal review, meeting agenda, follow-up plan and Markdown report from saved Worker review models.", category: "reporting", autonomyLevelRequired: 0, callsNetwork: false, callsAI: false, touchesExternalChannel: false, externalStateChange: false, requiresApproval: false, requiresEvidence: false, requiresContactSource: false, requiresSuppressionCheck: false, costRisk: "none", reputationRisk: "none", allowedInFreeSafeMode: true, currentImplementation: "available", notes: ["Owner-authenticated GET route only.", "Generation requires persistent Growth activity-budget admission.", "Reads saved D1 review models and writes only budget accounting.", "No email, calendar event, post, form, provider write or canonical promotion is possible."] },
   { id: "draft_message", label: "Draft message", description: "Reserved model for reviewable outreach or reply copy. Draft generation is disabled in the current Worker.", category: "drafting", autonomyLevelRequired: 1, callsNetwork: false, callsAI: true, touchesExternalChannel: false, externalStateChange: false, requiresApproval: true, requiresEvidence: true, requiresContactSource: true, requiresSuppressionCheck: true, costRisk: "medium", reputationRisk: "medium", allowedInFreeSafeMode: false, currentImplementation: "blocked", notes: ["No active drafting implementation.", "Historical draft records may remain readable but are not executable."] },
   { id: "draft_owned_content", label: "Draft owned-channel content", description: "Reserved model for reviewable owned-channel content. Draft generation is disabled in the current Worker.", category: "drafting", autonomyLevelRequired: 1, callsNetwork: false, callsAI: true, touchesExternalChannel: false, externalStateChange: false, requiresApproval: true, requiresEvidence: false, requiresContactSource: false, requiresSuppressionCheck: false, costRisk: "medium", reputationRisk: "medium", allowedInFreeSafeMode: false, currentImplementation: "blocked", notes: ["No active drafting implementation.", "No publishing capability exists."] },
   { id: "prepare_browser_step", label: "Prepare browser step", description: "Reserved model for a controlled browser step. Browser automation is disabled in the current Worker.", category: "browser", autonomyLevelRequired: 3, callsNetwork: true, callsAI: false, touchesExternalChannel: false, externalStateChange: false, requiresApproval: true, requiresEvidence: true, requiresContactSource: true, requiresSuppressionCheck: true, costRisk: "low", reputationRisk: "medium", allowedInFreeSafeMode: false, currentImplementation: "blocked", notes: ["No browser execution or preparation runtime exists.", "External state changes remain blocked."] },
@@ -78,6 +80,10 @@ export function listGrowthCapabilities() {
       manualResearchIsBounded: true,
       manualResearchSavesReviewItemsOnly: true,
       adaptiveSourceSelectionEnabled: true,
+      deterministicInternalOperatorPackEnabled: true,
+      deterministicInternalOperatorPackVersion: GROWTH_INTERNAL_OPERATOR_PACK_VERSION,
+      internalOperatorPackCallsAI: false,
+      internalOperatorPackCallsNetwork: false,
       draftingEnabled: false,
       browserExecutionEnabled: false,
       externalDeliveryEnabled: false,
@@ -87,6 +93,8 @@ export function listGrowthCapabilities() {
       contractVersion: GROWTH_ACTIVITY_BUDGET_VERSION,
       ledgerContractVersion: GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION,
       sourceSelectionContractVersion: OPPORTUNITY_SOURCE_SELECTION_VERSION,
+      internalOperatorPackContractVersion: GROWTH_INTERNAL_OPERATOR_PACK_VERSION,
+      internalOperatorPackBudgetAction: "owner_brief_generate",
       defaultIntensity: "light",
       profiles: listGrowthActivityProfiles(),
       hardLimits: GROWTH_ACTIVITY_HARD_LIMITS,
@@ -95,6 +103,7 @@ export function listGrowthCapabilities() {
       persistentUsageLedgerContractImplemented: true,
       persistentUsageLedgerMigrationApplied: false,
       manualResearchAdmissionIntegrated: true,
+      internalOperatorPackAdmissionIntegrated: true,
       adaptiveSourceSelectionIntegrated: true,
       accountWideCloudUsageKnown: zeroCostEnvelope.accountWideUsageKnown,
       absoluteZeroCostGuaranteed: zeroCostEnvelope.absoluteZeroCostGuaranteed,

@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 
 const root = process.cwd();
 const errors = [];
@@ -25,6 +26,30 @@ function forbidTokens(label, source, tokens) {
   for (const token of tokens) {
     if (source.includes(token)) errors.push(`${label} contains forbidden token ${token}`);
   }
+}
+
+function containsGlobalFetchCall(source, fileName) {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let found = false;
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "fetch"
+    ) {
+      found = true;
+      return;
+    }
+    if (!found) ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return found;
 }
 
 function walk(directory) {
@@ -127,7 +152,7 @@ const guardedFetchFiles = [
 
 for (const [relativePath, source] of guardedFetchFiles) {
   requireTokens(relativePath, source, ["publicResearchFetch"]);
-  if (/\bfetch\s*\(/.test(source)) errors.push(`${relativePath} must not call global fetch directly`);
+  if (containsGlobalFetchCall(source, relativePath)) errors.push(`${relativePath} must not call global fetch directly`);
   forbidTokens(relativePath, source, [
     'redirect: "follow"',
     "EVAVO-Outbound-Agent",
@@ -220,7 +245,7 @@ requireTokens("manual opportunity run truthfulness and source exclusion", opport
   "releaseManualResearchLease(env, sourceLease)",
   "successfulSources === 0 && summary.failed === 0",
   '"all_selected_sources_busy"',
-  '`partial_source_outcomes:failed:${summary.failed}:busy:${sourceLeaseConflicts}`',
+  '`partial_source_outcomes:failed:${summary.failed}:busy:${sourceLeaseConflicts}:budget:${budget.policyDeniedSourceClaims + budget.raceDeniedSourceClaims}`',
   "sourceFetch: sourceReceipt",
   "redirectChain: fetched.redirectChain",
   "timeoutScope: fetched.timeoutScope",
@@ -364,7 +389,15 @@ const expectedCommand = "node scripts/check-public-research-fetch-safety.mjs";
 if (packageJson.scripts?.["research:public-fetch-safety:check"] !== expectedCommand) {
   errors.push(`package.json must expose research:public-fetch-safety:check as ${expectedCommand}`);
 }
-if (packageJson.scripts?.["test:core"] !== "node --test") errors.push("package.json must expose test:core as node --test");
+const coreTestCommand = String(packageJson.scripts?.["test:core"] || "");
+for (const token of [
+  "--experimental-loader ./scripts/typescript-test-loader.mjs",
+  "--test",
+]) {
+  if (!coreTestCommand.includes(token)) {
+    errors.push(`package.json test:core must retain the guarded TypeScript loader token: ${token}`);
+  }
+}
 const checkLocal = String(packageJson.scripts?.["check:local"] || "");
 for (const command of ["npm run research:public-fetch-safety:check", "npm run test:core"]) {
   if (!checkLocal.includes(command)) errors.push(`check:local must include ${command}`);

@@ -38,7 +38,7 @@ function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
 
 const cases = [
   {
-    label: "experiment",
+    title: "experiment route validation is classified as a finite client input failure",
     path: "/admin/growth/experiments",
     body: {
       confirm: true,
@@ -50,7 +50,7 @@ const cases = [
     },
   },
   {
-    label: "metric",
+    title: "metric route validation is classified as a finite client input failure",
     path: "/admin/growth/metrics",
     body: {
       confirm: true,
@@ -61,7 +61,7 @@ const cases = [
     },
   },
   {
-    label: "evidence",
+    title: "evidence route validation is classified as a finite client input failure",
     path: "/admin/growth/evidence",
     body: {
       confirm: true,
@@ -73,7 +73,7 @@ const cases = [
     },
   },
   {
-    label: "learning",
+    title: "learning route validation is classified as a finite client input failure",
     path: "/admin/growth/learning",
     body: {
       confirm: true,
@@ -87,7 +87,7 @@ const cases = [
 ] as const;
 
 for (const fixture of cases) {
-  test(`${fixture.label} route validation is classified as a finite client input failure`, async () => {
+  test(fixture.title, async () => {
     const response = await handleGrowthCampaignIntelligenceAdmin(
       request(fixture.path, fixture.body),
       environment(),

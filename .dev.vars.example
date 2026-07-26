@@ -1,0 +1,9 @@
+# Cloudflare Worker local-development variables.
+# Copy this file to .dev.vars and replace placeholders locally.
+# Never commit .dev.vars or a real administrator credential.
+
+# Generate an independent random value with at least 32 bytes of entropy.
+ADMIN_TOKEN="replace_me_with_a_random_server_only_token"
+
+# Optional future private-hub integration origin. Leave empty when unused.
+PUBLIC_BASE_URL=""

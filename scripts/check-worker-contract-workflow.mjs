@@ -29,6 +29,7 @@ const paths = {
   schema: resolve("src", "core", "schema.ts"),
   sourceCandidateCore: resolve("src", "core", "opportunitySourceDiscovery.ts"),
   sourceCandidateTests: resolve("tests", "opportunitySourceCandidateSaveSource.test.ts"),
+  sourceSecrets: resolve("scripts", "check-worker-source-secrets.mjs"),
   bounded: resolve("scripts", "check-bounded-json-request-safety.mjs"),
   lease: resolve("scripts", "check-manual-research-lease-safety.mjs"),
   review: resolve("scripts", "check-review-mutation-boundary-safety.mjs"),
@@ -53,6 +54,8 @@ for (const token of [
   'node-version: "24"',
   "cache: npm",
   "npm ci --no-audit --no-fund",
+  "Verify tracked-source secret safety",
+  "npm run worker:source-secret-safety:check",
   "node scripts/check-worker-contract-workflow.mjs",
   "node scripts/check-worker-health-contract.mjs",
   "Verify bounded admin JSON requests",
@@ -83,6 +86,8 @@ for (const watchedPath of [
   '      - "docs/**"',
   '      - "migrations/**"',
   '      - "README.md"',
+  '      - ".gitignore"',
+  '      - ".dev.vars.example"',
   '      - "wrangler.toml"',
   '      - "package.json"',
   '      - "package-lock.json"',
@@ -95,6 +100,8 @@ for (const secretName of ["ADMIN_TOKEN", "OUTBOUND_AGENT_ADMIN_TOKEN", "PUBLIC_C
 }
 
 const orderedSteps = [
+  "npm run worker:source-secret-safety:check",
+  "node scripts/check-worker-contract-workflow.mjs",
   "npm run research:bounded-json-safety:check",
   "npm run research:manual-lease-safety:check",
   "npm run review:mutation-safety:check",
@@ -112,6 +119,17 @@ for (const step of orderedSteps) {
 }
 
 for (const [label, source, tokens] of [
+  ["tracked-source secret safety", sources.sourceSecrets, [
+    'contract: "worker-tracked-source-secret-safety-v3-fixture-aware"',
+    "realEnvironmentFilesTracked: false",
+    "privateKeyMaterialAllowed: false",
+    "liveProviderTokensAllowed: false",
+    "nonReservedCredentialBearingUrlsAllowed: false",
+    "reservedFixtureCredentialUrlsAllowed: true",
+    "rawSecretValuesPrinted: false",
+    "focusedReadOnlyCiRequired: true",
+    "repositoryVisibilityChangedByThisContract: false",
+  ]],
   ["bounded JSON safety", sources.bounded, [
     'contract: "bounded-admin-json-request-safety-v4-settings-and-legacy-review"',
     "exactBooleanConfirmationRequired: true",
@@ -352,6 +370,7 @@ const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
   "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
+  "worker:source-secret-safety:check": "node scripts/check-worker-source-secrets.mjs",
   "research:bounded-json-safety:check": "node scripts/check-bounded-json-request-safety.mjs",
   "research:manual-lease-safety:check": "node scripts/check-manual-research-lease-safety.mjs",
   "research:public-fetch-safety:check": "node scripts/check-public-research-fetch-safety.mjs",
@@ -373,13 +392,16 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) errors.pus
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-contract-workflow-v7-growth-route-parity",
+  contract: "worker-contract-workflow-v8-source-secrets",
   nodeVersion: 24,
   lockedInstallRequired: true,
   readOnlyWorkflowPermissions: true,
   persistedCheckoutCredentialsAllowed: false,
   deploymentAllowed: false,
   workerCredentialsAllowed: false,
+  trackedSourceSecretGateRequired: true,
+  trackedSourceSecretGateBeforeWorkflowParityRequired: true,
+  workerEnvironmentTemplateChangesWatched: true,
   boundedJsonGateRequired: true,
   manualLeaseGateRequired: true,
   reviewMutationGateRequired: true,

@@ -6,6 +6,7 @@ import {
 import { GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION } from "./growthActivityBudgetLedger";
 import { growthBridgeReadiness } from "./growthBridgeReadiness";
 import { listGrowthWorkerRouteInventory } from "./growthBusinessRouteInventory";
+import { growthZeroCostEnvelope } from "./growthZeroCostEnvelope";
 import { OPPORTUNITY_SOURCE_SELECTION_VERSION } from "./opportunitySourceSelection";
 
 export type GrowthCapabilityCategory = "research" | "analysis" | "drafting" | "browser" | "external_delivery" | "internal_ops" | "reporting";
@@ -65,6 +66,7 @@ export function listGrowthCapabilities() {
     counts[capability.currentImplementation] = (counts[capability.currentImplementation] || 0) + 1;
     return counts;
   }, {});
+  const zeroCostEnvelope = growthZeroCostEnvelope();
 
   return {
     contractVersion: "growth_capabilities_v2_registry_only",
@@ -89,11 +91,15 @@ export function listGrowthCapabilities() {
       profiles: listGrowthActivityProfiles(),
       hardLimits: GROWTH_ACTIVITY_HARD_LIMITS,
       zeroPaidServiceBudget: true,
+      zeroCostEnvelope,
       persistentUsageLedgerContractImplemented: true,
       persistentUsageLedgerMigrationApplied: false,
       manualResearchAdmissionIntegrated: true,
       adaptiveSourceSelectionIntegrated: true,
-      accountWideCloudUsageKnown: false,
+      accountWideCloudUsageKnown: zeroCostEnvelope.accountWideUsageKnown,
+      absoluteZeroCostGuaranteed: zeroCostEnvelope.absoluteZeroCostGuaranteed,
+      requiredCloudflarePlan: zeroCostEnvelope.requiredCloudflarePlan,
+      reservationWithinFreeLimits: zeroCostEnvelope.reservationWithinFreeLimits,
       scheduledExternalResearchEnabled: false,
       aiEnabled: false,
       browserEnabled: false,

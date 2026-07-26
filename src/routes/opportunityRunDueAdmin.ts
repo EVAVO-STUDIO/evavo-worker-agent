@@ -5,6 +5,7 @@ import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonO
 import { GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION } from "../core/growthActivityBudgetLedger";
 import { resolveGrowthActivitySettings } from "../core/growthActivityBudgetSettings";
 import { acquireManualResearchLease, manualResearchLeaseConflict, releaseManualResearchLease } from "../core/manualResearchLease";
+import { OPPORTUNITY_SOURCE_SELECTION_VERSION } from "../core/opportunitySourceSelection";
 import { readAutonomySettings } from "../engineAutonomy";
 import { runOpportunityAutonomy } from "../opportunityAutonomy";
 
@@ -70,6 +71,7 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
         },
         activity: {
           contractVersion: activity.contractVersion,
+          sourceSelectionContractVersion: OPPORTUNITY_SOURCE_SELECTION_VERSION,
           intensity: activity.intensity,
           selectedBy: activity.selectedBy,
           manualResearchConfigured: activity.manualResearchConfigured,
@@ -93,7 +95,17 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
       ownerApproved: true,
       explicitlyConfirmed: true,
     });
-    await logEvent(env, "opportunity_run_due_ok", `Manual opportunity run finished with ${summary.runStatus} | activity ${summary.budget.intensity} | sources ${summary.sourcesChecked} | admitted ${summary.budget.admittedSourceClaims} | budget-denied ${summary.budget.policyDeniedSourceClaims + summary.budget.raceDeniedSourceClaims} | successful ${summary.successfulSources} | saved ${summary.saved} | failed ${summary.failed}`);
+    const sourceSelection = summary.sourceSelection ?? {
+      considered: 0,
+      selected: 0,
+      explorationSelected: 0,
+      exploitationSelected: 0,
+    };
+    await logEvent(
+      env,
+      "opportunity_run_due_ok",
+      `Manual opportunity run finished with ${summary.runStatus} | activity ${summary.budget.intensity} | source-pool ${sourceSelection.considered} | explored ${sourceSelection.explorationSelected} | exploited ${sourceSelection.exploitationSelected} | checked ${summary.sourcesChecked} | admitted ${summary.budget.admittedSourceClaims} | budget-denied ${summary.budget.policyDeniedSourceClaims + summary.budget.raceDeniedSourceClaims} | successful ${summary.successfulSources} | saved ${summary.saved} | failed ${summary.failed}`,
+    );
 
     return json({
       ok: summary.runStatus !== "failed",
@@ -112,12 +124,14 @@ export async function handleOpportunityRunDueAdmin(request: Request, env: Env, p
       activity: {
         contractVersion: activity.contractVersion,
         ledgerContractVersion: GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION,
+        sourceSelectionContractVersion: OPPORTUNITY_SOURCE_SELECTION_VERSION,
         intensity: activity.intensity,
         selectedBy: activity.selectedBy,
         legacyControlsAreSecondaryCaps: activity.legacyControlsAreSecondaryCaps,
         effectiveSourceLimitPerRun: activity.effectiveSourceLimitPerRun,
         effectiveMinimumOpportunityScore: activity.effectiveMinimumOpportunityScore,
         persistentBudgetAdmissionRequired: true,
+        adaptiveSourceSelectionEnabled: true,
         migrationRequired: "0023_growth_activity_budget_ledger.sql",
       },
       summary,

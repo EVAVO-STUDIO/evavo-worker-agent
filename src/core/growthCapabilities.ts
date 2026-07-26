@@ -3,6 +3,7 @@ import {
   GROWTH_ACTIVITY_HARD_LIMITS,
   listGrowthActivityProfiles,
 } from "./growthActivityBudget";
+import { GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION } from "./growthActivityBudgetLedger";
 import { growthBridgeReadiness } from "./growthBridgeReadiness";
 import { listGrowthWorkerRouteInventory } from "./growthBusinessRouteInventory";
 
@@ -80,11 +81,13 @@ export function listGrowthCapabilities() {
     },
     activityBudget: {
       contractVersion: GROWTH_ACTIVITY_BUDGET_VERSION,
+      ledgerContractVersion: GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION,
       defaultIntensity: "light",
       profiles: listGrowthActivityProfiles(),
       hardLimits: GROWTH_ACTIVITY_HARD_LIMITS,
       zeroPaidServiceBudget: true,
-      persistentUsageLedgerImplemented: false,
+      persistentUsageLedgerContractImplemented: true,
+      persistentUsageLedgerMigrationApplied: false,
       manualResearchAdmissionIntegrated: false,
       accountWideCloudUsageKnown: false,
       scheduledExternalResearchEnabled: false,

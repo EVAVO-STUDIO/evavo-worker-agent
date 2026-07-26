@@ -34,6 +34,21 @@ type ConfirmedBodyResult =
   | Readonly<{ ok: false; response: Response }>;
 
 const MAX_GROWTH_ADMIN_BODY_BYTES = 32_768;
+const SENSITIVE_GROWTH_INPUT_KEYS = new Set([
+  "authorization",
+  "cookie",
+  "password",
+  "secret",
+  "secretref",
+  "token",
+  "accesstoken",
+  "refreshtoken",
+  "providertoken",
+  "servicerolekey",
+  "apikey",
+  "privatekey",
+  "clientsecret",
+]);
 
 const campaignIntelligencePrefixes = [
   "/admin/growth/autonomy",
@@ -100,6 +115,8 @@ function safetyBase() {
     boundedJsonRequired: true,
     exactBooleanConfirmationRequired: true,
     confirmationCoercionAllowed: false,
+    sensitiveInputKeysAllowed: false,
+    rawErrorsExposed: false,
   };
 }
 
@@ -140,6 +157,27 @@ function writeBlocked(json: JsonResponse): Response {
   }, { status: 400 });
 }
 
+function normalizedInputKey(value: string): string {
+  return value.replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function containsSensitiveInputKey(value: unknown): boolean {
+  const stack: unknown[] = [value];
+  while (stack.length) {
+    const current = stack.pop();
+    if (Array.isArray(current)) {
+      stack.push(...current);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
+      if (SENSITIVE_GROWTH_INPUT_KEYS.has(normalizedInputKey(key))) return true;
+      stack.push(child);
+    }
+  }
+  return false;
+}
+
 async function readConfirmedBody(
   request: Request,
   json: JsonResponse,
@@ -163,6 +201,16 @@ async function readConfirmedBody(
   }
   if (!isExplicitJsonConfirmation(parsed.value)) {
     return Object.freeze({ ok: false, response: writeBlocked(json) });
+  }
+  if (containsSensitiveInputKey(parsed.value)) {
+    return Object.freeze({
+      ok: false,
+      response: json({
+        ok: false,
+        error: "forbidden_growth_input_key",
+        safety: safety({ readOnly: false }),
+      }, { status: 400 }),
+    });
   }
   const { confirm: _confirm, ...body } = parsed.value;
   return Object.freeze({
@@ -462,7 +510,6 @@ export async function handleGrowthAdmin(
         mode: "growth_signal_status_updated",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         signal: updated,
-        requestBodySha256: parsed.requestBodySha256,
         safety: routeSafety,
       });
     }
@@ -483,7 +530,6 @@ export async function handleGrowthAdmin(
         mode: "growth_action_status_updated",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         action: updated,
-        requestBodySha256: parsed.requestBodySha256,
         safety: routeSafety,
       });
     }

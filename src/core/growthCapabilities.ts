@@ -1,3 +1,8 @@
+import {
+  GROWTH_ACTIVITY_BUDGET_VERSION,
+  GROWTH_ACTIVITY_HARD_LIMITS,
+  listGrowthActivityProfiles,
+} from "./growthActivityBudget";
 import { growthBridgeReadiness } from "./growthBridgeReadiness";
 import { listGrowthWorkerRouteInventory } from "./growthBusinessRouteInventory";
 
@@ -72,6 +77,20 @@ export function listGrowthCapabilities() {
       browserExecutionEnabled: false,
       externalDeliveryEnabled: false,
       autonomousCampaignsEnabled: false,
+    },
+    activityBudget: {
+      contractVersion: GROWTH_ACTIVITY_BUDGET_VERSION,
+      defaultIntensity: "light",
+      profiles: listGrowthActivityProfiles(),
+      hardLimits: GROWTH_ACTIVITY_HARD_LIMITS,
+      zeroPaidServiceBudget: true,
+      persistentUsageLedgerImplemented: false,
+      manualResearchAdmissionIntegrated: false,
+      accountWideCloudUsageKnown: false,
+      scheduledExternalResearchEnabled: false,
+      aiEnabled: false,
+      browserEnabled: false,
+      externalExecutionEnabled: false,
     },
     bridgeReadiness: growthBridgeReadiness,
     routeInventory: listGrowthWorkerRouteInventory(),

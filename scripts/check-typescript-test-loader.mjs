@@ -26,28 +26,42 @@ const loaderCheckCommand = String(packageJson.scripts?.["test:typescript-loader:
 const localCommand = String(packageJson.scripts?.["check:local"] ?? "");
 
 requireTokens("TypeScript test loader", loader, [
+  'import ts from "typescript"',
   "REPOSITORY_ROOT = await realpath(",
+  "NODE_MODULES_SEGMENT",
   "CANDIDATE_SUFFIXES = Object.freeze([",
   '".ts"',
   '".tsx"',
   '"/index.ts"',
   '"/index.tsx"',
   "function insideRepository(filePath)",
+  "function eligibleRepositorySource(filePath)",
   "path.relative(REPOSITORY_ROOT, filePath)",
-  "!relative.startsWith(\"..\")",
+  '!relative.startsWith("..")',
+  "!filePath.includes(NODE_MODULES_SEGMENT)",
+  '!filePath.endsWith(".d.ts")',
   "function eligibleSpecifier(specifier, parentURL)",
   'specifier.startsWith(".")',
   "!path.extname(specifier)",
-  "!specifier.includes(\"\\0\")",
-  "!specifier.includes(\"?\")",
-  "!specifier.includes(\"#\")",
+  '!specifier.includes("\\0")',
+  '!specifier.includes("?")',
+  '!specifier.includes("#")',
   "export async function resolve(specifier, context, nextResolve)",
   "return await nextResolve(specifier, context)",
   "if (!eligibleSpecifier(specifier, context.parentURL)) throw originalError",
-  "if (!insideRepository(unresolvedPath)) throw originalError",
+  "if (!eligibleRepositorySource(unresolvedPath)) throw originalError",
   "await access(candidate)",
   "const resolved = await realpath(candidate)",
-  "if (!insideRepository(resolved)) throw originalError",
+  "if (!eligibleRepositorySource(resolved)) throw originalError",
+  "export async function load(url, context, nextLoad)",
+  'const source = await readFile(resolved, "utf-8")',
+  "ts.transpileModule(source",
+  "module: ts.ModuleKind.ESNext",
+  "target: ts.ScriptTarget.ES2022",
+  "jsx: ts.JsxEmit.ReactJSX",
+  "verbatimModuleSyntax: false",
+  'format: "module"',
+  "source: transformed.outputText",
   "shortCircuit: true",
 ]);
 forbidTokens("TypeScript test loader", loader, [
@@ -58,10 +72,9 @@ forbidTokens("TypeScript test loader", loader, [
   "spawn(",
   "exec(",
   "process.env",
-  "node_modules",
-  "specifier.startsWith(\"node:\")",
-  "specifier.startsWith(\"@\")",
-  "specifier.startsWith(\"/\")",
+  'specifier.startsWith("node:")',
+  'specifier.startsWith("@")',
+  'specifier.startsWith("/")',
   "writeFile",
   "rm(",
   "unlink(",
@@ -85,13 +98,15 @@ if (localCommand.indexOf("npm run test:typescript-loader:check") > localCommand.
 }
 
 if (errors.length) {
-  console.error(`${CHECK_NAME} failed:\n`);
+  console.error(`${CHECK_NAME} failed:
+`);
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
 
 console.log("TypeScript test loader check passed.");
 console.log("- extensionless resolution is limited to relative TypeScript files inside the real repository root");
-console.log("- package, URL, absolute, query, fragment and NUL-bearing specifiers are not intercepted");
+console.log("- repository TypeScript is transpiled with the locked local compiler so type-only imports cannot survive at runtime");
+console.log("- dependency, declaration, package, URL, absolute, query, fragment and NUL-bearing modules are not intercepted");
 console.log("- the loader performs no network, subprocess, environment, mutation or deletion operation");
 console.log("- the guarded loader runs before the repository core test suite");

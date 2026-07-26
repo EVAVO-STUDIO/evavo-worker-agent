@@ -14,6 +14,7 @@ import { handlePlannerRoutesAdmin } from "./routes/plannerRoutesAdmin";
 import { handleGrowthAdmin } from "./routes/growthAdminProtected";
 import { handleGrowthCapabilitiesAdmin } from "./routes/growthCapabilitiesAdmin";
 import { handleGrowthCampaignIntelligenceAdmin } from "./routes/growthCampaignIntelligenceAdmin";
+import { handleGrowthInternalOperatorPackAdmin } from "./routes/growthInternalOperatorPackAdmin";
 import { handleGrowthStrategyMemoryAdmin } from "./routes/growthStrategyMemoryAdmin";
 import { handleGrowthBlackboardAdmin } from "./routes/growthBlackboardAdmin";
 import { handleGrowthApprovalRequestsAdmin } from "./routes/growthApprovalRequestsAdmin";
@@ -189,6 +190,8 @@ export default {
       switch (resolveGrowthRouteHandlerId(pathname)) {
         case "approval-requests":
           return await handleGrowthApprovalRequestsAdmin(req, env, pathname, jsonResponse);
+        case "operator-artifacts":
+          return await handleGrowthInternalOperatorPackAdmin(req, env, pathname, jsonResponse);
         case "capabilities":
           return await handleGrowthCapabilitiesAdmin(req, env, pathname, jsonResponse);
         case "blackboard":

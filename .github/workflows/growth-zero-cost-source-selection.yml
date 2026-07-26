@@ -1,0 +1,75 @@
+name: Growth zero-cost source selection
+
+on:
+  pull_request:
+    paths:
+      - src/core/growthActivityBudget.ts
+      - src/core/growthActivityBudgetLedger.ts
+      - src/core/growthActivityBudgetSettings.ts
+      - src/core/opportunitySourceSelection.ts
+      - src/core/growthCapabilities.ts
+      - src/opportunityAutonomy.ts
+      - src/routes/opportunityRunDueAdmin.ts
+      - tests/growthActivityBudget.test.ts
+      - tests/growthActivityBudgetLedger.test.ts
+      - tests/growthActivityBudgetSettings.test.ts
+      - tests/opportunitySourceSelection.test.ts
+      - scripts/check-growth-activity-budget.mjs
+      - scripts/check-growth-activity-budget-ledger.mjs
+      - migrations/0023_growth_activity_budget_ledger.sql
+      - package.json
+      - package-lock.json
+      - .github/workflows/growth-zero-cost-source-selection.yml
+  push:
+    branches:
+      - main
+    paths:
+      - src/core/growthActivityBudget.ts
+      - src/core/growthActivityBudgetLedger.ts
+      - src/core/growthActivityBudgetSettings.ts
+      - src/core/opportunitySourceSelection.ts
+      - src/core/growthCapabilities.ts
+      - src/opportunityAutonomy.ts
+      - src/routes/opportunityRunDueAdmin.ts
+      - tests/growthActivityBudget.test.ts
+      - tests/growthActivityBudgetLedger.test.ts
+      - tests/growthActivityBudgetSettings.test.ts
+      - tests/opportunitySourceSelection.test.ts
+      - scripts/check-growth-activity-budget.mjs
+      - scripts/check-growth-activity-budget-ledger.mjs
+      - migrations/0023_growth_activity_budget_ledger.sql
+      - package.json
+      - package-lock.json
+      - .github/workflows/growth-zero-cost-source-selection.yml
+
+permissions:
+  contents: read
+
+jobs:
+  source-selection:
+    name: Source budget and adaptive selection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Guard zero-cost activity and ledger contracts
+        run: node scripts/check-growth-activity-budget.mjs
+
+      - name: Exercise source capacity and selection contracts
+        run: node --test tests/growthActivityBudgetSettings.test.ts tests/opportunitySourceSelection.test.ts
+
+      - name: Type-check Worker integration
+        run: npm run typecheck

@@ -86,10 +86,12 @@ export function resolveGrowthActivitySettings(
   const profile = resolveGrowthActivityProfile(intensity);
   const legacyDailyLimit = boundedInteger(settings.dailySourceLimit, 0, 0, 100);
   const legacyRunLimit = boundedInteger(settings.maxNetworkCallsPerRun, 0, 0, 250);
+  // Run frequency and per-run source capacity are separate units. The durable
+  // activity ledger enforces manualResearchRunsPerDay; this mapping may only
+  // combine source/fetch caps that describe one research run.
   const effectiveSourceLimitPerRun = Math.min(
     legacyDailyLimit,
     legacyRunLimit,
-    profile.limits.manualResearchRunsPerDay,
     profile.limits.externalFetchesPerRun,
   );
   const effectiveMinimumOpportunityScore = Math.max(

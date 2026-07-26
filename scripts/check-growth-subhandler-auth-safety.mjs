@@ -48,7 +48,9 @@ const growthFallback = read("src/routes/growthAdmin.ts");
 const growthFallbackWrapper = read("src/routes/growthAdminProtected.ts");
 const growthAudit = read("src/core/growthAudit.ts");
 const growthBrief = read("src/core/growthBrief.ts");
+const approvalTest = read("tests/growthApprovalRequestBoundary.test.ts");
 const fallbackTest = read("tests/growthAdminFallbackSafety.test.ts");
+const fallbackShapeTest = read("tests/growthAdminRouteShapeSafety.test.ts");
 const strategyTest = read("tests/growthStrategyMemoryWriteBoundary.test.ts");
 const campaignTest = read("tests/growthCampaignIntelligenceWriteBoundary.test.ts");
 const campaignClassificationTest = read("tests/growthCampaignIntelligenceErrorClassification.test.ts");
@@ -131,6 +133,7 @@ for (const handler of protectedHandlers) {
     "boundedJsonRequired: true",
     "exactBooleanConfirmationRequired: true",
     "confirmationCoercionAllowed: false",
+    "queryConfirmationAllowed: false",
     "sensitiveInputKeysAllowed: false",
     "internalMetadataOnly: true",
     "externalStateChange: false",
@@ -157,6 +160,7 @@ for (const handler of protectedHandlers) {
     'body.confirm === "1"',
     "body.confirm === 1",
     "confirmationCoercionAllowed: true",
+    "queryConfirmationAllowed: true",
     "sensitiveInputKeysAllowed: true",
     "rawErrorExposed: true",
     'request.method === "OPTIONS") return json({ ok: true',
@@ -177,6 +181,18 @@ for (const handler of protectedHandlers) {
   }
 }
 
+requireTokens("Growth approval requests handler", approvalRequests, [
+  'request.method === "POST" && [...url.searchParams.keys()].length !== 0',
+  "CREATE_WRAPPER_KEYS",
+  "CREATE_PACK_KEYS",
+  "STATUS_KEYS",
+  "hasApprovalPack && hasPack",
+  "outerId && innerId && outerId !== innerId",
+  "requiredIdentifierFromAliases",
+  "growth_approval_request_invalid",
+  "rawErrorExposed: false",
+  'intParam(url, "limit", 25, 1, 100)',
+]);
 requireTokens("Growth strategy memory handler", strategyMemory, [
   'request.method === "POST" && [...url.searchParams.keys()].length !== 0',
   "OBJECTIVE_INPUT_KEYS",
@@ -235,20 +251,30 @@ requireOrder("Growth fallback wrapper order", growthFallbackWrapper, [
 
 requireTokens("Growth fallback", growthFallback, [
   'import { Env, todayUTC } from "../db"',
-  'from "../core/boundedJsonRequest"',
+  'from "../core/growthInternalWriteRequest"',
   "listGrowthAuditEventSummaries",
   "toGrowthAuditEventSummary",
-  "MAX_GROWTH_ADMIN_BODY_BYTES = 32_768",
-  "SENSITIVE_GROWTH_INPUT_KEYS",
-  "SENSITIVE_GROWTH_INPUT_KEY_FRAGMENTS",
-  "isSensitiveInputKey",
-  "normalized.includes(fragment)",
-  "containsSensitiveInputKey",
-  "readBoundedJsonObject<Record<string, any>>(request",
-  "boundedJsonFailurePayload(parsed)",
-  "isExplicitJsonConfirmation(parsed.value)",
-  'error: "forbidden_growth_input_key"',
-  "requestBodySha256: parsed.bodySha256",
+  "readGrowthInternalWriteRequest(request)",
+  "growthInternalWriteFailurePayload(parsed)",
+  "GOAL_INPUT_KEYS",
+  "CHANNEL_INPUT_KEYS",
+  "SIGNAL_INPUT_KEYS",
+  "ACTION_INPUT_KEYS",
+  "ACTION_PLAN_KEYS",
+  "SIGNAL_STATUS_KEYS",
+  "ACTION_STATUS_KEYS",
+  "function wrappedInput(",
+  "function requiredIdentifierAliases(",
+  "function validateGoal(",
+  "function validateChannel(",
+  "function validateSignal(",
+  "function validateAction(",
+  'const raw = url.searchParams.get(key)',
+  'raw === null || raw === ""',
+  "Number.isSafeInteger(value)",
+  'request.method === "POST" && [...url.searchParams.keys()].length !== 0',
+  'error: "query_not_supported"',
+  "queryConfirmationAllowed: false",
   "confirmationCoercionAllowed: false",
   "boundedJsonRequired: true",
   "exactBooleanConfirmationRequired: true",
@@ -256,11 +282,23 @@ requireTokens("Growth fallback", growthFallback, [
   "rawErrorsExposed: false",
   "auditSnapshotsExposed: false",
   "rawErrorExposed: false",
-  'diagnosticCode = missingGrowthTable',
+  "growth_admin_invalid_request",
   "inputSnapshot: auditInput(",
   "audit: toGrowthAuditEventSummary(audit)",
+  "requestReceipt: requestReceipt(parsed.contractVersion)",
+  "const blockedReason = boundedOptionalText(",
+  "updateGrowthActionStatus(env, id, status, blockedReason)",
 ]);
 forbidTokens("Growth fallback", growthFallback, [
+  'from "../core/boundedJsonRequest"',
+  "MAX_GROWTH_ADMIN_BODY_BYTES",
+  "SENSITIVE_GROWTH_INPUT_KEYS",
+  "SENSITIVE_GROWTH_INPUT_KEY_FRAGMENTS",
+  "function isSensitiveInputKey(",
+  "function containsSensitiveInputKey(",
+  "readBoundedJsonObject<Record<string, any>>(request",
+  "boundedJsonFailurePayload(parsed)",
+  "isExplicitJsonConfirmation(parsed.value)",
   "getAdminToken",
   "function authorized(",
   "function authorised(",
@@ -271,6 +309,9 @@ forbidTokens("Growth fallback", growthFallback, [
   'url.searchParams.get("confirm")',
   "body?.confirm === 1",
   'body?.confirm === "1"',
+  "String(body.status || \"reviewed\")",
+  "String(body.signalId || body.id || \"\")",
+  "updateGrowthActionStatus(\n        env,\n        String(body.id",
   "message,",
   "message: message",
   "events: await listGrowthAuditEvents",
@@ -284,11 +325,11 @@ for (const call of [
   "upsertGrowthSignal(env,",
   "upsertGrowthAction(env,",
   "planGrowthActionFromSignal(env,",
-  "updateGrowthSignalStatus(",
-  "updateGrowthActionStatus(",
+  "updateGrowthSignalStatus(env,",
+  "updateGrowthActionStatus(env,",
 ]) {
   const callPosition = growthFallback.indexOf(call);
-  const parsePosition = growthFallback.lastIndexOf("const parsed = await readConfirmedBody(request, json)", callPosition);
+  const parsePosition = growthFallback.lastIndexOf("const parsed = await confirmedBody(request, json)", callPosition);
   const acceptedPosition = growthFallback.lastIndexOf("if (!parsed.ok) return parsed.response", callPosition);
   if (
     callPosition < 0 ||
@@ -296,7 +337,7 @@ for (const call of [
     acceptedPosition < 0 ||
     !(parsePosition < acceptedPosition && acceptedPosition < callPosition)
   ) {
-    errors.push(`Growth fallback must complete bounded exact confirmation before persistence call: ${call}`);
+    errors.push(`Growth fallback must complete shared bounded confirmation before persistence call: ${call}`);
   }
 }
 
@@ -322,21 +363,37 @@ requireTokens("Growth brief audit reduction", growthBrief, [
 ]);
 forbidTokens("Growth brief audit reduction", growthBrief, ["listGrowthAuditEvents"]);
 
+requireTokens("Growth approval tests", approvalTest, [
+  "approval list retains the documented 25-record default",
+  "approval query and coerced confirmation fail before D1 access",
+  "approval wrappers and identifiers cannot be ambiguous",
+  "approval status is required and alias identifiers must agree",
+  "valid approval creation returns only the reduced summary and receipt",
+]);
 requireTokens("Growth fallback tests", fallbackTest, [
   'test("Growth fallback uses shared authentication before request parsing or persistence"',
-  'test("query confirmation cannot replace exact JSON confirmation"',
+  'test("query confirmation and all POST query parameters fail before body parsing"',
   'test("coerced confirmation is rejected before persistence"',
   "oauthAccessToken",
   "providerApiKey",
   "serviceRoleSecret",
   'test("non-JSON fallback writes fail through the bounded request contract"',
-  'test("unexpected database failures are reduced to finite diagnostics"',
+  'test("unexpected database failures are reduced to finite unavailable diagnostics"',
   "forbidden_growth_input_key",
   "json_content_type_required",
+  "queryConfirmationAllowed",
   "rawErrorExposed",
   "auditSnapshotsExposed",
-  "requestBodySha256",
   "database-secret-detail-must-not-reach-response",
+]);
+requireTokens("Growth fallback shape tests", fallbackShapeTest, [
+  "Growth fallback list routes keep their documented default limits",
+  "malformed list limits fail as input instead of silently becoming one record",
+  "flat and wrapped fallback inputs cannot be mixed",
+  "action planning requires one unambiguous signal identifier",
+  "signal and action status updates require explicit statuses",
+  "action status does not persist the safety object as a blocked reason",
+  'assert.notEqual(update.values[1], "[object Object]")',
 ]);
 requireTokens("Growth strategy tests", strategyTest, [
   "strategy list routes retain their documented default limits",
@@ -379,6 +436,7 @@ console.log(JSON.stringify({
   contract: "growth-subhandler-authentication-safety",
   sharedBoundedWriteContract: "growth_internal_write_request_v1",
   approvalRequestWritesRequireConfirmation: true,
+  approvalRequestReadLimitsBounded: true,
   strategyMemoryWritesRequireConfirmation: true,
   strategyMemoryReadLimitsBounded: true,
   campaignIntelligenceWritesRequireConfirmation: true,
@@ -387,8 +445,9 @@ console.log(JSON.stringify({
   blackboardWritesRequireConfirmation: true,
   blackboardReadLimitsBounded: true,
   growthFallbackUsesSharedAuthentication: true,
-  growthFallbackUsesBoundedJson: true,
-  growthFallbackRequiresExactBooleanConfirmation: true,
+  growthFallbackUsesSharedBoundedWriteContract: true,
+  growthFallbackReadLimitsBounded: true,
+  growthFallbackRequiresExplicitStatuses: true,
   growthFallbackRejectsSensitiveInputKeys: true,
   growthFallbackExposesRawErrors: false,
   growthFallbackExposesAuditSnapshots: false,

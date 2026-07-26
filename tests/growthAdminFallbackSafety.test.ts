@@ -61,7 +61,7 @@ test("Growth fallback uses shared authentication before request parsing or persi
   assert.equal(databaseTouched(), false);
 });
 
-test("query confirmation cannot replace exact JSON confirmation", async () => {
+test("query confirmation and all POST query parameters fail before body parsing", async () => {
   const { env, databaseTouched } = environment();
   const response = await handleGrowthAdmin(
     request("/admin/growth/strategy?confirm=1", { title: "Example goal" }, { token: ADMIN_TOKEN }),
@@ -71,9 +71,8 @@ test("query confirmation cannot replace exact JSON confirmation", async () => {
   );
   const body = await payload(response);
   assert.equal(response.status, 400);
-  assert.equal(body.error, "confirm_required");
-  assert.deepEqual(body.requiredPayload, { confirm: true });
-  assert.equal(body.confirmationCoercionAllowed, false);
+  assert.equal(body.error, "query_not_supported");
+  assert.equal(body.queryConfirmationAllowed, false);
   assert.equal(databaseTouched(), false);
 });
 
@@ -134,7 +133,7 @@ test("non-JSON fallback writes fail through the bounded request contract", async
   assert.equal(databaseTouched(), false);
 });
 
-test("unexpected database failures are reduced to finite diagnostics", async () => {
+test("unexpected database failures are reduced to finite unavailable diagnostics", async () => {
   const { env, databaseTouched } = environment();
   const response = await handleGrowthAdmin(
     request(
@@ -148,7 +147,7 @@ test("unexpected database failures are reduced to finite diagnostics", async () 
   );
   const body = await payload(response);
   const text = JSON.stringify(body);
-  assert.equal(response.status, 500);
+  assert.equal(response.status, 503);
   assert.equal(databaseTouched(), true);
   assert.equal(body.error, "growth_admin_failed");
   assert.equal(body.diagnosticCode, "growth_admin_failed");
@@ -162,6 +161,7 @@ test("unexpected database failures are reduced to finite diagnostics", async () 
   assert.equal(safety.boundedJsonRequired, true);
   assert.equal(safety.exactBooleanConfirmationRequired, true);
   assert.equal(safety.confirmationCoercionAllowed, false);
+  assert.equal(safety.queryConfirmationAllowed, false);
   assert.equal(safety.sensitiveInputKeysAllowed, false);
   assert.equal(safety.rawErrorsExposed, false);
   assert.equal(safety.auditSnapshotsExposed, false);

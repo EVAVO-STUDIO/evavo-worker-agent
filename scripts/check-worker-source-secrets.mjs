@@ -21,6 +21,33 @@ function normalizePath(value) {
   return value.replaceAll("\\", "/").replace(/^\.\//, "");
 }
 
+function read(relativePath) {
+  const absolute = path.join(root, relativePath);
+  if (!fs.existsSync(absolute)) {
+    errors.push(`Missing required file: ${relativePath}`);
+    return "";
+  }
+  return fs.readFileSync(absolute, "utf8");
+}
+
+function requireTokens(label, source, tokens) {
+  for (const token of tokens) {
+    if (!source.includes(token)) errors.push(`${label}: missing ${token}`);
+  }
+}
+
+function requireOrder(label, source, tokens) {
+  let previous = -1;
+  for (const token of tokens) {
+    const current = source.indexOf(token, previous + 1);
+    if (current < 0 || current <= previous) {
+      errors.push(`${label}: invalid ordering at ${token}`);
+      return;
+    }
+    previous = current;
+  }
+}
+
 function trackedFiles() {
   const result = spawnSync("git", ["ls-files", "-z"], {
     cwd: root,
@@ -146,10 +173,7 @@ for (const relativePath of files) {
   scanText(relativePath, buffer.toString("utf8"));
 }
 
-const gitignorePath = path.join(root, ".gitignore");
-const gitignore = fs.existsSync(gitignorePath)
-  ? fs.readFileSync(gitignorePath, "utf8")
-  : "";
+const gitignore = read(".gitignore");
 for (const token of [
   ".env",
   ".env.*",
@@ -165,10 +189,7 @@ for (const token of [
   }
 }
 
-const examplePath = path.join(root, ".dev.vars.example");
-const example = fs.existsSync(examplePath)
-  ? fs.readFileSync(examplePath, "utf8")
-  : "";
+const example = read(".dev.vars.example");
 for (const token of [
   "ADMIN_TOKEN=",
   "replace_me_with_a_random_server_only_token",
@@ -178,30 +199,85 @@ for (const token of [
   if (!example.includes(token)) errors.push(`.dev.vars.example: missing ${token}`);
 }
 
-const packagePath = path.join(root, "package.json");
-const packageJson = fs.existsSync(packagePath)
-  ? JSON.parse(fs.readFileSync(packagePath, "utf8"))
-  : {};
+const packageJson = JSON.parse(read("package.json") || "{}");
 const expectedCommand = "node scripts/check-worker-source-secrets.mjs";
 if (packageJson.scripts?.["worker:source-secret-safety:check"] !== expectedCommand) {
   errors.push(
     `package.json must expose worker:source-secret-safety:check as ${expectedCommand}`,
   );
 }
-if (
-  !String(packageJson.scripts?.["check:local"] || "").includes(
-    "npm run worker:source-secret-safety:check",
-  )
-) {
+const localGate = String(packageJson.scripts?.["check:local"] || "");
+if (!localGate.includes("npm run worker:source-secret-safety:check")) {
   errors.push("check:local must include worker:source-secret-safety:check");
 }
+if (
+  localGate.indexOf("npm run worker:source-secret-safety:check") >
+  localGate.indexOf("npm run scripts:check")
+) {
+  errors.push("tracked-source secret safety must run before helper and aggregate checks");
+}
+
+const safetyGate = read("scripts/check-safety-gate-completeness.mjs");
+requireTokens("safety-gate completeness", safetyGate, [
+  '"worker:source-secret-safety:check": "node scripts/check-worker-source-secrets.mjs"',
+  '"scripts/check-worker-source-secrets.mjs"',
+  '".dev.vars.example"',
+  '"docs/worker-source-secret-posture.md"',
+  'contract: "safety-gate-completeness-v8-source-secrets"',
+  "workerTrackedSourceSecretSafetyRequired: true",
+  "safeWorkerVariableTemplateRequired: true",
+]);
+
+const workflow = read(".github/workflows/worker-contract.yml");
+requireTokens("Worker contract workflow", workflow, [
+  '      - ".gitignore"',
+  '      - ".dev.vars.example"',
+  "Verify tracked-source secret safety",
+  "npm run worker:source-secret-safety:check",
+  "npm ci --no-audit --no-fund",
+  "permissions:\n  contents: read",
+  "persist-credentials: false",
+  "npm run check:local",
+]);
+requireOrder("Worker contract workflow", workflow, [
+  "npm ci --no-audit --no-fund",
+  "npm run worker:source-secret-safety:check",
+  "node scripts/check-worker-contract-workflow.mjs",
+  "npm run check:local",
+]);
+for (const forbidden of ["wrangler deploy", "ADMIN_TOKEN:", "PUBLIC_CONTROL_KEY:"]) {
+  if (workflow.includes(forbidden)) {
+    errors.push(`Worker contract workflow contains forbidden material: ${forbidden}`);
+  }
+}
+
+const readme = read("README.md");
+requireTokens("README source-secret posture", readme, [
+  "## Source-secret and repository posture",
+  "npm run worker:source-secret-safety:check",
+  "GitHub currently reports this repository as **public**",
+  "Repository visibility is an administrative GitHub setting",
+  "This source-hardening pass did not change that setting",
+  "docs/worker-source-secret-posture.md",
+  ".dev.vars.example",
+]);
+
+const sourcePosture = read("docs/worker-source-secret-posture.md");
+requireTokens("Worker source-secret operating document", sourcePosture, [
+  "# Worker tracked-source secret posture",
+  "npm run worker:source-secret-safety:check",
+  "The repository is currently reported by GitHub as public",
+  "an administrator must change the repository visibility in GitHub settings",
+  "That setting change is separate from this source hardening and was not performed by the connector",
+  "Do not solve an exposure by merely adding the file to `.gitignore`",
+]);
 
 console.log(
   JSON.stringify(
     {
       passed: errors.length === 0,
       activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-      contract: "worker-tracked-source-secret-safety-v1",
+      contract: "worker-tracked-source-secret-safety-v2-self-verifying",
       trackedFilesInspected: files.length,
       maximumScannedFileBytes: MAX_SCANNED_FILE_BYTES,
       trackedEnvironmentFilesAllowed: [...ALLOWED_ENV_FILES],
@@ -210,7 +286,12 @@ console.log(
       liveProviderTokensAllowed: false,
       credentialBearingUrlsAllowed: false,
       rawSecretValuesPrinted: false,
+      localGateRunsBeforeAggregateChecks: true,
+      safetyCompletenessRequired: true,
+      focusedReadOnlyCiRequired: true,
+      sourcePostureDocumentationRequired: true,
       repositoryVisibilityEnforcedBySource: false,
+      repositoryVisibilityChangedByThisContract: false,
       errors,
     },
     null,

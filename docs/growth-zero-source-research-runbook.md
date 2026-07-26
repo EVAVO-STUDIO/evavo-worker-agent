@@ -1,6 +1,6 @@
 # Growth zero-source research runbook
 
-This runbook defines the current safe workflow for researching opportunities when the operator has not supplied an approved source list.
+This runbook defines the current safe workflow for researching opportunities without the operator supplying a source list. The operator may still provide an approved source list later; zero-source planning must not invent evidence or silently broaden execution authority.
 
 The active Worker does not perform autonomous or scheduled network research. Zero-source research is a manual, authenticated, explicitly confirmed and bounded workflow that saves internal review metadata only.
 

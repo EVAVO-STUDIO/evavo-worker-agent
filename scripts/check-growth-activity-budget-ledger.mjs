@@ -39,6 +39,8 @@ const tests = read("tests/growthActivityBudgetLedger.test.ts");
 const inventory = read("scripts/check-migrations-present.mjs");
 const migrationReadme = read("migrations/README.md");
 const capabilities = read("src/core/growthCapabilities.ts");
+const opportunityAutonomy = read("src/opportunityAutonomy.ts");
+const opportunityRoute = read("src/routes/opportunityRunDueAdmin.ts");
 const packageJson = JSON.parse(read("package.json"));
 
 requireTokens("Growth activity budget ledger", ledger, [
@@ -55,7 +57,7 @@ requireTokens("Growth activity budget ledger", ledger, [
   "GROWTH_ACTIVITY_BUDGET_CLAIM_REPLAY",
   "automaticRetryAllowed: false",
   "persistentAdmission: true",
-  "denialSource: \"database_race\"",
+  'denialSource: "database_race"',
   "INSERT INTO growth_activity_budget_claims",
   "UPDATE growth_activity_budget_claims",
   "SELECT counters_json, domain_fetches_json, domain_failures_json",
@@ -169,11 +171,38 @@ requireTokens("Growth capability budget ledger posture", capabilities, [
   "ledgerContractVersion: GROWTH_ACTIVITY_BUDGET_LEDGER_VERSION",
   "persistentUsageLedgerContractImplemented: true",
   "persistentUsageLedgerMigrationApplied: false",
-  "manualResearchAdmissionIntegrated: false",
+  "manualResearchAdmissionIntegrated: true",
+  "adaptiveSourceSelectionIntegrated: true",
 ]);
 forbidTokens("Growth capability budget ledger posture", capabilities, [
   "persistentUsageLedgerMigrationApplied: true",
-  "manualResearchAdmissionIntegrated: true",
+  "manualResearchAdmissionIntegrated: false",
+]);
+requireTokens("Confirmed opportunity research ledger integration", opportunityAutonomy, [
+  "claimGrowthActivityBudget",
+  "completeGrowthActivityBudgetClaim",
+  "requestBodySha256: budgetContext.requestBodySha256",
+  'invocation: "manual"',
+  "ownerApproved: budgetContext.ownerApproved",
+  "explicitlyConfirmed: budgetContext.explicitlyConfirmed",
+  "persistentAdmissionRequired: true",
+  "automaticRetryAllowed: false",
+  "budget.ledgerUnavailable = true",
+]);
+requireOrder("Confirmed opportunity research budget order", opportunityAutonomy, [
+  "claimResult = await claimGrowthActivityBudget",
+  "if (!claimResult.accepted)",
+  "activityClaim = claimResult.claim",
+  "const fetched = await fetchPublicResearchHtml",
+  "await finishBudgetClaimSafely(",
+]);
+requireTokens("Confirmed opportunity route budget context", opportunityRoute, [
+  "runOpportunityAutonomy(env, settings, {",
+  "requestBodySha256: parsed.bodySha256",
+  "ownerApproved: true",
+  "explicitlyConfirmed: true",
+  "persistentBudgetAdmissionRequired: true",
+  "automaticRetryAllowed: false",
 ]);
 
 if (packageJson.scripts?.["growth:activity-budget:check"] !== "node scripts/check-growth-activity-budget.mjs") {
@@ -203,6 +232,7 @@ console.log("- one trigger-protected D1 insert is the final concurrency authorit
 console.log("- daily, per-run, distinct-domain, per-domain, cooldown and failure-circuit limits are rechecked against persisted state");
 console.log("- target domains are stored only as SHA-256 hashes and claim identifiers are immutable, one-time and runtime-branded");
 console.log("- claims reserve usage before work, never release reserved cost automatically and allow one completed or failed outcome");
-console.log("- migration inventory and capability posture remain truthful: contract implemented, migration and manual research integration not yet claimed");
+console.log("- confirmed manual opportunity research now passes through the persistent ledger before every public fetch");
+console.log("- migration inventory and capability posture remain truthful: contract and runtime integration exist, while deployment application is not claimed");
 console.log("- the aggregate budget guard is included between Growth negative safety and capability truthfulness in check:local");
 console.log("- AI, browser, paid services, sending, posting, forms, calendars, provider writes and external execution remain unavailable");

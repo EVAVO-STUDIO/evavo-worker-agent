@@ -16,6 +16,7 @@ const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : ""
 
 const expectedHandlers = [
   "approval-requests",
+  "operator-artifacts",
   "capabilities",
   "blackboard",
   "strategy-memory",
@@ -34,7 +35,10 @@ for (const handlerId of expectedHandlers) {
 
 for (const token of [
   'import { resolveGrowthRouteHandlerId } from "./routes/growthRoutePolicy"',
+  'import { handleGrowthInternalOperatorPackAdmin } from "./routes/growthInternalOperatorPackAdmin"',
   "switch (resolveGrowthRouteHandlerId(pathname))",
+  'case "operator-artifacts":',
+  "handleGrowthInternalOperatorPackAdmin(req, env, pathname, jsonResponse)",
   'authentication: "handler-enforced"',
   "callsExternalNetwork: false",
   "callsAI: false",
@@ -43,13 +47,14 @@ for (const token of [
   "canSubmitForms: false",
   'prefix: "/admin/growth"',
 ]) {
-  const source = token.startsWith("import ") || token.startsWith("switch ") ? index : policy;
+  const source = token.startsWith("import ") || token.startsWith("switch ") || token.startsWith("case ") || token.startsWith("handleGrowth") ? index : policy;
   if (!source.includes(token)) errors.push(`Growth route policy contract is missing: ${token}`);
 }
 
 const expectedPaths = [
   "/admin/growth/approval-requests",
   "/admin/growth/approval-requests/status",
+  "/admin/growth/operator/artifacts",
   "/admin/growth/capabilities",
   "/admin/growth/blackboard",
   "/admin/growth/blackboard/facts",
@@ -83,6 +88,28 @@ for (const routePath of expectedPaths) {
   if (count !== 1) errors.push(`Growth route path must have one typed owner: ${routePath} (${count})`);
 }
 
+const operatorPolicyStart = policy.indexOf('exact("operator-artifacts"');
+const operatorPolicyEnd = policy.indexOf('exact("capabilities"', operatorPolicyStart);
+const operatorPolicy = operatorPolicyStart >= 0 && operatorPolicyEnd > operatorPolicyStart
+  ? policy.slice(operatorPolicyStart, operatorPolicyEnd)
+  : "";
+for (const token of [
+  '"mixed-internal"',
+  '"not-required"',
+  "/admin/growth/operator/artifacts",
+]) {
+  if (!operatorPolicy.includes(token)) errors.push(`Growth operator-artifacts policy is missing: ${token}`);
+}
+for (const forbidden of [
+  "callsExternalNetwork: true",
+  "callsAI: true",
+  "canSendEmail: true",
+  "canPostSocial: true",
+  "canSubmitForms: true",
+]) {
+  if (operatorPolicy.includes(forbidden)) errors.push(`Unsafe operator-artifacts policy capability detected: ${forbidden}`);
+}
+
 const helperPriorities = [...policy.matchAll(/exact\("[^"]+",\s*(\d+)/g)].map((match) => Number(match[1]));
 const literalPriorities = [...policy.matchAll(/handlerId:\s*"[^"]+"[\s\S]{0,120}?priority:\s*(\d+)/g)].map((match) => Number(match[1]));
 const priorities = [...helperPriorities, ...literalPriorities];
@@ -95,6 +122,7 @@ for (let indexValue = 1; indexValue < sortedPriorities.length; indexValue += 1) 
 
 const forbiddenIndexTokens = [
   'pathname === "/admin/growth/approval-requests"',
+  'pathname === "/admin/growth/operator/artifacts"',
   'pathname === "/admin/growth/capabilities"',
   'pathname === "/admin/growth/blackboard"',
   'pathname === "/admin/growth/strategy-memory"',
@@ -122,6 +150,7 @@ console.log(JSON.stringify({
   contract: "typed-growth-route-policy",
   handlerCount: expectedHandlers.length,
   exactPathCount: expectedPaths.length,
+  deterministicOperatorArtifactsEnabled: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

@@ -9,7 +9,11 @@ import {
   upsertGrowthChannel,
   upsertGrowthGoal,
 } from "../core/growthAutonomy";
-import { listGrowthAuditEvents, logGrowthAuditEvent } from "../core/growthAudit";
+import {
+  listGrowthAuditEventSummaries,
+  logGrowthAuditEvent,
+  toGrowthAuditEventSummary,
+} from "../core/growthAudit";
 import { planGrowthActionFromSignal } from "../core/growthActionPlanner";
 import { upsertGrowthAction } from "../core/growthActions";
 import {
@@ -49,6 +53,14 @@ const SENSITIVE_GROWTH_INPUT_KEYS = new Set([
   "privatekey",
   "clientsecret",
 ]);
+const SENSITIVE_GROWTH_INPUT_KEY_FRAGMENTS = Object.freeze([
+  "token",
+  "secret",
+  "password",
+  "apikey",
+  "privatekey",
+  "servicerole",
+] as const);
 
 const campaignIntelligencePrefixes = [
   "/admin/growth/autonomy",
@@ -117,6 +129,7 @@ function safetyBase() {
     confirmationCoercionAllowed: false,
     sensitiveInputKeysAllowed: false,
     rawErrorsExposed: false,
+    auditSnapshotsExposed: false,
   };
 }
 
@@ -142,6 +155,7 @@ function migrationError(error: unknown) {
       ? "latest Growth migration, including 0012_growth_autonomy_core.sql through 0023_growth_activity_budget_ledger.sql"
       : null,
     rawErrorExposed: false,
+    auditSnapshotsExposed: false,
     safety: safety({ readOnly: true }),
   };
 }
@@ -161,6 +175,12 @@ function normalizedInputKey(value: string): string {
   return value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
+function isSensitiveInputKey(value: string): boolean {
+  const normalized = normalizedInputKey(value);
+  return SENSITIVE_GROWTH_INPUT_KEYS.has(normalized) ||
+    SENSITIVE_GROWTH_INPUT_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+}
+
 function containsSensitiveInputKey(value: unknown): boolean {
   const stack: unknown[] = [value];
   while (stack.length) {
@@ -171,7 +191,7 @@ function containsSensitiveInputKey(value: unknown): boolean {
     }
     if (!current || typeof current !== "object") continue;
     for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
-      if (SENSITIVE_GROWTH_INPUT_KEYS.has(normalizedInputKey(key))) return true;
+      if (isSensitiveInputKey(key)) return true;
       stack.push(child);
     }
   }
@@ -332,13 +352,18 @@ export async function handleGrowthAdmin(
       }
       if (pathname === "/admin/growth/audit") {
         const entityType = optionalEntityType(url);
-        const events = await listGrowthAuditEvents(env, intParam(url, "limit", 50, 1, 200), entityType);
+        const events = await listGrowthAuditEventSummaries(
+          env,
+          intParam(url, "limit", 50, 1, 200),
+          entityType,
+        );
         return json({
           ok: true,
           mode: "growth_audit_events",
           contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
           events,
           count: events.length,
+          auditSnapshotsExposed: false,
           filter: { entityType: entityType || null },
           safety: safety(),
         });
@@ -381,7 +406,8 @@ export async function handleGrowthAdmin(
         mode: "growth_strategy_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         goal: saved,
-        audit,
+        audit: toGrowthAuditEventSummary(audit),
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }
@@ -408,7 +434,8 @@ export async function handleGrowthAdmin(
         mode: "growth_channel_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         channel: saved,
-        audit,
+        audit: toGrowthAuditEventSummary(audit),
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }
@@ -435,7 +462,8 @@ export async function handleGrowthAdmin(
         mode: "growth_signal_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         signal: saved,
-        audit,
+        audit: toGrowthAuditEventSummary(audit),
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }
@@ -462,7 +490,8 @@ export async function handleGrowthAdmin(
         mode: "growth_action_saved",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         action: saved,
-        audit,
+        audit: toGrowthAuditEventSummary(audit),
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }
@@ -490,7 +519,8 @@ export async function handleGrowthAdmin(
         mode: "growth_action_planned",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         action: saved,
-        audit,
+        audit: toGrowthAuditEventSummary(audit),
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }
@@ -510,6 +540,7 @@ export async function handleGrowthAdmin(
         mode: "growth_signal_status_updated",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         signal: updated,
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }
@@ -530,6 +561,7 @@ export async function handleGrowthAdmin(
         mode: "growth_action_status_updated",
         contractVersion: "growth_agent_v1_strategy_channel_voice_cost_governed",
         action: updated,
+        auditSnapshotsExposed: false,
         safety: routeSafety,
       });
     }

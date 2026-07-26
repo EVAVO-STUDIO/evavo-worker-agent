@@ -30,6 +30,7 @@ const expected = [
   "0020_growth_autonomous_discovery.sql",
   "0021_business_autopilot_foundation.sql",
   "0022_business_website_audit_records.sql",
+  "0023_growth_activity_budget_ledger.sql",
 ];
 
 const allowedDuplicatePrefixes = new Map([

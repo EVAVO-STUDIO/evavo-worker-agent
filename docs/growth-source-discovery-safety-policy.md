@@ -1,8 +1,8 @@
-# Growth source discovery safety policy
+# Growth Source Discovery Safety Policy
 
-This policy is authoritative for source discovery and public-source research in the active EVAVO Growth Research Worker.
+This Growth source discovery safety policy is authoritative for source discovery and public-source research in the active EVAVO Growth Research Worker.
 
-The active Worker is manual-research-only. Scheduled external research, autonomous discovery, background crawling, fetch queues, drafting, sending and third-party mutation are disabled.
+The active Worker is manual-research-only. Scheduled external research, autonomous discovery, background crawling, executable fetch queues, drafting, sending and third-party mutation are disabled.
 
 ## Current operating boundary
 
@@ -11,7 +11,8 @@ A network-capable research action is allowed only when all of these are true:
 ```text
 shared ADMIN_TOKEN authentication succeeded
 request method is POST
-explicit confirmation is present
+exact Boolean JSON confirmation is present
+persistent Growth budget admission succeeded
 route is classified as bounded manual research
 HTTP method to the public target is GET
 request, redirect, byte and result limits are enforced
@@ -20,7 +21,7 @@ result is stored only as internal review metadata
 no alternate scheduled or retry executor exists
 ```
 
-Cron may synchronise defensive settings, refresh learning from existing D1 review metadata and record internal audit events. Cron must not fetch pages, expand sources, discover opportunities or enqueue work.
+Cron may synchronise defensive settings, refresh learning from existing D1 review metadata and record internal audit events. Cron must not fetch pages, expand sources, discover opportunities or enqueue executable work.
 
 ## Hard safety rules
 
@@ -93,7 +94,13 @@ maximum elapsed time
 maximum stored candidates or review records
 ```
 
-Unknown or unsafe crawl policy means the action fails closed. The active Worker has no autonomous crawl queue, scheduled crawler or background retry loop.
+The fail-closed rule is exact:
+
+```text
+unknown robots policy = do not crawl yet
+```
+
+Unknown, failed, ambiguous or stale crawl policy means the action fails closed. The active Worker has no autonomous crawl queue, scheduled crawler or background retry loop.
 
 ## Route posture
 
@@ -108,7 +115,7 @@ canSubmitForms: false
 externalStateChange: false
 ```
 
-A bounded manual research route may declare `callsNetwork: true` only when it is authenticated, confirmation-gated, GET-only, public-target validated and isolated from scheduled execution. It must still declare:
+A bounded manual research route may declare `callsNetwork: true` only when it is authenticated, confirmation-gated, persistently budgeted, GET-only, public-target validated and isolated from scheduled execution. It must still declare:
 
 ```text
 callsAI: false
@@ -118,13 +125,27 @@ canSubmitForms: false
 externalStateChange: false
 scheduled: false
 reviewOnly: true
+automaticRetryAllowed: false
 ```
+
+## Internal discovery metadata writes
+
+Research plans, source candidates, non-executing fetch metadata, internal decisions and feedback use:
+
+```text
+growth_internal_write_request_v1
+bounded_admin_json_request_v1
+```
+
+These writes require shared authentication and exact Boolean JSON confirmation. Query confirmation, numeric or string confirmation, credential-shaped input keys, unknown fields, mixed wrappers, conflicting identifiers and conflicting aliases fail closed before D1 access.
+
+Candidate records require real reviewed public domains and URLs. Placeholder evidence such as `unknown.local`, `example.invalid` or an empty URL is forbidden.
 
 ## Browser and control-plane policy
 
-Browser-facing proxies may expose read-only views of stored records only. They must not receive Worker credentials or expose confirmation routes, network execution routes, raw secrets, third-party cookies or internal mutation endpoints.
+Browser-facing proxies may expose reduced read-only views of stored records only. They must not receive Worker credentials or expose confirmation routes, network execution routes, raw secrets, third-party cookies or internal mutation endpoints.
 
-The browser must never be able to trigger Worker research directly with an exposed admin token.
+All Growth discovery admin routes must not be browser-proxied. The browser must never be able to trigger Worker research directly with an exposed admin token.
 
 ## Candidate and decision policy
 
@@ -135,7 +156,7 @@ research_more
 score_candidate
 reject_candidate
 monitor_later
-prepare_review_pack
+prepare_approval_pack
 request_operator_review
 ```
 
@@ -167,8 +188,8 @@ The Worker repository must enforce that:
 
 ```text
 scheduled external research is disabled
-manual research requires shared authentication and explicit confirmation
-network-capable handlers are bounded and GET-only
+manual research requires shared authentication and exact confirmation
+network-capable handlers are persistently budgeted, bounded and GET-only
 public targets and redirects are validated
 manual research saves review metadata only
 no autonomous fetch queue or background retry executor exists

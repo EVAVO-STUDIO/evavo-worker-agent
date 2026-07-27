@@ -91,9 +91,10 @@ test("retiring keys cannot be selected or exposed for new Worker request signing
   assert.equal(source.includes("resolveVerificationKey("), false);
   assert.equal(source.includes("#keysById"), false);
 
-  const selectorStart = source.indexOf("activeSigningKeyForTenant(");
+  const classStart = source.indexOf("class GrowthProposalDeliveryKeyRegistryImplementation");
+  const selectorStart = source.indexOf("activeSigningKeyForTenant(", classStart);
   const selectorEnd = source.indexOf("hasRetiringKeyForTenant(", selectorStart);
-  assert.ok(selectorStart >= 0 && selectorEnd > selectorStart, "active selector section is isolatable");
+  assert.ok(classStart >= 0 && selectorStart >= classStart && selectorEnd > selectorStart, "active selector section is isolatable");
   const selector = source.slice(selectorStart, selectorEnd);
   assert.equal(selector.includes("this.#activeByTenant.get"), true);
   assert.equal(selector.includes("retiring"), false);

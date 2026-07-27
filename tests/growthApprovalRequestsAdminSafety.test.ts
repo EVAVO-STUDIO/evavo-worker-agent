@@ -62,24 +62,44 @@ test("Growth approval writes authenticate before parsing or persistence", async 
 });
 
 test("query and coerced confirmation cannot authorize approval writes", async () => {
-  for (const body of [
-    { step: "review" },
-    { confirm: 1, step: "review" },
-    { confirm: "true", step: "review" },
-  ]) {
+  for (const fixture of [
+    {
+      label: "query confirmation",
+      path: "/admin/growth/approval-requests?confirm=1",
+      body: { step: "review" },
+      error: "query_not_supported",
+    },
+    {
+      label: "numeric confirmation",
+      path: "/admin/growth/approval-requests",
+      body: { confirm: 1, step: "review" },
+      error: "confirm_required",
+    },
+    {
+      label: "string confirmation",
+      path: "/admin/growth/approval-requests",
+      body: { confirm: "true", step: "review" },
+      error: "confirm_required",
+    },
+  ] as const) {
     const { env, databaseTouched } = environment();
     const response = await handleGrowthApprovalRequestsAdmin(
-      request("/admin/growth/approval-requests?confirm=1", body, { token: ADMIN_TOKEN }),
+      request(fixture.path, fixture.body, { token: ADMIN_TOKEN }),
       env,
       "/admin/growth/approval-requests",
       json,
     );
     const result = await payload(response);
-    assert.equal(response.status, 400);
-    assert.equal(result.error, "confirm_required");
-    assert.deepEqual(result.requiredPayload, { confirm: true });
-    assert.equal(result.confirmationCoercionAllowed, false);
-    assert.equal(databaseTouched(), false);
+    assert.equal(response.status, 400, fixture.label);
+    assert.equal(result.error, fixture.error, fixture.label);
+    if (fixture.error === "confirm_required") {
+      assert.deepEqual(result.requiredPayload, { confirm: true }, fixture.label);
+      assert.equal(result.confirmationCoercionAllowed, false, fixture.label);
+    } else {
+      assert.equal(result.queryConfirmationAllowed, false, fixture.label);
+      assert.equal(Object.hasOwn(result, "requiredPayload"), false, fixture.label);
+    }
+    assert.equal(databaseTouched(), false, fixture.label);
   }
 });
 
@@ -162,7 +182,7 @@ test("database failures expose finite diagnostics without raw approval payloads"
   );
   const result = await payload(response);
   const text = JSON.stringify(result);
-  assert.equal(response.status, 500);
+  assert.equal(response.status, 503);
   assert.equal(databaseTouched(), true);
   assert.equal(result.error, "growth_approval_requests_failed");
   assert.equal(result.rawErrorExposed, false);

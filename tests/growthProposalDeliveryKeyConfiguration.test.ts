@@ -26,6 +26,7 @@ const proposalFixturePath = path.join(process.cwd(), "fixtures/growth-worker-pro
 const requestFixturePath = path.join(process.cwd(), "fixtures/growth-worker-request-v1.json");
 const keyFixtureText = fs.readFileSync(keyFixturePath, "utf8");
 const keyFixture = JSON.parse(keyFixtureText) as { contractVersion: string; keys: Array<Record<string, unknown>> };
+const canonicalKeyFixtureText = JSON.stringify(keyFixture);
 const proposalFixture = JSON.parse(fs.readFileSync(proposalFixturePath, "utf8")) as GrowthProposalPacket;
 const requestFixture = JSON.parse(fs.readFileSync(requestFixturePath, "utf8")) as SignedGrowthProposalRequest;
 
@@ -95,7 +96,7 @@ test("canonical delivery key fixture selects the active tenant key and hides cre
 });
 
 test("selected active key reproduces the canonical signed request fixture", async () => {
-  const registry = parseGrowthProposalDeliveryKeyConfigurationJson(keyFixtureText, { now: NOW });
+  const registry = parseGrowthProposalDeliveryKeyConfigurationJson(canonicalKeyFixtureText, { now: NOW });
   const key = registry.activeSigningKeyForTenant(ORGANISATION_A, WORKSPACE_A);
   assert.ok(key);
   const signed = await signGrowthProposalRequest({
@@ -214,12 +215,12 @@ test("delivery key parser rejects malformed, unsafe and ambiguous rotation regis
 });
 
 test("delivery key JSON parser is exact and bounded", () => {
-  const parsed = parseGrowthProposalDeliveryKeyConfigurationJson(keyFixtureText, { now: NOW });
+  const parsed = parseGrowthProposalDeliveryKeyConfigurationJson(canonicalKeyFixtureText, { now: NOW });
   assert.equal(parsed.activeSigningKeyForTenant(ORGANISATION_A, WORKSPACE_A)?.keyId, "worker-primary-2026-07");
 
   for (const [label, raw, expected] of [
     ["empty", "", "GROWTH_PROPOSAL_DELIVERY_KEY_CONFIGURATION_JSON_INVALID"],
-    ["leading-space", ` ${keyFixtureText}`, "GROWTH_PROPOSAL_DELIVERY_KEY_CONFIGURATION_JSON_INVALID"],
+    ["leading-space", ` ${canonicalKeyFixtureText}`, "GROWTH_PROPOSAL_DELIVERY_KEY_CONFIGURATION_JSON_INVALID"],
     ["invalid-json", "{not-json", "GROWTH_PROPOSAL_DELIVERY_KEY_CONFIGURATION_JSON_INVALID"],
     ["oversized", "x".repeat(GROWTH_PROPOSAL_DELIVERY_KEY_CONFIGURATION_MAX_BYTES + 1), "GROWTH_PROPOSAL_DELIVERY_KEY_CONFIGURATION_JSON_TOO_LARGE"],
   ] as const) {

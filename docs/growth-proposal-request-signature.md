@@ -62,7 +62,7 @@ It must not reuse:
 
 The bridge secret stays in Worker secret storage. It is passed into the signer by trusted server-side orchestration and is never returned in the signed request object, body, headers, logs or fixtures.
 
-The deterministic fixture uses documented test-only secrets. No production credential belongs in the repository or compatibility fixtures.
+The deterministic fixture uses documented test-only secrets. The secret is not included in the fixture itself. No production credential belongs in the repository or compatibility fixtures.
 
 ## Tenant-scoped key selection
 
@@ -195,8 +195,9 @@ The key selector rejects:
 
 ## Current limits
 
-The modules do not yet:
+The current implementation does not yet:
 
+- load a bridge secret from `Env`;
 - load the registry from Worker `Env`;
 - send an HTTP request;
 - retry transport failures;

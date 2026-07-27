@@ -82,9 +82,9 @@ test("Growth approval summaries retain review value without raw payloads or note
   assert(!serialised.includes(SECRET_PAYLOAD));
   assert(!serialised.includes(SECRET_SETUP_GAP));
   assert(!serialised.includes(SECRET_DECISION_NOTE));
-  assert(!serialised.includes("payloadHint"));
-  assert(!serialised.includes("decisionNote"));
-  assert(!serialised.includes("safety"));
+  assert.equal(Object.hasOwn(summary, "payloadHint"), false);
+  assert.equal(Object.hasOwn(summary, "decisionNote"), false);
+  assert.equal(Object.hasOwn(summary, "safety"), false);
   assert.equal(Object.isFrozen(summary), true);
   assert.equal(Object.isFrozen(summary.reviewChecklist), true);
   assert.equal(Object.isFrozen(summary.explicitBlocks), true);

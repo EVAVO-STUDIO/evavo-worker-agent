@@ -380,12 +380,23 @@ const expectedScripts = {
   "autonomy:capability-truthfulness:check": "node scripts/check-autonomy-capability-truthfulness.mjs",
   "manual:execution-safety:check": "node scripts/check-manual-execution-safety.mjs",
   "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
-  "test:core": "node --test",
   "safety:gates:check": "node scripts/check-safety-gate-completeness.mjs",
 };
 for (const [name, command] of Object.entries(expectedScripts)) {
   if (scripts[name] !== command) errors.push(`package.json must expose ${name} as ${command}`);
   if (!checkLocal.includes(`npm run ${name}`)) errors.push(`check:local must include npm run ${name}`);
+}
+const coreTestCommand = String(scripts["test:core"] || "");
+for (const token of [
+  "--experimental-loader ./scripts/typescript-test-loader.mjs",
+  "--test",
+]) {
+  if (!coreTestCommand.includes(token)) {
+    errors.push(`package.json test:core must retain guarded TypeScript test token: ${token}`);
+  }
+}
+if (!checkLocal.includes("npm run test:typescript-loader:check")) {
+  errors.push("check:local must guard TypeScript test resolution before test:core");
 }
 if (!String(scripts.predeploy || "").includes("npm run check:local")) errors.push("predeploy must run check:local");
 

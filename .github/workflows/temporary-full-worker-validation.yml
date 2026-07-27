@@ -49,36 +49,25 @@ jobs:
         run: |
           set +e
           mkdir -p diagnostics
-          base=0
-          refine=0
-          docs=0
-          broad=0
-          python scripts/prepare-full-worker-gate-fixes.py > diagnostics/prepare-base.log 2>&1 || base=$?
-          if [ "$base" -eq 0 ]; then
-            python scripts/refine-full-worker-gate-fixes.py > diagnostics/prepare-refine.log 2>&1 || refine=$?
-          else
-            echo "refinement skipped because base preparation failed" > diagnostics/prepare-refine.log
-            refine=125
-          fi
-          if [ "$base" -eq 0 ] && [ "$refine" -eq 0 ]; then
-            python scripts/refine-full-worker-doc-contract.py > diagnostics/prepare-docs.log 2>&1 || docs=$?
-          else
-            echo "documentation refinement skipped because earlier preparation failed" > diagnostics/prepare-docs.log
-            docs=125
-          fi
-          if [ "$base" -eq 0 ] && [ "$refine" -eq 0 ] && [ "$docs" -eq 0 ]; then
-            python scripts/refine-full-worker-broad-admin-guard.py > diagnostics/prepare-broad-admin.log 2>&1 || broad=$?
-          else
-            echo "broad-admin refinement skipped because earlier preparation failed" > diagnostics/prepare-broad-admin.log
-            broad=125
-          fi
+          failed=0
+          python scripts/prepare-full-worker-gate-fixes.py > diagnostics/prepare-base.log 2>&1
+          base=$?
           printf '%s\n' "$base" > diagnostics/prepare-base.status
-          printf '%s\n' "$refine" > diagnostics/prepare-refine.status
-          printf '%s\n' "$docs" > diagnostics/prepare-docs.status
-          printf '%s\n' "$broad" > diagnostics/prepare-broad-admin.status
-          if [ "$base" -ne 0 ] || [ "$refine" -ne 0 ] || [ "$docs" -ne 0 ] || [ "$broad" -ne 0 ]; then
-            exit 1
+          if [ "$base" -ne 0 ]; then
+            failed=1
+          else
+            while IFS= read -r script; do
+              label="$(basename "$script" .py)"
+              python "$script" >"diagnostics/${label}.log" 2>&1
+              code=$?
+              printf '%s\n' "$code" >"diagnostics/${label}.status"
+              if [ "$code" -ne 0 ]; then
+                failed=1
+                break
+              fi
+            done < <(find scripts -maxdepth 1 -type f -name 'refine-full-worker-*.py' | sort)
           fi
+          exit "$failed"
 
       - name: Collect full validation diagnostics
         if: always()
@@ -113,6 +102,7 @@ jobs:
             run_check safety-completeness node scripts/check-safety-gate-completeness.mjs
             run_check operating-posture node scripts/check-readme-operating-posture.mjs
             run_check broad-admin node scripts/check-broad-admin-write-safety.mjs
+            run_check autonomy-capability node scripts/check-autonomy-capability-truthfulness.mjs
             run_check worker-workflow-guard node scripts/check-worker-contract-workflow.mjs
             run_check activity-budget node scripts/check-growth-activity-budget.mjs
             run_check zero-cost node scripts/check-growth-zero-cost-envelope.mjs
@@ -158,27 +148,13 @@ jobs:
           publish="$RUNNER_TEMP/full-worker-publish"
           git worktree add --detach "$publish" origin/main
           python "$GITHUB_WORKSPACE/scripts/prepare-full-worker-gate-fixes.py" "$publish"
-          python "$GITHUB_WORKSPACE/scripts/refine-full-worker-gate-fixes.py" "$publish"
-          python "$GITHUB_WORKSPACE/scripts/refine-full-worker-doc-contract.py" "$publish"
-          python "$GITHUB_WORKSPACE/scripts/refine-full-worker-broad-admin-guard.py" "$publish"
+          while IFS= read -r script; do
+            python "$GITHUB_WORKSPACE/$script" "$publish"
+          done < <(find scripts -maxdepth 1 -type f -name 'refine-full-worker-*.py' | sort)
           cd "$publish"
           git switch -c "$PUBLISH_BRANCH"
 
-          expected="$(printf '%s\n' \
-            docs/manual-research-concurrency.md \
-            scripts/check-broad-admin-write-safety.mjs \
-            scripts/check-growth-activity-budget.mjs \
-            scripts/check-growth-route-parity.mjs \
-            scripts/check-growth-zero-cost-envelope.mjs \
-            scripts/check-helper-scripts.mjs \
-            scripts/check-readme-operating-posture.mjs \
-            scripts/check-safety-gate-completeness.mjs \
-            src/core/growthCapabilities.ts \
-            src/core/growthZeroCostEnvelope.ts \
-            tests/growthActivityBudgetSettings.test.ts \
-            tests/growthActivityBudgetSource.test.ts \
-            tests/growthInternalOperatorPackRouteSource.test.ts \
-            tests/growthRouteParitySource.test.ts | sort)"
+          expected="$(sort -u "$GITHUB_WORKSPACE/scripts/full-worker-publish-files.txt")"
           actual="$(git diff --name-only | sort)"
           test "$actual" = "$expected"
 
@@ -197,14 +173,8 @@ jobs:
             tests/growthInternalOperatorPackRouteSource.test.ts
           git commit -m "Align Growth activity contracts with live runtime"
 
-          git add \
-            scripts/check-broad-admin-write-safety.mjs \
-            scripts/check-growth-route-parity.mjs \
-            scripts/check-helper-scripts.mjs \
-            scripts/check-readme-operating-posture.mjs \
-            scripts/check-safety-gate-completeness.mjs \
-            tests/growthRouteParitySource.test.ts
-          git commit -m "Align Worker meta-guards with guarded tests"
+          git add -A
+          git commit -m "Align Worker meta-guards with guarded runtime"
 
           test -z "$(git status --porcelain)"
           git push origin "HEAD:refs/heads/$PUBLISH_BRANCH"

@@ -111,3 +111,18 @@ replace_once(
     '  "This source-hardening pass did not change that setting",',
     '  "Source-secret safety and private repository visibility are independent requirements; passing one does not prove the other.",',
 )
+
+
+# Historical compatibility already uses the more precise complete-filename
+# migration rule and backticked schema filename. Align the checker with those
+# authoritative documents instead of weakening either safety statement.
+replace_once(
+    "scripts/check-historical-data-compatibility.mjs",
+    '  "Run migrations in filename order",',
+    '  "Run migrations in complete filename order",',
+)
+replace_once(
+    "scripts/check-historical-data-compatibility.mjs",
+    '  "schema.sql is a legacy bootstrap reference only",',
+    '  "`schema.sql` is a legacy bootstrap reference only",',
+)

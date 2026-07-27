@@ -70,12 +70,16 @@ function rows(result: { results?: Row[] | null }): Row[] {
   return Array.isArray(result.results) ? result.results : [];
 }
 
-function statusCounts(records: readonly Row[]): Record<string, number> {
+function valueCounts(records: readonly Row[], field: string): Record<string, number> {
   return records.reduce<Record<string, number>>((counts, record) => {
-    const status = text(record.status, 64) ?? "unknown";
-    counts[status] = (counts[status] ?? 0) + 1;
+    const value = text(record[field], 128) ?? "unknown";
+    counts[value] = (counts[value] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function statusCounts(records: readonly Row[]): Record<string, number> {
+  return valueCounts(records, "status");
 }
 
 function latestTimestamp(records: readonly Row[]): string | null {
@@ -120,6 +124,12 @@ function uncertainties(input: {
   if (!input.returnedCounts.signals) {
     result.push("No evidence-backed account signals are stored.");
   }
+  if (!input.returnedCounts.auditRuns) {
+    result.push("No organization-linked website audit run is stored.");
+  }
+  if (!input.returnedCounts.auditObservations) {
+    result.push("No reviewed website audit observations are stored for this organization.");
+  }
   if (!input.returnedCounts.opportunities) {
     result.push("No internal opportunity hypothesis is stored.");
   }
@@ -143,6 +153,12 @@ function reviewPrompts(counts: Record<string, number>): string[] {
   if (!counts.websites) prompts.push("Review and link a public organization website.");
   if (!counts.people) prompts.push("Research public stakeholder context for owner review.");
   if (!counts.signals) prompts.push("Run bounded public research and review the resulting evidence.");
+  if (counts.websites && !counts.auditRuns) {
+    prompts.push("Prepare a bounded website audit run for owner review.");
+  }
+  if (counts.auditRuns && !counts.auditObservations) {
+    prompts.push("Review the latest audit run and record evidence-backed observations.");
+  }
   if (!counts.opportunities && counts.signals) {
     prompts.push("Review stored signals before creating an internal opportunity hypothesis.");
   }
@@ -215,64 +231,93 @@ export async function buildBusinessAccount360(
   `).bind(organizationId).first<Row>();
   if (!organization) return null;
 
-  const [people, websites, pages, signals, opportunities, serviceMatches, auditPacks, followups] =
-    await Promise.all([
-      readRows(env, `SELECT id, name, role, source_type AS sourceType,
-        allowed_use AS allowedUse, contact_status AS contactStatus,
-        confidence_score AS confidenceScore,
-        CASE WHEN email IS NOT NULL AND trim(email) <> '' THEN 1 ELSE 0 END AS emailPresent,
-        CASE WHEN phone IS NOT NULL AND trim(phone) <> '' THEN 1 ELSE 0 END AS phonePresent,
-        CASE WHEN profile_url IS NOT NULL AND trim(profile_url) <> '' THEN 1 ELSE 0 END AS profileUrlPresent,
-        CASE WHEN source_url IS NOT NULL AND trim(source_url) <> '' THEN 1 ELSE 0 END AS sourceUrlPresent,
-        created_at AS createdAt, updated_at AS updatedAt
-        FROM business_people WHERE organization_id = ?
-        ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, url, domain, status, last_checked_at AS lastCheckedAt,
-        robots_status AS robotsStatus, crawl_allowed AS crawlAllowed,
-        tech_hints_json AS techHintsJson, created_at AS createdAt, updated_at AS updatedAt
-        FROM business_websites WHERE organization_id = ?
-        ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, website_id AS websiteId, url, page_type AS pageType,
-        title, status, last_fetched_at AS lastFetchedAt, http_status AS httpStatus,
-        content_hash AS contentHash, created_at AS createdAt, updated_at AS updatedAt
-        FROM business_pages WHERE organization_id = ?
-        ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, website_id AS websiteId, page_id AS pageId,
-        signal_type AS signalType, signal_strength AS signalStrength,
-        evidence_summary AS evidenceSummary, evidence_url AS evidenceUrl,
-        confidence_score AS confidenceScore, risk_flags_json AS riskFlagsJson,
-        created_at AS createdAt, updated_at AS updatedAt
-        FROM business_signals WHERE organization_id = ?
-        ORDER BY signal_strength DESC, updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, opportunity_type AS opportunityType, status, priority,
-        fit_score AS fitScore, need_score AS needScore, urgency_score AS urgencyScore,
-        budget_likelihood_score AS budgetLikelihoodScore,
-        contactability_score AS contactabilityScore,
-        evidence_quality_score AS evidenceQualityScore, risk_score AS riskScore,
-        confidence_score AS confidenceScore, recommended_service AS recommendedService,
-        recommended_angle AS recommendedAngle, next_step AS nextStep,
-        created_at AS createdAt, updated_at AS updatedAt
-        FROM business_opportunities WHERE organization_id = ?
-        ORDER BY fit_score DESC, need_score DESC, updated_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, opportunity_id AS opportunityId, signal_id AS signalId,
-        service_key AS serviceKey, match_score AS matchScore, reason,
-        evidence_json AS evidenceJson, created_at AS createdAt, updated_at AS updatedAt
-        FROM business_service_matches WHERE organization_id = ?
-        ORDER BY match_score DESC, updated_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, opportunity_id AS opportunityId, title, summary,
-        audit_type AS auditType, risk_flags_json AS riskFlagsJson,
-        confidence_score AS confidenceScore, status,
-        created_at AS createdAt, updated_at AS updatedAt
-        FROM business_audit_packs WHERE organization_id = ?
-        ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
-      readRows(env, `SELECT id, person_id AS personId, opportunity_id AS opportunityId,
-        followup_type AS followupType, due_at AS dueAt, status,
-        CASE WHEN notes IS NOT NULL AND trim(notes) <> '' THEN 1 ELSE 0 END AS notesPresent,
-        created_at AS createdAt, updated_at AS updatedAt
-        FROM business_followups WHERE organization_id = ?
-        ORDER BY CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at, updated_at DESC LIMIT ?`,
-        organizationId, limit),
-    ]);
+  const [
+    people,
+    websites,
+    pages,
+    auditRuns,
+    auditObservations,
+    signals,
+    opportunities,
+    serviceMatches,
+    auditPacks,
+    followups,
+  ] = await Promise.all([
+    readRows(env, `SELECT id, name, role, source_type AS sourceType,
+      allowed_use AS allowedUse, contact_status AS contactStatus,
+      confidence_score AS confidenceScore,
+      CASE WHEN email IS NOT NULL AND trim(email) <> '' THEN 1 ELSE 0 END AS emailPresent,
+      CASE WHEN phone IS NOT NULL AND trim(phone) <> '' THEN 1 ELSE 0 END AS phonePresent,
+      CASE WHEN profile_url IS NOT NULL AND trim(profile_url) <> '' THEN 1 ELSE 0 END AS profileUrlPresent,
+      CASE WHEN source_url IS NOT NULL AND trim(source_url) <> '' THEN 1 ELSE 0 END AS sourceUrlPresent,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_people WHERE organization_id = ?
+      ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, url, domain, status, last_checked_at AS lastCheckedAt,
+      robots_status AS robotsStatus, crawl_allowed AS crawlAllowed,
+      tech_hints_json AS techHintsJson, created_at AS createdAt, updated_at AS updatedAt
+      FROM business_websites WHERE organization_id = ?
+      ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, website_id AS websiteId, url, page_type AS pageType,
+      title, status, last_fetched_at AS lastFetchedAt, http_status AS httpStatus,
+      content_hash AS contentHash, created_at AS createdAt, updated_at AS updatedAt
+      FROM business_pages WHERE organization_id = ?
+      ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, website_id AS websiteId, status,
+      audit_type AS auditType, source,
+      CASE WHEN requested_by IS NOT NULL AND trim(requested_by) <> '' THEN 1 ELSE 0 END AS requestedByPresent,
+      started_at AS startedAt, completed_at AS completedAt,
+      readiness_score AS readinessScore, risk_score AS riskScore,
+      confidence_score AS confidenceScore, summary,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_website_audit_runs WHERE organization_id = ?
+      ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, audit_run_id AS auditRunId, website_id AS websiteId,
+      page_id AS pageId, signal_id AS signalId, category, severity, title,
+      evidence_summary AS evidenceSummary, recommendation,
+      confidence_score AS confidenceScore,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_audit_observations WHERE organization_id = ?
+      ORDER BY CASE severity
+        WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
+        WHEN 'low' THEN 3 ELSE 4 END,
+        updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, website_id AS websiteId, page_id AS pageId,
+      signal_type AS signalType, signal_strength AS signalStrength,
+      evidence_summary AS evidenceSummary, evidence_url AS evidenceUrl,
+      confidence_score AS confidenceScore, risk_flags_json AS riskFlagsJson,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_signals WHERE organization_id = ?
+      ORDER BY signal_strength DESC, updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, opportunity_type AS opportunityType, status, priority,
+      fit_score AS fitScore, need_score AS needScore, urgency_score AS urgencyScore,
+      budget_likelihood_score AS budgetLikelihoodScore,
+      contactability_score AS contactabilityScore,
+      evidence_quality_score AS evidenceQualityScore, risk_score AS riskScore,
+      confidence_score AS confidenceScore, recommended_service AS recommendedService,
+      recommended_angle AS recommendedAngle, next_step AS nextStep,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_opportunities WHERE organization_id = ?
+      ORDER BY fit_score DESC, need_score DESC, updated_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, opportunity_id AS opportunityId, signal_id AS signalId,
+      service_key AS serviceKey, match_score AS matchScore, reason,
+      evidence_json AS evidenceJson, created_at AS createdAt, updated_at AS updatedAt
+      FROM business_service_matches WHERE organization_id = ?
+      ORDER BY match_score DESC, updated_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, opportunity_id AS opportunityId, title, summary,
+      audit_type AS auditType, risk_flags_json AS riskFlagsJson,
+      confidence_score AS confidenceScore, status,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_audit_packs WHERE organization_id = ?
+      ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
+    readRows(env, `SELECT id, person_id AS personId, opportunity_id AS opportunityId,
+      followup_type AS followupType, due_at AS dueAt, status,
+      CASE WHEN notes IS NOT NULL AND trim(notes) <> '' THEN 1 ELSE 0 END AS notesPresent,
+      created_at AS createdAt, updated_at AS updatedAt
+      FROM business_followups WHERE organization_id = ?
+      ORDER BY CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at, updated_at DESC LIMIT ?`,
+      organizationId, limit),
+  ]);
 
   const stakeholders = people.map((row) => ({
     id: text(row.id, 128),
@@ -314,6 +359,40 @@ export async function buildBusinessAccount360(
     lastFetchedAt: text(row.lastFetchedAt, 64),
     httpStatus: row.httpStatus === null ? null : numberValue(row.httpStatus),
     contentHashPresent: Boolean(text(row.contentHash, 256)),
+    metadataRedacted: true,
+    createdAt: text(row.createdAt, 64),
+    updatedAt: text(row.updatedAt, 64),
+  }));
+  const auditRunEvidence = auditRuns.map((row) => ({
+    id: text(row.id, 128),
+    websiteId: text(row.websiteId, 128),
+    status: text(row.status, 64) ?? "unknown",
+    auditType: text(row.auditType, 128) ?? "website_funnel_audit",
+    source: text(row.source, 128) ?? "unknown",
+    requestedByPresent: Boolean(row.requestedByPresent),
+    requestedByRedacted: true,
+    startedAt: text(row.startedAt, 64),
+    completedAt: text(row.completedAt, 64),
+    readinessScore: numberValue(row.readinessScore),
+    riskScore: numberValue(row.riskScore),
+    confidenceScore: numberValue(row.confidenceScore),
+    summary: text(row.summary, 2_000),
+    metadataRedacted: true,
+    createdAt: text(row.createdAt, 64),
+    updatedAt: text(row.updatedAt, 64),
+  }));
+  const auditObservationEvidence = auditObservations.map((row) => ({
+    id: text(row.id, 128),
+    auditRunId: text(row.auditRunId, 128),
+    websiteId: text(row.websiteId, 128),
+    pageId: text(row.pageId, 128),
+    signalId: text(row.signalId, 128),
+    category: text(row.category, 128) ?? "general",
+    severity: text(row.severity, 64) ?? "info",
+    title: text(row.title, 512) ?? "Untitled observation",
+    evidenceSummary: text(row.evidenceSummary, 2_000),
+    recommendation: text(row.recommendation, 2_000),
+    confidenceScore: numberValue(row.confidenceScore),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
     updatedAt: text(row.updatedAt, 64),
@@ -399,6 +478,8 @@ export async function buildBusinessAccount360(
     people: stakeholders.length,
     websites: websiteEvidence.length,
     pages: pageEvidence.length,
+    auditRuns: auditRunEvidence.length,
+    auditObservations: auditObservationEvidence.length,
     signals: signalEvidence.length,
     opportunities: opportunityContext.length,
     serviceMatches: serviceMatchContext.length,
@@ -409,11 +490,20 @@ export async function buildBusinessAccount360(
   const coverage = dimensionCoverage(signalTypes);
   const allProjected = [
     { createdAt: text(organization.createdAt, 64), updatedAt: text(organization.updatedAt, 64) },
-    ...stakeholders, ...websiteEvidence, ...pageEvidence, ...signalEvidence,
-    ...opportunityContext, ...serviceMatchContext, ...auditPackEvidence, ...followupContext,
+    ...stakeholders,
+    ...websiteEvidence,
+    ...pageEvidence,
+    ...auditRunEvidence,
+    ...auditObservationEvidence,
+    ...signalEvidence,
+    ...opportunityContext,
+    ...serviceMatchContext,
+    ...auditPackEvidence,
+    ...followupContext,
   ];
 
   return {
+    auditEvidenceContract: "business_account_360_audit_evidence_v1",
     organization: {
       id: text(organization.id, 128),
       name: text(organization.name, 255) ?? "Unknown organization",
@@ -436,6 +526,8 @@ export async function buildBusinessAccount360(
     accountEvidence: {
       websites: websiteEvidence,
       pages: pageEvidence,
+      auditRuns: auditRunEvidence,
+      auditObservations: auditObservationEvidence,
       signals: signalEvidence,
       auditPacks: auditPackEvidence,
     },
@@ -461,6 +553,9 @@ export async function buildBusinessAccount360(
         counts[signalType] = (counts[signalType] ?? 0) + 1;
         return counts;
       }, {}),
+      auditRunStatusCounts: statusCounts(auditRunEvidence),
+      auditObservationSeverityCounts: valueCounts(auditObservationEvidence, "severity"),
+      auditObservationCategoryCounts: valueCounts(auditObservationEvidence, "category"),
       opportunityStatusCounts: statusCounts(opportunityContext),
       followupStatusCounts: statusCounts(followupContext),
       dimensionCoverage: coverage,
@@ -479,19 +574,23 @@ function errorText(error: unknown): string {
 }
 
 export function businessAccount360Failure(error: unknown) {
-  const missingTable =
-    /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|followups)/i.test(
-      errorText(error),
-    );
+  const errorMessage = errorText(error);
+  const missingAuditTable = /no such table: business_(website_audit_runs|audit_observations)/i.test(errorMessage);
+  const missingFoundationTable = /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|followups)/i.test(errorMessage);
+  const missingTable = missingAuditTable || missingFoundationTable;
   return {
     ok: false,
     mode: "business_account_360_error",
     contract: "business_account_360_read_v1",
     error: missingTable ? "business_autopilot_schema_missing" : "business_account_360_failed",
     message: missingTable
-      ? "Account 360 requires the Business Autopilot foundation schema."
+      ? "Account 360 requires the Business Autopilot foundation and website audit schemas."
       : "Account 360 failed before a safe evidence view could be returned.",
-    requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql" : null,
+    requiredMigration: missingAuditTable
+      ? "0022_business_website_audit_records.sql"
+      : missingFoundationTable
+        ? "0021_business_autopilot_foundation.sql"
+        : null,
     rawErrorExposed: false,
     contactDetailsExposed: false,
     metadataExposed: false,

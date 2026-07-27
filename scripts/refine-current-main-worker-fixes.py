@@ -135,3 +135,27 @@ replace_once(
     '  \'contract: "review-mutation-boundary-safety-v1"\',',
     '  \'contract: "review-mutation-boundary-safety-v3-source-candidate-atomicity"\',',
 )
+
+
+# The credential contract must preserve the guarded TypeScript test loader,
+# which is stricter and more representative than the retired raw node --test
+# command that could not resolve this repository's extensionless TS imports.
+replace_once(
+    "scripts/check-worker-credential-contract.mjs",
+    '''if (packageJson.scripts?.["test:core"] !== "node --test") {
+  errors.push("package.json must retain deterministic Node core tests");
+}
+''',
+    '''const coreTestCommand = String(packageJson.scripts?.["test:core"] || "");
+for (const token of [
+  "--experimental-strip-types",
+  "--experimental-transform-types",
+  "--experimental-loader ./scripts/typescript-test-loader.mjs",
+  "--test",
+]) {
+  if (!coreTestCommand.includes(token)) {
+    errors.push(`package.json test:core must retain guarded TypeScript test token: ${token}`);
+  }
+}
+''',
+)

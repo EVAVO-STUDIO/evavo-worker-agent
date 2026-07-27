@@ -74,8 +74,8 @@ replace_once(
 ''',
     '''forbidTokens("Zero-source runbook", content.runbook, [
   "Fetch work must be queued and bounded.",
-  "active queue consumer",
-  "scheduled fetch queue consumer",
+  "The active Worker consumes `growth_fetch_queue` as an execution queue.",
+  "Scheduled processing executes queued network work.",
 ]);
 ''',
 )

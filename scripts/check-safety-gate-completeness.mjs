@@ -14,6 +14,10 @@ const packageJson = fs.existsSync(packagePath)
   : {};
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
+const packageIdentityPath = path.join(root, "scripts/check-package-service-identity.mjs");
+const packageIdentity = fs.existsSync(packageIdentityPath)
+  ? fs.readFileSync(packageIdentityPath, "utf8")
+  : "";
 const typescriptCoreTestCommand =
   "node --experimental-strip-types --experimental-transform-types --experimental-loader ./scripts/typescript-test-loader.mjs --test";
 
@@ -146,6 +150,19 @@ for (const relativePath of [
   }
 }
 
+for (const token of [
+  'contract: "package-service-identity-v2-active-package"',
+  'packageIdentifier: packageJson.name || null',
+  'historicalDeploymentIdentifier: identity.historicalDeploymentIdentifier || null',
+  'historicalDatabaseIdentifier: identity.historicalDatabaseIdentifier || null',
+  "packageLockAligned:",
+  "outboundExecutionEnabled: false",
+]) {
+  if (!packageIdentity.includes(token)) {
+    errors.push(`Package identity safety contract is missing: ${token}`);
+  }
+}
+
 if (!String(scripts.predeploy || "").includes("npm run check:local")) {
   errors.push("predeploy must run the complete check:local gate");
 }
@@ -155,7 +172,7 @@ console.log(
     {
       passed: errors.length === 0,
       activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-      contract: "safety-gate-completeness-v9-repository-confidentiality",
+      contract: "safety-gate-completeness-v10-package-identity",
       generatedRouteIntegrityRequired: true,
       growthRouteParityRequired: true,
       readmeOperatingPostureRequired: true,
@@ -206,6 +223,10 @@ console.log(
       safeWorkerVariableTemplateRequired: true,
       dependabotConfigurationRequired: true,
       packageServiceIdentityRequired: true,
+      activePackageIdentifierRequired: "evavo-worker-agent",
+      packageAndLockIdentityAlignmentRequired: true,
+      historicalDeploymentIdentifierRetained: true,
+      historicalDatabaseIdentifierRetained: true,
       workflowActionPinningRequired: true,
       typescriptLoaderCoreTestsRequired: true,
       deterministicCoreBehavioralTestsRequired: true,

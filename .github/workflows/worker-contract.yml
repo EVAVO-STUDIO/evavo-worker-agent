@@ -69,6 +69,9 @@ jobs:
       - name: Verify tracked-source secret safety
         run: npm run worker:source-secret-safety:check
 
+      - name: Verify npm package and deployment identity
+        run: npm run worker:package-identity:check
+
       - name: Verify Worker workflow parity
         run: node scripts/check-worker-contract-workflow.mjs
 

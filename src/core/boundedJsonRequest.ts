@@ -1,3 +1,5 @@
+import { copyBytesToArrayBuffer } from "./cryptoBufferSource";
+
 export const BOUNDED_JSON_REQUEST_CONTRACT = "bounded_admin_json_request_v1";
 export const DEFAULT_ADMIN_JSON_MAX_BYTES = 65_536;
 
@@ -77,7 +79,7 @@ function isJsonContentType(contentType: string | null): boolean {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const digest = await crypto.subtle.digest("SHA-256", copyBytesToArrayBuffer(bytes));
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 

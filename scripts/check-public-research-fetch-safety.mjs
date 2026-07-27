@@ -76,6 +76,7 @@ const readme = read("README.md");
 const boundaryDoc = read("docs/public-research-fetch-boundary.md");
 const packageJson = JSON.parse(read("package.json") || "{}");
 const safetyGate = read("scripts/check-safety-gate-completeness.mjs");
+const cryptoBufferSource = read("src/core/cryptoBufferSource.ts");
 
 requireTokens("public research fetch helper", helper, [
   'PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v2"',
@@ -108,7 +109,7 @@ requireTokens("public research fetch helper", helper, [
   "readBodyBounded",
   "isProbablyBinary",
   "bodySha256",
-  'crypto.subtle.digest("SHA-256", bytes)',
+  "copyBytesToArrayBuffer(bytes)",
   '"EVAVO-Growth-Research-Worker/2.0 (+https://evavo.com.au)"',
   "fetchPublicResearchHtml",
   "fetchPublicResearchText",
@@ -125,6 +126,19 @@ requireTokens("public research fetch helper", helper, [
   "lastModified",
   "contentLanguage",
   "transport?: PublicResearchTransport",
+]);
+
+
+requireTokens("crypto BufferSource copy", cryptoBufferSource, [
+  "copyBytesToArrayBuffer",
+  "const copy = new Uint8Array(bytes.byteLength)",
+  "copy.set(bytes)",
+  "return copy.buffer",
+]);
+forbidTokens("crypto BufferSource copy", cryptoBufferSource, [
+  "fetch(",
+  "process.env",
+  "child_process",
 ]);
 
 const boundedReadPosition = helper.indexOf("const bounded = await readBodyBounded(response, maxBytes)");

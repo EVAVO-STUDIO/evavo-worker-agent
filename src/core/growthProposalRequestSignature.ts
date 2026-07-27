@@ -2,6 +2,7 @@ import {
   buildGrowthProposalPacket,
   type GrowthProposalPacket,
 } from "./growthProposalPacket";
+import { copyBytesToArrayBuffer } from "./cryptoBufferSource";
 
 export const GROWTH_PROPOSAL_REQUEST_CONTRACT_VERSION = "growth_worker_request_v1" as const;
 export const GROWTH_PROPOSAL_REQUEST_PATH = "/api/private/growth/worker-proposals" as const;
@@ -187,7 +188,7 @@ function toHex(bytes: ArrayBuffer): string {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  return toHex(await crypto.subtle.digest("SHA-256", bytes));
+  return toHex(await crypto.subtle.digest("SHA-256", copyBytesToArrayBuffer(bytes)));
 }
 
 async function hmacSha256Hex(secret: string, value: string): Promise<string> {

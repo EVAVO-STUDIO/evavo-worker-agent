@@ -1,3 +1,5 @@
+import { copyBytesToArrayBuffer } from "./cryptoBufferSource";
+
 export const PUBLIC_RESEARCH_FETCH_CONTRACT = "public_research_fetch_v2";
 export const DEFAULT_PUBLIC_RESEARCH_MAX_BYTES = 1_048_576;
 export const DEFAULT_PUBLIC_RESEARCH_MAX_REDIRECTS = 4;
@@ -256,7 +258,7 @@ function isProbablyBinary(bytes: Uint8Array): boolean {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const digest = await crypto.subtle.digest("SHA-256", copyBytesToArrayBuffer(bytes));
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 

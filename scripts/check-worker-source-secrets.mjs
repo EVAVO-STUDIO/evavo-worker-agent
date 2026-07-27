@@ -102,7 +102,7 @@ function isProbablyBinary(buffer) {
 function placeholderValue(value) {
   const normalized = value
     .trim()
-    .replace(/^['"]|['"]$/g, "")
+    .replace(/^["']|["']$/g, "")
     .toLowerCase();
   if (!normalized) return true;
   return (
@@ -259,7 +259,7 @@ requireTokens("safety-gate completeness", safetyGate, [
   '"scripts/check-worker-source-secrets.mjs"',
   '".dev.vars.example"',
   '"docs/worker-source-secret-posture.md"',
-  'contract: "safety-gate-completeness-v8-source-secrets"',
+  'contract: "safety-gate-completeness-v10-package-identity"',
   "workerTrackedSourceSecretSafetyRequired: true",
   "safeWorkerVariableTemplateRequired: true",
 ]);
@@ -292,8 +292,8 @@ requireTokens("README source-secret posture", readme, [
   "## Source-secret and repository posture",
   "npm run worker:source-secret-safety:check",
   "GitHub currently reports this repository as **public**",
-  "Repository visibility is an administrative GitHub setting",
-  "This source-hardening pass did not change that setting",
+  "GitHub repository visibility must be private; current public visibility is a release and governance blocker.",
+  "Source-secret safety and private repository visibility are independent requirements; passing one does not prove the other.",
   "docs/worker-source-secret-posture.md",
   ".dev.vars.example",
 ]);
@@ -313,7 +313,7 @@ console.log(
     {
       passed: errors.length === 0,
       activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-      contract: "worker-tracked-source-secret-safety-v3-fixture-aware",
+      contract: "worker-tracked-source-secret-safety-v4-current-contracts",
       trackedFilesInspected: files.length,
       maximumScannedFileBytes: MAX_SCANNED_FILE_BYTES,
       trackedEnvironmentFilesAllowed: [...ALLOWED_ENV_FILES],
@@ -325,6 +325,7 @@ console.log(
       rawSecretValuesPrinted: false,
       localGateRunsBeforeAggregateChecks: true,
       safetyCompletenessRequired: true,
+      packageIdentityContractRequired: true,
       focusedReadOnlyCiRequired: true,
       sourcePostureDocumentationRequired: true,
       repositoryVisibilityEnforcedBySource: false,

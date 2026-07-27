@@ -207,13 +207,14 @@ export default {
       }
 
       switch (resolveBusinessRouteHandlerId(pathname)) {
+        case "account-intelligence":
+        case "business-historical":
+        case "business-fallback":
+          return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);
         case "people":
           return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse);
         case "website-audit":
           return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse);
-        case "business-historical":
-        case "business-fallback":
-          return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);
         default:
           break;
       }

@@ -7,15 +7,18 @@ const root = process.cwd();
 const policyPath = path.join(root, "src", "routes", "businessRoutePolicy.ts");
 const indexPath = path.join(root, "src", "index.ts");
 const inventoryPath = path.join(root, "src", "core", "growthBusinessRouteInventory.ts");
+const cataloguePath = path.join(root, "src", "routes", "businessAutopilotRouteCatalogue.ts");
 const errors = [];
 
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
 const inventory = fs.existsSync(inventoryPath) ? fs.readFileSync(inventoryPath, "utf8") : "";
+const catalogue = fs.existsSync(cataloguePath) ? fs.readFileSync(cataloguePath, "utf8") : "";
 
 if (!policy) errors.push("Missing typed Business route policy registry");
 if (!index) errors.push("Missing Worker dispatcher");
 if (!inventory) errors.push("Missing Worker route inventory");
+if (!catalogue) errors.push("Missing Business route catalogue");
 
 const ids = ["account-intelligence", "people", "website-audit", "business-historical", "business-fallback"];
 for (const id of ids) {
@@ -101,6 +104,20 @@ for (const required of [
   if (!inventory.includes(required)) errors.push(`Business inventory is missing: ${required}`);
 }
 
+for (const required of [
+  'const accountIntelligenceDescription = "Reads one bounded, evidence-backed Worker Account 360 snapshot',
+  'readRoute("business_account_360"',
+  '/admin/business/organizations/:organizationId/account-360?limit=25',
+  'D1 remains noncanonical',
+  'does not promote state to Supabase',
+  'infer relationship or deal health',
+  'expose contact details',
+  'create meetings',
+  'or execute external actions',
+]) {
+  if (!catalogue.includes(required)) errors.push(`Business catalogue is missing Account 360 posture: ${required}`);
+}
+
 const priorities = [...policy.matchAll(/priority:\s*(\d+)/g)].map((match) => Number(match[1]));
 if (priorities.length !== ids.length) errors.push(`Expected ${ids.length} Business priorities, found ${priorities.length}`);
 if (new Set(priorities).size !== priorities.length) errors.push("Business route priorities must be unique");
@@ -138,14 +155,21 @@ console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
   contract: "typed-business-route-policy-v3-account-intelligence-read-only",
+  compatibility: {
+    contract: "typed-business-route-policy-v2-historical-explicit",
+  },
   routeGroups: ids,
   accountIntelligenceRouteGroupExplicit: true,
   accountIntelligenceReadOnly: true,
   accountIntelligencePostSupported: false,
   accountIntelligenceConfirmationRequired: false,
+  accountIntelligenceInventoryExplicit: true,
+  accountIntelligenceCatalogueExplicit: true,
+  accountIntelligenceCanonicalPromotionAllowed: false,
   historicalRouteGroupExplicit: true,
   historicalReadsOnly: true,
   retiredHistoricalWritesFailClosed: true,
+  historicalGroupPrecedesFallback: true,
   specificGroupsPrecedeFallback: true,
   readMethods: ["GET"],
   writeMethods: ["POST"],

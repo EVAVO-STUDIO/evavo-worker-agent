@@ -39,6 +39,7 @@ It does **not** provide outbound execution.
 - The browser must never receive the Worker admin token.
 - Tracked source is scanned for environment files, private keys, live provider-token shapes, credential-bearing URLs and non-placeholder sensitive assignments.
 - Local `.env`, `.dev.vars` and Wrangler state remain ignored; only reviewed placeholder templates may be tracked.
+- GitHub repository visibility must be private; current public visibility is a release and governance blocker.
 
 ## Active architecture
 
@@ -66,9 +67,28 @@ The guard scans tracked text files without printing matched values. It rejects r
 
 Use [`.dev.vars.example`](.dev.vars.example) as the local template. Copy it to the ignored `.dev.vars` file and replace placeholders only in that local file. `ADMIN_TOKEN` remains a Cloudflare server-side secret and must never be committed, exposed to browser code or placed in client-visible configuration.
 
-GitHub currently reports this repository as **public**. Repository visibility is an administrative GitHub setting and cannot be enforced by Worker source code. If EVAVO's governance intent is private source hosting, an administrator must change the repository visibility in GitHub settings and review the effects on forks, Actions, rulesets and integrations. This source-hardening pass did not change that setting.
+GitHub currently reports this repository as **public**. The required repository posture is `private: true`, `visibility: private` and `archived: false`. Until an approved GitHub administrator changes the visibility and the live check passes, repository confidentiality remains a release and governance blocker.
 
-The authoritative detailed contract is [`docs/worker-source-secret-posture.md`](docs/worker-source-secret-posture.md).
+Run the deterministic static policy check locally:
+
+```powershell
+npm run worker:repository-visibility:check
+```
+
+A live metadata check requires a read-only GitHub token and the exact repository context:
+
+```powershell
+$env:GITHUB_REPOSITORY = "EVAVO-STUDIO/evavo-worker-agent"
+$env:GITHUB_TOKEN = "<read-only GitHub token>"
+node .\scripts\check-worker-repository-visibility.mjs --live
+```
+
+The separate `Worker repository confidentiality` GitHub Actions workflow performs this live read with the built-in read-only repository token. It performs no repository mutation and no deployment. Source-secret safety and private repository visibility are independent requirements; passing one does not prove the other.
+
+The authoritative detailed contracts are:
+
+- [`docs/worker-source-secret-posture.md`](docs/worker-source-secret-posture.md)
+- [`docs/worker-repository-confidentiality.md`](docs/worker-repository-confidentiality.md)
 
 ## Bounded request boundary
 
@@ -135,6 +155,7 @@ The authoritative detailed contract is [`docs/opportunity-evidence-quality.md`](
 ## Current operating documents
 
 - [`docs/worker-source-secret-posture.md`](docs/worker-source-secret-posture.md)
+- [`docs/worker-repository-confidentiality.md`](docs/worker-repository-confidentiality.md)
 - [`docs/bounded-admin-json-boundary.md`](docs/bounded-admin-json-boundary.md)
 - [`docs/public-research-fetch-boundary.md`](docs/public-research-fetch-boundary.md)
 - [`docs/opportunity-evidence-quality.md`](docs/opportunity-evidence-quality.md)
@@ -197,6 +218,7 @@ Important focused checks include:
 
 ```powershell
 npm run worker:source-secret-safety:check
+npm run worker:repository-visibility:check
 npm run safety:gates:check
 npm run docs:operating-posture:check
 npm run docs:readme-truthfulness:check
@@ -234,6 +256,8 @@ npm run typecheck
 The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.
 
 The GitHub Actions Worker contract workflow runs the tracked-source secret check, focused request, fetch and evidence checks, deterministic Node tests and the authoritative `check:local` chain with read-only repository permissions. It does not deploy and does not request Worker credentials.
+
+The separate Worker repository confidentiality workflow performs a bounded live GitHub metadata read using only the built-in read-only repository token. It remains red while the repository is public and performs no repository mutation or deployment.
 
 ## Deployment
 

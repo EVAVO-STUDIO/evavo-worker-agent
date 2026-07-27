@@ -80,6 +80,7 @@ jobs:
           run_check repository-visibility-static node scripts/check-worker-repository-visibility.mjs
           run_check broad-admin node scripts/check-broad-admin-write-safety.mjs
           run_check autonomy-capability node scripts/check-autonomy-capability-truthfulness.mjs
+          run_check historical-compatibility node scripts/check-historical-data-compatibility.mjs
           run_check activity-budget node scripts/check-growth-activity-budget.mjs
           run_check zero-cost node scripts/check-growth-zero-cost-envelope.mjs
           run_check route-parity node scripts/check-growth-route-parity.mjs
@@ -151,6 +152,7 @@ jobs:
             scripts/check-broad-admin-write-safety.mjs \
             scripts/check-growth-route-parity.mjs \
             scripts/check-helper-scripts.mjs \
+            scripts/check-historical-data-compatibility.mjs \
             scripts/check-readme-operating-posture.mjs \
             scripts/check-worker-source-secrets.mjs \
             tests/growthRouteParitySource.test.ts

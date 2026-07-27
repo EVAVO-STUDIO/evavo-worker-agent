@@ -14,6 +14,8 @@ const packageJson = fs.existsSync(packagePath)
   : {};
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
+const typescriptCoreTestCommand =
+  "node --experimental-strip-types --experimental-transform-types --experimental-loader ./scripts/typescript-test-loader.mjs --test";
 
 const requiredSafetyCommands = {
   "growth:generated-routes:check": "node scripts/check-generated-route-wiring-clean.mjs",
@@ -60,14 +62,19 @@ const requiredSafetyCommands = {
   "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
   "worker:dependabot-config:check": "node scripts/check-dependabot-config.mjs",
   "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
+  "worker:repository-visibility:check": "node scripts/check-worker-repository-visibility.mjs",
   "worker:source-secret-safety:check": "node scripts/check-worker-source-secrets.mjs",
   "worker:workflow-action-pinning:check": "node scripts/check-workflow-action-pinning.mjs",
-  "test:core": "node --test",
+  "test:core": typescriptCoreTestCommand,
 };
 
 for (const [scriptName, expectedCommand] of Object.entries(requiredSafetyCommands)) {
-  if (scripts[scriptName] !== expectedCommand) errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
-  if (!checkLocal.includes(`npm run ${scriptName}`)) errors.push(`check:local must include ${scriptName}`);
+  if (scripts[scriptName] !== expectedCommand) {
+    errors.push(`package.json must expose ${scriptName} as ${expectedCommand}`);
+  }
+  if (!checkLocal.includes(`npm run ${scriptName}`)) {
+    errors.push(`check:local must include ${scriptName}`);
+  }
 }
 
 for (const relativePath of [
@@ -115,6 +122,7 @@ for (const relativePath of [
   "scripts/check-worker-credential-contract.mjs",
   "scripts/check-dependabot-config.mjs",
   "scripts/check-package-service-identity.mjs",
+  "scripts/check-worker-repository-visibility.mjs",
   "scripts/check-worker-source-secrets.mjs",
   "scripts/check-workflow-action-pinning.mjs",
   "tests/adminAuthentication.test.ts",
@@ -126,74 +134,87 @@ for (const relativePath of [
   "tests/growthRouteParitySource.test.ts",
   "fixtures/growth-worker-route-parity-v1.json",
   ".dev.vars.example",
+  ".github/workflows/worker-repository-confidentiality.yml",
   "docs/admin-token-security.md",
   "docs/review-mutation-boundary.md",
   "docs/growth-route-parity.md",
+  "docs/worker-repository-confidentiality.md",
   "docs/worker-source-secret-posture.md",
 ]) {
-  if (!fs.existsSync(path.join(root, relativePath))) errors.push(`Missing safety contract or behavioral test: ${relativePath}`);
+  if (!fs.existsSync(path.join(root, relativePath))) {
+    errors.push(`Missing safety contract or behavioral test: ${relativePath}`);
+  }
 }
 
 if (!String(scripts.predeploy || "").includes("npm run check:local")) {
   errors.push("predeploy must run the complete check:local gate");
 }
 
-console.log(JSON.stringify({
-  passed: errors.length === 0,
-  activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "safety-gate-completeness-v8-source-secrets",
-  generatedRouteIntegrityRequired: true,
-  growthRouteParityRequired: true,
-  readmeOperatingPostureRequired: true,
-  readmeTopLevelTruthfulnessRequired: true,
-  businessApprovalIsolationRequired: true,
-  businessAuditPackResponseMinimisationRequired: true,
-  businessAutopilotFoundationRequired: true,
-  businessAutopilotRawErrorSafetyRequired: true,
-  businessCiParityRequired: true,
-  businessDraftRuntimeSafetyRequired: true,
-  businessExecutionLevelTruthfulnessRequired: true,
-  businessHistoricalReadMinimisationRequired: true,
-  businessHistoricalRecordPostureRequired: true,
-  businessHistoricalTypeIsolationRequired: true,
-  businessInternalPlanningSafetyRequired: true,
-  businessInternalReadMinimisationRequired: true,
-  businessLearningEventSafetyRequired: true,
-  businessOpportunityReviewSafetyRequired: true,
-  businessPeopleResponseMinimisationRequired: true,
-  businessRecordBuilderSafetyRequired: true,
-  businessReviewRecordStorageIsolationRequired: true,
-  businessRoutePolicyRequired: true,
-  businessSuppressionIntegrityRequired: true,
-  businessValidationWorkflowSafetyRequired: true,
-  businessRouteCatalogueTruthfulnessRequired: true,
-  plannerCatalogueTruthfulnessRequired: true,
-  broadAdminReadTruthfulnessRequired: true,
-  broadAdminWriteSafetyRequired: true,
-  adminReportingTruthfulnessRequired: true,
-  authenticatedSchemaSafetyRequired: true,
-  autonomyCapabilityTruthfulnessRequired: true,
-  sourceConfirmationSafetyRequired: true,
-  boundedJsonRequestSafetyRequired: true,
-  manualResearchLeaseSafetyRequired: true,
-  publicResearchFetchSafetyRequired: true,
-  reviewMutationSafetyRequired: true,
-  sourceCandidateAtomicityBehaviorRequired: true,
-  opportunityEvidenceQualityRequired: true,
-  opportunityExecutionBoundarySafetyRequired: true,
-  growthSubhandlerAuthenticationSafetyRequired: true,
-  runtimeCapabilityConfigurationRequired: true,
-  dormantAiBindingRequired: true,
-  centralAuthenticationSafetyRequired: true,
-  boundedCredentialBehaviorRequired: true,
-  workerTrackedSourceSecretSafetyRequired: true,
-  safeWorkerVariableTemplateRequired: true,
-  dependabotConfigurationRequired: true,
-  packageServiceIdentityRequired: true,
-  workflowActionPinningRequired: true,
-  deterministicCoreBehavioralTestsRequired: true,
-  predeployUsesCompleteLocalGate: true,
-  errors,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      passed: errors.length === 0,
+      activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
+      contract: "safety-gate-completeness-v9-repository-confidentiality",
+      generatedRouteIntegrityRequired: true,
+      growthRouteParityRequired: true,
+      readmeOperatingPostureRequired: true,
+      readmeTopLevelTruthfulnessRequired: true,
+      businessApprovalIsolationRequired: true,
+      businessAuditPackResponseMinimisationRequired: true,
+      businessAutopilotFoundationRequired: true,
+      businessAutopilotRawErrorSafetyRequired: true,
+      businessCiParityRequired: true,
+      businessDraftRuntimeSafetyRequired: true,
+      businessExecutionLevelTruthfulnessRequired: true,
+      businessHistoricalReadMinimisationRequired: true,
+      businessHistoricalRecordPostureRequired: true,
+      businessHistoricalTypeIsolationRequired: true,
+      businessInternalPlanningSafetyRequired: true,
+      businessInternalReadMinimisationRequired: true,
+      businessLearningEventSafetyRequired: true,
+      businessOpportunityReviewSafetyRequired: true,
+      businessPeopleResponseMinimisationRequired: true,
+      businessRecordBuilderSafetyRequired: true,
+      businessReviewRecordStorageIsolationRequired: true,
+      businessRoutePolicyRequired: true,
+      businessSuppressionIntegrityRequired: true,
+      businessValidationWorkflowSafetyRequired: true,
+      businessRouteCatalogueTruthfulnessRequired: true,
+      plannerCatalogueTruthfulnessRequired: true,
+      broadAdminReadTruthfulnessRequired: true,
+      broadAdminWriteSafetyRequired: true,
+      adminReportingTruthfulnessRequired: true,
+      authenticatedSchemaSafetyRequired: true,
+      autonomyCapabilityTruthfulnessRequired: true,
+      sourceConfirmationSafetyRequired: true,
+      boundedJsonRequestSafetyRequired: true,
+      manualResearchLeaseSafetyRequired: true,
+      publicResearchFetchSafetyRequired: true,
+      reviewMutationSafetyRequired: true,
+      sourceCandidateAtomicityBehaviorRequired: true,
+      opportunityEvidenceQualityRequired: true,
+      opportunityExecutionBoundarySafetyRequired: true,
+      growthSubhandlerAuthenticationSafetyRequired: true,
+      runtimeCapabilityConfigurationRequired: true,
+      dormantAiBindingRequired: true,
+      centralAuthenticationSafetyRequired: true,
+      boundedCredentialBehaviorRequired: true,
+      workerTrackedSourceSecretSafetyRequired: true,
+      workerRepositoryConfidentialityPolicyRequired: true,
+      liveRepositoryVisibilityWorkflowRequired: true,
+      safeWorkerVariableTemplateRequired: true,
+      dependabotConfigurationRequired: true,
+      packageServiceIdentityRequired: true,
+      workflowActionPinningRequired: true,
+      typescriptLoaderCoreTestsRequired: true,
+      deterministicCoreBehavioralTestsRequired: true,
+      predeployUsesCompleteLocalGate: true,
+      errors,
+    },
+    null,
+    2,
+  ),
+);
 
 if (errors.length) process.exitCode = 1;

@@ -2,9 +2,11 @@ docs/manual-research-concurrency.md
 scripts/check-autonomy-capability-truthfulness.mjs
 scripts/check-broad-admin-write-safety.mjs
 scripts/check-growth-activity-budget.mjs
+scripts/check-growth-route-parity.mjs
 scripts/check-growth-zero-cost-envelope.mjs
 scripts/check-helper-scripts.mjs
 scripts/check-readme-operating-posture.mjs
+scripts/check-worker-source-secrets.mjs
 src/core/growthCapabilities.ts
 src/core/growthZeroCostEnvelope.ts
 tests/growthActivityBudgetSettings.test.ts

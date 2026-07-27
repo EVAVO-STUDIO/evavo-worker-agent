@@ -1,6 +1,7 @@
 import { RouteCatalogueItem, route } from "./routeCatalogueTypes";
 
 const readDescription = "Reads stored Business Autopilot metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
+const accountIntelligenceDescription = "Reads one bounded, evidence-backed Worker Account 360 snapshot for an operator-selected organization. D1 remains noncanonical; the route does not promote state to Supabase, infer relationship or deal health, expose contact details, create meetings, or execute external actions.";
 const historicalReadDescription = "Reads historical Business review records only. Records are non-deliverable, non-executable and non-authoritative for external action. This route does not generate drafts, approve delivery or mutate external systems.";
 const writeDescription = "Confirm-saves Business Autopilot internal metadata only. It does not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.";
 const historicalReviewDescription = "Confirm-saves one internal historical review record only. It does not create deliverable copy, approvals, external execution permission, network activity or third-party state changes.";
@@ -12,7 +13,7 @@ export const disabledBusinessAutopilotWriteRouteIds = Object.freeze([
   "business_approval_request_save",
 ] as const);
 
-function readRoute(id: string, path: string, label: string): RouteCatalogueItem {
+function readRoute(id: string, path: string, label: string, description = readDescription): RouteCatalogueItem {
   return route({
     id,
     method: "GET",
@@ -29,7 +30,7 @@ function readRoute(id: string, path: string, label: string): RouteCatalogueItem 
     costRisk: "none",
     operatorFacing: true,
     operationsHubRecommended: true,
-    description: readDescription,
+    description,
   });
 }
 
@@ -100,6 +101,7 @@ function historicalReviewWriteRoute(id: string, path: string, label: string, wri
 // The active catalogue entry below intentionally uses historicalReviewWriteRoute.
 export const businessAutopilotRouteCatalogue: RouteCatalogueItem[] = [
   readRoute("business_organizations", "/admin/business/organizations?limit=25", "Business organizations"),
+  readRoute("business_account_360", "/admin/business/organizations/:organizationId/account-360?limit=25", "Business Account 360", accountIntelligenceDescription),
   readRoute("business_people", "/admin/business/people?limit=25", "Business people"),
   readRoute("business_websites", "/admin/business/websites?limit=25", "Business websites"),
   readRoute("business_pages", "/admin/business/pages?limit=25", "Business pages"),

@@ -159,3 +159,91 @@ for (const token of [
 }
 ''',
 )
+
+
+# Admin and tools are referenced once by the central protected-route classifier
+# and once by their fallback dispatch. Public families remain single-dispatch
+# references. Validate both roles and their order instead of treating the
+# authentication classifier as a duplicate dispatcher.
+replace_once(
+    "scripts/check-worker-route-policy.mjs",
+    '''  const dispatchToken = `matchesWorkerRouteFamily("${item.id}", pathname)`;
+  const occurrences = dispatcher.split(dispatchToken).length - 1;
+  if (occurrences !== 1) errors.push(`Route family must be dispatched exactly once: ${item.id} (${occurrences})`);
+}
+''',
+    '''}
+
+const expectedRouteReferenceCounts = Object.freeze({
+  health: 1,
+  admin: 2,
+  tools: 2,
+  public: 1,
+  root: 1,
+});
+
+function routePositions(content, token) {
+  const positions = [];
+  let offset = 0;
+  while (offset < content.length) {
+    const position = content.indexOf(token, offset);
+    if (position < 0) break;
+    positions.push(position);
+    offset = position + token.length;
+  }
+  return positions;
+}
+
+const routeReferencePositions = Object.fromEntries(
+  expected.map((item) => [
+    item.id,
+    routePositions(dispatcher, `matchesWorkerRouteFamily("${item.id}", pathname)`),
+  ]),
+);
+for (const item of expected) {
+  const positions = routeReferencePositions[item.id] || [];
+  const expectedCount = expectedRouteReferenceCounts[item.id];
+  if (positions.length !== expectedCount) {
+    errors.push(`Route family reference count is invalid: ${item.id} (${positions.length}; expected ${expectedCount})`);
+  }
+}
+''',
+)
+replace_once(
+    "scripts/check-worker-route-policy.mjs",
+    '''const healthPosition = dispatcher.indexOf('matchesWorkerRouteFamily("health", pathname)');
+const adminPosition = dispatcher.indexOf('matchesWorkerRouteFamily("admin", pathname)');
+const toolsPosition = dispatcher.indexOf('matchesWorkerRouteFamily("tools", pathname)');
+const publicPosition = dispatcher.indexOf('matchesWorkerRouteFamily("public", pathname)');
+const rootPosition = dispatcher.indexOf('matchesWorkerRouteFamily("root", pathname)');
+const notFoundPosition = dispatcher.indexOf('return jsonResponse({ ok: false, error: "not_found" }');
+if (!(healthPosition >= 0 && healthPosition < adminPosition && adminPosition < toolsPosition && toolsPosition < publicPosition && publicPosition < rootPosition && rootPosition < notFoundPosition)) {
+  errors.push("Typed route-family dispatch order must remain health, admin, tools, public, root, not-found");
+}
+''',
+    '''const healthPositions = routeReferencePositions.health || [];
+const adminPositions = routeReferencePositions.admin || [];
+const toolsPositions = routeReferencePositions.tools || [];
+const publicPositions = routeReferencePositions.public || [];
+const rootPositions = routeReferencePositions.root || [];
+const protectedAuthPosition = dispatcher.indexOf("if (protectedRoute && !(await isAdminRequestAuthorized(req, env)))");
+const notFoundPosition = dispatcher.indexOf('return jsonResponse({ ok: false, error: "not_found" }');
+if (!(
+  healthPositions.length === 1 &&
+  adminPositions.length === 2 &&
+  toolsPositions.length === 2 &&
+  publicPositions.length === 1 &&
+  rootPositions.length === 1 &&
+  healthPositions[0] < adminPositions[0] &&
+  adminPositions[0] < toolsPositions[0] &&
+  toolsPositions[0] < protectedAuthPosition &&
+  protectedAuthPosition < adminPositions[1] &&
+  adminPositions[1] < toolsPositions[1] &&
+  toolsPositions[1] < publicPositions[0] &&
+  publicPositions[0] < rootPositions[0] &&
+  rootPositions[0] < notFoundPosition
+)) {
+  errors.push("Typed route-family order must remain health, protected admin/tools classification, central auth, admin/tools fallback dispatch, public, root, not-found");
+}
+''',
+)

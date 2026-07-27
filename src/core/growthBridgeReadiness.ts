@@ -17,6 +17,22 @@ export type GrowthBridgePacketKind =
   | "analysis_recommendation"
   | "next_action_proposal";
 
+const GROWTH_BRIDGE_PACKET_KINDS = Object.freeze([
+  "account_candidate",
+  "opportunity_signal",
+  "evidence_packet",
+  "analysis_recommendation",
+  "next_action_proposal",
+] as const satisfies readonly GrowthBridgePacketKind[]);
+
+const GROWTH_BRIDGE_BLOCKED_CAPABILITIES = Object.freeze([
+  "email_send",
+  "social_post",
+  "form_submit",
+  "provider_write",
+  "canonical_auto_promotion",
+] as const);
+
 export type GrowthBridgeBlockingReason = GrowthWorkerRouteBlockingReason;
 
 export type GrowthBridgeReadiness = Readonly<{
@@ -78,19 +94,7 @@ export const growthBridgeReadiness: GrowthBridgeReadiness = Object.freeze({
   ownerApprovalRequired: true,
   idempotencyRequired: true,
   auditRequired: true,
-  packetKinds: Object.freeze([
-    "account_candidate",
-    "opportunity_signal",
-    "evidence_packet",
-    "analysis_recommendation",
-    "next_action_proposal",
-  ]),
-  blockedCapabilities: Object.freeze([
-    "email_send",
-    "social_post",
-    "form_submit",
-    "provider_write",
-    "canonical_auto_promotion",
-  ]),
+  packetKinds: GROWTH_BRIDGE_PACKET_KINDS,
+  blockedCapabilities: GROWTH_BRIDGE_BLOCKED_CAPABILITIES,
   blockingReasons: GROWTH_WORKER_ROUTE_CURRENT_BLOCKERS,
 });

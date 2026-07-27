@@ -98,6 +98,7 @@ const requiredFiles = [
   "scripts/check-manual-execution-safety.mjs",
   "scripts/check-operations-route-policy.mjs",
   "scripts/check-runtime-capability-config.mjs",
+  "scripts/check-package-service-identity.mjs",
   "scripts/check-worker-repository-visibility.mjs",
   "tests/adminAuthentication.test.ts",
   "tests/boundedJsonRequest.test.ts",
@@ -436,6 +437,15 @@ requireTokens("scripts/check-runtime-capability-config.mjs", [
   "draftRuntimeCapConfigured: false",
   "sendRuntimeCapConfigured: false",
 ]);
+requireTokens("scripts/check-package-service-identity.mjs", [
+  'contract: "package-service-identity-v2-active-package"',
+  'packageIdentifier: packageJson.name || null',
+  'historicalDeploymentIdentifier: identity.historicalDeploymentIdentifier || null',
+  'historicalDatabaseIdentifier: identity.historicalDatabaseIdentifier || null',
+  'npmPackageUsesHistoricalDeploymentName: packageJson.name === identity.historicalDeploymentIdentifier',
+  "packageLockAligned:",
+  "outboundExecutionEnabled: false",
+]);
 requireTokens("scripts/check-worker-repository-visibility.mjs", [
   'contract: "worker-repository-confidentiality-v1-live-metadata"',
   'requiredVisibility: "private"',
@@ -456,6 +466,7 @@ const expectedScripts = {
   "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
   "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
   "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
+  "worker:package-identity:check": "node scripts/check-package-service-identity.mjs",
   "worker:repository-visibility:check": "node scripts/check-worker-repository-visibility.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
@@ -498,7 +509,7 @@ for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v9-repository-confidentiality",
+  contract: "dynamic-helper-and-gate-validation-v10-package-identity",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -515,6 +526,9 @@ console.log(JSON.stringify({
   operationalRoutePolicySafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
   opportunityEvidenceQualityRequired: true,
+  activePackageIdentityRequired: true,
+  packageAndLockIdentityAlignmentRequired: true,
+  historicalDeploymentIdentifierRetained: true,
   repositoryConfidentialityPolicyRequired: true,
   liveRepositoryVisibilityWorkflowRequired: true,
   typescriptLoaderCoreTestsRequired: true,

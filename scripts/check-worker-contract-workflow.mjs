@@ -30,6 +30,7 @@ const paths = {
   sourceCandidateCore: resolve("src", "core", "opportunitySourceDiscovery.ts"),
   sourceCandidateTests: resolve("tests", "opportunitySourceCandidateSaveSource.test.ts"),
   sourceSecrets: resolve("scripts", "check-worker-source-secrets.mjs"),
+  packageIdentity: resolve("scripts", "check-package-service-identity.mjs"),
   bounded: resolve("scripts", "check-bounded-json-request-safety.mjs"),
   lease: resolve("scripts", "check-manual-research-lease-safety.mjs"),
   review: resolve("scripts", "check-review-mutation-boundary-safety.mjs"),
@@ -47,6 +48,12 @@ const sources = Object.fromEntries(
 const packageJson = sources.package ? JSON.parse(sources.package) : {};
 const scripts = packageJson.scripts || {};
 const checkLocal = String(scripts["check:local"] || "");
+if (scripts["worker:package-identity:check"] !== "node scripts/check-package-service-identity.mjs") {
+  errors.push("package.json must expose worker:package-identity:check");
+}
+if (!checkLocal.includes("npm run worker:package-identity:check")) {
+  errors.push("check:local must include worker:package-identity:check");
+}
 
 for (const token of [
   "branches: [main]",
@@ -56,6 +63,8 @@ for (const token of [
   "npm ci --no-audit --no-fund",
   "Verify tracked-source secret safety",
   "npm run worker:source-secret-safety:check",
+  "Verify npm package and deployment identity",
+  "npm run worker:package-identity:check",
   "node scripts/check-worker-contract-workflow.mjs",
   "node scripts/check-worker-health-contract.mjs",
   "Verify bounded admin JSON requests",
@@ -101,6 +110,7 @@ for (const secretName of ["ADMIN_TOKEN", "OUTBOUND_AGENT_ADMIN_TOKEN", "PUBLIC_C
 
 const orderedSteps = [
   "npm run worker:source-secret-safety:check",
+  "npm run worker:package-identity:check",
   "node scripts/check-worker-contract-workflow.mjs",
   "npm run research:bounded-json-safety:check",
   "npm run research:manual-lease-safety:check",
@@ -129,6 +139,15 @@ for (const [label, source, tokens] of [
     "rawSecretValuesPrinted: false",
     "focusedReadOnlyCiRequired: true",
     "repositoryVisibilityChangedByThisContract: false",
+  ]],
+  ["package identity", sources.packageIdentity, [
+    'contract: "package-service-identity-v2-active-package"',
+    'packageIdentifier: packageJson.name || null',
+    'historicalDeploymentIdentifier: identity.historicalDeploymentIdentifier || null',
+    'historicalDatabaseIdentifier: identity.historicalDatabaseIdentifier || null',
+    'npmPackageUsesHistoricalDeploymentName: packageJson.name === identity.historicalDeploymentIdentifier',
+    "packageLockAligned:",
+    "outboundExecutionEnabled: false",
   ]],
   ["bounded JSON safety", sources.bounded, [
     'contract: "bounded-admin-json-request-safety-v4-settings-and-legacy-review"',
@@ -403,7 +422,7 @@ if (!String(scripts.predeploy || "").includes("npm run check:local")) errors.pus
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "worker-contract-workflow-v8-source-secrets",
+  contract: "worker-contract-workflow-v9-package-identity",
   nodeVersion: 24,
   lockedInstallRequired: true,
   readOnlyWorkflowPermissions: true,
@@ -412,6 +431,10 @@ console.log(JSON.stringify({
   workerCredentialsAllowed: false,
   trackedSourceSecretGateRequired: true,
   trackedSourceSecretGateBeforeWorkflowParityRequired: true,
+  packageIdentityFocusedGateRequired: true,
+  packageIdentityGateBeforeWorkflowParityRequired: true,
+  packageAndLockIdentityMustRemainAligned: true,
+  historicalDeploymentIdentifierRetained: true,
   workerEnvironmentTemplateChangesWatched: true,
   boundedJsonGateRequired: true,
   manualLeaseGateRequired: true,

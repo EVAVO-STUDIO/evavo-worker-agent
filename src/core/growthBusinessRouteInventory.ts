@@ -3,6 +3,7 @@ import {
   type GrowthRoutePolicy,
 } from "../routes/growthRoutePolicy";
 import {
+  BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN,
   BUSINESS_HISTORICAL_PATHS,
   BUSINESS_ROUTE_POLICIES,
   BUSINESS_WEBSITE_AUDIT_PATHS,
@@ -124,6 +125,8 @@ function growthEntry(policy: GrowthRoutePolicy): GrowthWorkerRouteInventoryEntry
 
 function businessOwnership(handlerId: BusinessRouteHandlerId): GrowthWorkerRouteInventoryEntry["ownership"] {
   switch (handlerId) {
+    case "account-intelligence":
+      return Object.freeze({ kind: "pattern", pattern: BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN });
     case "people":
       return Object.freeze({ kind: "exact", paths: Object.freeze(["/admin/business/people"]) });
     case "website-audit":
@@ -136,6 +139,7 @@ function businessOwnership(handlerId: BusinessRouteHandlerId): GrowthWorkerRoute
 }
 
 function businessEntry(policy: BusinessRoutePolicy): GrowthWorkerRouteInventoryEntry {
+  const readOnly = policy.mutationPosture === "read-only";
   const retired = policy.mutationPosture === "historical-read-retired-write";
   return Object.freeze({
     routeFamily: "business",
@@ -144,7 +148,7 @@ function businessEntry(policy: BusinessRoutePolicy): GrowthWorkerRouteInventoryE
     ownership: businessOwnership(policy.id),
     readMethods: Object.freeze([...policy.readMethods]),
     writeMethods: Object.freeze([...policy.writeMethods]),
-    postClassification: retired ? "retired-write-fail-closed" : "internal-mutation",
+    postClassification: readOnly ? "not-supported" : retired ? "retired-write-fail-closed" : "internal-mutation",
     authentication: policy.authentication,
     confirmation: policy.writeConfirmation,
     networkPosture: "none",

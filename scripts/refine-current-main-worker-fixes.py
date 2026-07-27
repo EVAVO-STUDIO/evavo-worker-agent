@@ -126,3 +126,12 @@ replace_once(
     '  "schema.sql is a legacy bootstrap reference only",',
     '  "`schema.sql` is a legacy bootstrap reference only",',
 )
+
+
+# Central authentication delegates review-mutation semantics to the current
+# v3 source-candidate-atomicity gate, not the retired v1 contract identifier.
+replace_once(
+    "scripts/check-central-authentication-safety.mjs",
+    '  \'contract: "review-mutation-boundary-safety-v1"\',',
+    '  \'contract: "review-mutation-boundary-safety-v3-source-candidate-atomicity"\',',
+)

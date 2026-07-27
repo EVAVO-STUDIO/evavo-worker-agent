@@ -1,6 +1,7 @@
 docs/manual-research-concurrency.md
 scripts/check-autonomy-capability-truthfulness.mjs
 scripts/check-broad-admin-write-safety.mjs
+scripts/check-central-authentication-safety.mjs
 scripts/check-growth-activity-budget.mjs
 scripts/check-growth-route-parity.mjs
 scripts/check-growth-zero-cost-envelope.mjs

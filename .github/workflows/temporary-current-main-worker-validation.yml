@@ -43,7 +43,10 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Prepare candidate
-        run: python scripts/prepare-current-main-worker-fixes.py
+        shell: bash
+        run: |
+          python scripts/prepare-current-main-worker-fixes.py
+          python scripts/refine-current-main-worker-fixes.py
 
       - name: Validate candidate
         id: diagnostics
@@ -120,6 +123,7 @@ jobs:
           publish="$RUNNER_TEMP/current-main-worker-publish"
           git worktree add --detach "$publish" origin/main
           python "$GITHUB_WORKSPACE/scripts/prepare-current-main-worker-fixes.py" "$publish"
+          python "$GITHUB_WORKSPACE/scripts/refine-current-main-worker-fixes.py" "$publish"
           cd "$publish"
           git switch -c "$PUBLISH_BRANCH"
 
@@ -145,8 +149,10 @@ jobs:
           git add \
             scripts/check-autonomy-capability-truthfulness.mjs \
             scripts/check-broad-admin-write-safety.mjs \
+            scripts/check-growth-route-parity.mjs \
             scripts/check-helper-scripts.mjs \
             scripts/check-readme-operating-posture.mjs \
+            scripts/check-worker-source-secrets.mjs \
             tests/growthRouteParitySource.test.ts
           git commit -m "Align Worker safety guards with bounded runtime"
 

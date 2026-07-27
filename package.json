@@ -1,11 +1,14 @@
 {
-  "name": "evavo-outbound-agent",
+  "name": "evavo-worker-agent",
   "private": true,
   "version": "1.0.0",
-  "description": "EVAVO Growth Research Worker. Historical npm package identifier retained for lockfile and deployment compatibility.",
+  "description": "EVAVO Growth Research Worker package. Historical Cloudflare deployment and D1 resource identifiers remain compatibility-only.",
   "evavoServiceIdentity": {
     "activeName": "EVAVO Growth Research Worker",
+    "packageIdentifier": "evavo-worker-agent",
     "historicalPackageIdentifier": "evavo-outbound-agent",
+    "historicalDeploymentIdentifier": "evavo-outbound-agent",
+    "historicalDatabaseIdentifier": "evavo_outbound_agent",
     "historicalIdentifierAuthoritative": false,
     "outboundExecutionEnabled": false
   },

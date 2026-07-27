@@ -34,15 +34,18 @@ try {
 }
 
 const identity = packageJson.evavoServiceIdentity || {};
-if (packageJson.description !== "EVAVO Growth Research Worker. Historical npm package identifier retained for lockfile and deployment compatibility.") {
+if (packageJson.description !== "EVAVO Growth Research Worker package. Historical Cloudflare deployment and D1 resource identifiers remain compatibility-only.") {
   errors.push("package description must identify the active Growth Research Worker and historical identifier posture");
 }
 if (identity.activeName !== "EVAVO Growth Research Worker") errors.push("active package service identity is incorrect");
+if (identity.packageIdentifier !== "evavo-worker-agent") errors.push("active npm package identifier is incorrect");
 if (identity.historicalPackageIdentifier !== "evavo-outbound-agent") errors.push("historical package identifier must be explicit");
+if (identity.historicalDeploymentIdentifier !== "evavo-outbound-agent") errors.push("historical deployment identifier must be explicit");
+if (identity.historicalDatabaseIdentifier !== "evavo_outbound_agent") errors.push("historical database identifier must be explicit");
 if (identity.historicalIdentifierAuthoritative !== false) errors.push("historical package identifier must remain non-authoritative");
 if (identity.outboundExecutionEnabled !== false) errors.push("package identity must not advertise outbound execution");
 
-if (packageJson.name !== "evavo-outbound-agent") errors.push("package name and lockfile must be changed atomically, not independently");
+if (packageJson.name !== "evavo-worker-agent") errors.push("active npm package name must be evavo-worker-agent");
 if (lockJson.name !== packageJson.name || lockJson.packages?.[""]?.name !== packageJson.name) {
   errors.push("package.json and package-lock.json root package names must remain aligned");
 }
@@ -60,6 +63,9 @@ for (const token of [
 for (const token of [
   '# EVAVO Growth Research Worker',
   'It does **not** provide outbound execution.',
+  'The npm package identifier is `evavo-worker-agent`.',
+  'The live Cloudflare Worker deployment identifier remains `evavo-outbound-agent`.',
+  'The historical D1 resource identifier remains `evavo_outbound_agent`.',
 ]) {
   if (!readme.includes(token)) errors.push(`README identity posture is missing: ${token}`);
 }
@@ -75,11 +81,15 @@ for (const unsafe of [
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "package-service-identity-v1",
+  contract: "package-service-identity-v2-active-package",
   activeServiceName: identity.activeName || null,
-  historicalPackageIdentifier: packageJson.name || null,
+  packageIdentifier: packageJson.name || null,
+  historicalPackageIdentifier: identity.historicalPackageIdentifier || null,
+  historicalDeploymentIdentifier: identity.historicalDeploymentIdentifier || null,
+  historicalDatabaseIdentifier: identity.historicalDatabaseIdentifier || null,
   packageLockAligned: lockJson.name === packageJson.name && lockJson.packages?.[""]?.name === packageJson.name,
   deploymentIdentifierRetained: wrangler.includes('name = "evavo-outbound-agent"'),
+  npmPackageUsesHistoricalDeploymentName: packageJson.name === identity.historicalDeploymentIdentifier,
   historicalIdentifiersAuthoritative: false,
   outboundExecutionEnabled: false,
   errors,

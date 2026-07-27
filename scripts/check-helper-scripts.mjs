@@ -98,6 +98,7 @@ const requiredFiles = [
   "scripts/check-manual-execution-safety.mjs",
   "scripts/check-operations-route-policy.mjs",
   "scripts/check-runtime-capability-config.mjs",
+  "scripts/check-worker-repository-visibility.mjs",
   "tests/adminAuthentication.test.ts",
   "tests/boundedJsonRequest.test.ts",
   "tests/publicResearchFetch.test.ts",
@@ -109,7 +110,9 @@ const requiredFiles = [
   "docs/public-research-fetch-boundary.md",
   "docs/review-mutation-boundary.md",
   "docs/opportunity-evidence-quality.md",
+  "docs/worker-repository-confidentiality.md",
   ".github/workflows/worker-contract.yml",
+  ".github/workflows/worker-repository-confidentiality.yml",
   "wrangler.toml",
   "package.json",
   "package-lock.json",
@@ -131,7 +134,7 @@ requireTokens("src/core/adminAuthentication.ts", [
   'authorization.startsWith("Bearer ")',
   'authorization.slice("Bearer ".length)',
   "value.trim() !== value",
-  "/\\s/.test(value)",
+  "/\s/.test(value)",
   'crypto.subtle.digest("SHA-256"',
   "difference |= leftDigest[index] ^ rightDigest[index]",
   "!expected || !provided || !hasValidAdminTokenShape(expected)",
@@ -433,15 +436,27 @@ requireTokens("scripts/check-runtime-capability-config.mjs", [
   "draftRuntimeCapConfigured: false",
   "sendRuntimeCapConfigured: false",
 ]);
+requireTokens("scripts/check-worker-repository-visibility.mjs", [
+  'contract: "worker-repository-confidentiality-v1-live-metadata"',
+  'requiredVisibility: "private"',
+  "liveRepositoryVisibilityVerified:",
+  "tokenLogged: false",
+  "responseBodyLogged: false",
+  "repositoryMutationPerformed: false",
+  "deploymentPerformed: false",
+]);
 
 const packageJson = JSON.parse(read("package.json") || "{}");
 const scripts = packageJson.scripts || {};
+const typescriptCoreTestCommand =
+  "node --experimental-strip-types --experimental-transform-types --experimental-loader ./scripts/typescript-test-loader.mjs --test";
 const expectedScripts = {
   "worker:health:check": "node scripts/check-worker-health-contract.mjs",
   "worker:central-auth-safety:check": "node scripts/check-central-authentication-safety.mjs",
   "worker:credential-contract:check": "node scripts/check-worker-credential-contract.mjs",
   "worker:env-contract:check": "node scripts/check-worker-env-contract.mjs",
   "worker:protected-response-safety:check": "node scripts/check-protected-response-safety.mjs",
+  "worker:repository-visibility:check": "node scripts/check-worker-repository-visibility.mjs",
   "worker:routes:check": "node scripts/check-worker-route-policy.mjs",
   "scheduled:entrypoint-safety:check": "node scripts/check-scheduled-entrypoint-safety.mjs",
   "scheduled:autonomy-safety:check": "node scripts/check-scheduled-autonomy-safety.mjs",
@@ -457,7 +472,7 @@ const expectedScripts = {
   "operations:route-policy:check": "node scripts/check-operations-route-policy.mjs",
   "runtime:capability-config:check": "node scripts/check-runtime-capability-config.mjs",
   "scripts:check": "node scripts/check-helper-scripts.mjs",
-  "test:core": "node --test",
+  "test:core": typescriptCoreTestCommand,
   "typecheck": "tsc --noEmit",
 };
 for (const [name, command] of Object.entries(expectedScripts)) {
@@ -483,7 +498,7 @@ for (const forbidden of ["PUBLIC_CONTROL_KEY", "OUTBOUND_AGENT_ADMIN_TOKEN"]) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "dynamic-helper-and-gate-validation-v8-source-candidate-atomicity",
+  contract: "dynamic-helper-and-gate-validation-v9-repository-confidentiality",
   parsedHelperScripts: helperScripts.length,
   verifiedFiles: passes.length,
   canonicalCredentialRequired: "ADMIN_TOKEN",
@@ -500,6 +515,9 @@ console.log(JSON.stringify({
   operationalRoutePolicySafetyRequired: true,
   publicResearchFetchSafetyRequired: true,
   opportunityEvidenceQualityRequired: true,
+  repositoryConfidentialityPolicyRequired: true,
+  liveRepositoryVisibilityWorkflowRequired: true,
+  typescriptLoaderCoreTestsRequired: true,
   deterministicCoreBehavioralTestsRequired: true,
   weakEvidenceLearningBoostAllowed: false,
   opportunityDraftRecommendationAllowed: false,

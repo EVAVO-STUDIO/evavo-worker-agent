@@ -43,12 +43,29 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Prepare focused full-gate fixes
+        id: prepare
+        continue-on-error: true
         shell: bash
         run: |
-          python scripts/prepare-full-worker-gate-fixes.py
-          python scripts/refine-full-worker-gate-fixes.py
+          set +e
+          mkdir -p diagnostics
+          base=0
+          refine=0
+          python scripts/prepare-full-worker-gate-fixes.py > diagnostics/prepare-base.log 2>&1 || base=$?
+          if [ "$base" -eq 0 ]; then
+            python scripts/refine-full-worker-gate-fixes.py > diagnostics/prepare-refine.log 2>&1 || refine=$?
+          else
+            echo "refinement skipped because base preparation failed" > diagnostics/prepare-refine.log
+            refine=125
+          fi
+          printf '%s\n' "$base" > diagnostics/prepare-base.status
+          printf '%s\n' "$refine" > diagnostics/prepare-refine.status
+          if [ "$base" -ne 0 ] || [ "$refine" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Collect full validation diagnostics
+        if: always()
         id: diagnostics
         continue-on-error: true
         shell: bash
@@ -72,23 +89,28 @@ jobs:
             fi
           }
 
-          run_check helper-guard node scripts/check-helper-scripts.mjs
-          run_check safety-completeness node scripts/check-safety-gate-completeness.mjs
-          run_check worker-workflow-guard node scripts/check-worker-contract-workflow.mjs
-          run_check activity-budget node scripts/check-growth-activity-budget.mjs
-          run_check zero-cost node scripts/check-growth-zero-cost-envelope.mjs
-          run_check route-parity node scripts/check-growth-route-parity.mjs
-          run_check focused-tests npm run test:core -- \
-            tests/growthActivityBudgetSettings.test.ts \
-            tests/growthActivityBudgetSource.test.ts \
-            tests/growthInternalOperatorPackRouteSource.test.ts \
-            tests/growthRouteParitySource.test.ts \
-            tests/growthZeroCostEnvelope.test.ts \
-            tests/opportunitySourceHealthActionsSource.test.ts
-          run_check core-tests npm run test:core
-          run_check backend-aggregate npm run growth:backend:aggregate:check
-          run_check local-gate npm run check:local
-          run_check typecheck npm run typecheck
+          if [ "${{ steps.prepare.outcome }}" != "success" ]; then
+            failed=1
+            echo "FAIL preparation"
+          else
+            run_check helper-guard node scripts/check-helper-scripts.mjs
+            run_check safety-completeness node scripts/check-safety-gate-completeness.mjs
+            run_check worker-workflow-guard node scripts/check-worker-contract-workflow.mjs
+            run_check activity-budget node scripts/check-growth-activity-budget.mjs
+            run_check zero-cost node scripts/check-growth-zero-cost-envelope.mjs
+            run_check route-parity node scripts/check-growth-route-parity.mjs
+            run_check focused-tests npm run test:core -- \
+              tests/growthActivityBudgetSettings.test.ts \
+              tests/growthActivityBudgetSource.test.ts \
+              tests/growthInternalOperatorPackRouteSource.test.ts \
+              tests/growthRouteParitySource.test.ts \
+              tests/growthZeroCostEnvelope.test.ts \
+              tests/opportunitySourceHealthActionsSource.test.ts
+            run_check core-tests npm run test:core
+            run_check backend-aggregate npm run growth:backend:aggregate:check
+            run_check local-gate npm run check:local
+            run_check typecheck npm run typecheck
+          fi
 
           git diff --name-only | sort > diagnostics/candidate-files.txt
           git diff --stat > diagnostics/candidate-stat.txt
@@ -96,6 +118,7 @@ jobs:
 
           {
             echo "validated_main_sha=${{ github.event.pull_request.base.sha }}"
+            echo "prepare_outcome=${{ steps.prepare.outcome }}"
             echo "full_validation_failed=$failed"
             for status in diagnostics/*.status; do
               printf '%s=%s\n' "$(basename "$status" .status)" "$(cat "$status")"
@@ -104,7 +127,7 @@ jobs:
           exit "$failed"
 
       - name: Publish clean validated commits
-        if: steps.diagnostics.outcome == 'success'
+        if: steps.prepare.outcome == 'success' && steps.diagnostics.outcome == 'success'
         shell: bash
         env:
           EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}

@@ -1,4 +1,4 @@
-import { Env } from "../db";
+import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { buildBusinessDraftOnlyAction } from "../core/businessAutopilotActionDraftBuilder";
 import {
@@ -48,6 +48,12 @@ import {
 } from "../core/businessAutopilotRecords";
 import { businessAuditPackReadPayload, listBusinessAuditPacks, saveBusinessAuditPack } from "../core/businessAutopilotAuditPackRecords";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
+import {
+  buildBusinessAccount360,
+  businessAccount360Failure,
+  parseBusinessAccount360Limit,
+  parseBusinessAccount360Path,
+} from "../core/businessAccount360";
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
@@ -119,6 +125,104 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     return json({ ok: false, error: "method_not_allowed" }, { status: 405, headers: { allow: "GET, POST" } });
   }
   const url = new URL(request.url);
+  const account360Path = parseBusinessAccount360Path(pathname);
+
+  if (account360Path.matched) {
+    if (!account360Path.organizationId) {
+      return json(
+        {
+          ok: false,
+          mode: "business_account_360_error",
+          error: "invalid_organization_id",
+          rawInputExposed: false,
+          canonicalStateMutated: false,
+          externalExecutionAllowed: false,
+        },
+        { status: 400 },
+      );
+    }
+    if (request.method !== "GET") {
+      return json(
+        {
+          ok: false,
+          mode: "business_account_360",
+          error: "method_not_allowed",
+          readOnly: true,
+          canonicalStateMutated: false,
+          externalExecutionAllowed: false,
+        },
+        { status: 405, headers: { allow: "GET" } },
+      );
+    }
+
+    const limit = parseBusinessAccount360Limit(url);
+    if (!limit.ok) {
+      return json(
+        {
+          ok: false,
+          mode: "business_account_360_error",
+          error: limit.error,
+          ...(limit.fields ? { fields: limit.fields } : {}),
+          rawInputExposed: false,
+          canonicalStateMutated: false,
+          externalExecutionAllowed: false,
+        },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const account = await buildBusinessAccount360(
+        env,
+        account360Path.organizationId,
+        limit.value,
+      );
+      if (!account) {
+        return json(
+          {
+            ok: false,
+            mode: "business_account_360",
+            contract: "business_account_360_read_v1",
+            error: "organization_not_found",
+            organizationId: account360Path.organizationId,
+            canonicalStateMutated: false,
+            externalExecutionAllowed: false,
+          },
+          { status: 404 },
+        );
+      }
+
+      return json({
+        ok: true,
+        mode: "business_account_360",
+        contract: "business_account_360_read_v1",
+        generatedAt: new Date().toISOString(),
+        organizationId: account360Path.organizationId,
+        boundedCollectionLimit: limit.value,
+        readOnly: true,
+        internalReviewOnly: true,
+        evidenceBackedOnly: true,
+        uncertaintyExplicit: true,
+        contactDetailsRedacted: true,
+        metadataRedacted: true,
+        canonicalBusinessState: false,
+        canonicalStateOwner: "next-website/Supabase growth_*",
+        canonicalPromotionAllowed: false,
+        callsExternalNetwork: false,
+        callsAI: false,
+        sendsEmail: false,
+        postsContent: false,
+        createsMeetings: false,
+        executesBrowserActions: false,
+        mutatesExternalProviders: false,
+        externalExecutionAllowed: false,
+        ...account,
+        safety: businessAutopilotReadSafety(),
+      });
+    } catch (error) {
+      return json(businessAccount360Failure(error), { status: 503 });
+    }
+  }
 
   try {
     if (request.method === "GET" && pathname === "/admin/business/organizations") {

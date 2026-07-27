@@ -1,0 +1,97 @@
+name: Temporary full Worker main validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+      - "docs/**"
+      - "migrations/**"
+      - "README.md"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/temporary-full-worker-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temporary-full-worker-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Full Worker validation from current main
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Collect full validation diagnostics
+        id: diagnostics
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          mkdir -p diagnostics
+          failed=0
+
+          run_check() {
+            label="$1"
+            shift
+            log="diagnostics/${label}.log"
+            "$@" >"$log" 2>&1
+            code=$?
+            printf '%s\n' "$code" >"diagnostics/${label}.status"
+            if [ "$code" -ne 0 ]; then
+              failed=1
+              echo "FAIL $label"
+            else
+              echo "PASS $label"
+            fi
+          }
+
+          run_check worker-workflow-guard node scripts/check-worker-contract-workflow.mjs
+          run_check core-tests npm run test:core
+          run_check backend-aggregate npm run growth:backend:aggregate:check
+          run_check local-gate npm run check:local
+          run_check typecheck npm run typecheck
+
+          {
+            echo "validated_main_sha=$(git rev-parse HEAD^)"
+            echo "full_validation_failed=$failed"
+            for status in diagnostics/*.status; do
+              printf '%s=%s\n' "$(basename "$status" .status)" "$(cat "$status")"
+            done
+          } | tee diagnostics/summary.txt
+          exit "$failed"
+
+      - name: Upload exact diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: temporary-full-worker-main-validation
+          path: diagnostics
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail when validation failed
+        if: always()
+        shell: bash
+        run: |
+          test -f diagnostics/summary.txt
+          grep -q '^full_validation_failed=0$' diagnostics/summary.txt

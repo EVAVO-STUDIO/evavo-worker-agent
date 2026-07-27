@@ -15,7 +15,7 @@ on:
       - ".github/workflows/temporary-full-worker-validation.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: temporary-full-worker-validation-${{ github.ref }}
@@ -23,14 +23,15 @@ concurrency:
 
 jobs:
   validate:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'EVAVO-STUDIO'
     name: Full Worker validation from current main
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Set up Node.js 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -40,6 +41,9 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Prepare focused full-gate fixes
+        run: python scripts/prepare-full-worker-gate-fixes.py
 
       - name: Collect full validation diagnostics
         id: diagnostics
@@ -65,20 +69,93 @@ jobs:
             fi
           }
 
+          run_check helper-guard node scripts/check-helper-scripts.mjs
           run_check worker-workflow-guard node scripts/check-worker-contract-workflow.mjs
+          run_check activity-budget node scripts/check-growth-activity-budget.mjs
+          run_check zero-cost node scripts/check-growth-zero-cost-envelope.mjs
+          run_check route-parity node scripts/check-growth-route-parity.mjs
+          run_check focused-tests npm run test:core -- \
+            tests/growthActivityBudgetSettings.test.ts \
+            tests/growthActivityBudgetSource.test.ts \
+            tests/growthInternalOperatorPackRouteSource.test.ts \
+            tests/growthRouteParitySource.test.ts \
+            tests/growthZeroCostEnvelope.test.ts \
+            tests/opportunitySourceHealthActionsSource.test.ts
           run_check core-tests npm run test:core
           run_check backend-aggregate npm run growth:backend:aggregate:check
           run_check local-gate npm run check:local
           run_check typecheck npm run typecheck
 
+          git diff --name-only | sort > diagnostics/candidate-files.txt
+          git diff --stat > diagnostics/candidate-stat.txt
+          git diff > diagnostics/candidate.patch
+
           {
-            echo "validated_main_sha=$(git rev-parse HEAD^)"
+            echo "validated_main_sha=${{ github.event.pull_request.base.sha }}"
             echo "full_validation_failed=$failed"
             for status in diagnostics/*.status; do
               printf '%s=%s\n' "$(basename "$status" .status)" "$(cat "$status")"
             done
           } | tee diagnostics/summary.txt
           exit "$failed"
+
+      - name: Publish clean validated commits
+        if: steps.diagnostics.outcome == 'success'
+        shell: bash
+        env:
+          EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUBLISH_BRANCH: validated/full-worker-gates-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE_SHA"
+
+          publish="$RUNNER_TEMP/full-worker-publish"
+          git worktree add --detach "$publish" origin/main
+          python "$GITHUB_WORKSPACE/scripts/prepare-full-worker-gate-fixes.py" "$publish"
+          cd "$publish"
+          git switch -c "$PUBLISH_BRANCH"
+
+          expected="$(printf '%s\n' \
+            docs/manual-research-concurrency.md \
+            scripts/check-growth-zero-cost-envelope.mjs \
+            scripts/check-helper-scripts.mjs \
+            src/core/growthCapabilities.ts \
+            src/core/growthZeroCostEnvelope.ts \
+            tests/growthActivityBudgetSettings.test.ts \
+            tests/growthActivityBudgetSource.test.ts \
+            tests/growthInternalOperatorPackRouteSource.test.ts \
+            tests/growthRouteParitySource.test.ts | sort)"
+          actual="$(git diff --name-only | sort)"
+          test "$actual" = "$expected"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add src/core/growthZeroCostEnvelope.ts scripts/check-growth-zero-cost-envelope.mjs
+          git commit -m "Fix Growth zero-cost safety floor evaluation"
+
+          git add \
+            src/core/growthCapabilities.ts \
+            docs/manual-research-concurrency.md \
+            tests/growthActivityBudgetSettings.test.ts \
+            tests/growthActivityBudgetSource.test.ts \
+            tests/growthInternalOperatorPackRouteSource.test.ts
+          git commit -m "Align Growth activity contracts with live runtime"
+
+          git add scripts/check-helper-scripts.mjs tests/growthRouteParitySource.test.ts
+          git commit -m "Align Worker meta-guards with guarded tests"
+
+          test -z "$(git status --porcelain)"
+          git push origin "HEAD:refs/heads/$PUBLISH_BRANCH"
+          {
+            echo "publish_branch=$PUBLISH_BRANCH"
+            echo "parent_sha=$(git rev-parse HEAD^^^)"
+            echo "final_sha=$(git rev-parse HEAD)"
+            echo "changed_files<<EOF"
+            printf '%s\n' "$actual"
+            echo "EOF"
+          } | tee "$GITHUB_WORKSPACE/diagnostics/published-commit.txt"
 
       - name: Upload exact diagnostics
         if: always()

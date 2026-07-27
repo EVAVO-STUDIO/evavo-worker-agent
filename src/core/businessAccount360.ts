@@ -181,7 +181,9 @@ export function parseBusinessAccount360Path(pathname: string): Account360Path {
 export function parseBusinessAccount360Limit(url: URL):
   | Readonly<{ ok: true; value: number }>
   | Readonly<{ ok: false; error: string; fields: readonly string[] }> {
-  const unsupported = [...new Set(url.searchParams.keys())]
+  const queryKeys = new Set<string>();
+  url.searchParams.forEach((_value, key) => queryKeys.add(key));
+  const unsupported = [...queryKeys]
     .filter((key) => key !== "limit")
     .sort();
   if (unsupported.length) {

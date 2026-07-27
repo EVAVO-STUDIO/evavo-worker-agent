@@ -6,6 +6,14 @@ The active Worker is a governed, review-first opportunity-intelligence system. I
 
 It does **not** provide outbound execution.
 
+## Package and deployment identity
+
+The npm package identifier is `evavo-worker-agent`.
+
+The live Cloudflare Worker deployment identifier remains `evavo-outbound-agent`. The historical D1 resource identifier remains `evavo_outbound_agent`. These infrastructure names are compatibility resources only; they do not describe an enabled outbound capability.
+
+Changing the npm package identity does not rename or deploy the Worker, alter the Wrangler deployment name, rename the D1 database, run a migration or mutate remote data.
+
 ## Enforced operating posture
 
 - AI execution is disabled.

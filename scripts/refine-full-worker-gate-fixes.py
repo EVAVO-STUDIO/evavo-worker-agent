@@ -92,7 +92,7 @@ if (checkLocal.indexOf("npm run test:typescript-loader:check") > checkLocal.inde
   errors.push("check:local must guard TypeScript test resolution before test:core");
 }
 '''
-if replacement not in safety:
+if 'const coreTestCommand = String(scripts["test:core"] || "");' not in safety:
     if anchor not in safety:
         raise SystemExit("safety gate test-command anchor is stale")
     safety = safety.replace(anchor, replacement, 1)

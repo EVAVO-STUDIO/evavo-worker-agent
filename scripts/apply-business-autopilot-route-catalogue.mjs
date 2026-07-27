@@ -21,7 +21,7 @@ const retiredRouteIds = [
 ];
 
 for (const routeId of retiredRouteIds) {
-  const advertisedPattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute|historicalReviewWriteRoute)\\(\\s*["']${routeId}["']`);
+  const advertisedPattern = new RegExp(`(?:readRoute|historicalReadRoute|writeRoute|historicalReviewWriteRoute)\(\s*["']${routeId}["']`);
   if (advertisedPattern.test(catalogue)) {
     console.error(`Refusing to wire retired Business route ${routeId}.`);
     process.exit(1);
@@ -30,6 +30,14 @@ for (const routeId of retiredRouteIds) {
 
 const requiredCataloguePosture = [
   'disabledBusinessAutopilotWriteRouteIds',
+  'accountIntelligenceDescription',
+  'readRoute("business_account_360"',
+  '/admin/business/organizations/:organizationId/account-360?limit=25',
+  'D1 remains noncanonical',
+  'does not promote state to Supabase',
+  'infer relationship or deal health',
+  'expose contact details',
+  'create meetings',
   'historicalReadDescription',
   'historicalReviewDescription',
   'operationsHubRecommended: false',

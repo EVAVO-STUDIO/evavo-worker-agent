@@ -57,6 +57,37 @@ function fixture(): Fixture {
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-20T00:00:00Z",
     }],
+    business_website_audit_runs: [{
+      id: "audit-run-1",
+      websiteId: "website-1",
+      status: "completed",
+      auditType: "website_funnel_audit",
+      source: "operator",
+      requestedByPresent: 1,
+      startedAt: "2026-07-20T00:00:00Z",
+      completedAt: "2026-07-21T00:00:00Z",
+      readinessScore: 72,
+      riskScore: 38,
+      confidenceScore: 82,
+      summary: "Reviewed website and funnel evidence.",
+      createdAt: "2026-07-20T00:00:00Z",
+      updatedAt: "2026-07-21T00:00:00Z",
+    }],
+    business_audit_observations: [{
+      id: "observation-1",
+      auditRunId: "audit-run-1",
+      websiteId: "website-1",
+      pageId: "page-1",
+      signalId: "signal-1",
+      category: "conversion_friction",
+      severity: "high",
+      title: "Review enquiry path friction",
+      evidenceSummary: "The reviewed page evidence shows a weak enquiry transition.",
+      recommendation: "Review the enquiry path before preparing any outreach angle.",
+      confidenceScore: 78,
+      createdAt: "2026-07-21T00:00:00Z",
+      updatedAt: "2026-07-22T00:00:00Z",
+    }],
     business_signals: [{
       id: "signal-1",
       websiteId: "website-1",
@@ -216,6 +247,7 @@ test("Account 360 returns bounded evidence and reduced relationship context", as
     25,
   );
   assert.ok(account);
+  assert.equal(account.auditEvidenceContract, "business_account_360_audit_evidence_v1");
   assert.equal(account.organization.name, "Example Co");
   assert.deepEqual(account.organization.metadata, {});
   assert.equal(
@@ -227,6 +259,15 @@ test("Account 360 returns bounded evidence and reduced relationship context", as
     false,
   );
   assert.equal(account.accountEvidence.websites[0].crawlAllowed, true);
+  assert.equal(account.accountEvidence.auditRuns[0].requestedByPresent, true);
+  assert.equal(account.accountEvidence.auditRuns[0].requestedByRedacted, true);
+  assert.equal("requestedBy" in account.accountEvidence.auditRuns[0], false);
+  assert.equal(account.accountEvidence.auditObservations[0].severity, "high");
+  assert.equal(
+    account.accountEvidence.auditObservations[0].recommendation,
+    "Review the enquiry path before preparing any outreach angle.",
+  );
+  assert.equal(account.accountEvidence.auditObservations[0].metadataRedacted, true);
   assert.equal(
     account.accountEvidence.signals[0].evidenceUrl,
     "https://evavo.com.au/work",
@@ -243,6 +284,23 @@ test("Account 360 returns bounded evidence and reduced relationship context", as
     account.relationshipContext.followups[0].notesRedacted,
     true,
   );
+  assert.equal(
+    account.deterministicIndicators.returnedCounts.auditRuns,
+    1,
+  );
+  assert.equal(
+    account.deterministicIndicators.returnedCounts.auditObservations,
+    1,
+  );
+  assert.deepEqual(account.deterministicIndicators.auditRunStatusCounts, {
+    completed: 1,
+  });
+  assert.deepEqual(account.deterministicIndicators.auditObservationSeverityCounts, {
+    high: 1,
+  });
+  assert.deepEqual(account.deterministicIndicators.auditObservationCategoryCounts, {
+    conversion_friction: 1,
+  });
   assert.equal(
     account.deterministicIndicators.returnedCounts.signals,
     1,
@@ -276,4 +334,17 @@ test("Account 360 failures are finite and never expose raw D1 errors", () => {
   assert.equal(failure.rawErrorExposed, false);
   assert.equal(JSON.stringify(failure).includes(secret), false);
   assert.equal(failure.externalExecutionAllowed, false);
+
+  const missingAudit = businessAccount360Failure(
+    new Error("no such table: business_audit_observations"),
+  );
+  assert.equal(missingAudit.error, "business_autopilot_schema_missing");
+  assert.equal(
+    missingAudit.requiredMigration,
+    "0022_business_website_audit_records.sql",
+  );
+  assert.equal(
+    JSON.stringify(missingAudit).includes("business_audit_observations"),
+    false,
+  );
 });

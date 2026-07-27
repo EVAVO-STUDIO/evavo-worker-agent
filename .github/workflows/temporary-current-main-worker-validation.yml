@@ -80,6 +80,7 @@ jobs:
           run_check repository-visibility-static node scripts/check-worker-repository-visibility.mjs
           run_check broad-admin node scripts/check-broad-admin-write-safety.mjs
           run_check central-auth node scripts/check-central-authentication-safety.mjs
+          run_check credential-contract node scripts/check-worker-credential-contract.mjs
           run_check autonomy-capability node scripts/check-autonomy-capability-truthfulness.mjs
           run_check historical-compatibility node scripts/check-historical-data-compatibility.mjs
           run_check activity-budget node scripts/check-growth-activity-budget.mjs
@@ -156,6 +157,7 @@ jobs:
             scripts/check-helper-scripts.mjs \
             scripts/check-historical-data-compatibility.mjs \
             scripts/check-readme-operating-posture.mjs \
+            scripts/check-worker-credential-contract.mjs \
             scripts/check-worker-source-secrets.mjs \
             tests/growthRouteParitySource.test.ts
           git commit -m "Align Worker safety guards with bounded runtime"

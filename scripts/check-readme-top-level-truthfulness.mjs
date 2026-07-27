@@ -8,7 +8,9 @@ const errors = [];
 const readmePath = path.join(root, "README.md");
 const packagePath = path.join(root, "package.json");
 
-const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : "";
+const readme = fs.existsSync(readmePath)
+  ? fs.readFileSync(readmePath, "utf8")
+  : "";
 const packageJson = fs.existsSync(packagePath)
   ? JSON.parse(fs.readFileSync(packagePath, "utf8"))
   : {};
@@ -36,23 +38,37 @@ const required = [
   "Missing deadlines, values, currencies, eligibility and scope remain missing rather than being inferred.",
   "Historical source and review learning may calibrate grounded evidence but cannot promote weak evidence into high confidence.",
   "Persisted opportunity candidates are internal review records only and cannot become drafts, approvals or external actions.",
+  "GitHub currently reports this repository as **public**.",
+  "The required repository posture is `private: true`, `visibility: private` and `archived: false`.",
+  "repository confidentiality remains a release and governance blocker",
+  "Source-secret safety and private repository visibility are independent requirements; passing one does not prove the other.",
+  "The separate Worker repository confidentiality workflow performs a bounded live GitHub metadata read",
+  "It remains red while the repository is public and performs no repository mutation or deployment.",
   "The focused commands are useful for diagnosing one contract, but `npm run check:local` remains the authoritative complete gate.",
 ];
 
 for (const token of required) {
-  if (!readme.includes(token)) errors.push(`README missing truthful top-level posture: ${token}`);
+  if (!readme.includes(token)) {
+    errors.push(`README missing truthful top-level posture: ${token}`);
+  }
 }
 
 for (const document of [
+  "docs/worker-source-secret-posture.md",
+  "docs/worker-repository-confidentiality.md",
   "docs/bounded-admin-json-boundary.md",
   "docs/public-research-fetch-boundary.md",
   "docs/opportunity-evidence-quality.md",
   "docs/manual-research-concurrency.md",
 ]) {
-  if (!readme.includes(document)) errors.push(`README operating document list is missing: ${document}`);
+  if (!readme.includes(document)) {
+    errors.push(`README operating document list is missing: ${document}`);
+  }
 }
 
 const requiredFocusedChecks = [
+  "npm run worker:source-secret-safety:check",
+  "npm run worker:repository-visibility:check",
   "npm run safety:gates:check",
   "npm run docs:operating-posture:check",
   "npm run docs:readme-truthfulness:check",
@@ -73,9 +89,23 @@ const requiredFocusedChecks = [
 ];
 
 for (const command of requiredFocusedChecks) {
-  if (!readme.includes(command)) errors.push(`README focused validation list is missing: ${command}`);
+  if (!readme.includes(command)) {
+    errors.push(`README focused validation list is missing: ${command}`);
+  }
   const scriptName = command.replace("npm run ", "");
-  if (!packageJson.scripts?.[scriptName]) errors.push(`README advertises missing package script: ${scriptName}`);
+  if (!packageJson.scripts?.[scriptName]) {
+    errors.push(`README advertises missing package script: ${scriptName}`);
+  }
+}
+
+for (const token of [
+  "$env:GITHUB_REPOSITORY = \"EVAVO-STUDIO/evavo-worker-agent\"",
+  "$env:GITHUB_TOKEN = \"<read-only GitHub token>\"",
+  "node .\\scripts\\check-worker-repository-visibility.mjs --live",
+]) {
+  if (!readme.includes(token)) {
+    errors.push(`README live repository verification is missing: ${token}`);
+  }
 }
 
 const forbidden = [
@@ -91,43 +121,66 @@ const forbidden = [
   "numeric confirmation is accepted",
   "public_research_fetch_v1",
   "automatic retry executor",
+  "repository visibility is optional",
+  "public source hosting is approved",
+  "source-secret scanning proves repository confidentiality",
 ];
 
 for (const token of forbidden) {
-  if (readme.includes(token)) errors.push(`README contains stale top-level capability wording: ${token}`);
+  if (readme.includes(token)) {
+    errors.push(`README contains stale top-level capability wording: ${token}`);
+  }
 }
 
-const expectedCommand = "node scripts/check-readme-top-level-truthfulness.mjs";
+const expectedCommand =
+  "node scripts/check-readme-top-level-truthfulness.mjs";
 if (packageJson.scripts?.["docs:readme-truthfulness:check"] !== expectedCommand) {
-  errors.push(`package.json must expose docs:readme-truthfulness:check as ${expectedCommand}`);
+  errors.push(
+    `package.json must expose docs:readme-truthfulness:check as ${expectedCommand}`,
+  );
 }
-if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run docs:readme-truthfulness:check")) {
+if (
+  !String(packageJson.scripts?.["check:local"] || "").includes(
+    "npm run docs:readme-truthfulness:check",
+  )
+) {
   errors.push("check:local must include docs:readme-truthfulness:check");
 }
 
-console.log(JSON.stringify({
-  passed: errors.length === 0,
-  activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "readme-top-level-truthfulness-v4-bounded-behavioral-research",
-  outboundExecutionDocumentedAsDisabled: true,
-  historicalReviewRecordsDocumentedAsNonAuthoritative: true,
-  approvalToExecutionDocumentedAsDisabled: true,
-  authoritativeModelDocumentedAsNonExecuting: true,
-  exactBooleanConfirmationDocumented: true,
-  boundedJsonRequestDocumented: true,
-  publicResearchFetchV2Documented: true,
-  sensitiveQueryAndBinaryRejectionDocumented: true,
-  researchTransactionAtomicityDocumented: true,
-  boundedSitemapIndexTraversalDocumented: true,
-  deterministicEvidenceQualityDocumented: true,
-  missingFactsRemainMissing: true,
-  weakEvidenceLearningPromotionAllowed: false,
-  opportunityCandidatesExecutable: false,
-  authoritativeCompleteGateDocumented: true,
-  focusedSafetyChecksDocumented: true,
-  focusedCommandsBackedByPackageScripts: true,
-  deterministicCoreTestsDocumented: true,
-  errors,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      passed: errors.length === 0,
+      activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
+      contract:
+        "readme-top-level-truthfulness-v5-repository-confidentiality",
+      outboundExecutionDocumentedAsDisabled: true,
+      historicalReviewRecordsDocumentedAsNonAuthoritative: true,
+      approvalToExecutionDocumentedAsDisabled: true,
+      authoritativeModelDocumentedAsNonExecuting: true,
+      exactBooleanConfirmationDocumented: true,
+      boundedJsonRequestDocumented: true,
+      publicResearchFetchV2Documented: true,
+      sensitiveQueryAndBinaryRejectionDocumented: true,
+      researchTransactionAtomicityDocumented: true,
+      boundedSitemapIndexTraversalDocumented: true,
+      deterministicEvidenceQualityDocumented: true,
+      missingFactsRemainMissing: true,
+      weakEvidenceLearningPromotionAllowed: false,
+      opportunityCandidatesExecutable: false,
+      publicRepositoryVisibilityDocumentedAsBlocker: true,
+      requiredPrivateVisibilityDocumented: true,
+      liveRepositoryMetadataCheckDocumented: true,
+      sourceSecretScanTreatedAsVisibilityProof: false,
+      authoritativeCompleteGateDocumented: true,
+      focusedSafetyChecksDocumented: true,
+      focusedCommandsBackedByPackageScripts: true,
+      deterministicCoreTestsDocumented: true,
+      errors,
+    },
+    null,
+    2,
+  ),
+);
 
 if (errors.length) process.exitCode = 1;

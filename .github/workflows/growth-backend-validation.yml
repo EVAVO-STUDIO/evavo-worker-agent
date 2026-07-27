@@ -2,53 +2,130 @@ name: Growth Backend Validation
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+      - "docs/**"
+      - "migrations/**"
+      - "README.md"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "wrangler.toml"
+      - "**/*.ps1"
+      - ".github/workflows/growth-backend-validation.yml"
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+      - "docs/**"
+      - "migrations/**"
+      - "README.md"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "wrangler.toml"
+      - "**/*.ps1"
+      - ".github/workflows/growth-backend-validation.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: growth-backend-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   growth-backend-check:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     name: Growth backend local contract check
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
-      - name: Check Growth backend aggregate wiring
-        run: npm run growth:backend:aggregate:check
+      - name: Collect complete Growth backend diagnostics
+        id: diagnostics
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          mkdir -p diagnostics
+          failed=0
 
-      - name: Check Business people docs
-        run: npm run business:people:docs:check
+          run_check() {
+            label="$1"
+            shift
+            log="diagnostics/${label}.log"
+            "$@" >"$log" 2>&1
+            code=$?
+            printf '%s\n' "$code" >"diagnostics/${label}.status"
+            if [ "$code" -ne 0 ]; then
+              failed=1
+              echo "FAIL $label"
+            else
+              echo "PASS $label"
+            fi
+          }
 
-      - name: Check Business website page docs
-        run: npm run business:website-pages:docs:check
+          # Check Growth backend aggregate wiring
+          run_check aggregate-wiring npm run growth:backend:aggregate:check
+          # Check Business people docs
+          run_check business-people-docs npm run business:people:docs:check
+          # Check Business website page docs
+          run_check business-website-page-docs npm run business:website-pages:docs:check
+          # Check Worker PowerShell runners
+          run_check worker-powershell npm run worker:powershell:check
+          # Check generated route wiring clean
+          run_check generated-routes npm run growth:generated-routes:check
+          # Print Worker final local gate
+          run_check final-gate-print npm run worker:final-gate:print
+          # Run Growth backend aggregate check
+          run_check complete-local-gate npm run growth:backend:check:local
+          # Print Growth backend validation runbook
+          run_check validation-runbook npm run growth:backend:final:print
+          run_check typecheck npm run typecheck
 
-      - name: Check Worker PowerShell runners
-        run: npm run worker:powershell:check
+          {
+            echo "validated_sha=$(git rev-parse HEAD)"
+            echo "validation_failed=$failed"
+            for status in diagnostics/*.status; do
+              printf '%s=%s\n' "$(basename "$status" .status)" "$(cat "$status")"
+            done
+          } | tee diagnostics/summary.txt
 
-      - name: Check generated route wiring clean
-        run: npm run growth:generated-routes:check
+          exit "$failed"
 
-      - name: Print Worker final local gate
-        run: npm run worker:final-gate:print
+      - name: Upload exact Growth backend diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: growth-backend-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Run Growth backend aggregate check
-        run: npm run growth:backend:check:local
-
-      - name: Print Growth backend validation runbook
-        run: npm run growth:backend:final:print
+      - name: Fail when Growth backend validation failed
+        if: always()
+        shell: bash
+        run: |
+          test -f diagnostics/summary.txt
+          grep -q '^validation_failed=0$' diagnostics/summary.txt

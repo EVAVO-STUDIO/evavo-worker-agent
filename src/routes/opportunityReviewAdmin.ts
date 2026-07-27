@@ -160,20 +160,20 @@ export async function handleOpportunityReviewAdmin(
   }
 
   const reason = boundedReviewText(parsed.value.reason, "reason", 500);
-  if (!reason.ok) return json({ ok: false, ...reason }, { status: 400 });
+  if (!reason.ok) return json({ ...reason, ok: false }, { status: 400 });
   const reviewer = boundedReviewText(parsed.value.reviewer, "reviewer", 120);
-  if (!reviewer.ok) return json({ ok: false, ...reviewer }, { status: 400 });
+  if (!reviewer.ok) return json({ ...reviewer, ok: false }, { status: 400 });
   const notes = boundedReviewText(parsed.value.notes, "notes", 4_000, { preserveLineBreaks: true });
-  if (!notes.ok) return json({ ok: false, ...notes }, { status: 400 });
+  if (!notes.ok) return json({ ...notes, ok: false }, { status: 400 });
 
   const valueRating = readRating(parsed.value, "valueRating", "value_rating");
-  if (!valueRating.ok) return json({ ok: false, ...valueRating }, { status: 400 });
+  if (!valueRating.ok) return json({ ...valueRating, ok: false }, { status: 400 });
   const fitRating = readRating(parsed.value, "fitRating", "fit_rating");
-  if (!fitRating.ok) return json({ ok: false, ...fitRating }, { status: 400 });
+  if (!fitRating.ok) return json({ ...fitRating, ok: false }, { status: 400 });
   const effortRating = readRating(parsed.value, "effortRating", "effort_rating");
-  if (!effortRating.ok) return json({ ok: false, ...effortRating }, { status: 400 });
+  if (!effortRating.ok) return json({ ...effortRating, ok: false }, { status: 400 });
   const urgencyRating = readRating(parsed.value, "urgencyRating", "urgency_rating");
-  if (!urgencyRating.ok) return json({ ok: false, ...urgencyRating }, { status: 400 });
+  if (!urgencyRating.ok) return json({ ...urgencyRating, ok: false }, { status: 400 });
   const ratings: OpportunityReviewRatings = {
     value_rating: valueRating.value,
     fit_rating: fitRating.value,

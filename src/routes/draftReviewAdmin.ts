@@ -108,11 +108,11 @@ export async function handleDraftReviewAdmin(
   }
 
   const reason = boundedReviewText(parsed.value.reason, "reason", 500);
-  if (!reason.ok) return json({ ok: false, ...reason }, { status: 400 });
+  if (!reason.ok) return json({ ...reason, ok: false }, { status: 400 });
   const notes = boundedReviewText(parsed.value.notes, "notes", 4_000, { preserveLineBreaks: true });
-  if (!notes.ok) return json({ ok: false, ...notes }, { status: 400 });
+  if (!notes.ok) return json({ ...notes, ok: false }, { status: 400 });
   const strategy = boundedReviewText(parsed.value.strategyKey, "strategyKey", 160);
-  if (!strategy.ok) return json({ ok: false, ...strategy }, { status: 400 });
+  if (!strategy.ok) return json({ ...strategy, ok: false }, { status: 400 });
 
   const requestReceipt = {
     contract: parsed.contract,

@@ -439,10 +439,26 @@ export async function runOpportunityAutonomy(
           summary.candidatesFound += candidates.length;
 
           for (const candidate of candidates.slice(0, 10)) {
+            if (!candidate.evidence) {
+              summary.skipped += 1;
+              summary.rejected += 1;
+              candidatesRejected += 1;
+              await recordCandidateRejection(env, {
+                runId,
+                sourceId: source.id,
+                sourceUrl: source.url,
+                candidateUrl: candidate.url,
+                candidateTitle: candidate.title,
+                score: candidate.score,
+                reason: "missing_candidate_evidence",
+                evidence: { sourceFetch: sourceReceipt },
+              });
+              continue;
+            }
             const candidateWithReceipt = {
               ...candidate,
               evidence: {
-                ...(candidate.evidence || {}),
+                ...candidate.evidence,
                 sourceFetch: sourceReceipt,
               },
             };

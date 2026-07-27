@@ -141,10 +141,20 @@ async function commitPreview(env: Env, id: string, body: Record<string, unknown>
   const skipped: any[] = [];
 
   for (const candidate of candidates) {
+    if (!candidate.evidence) {
+      skipped.push({
+        url: candidate.url,
+        title: candidate.title,
+        score: candidate.score,
+        opportunityType: candidate.opportunityType,
+        reason: "missing_candidate_evidence",
+      });
+      continue;
+    }
     const candidateWithReceipt = {
       ...candidate,
       evidence: {
-        ...(candidate.evidence || {}),
+        ...candidate.evidence,
         sourceFetch,
       },
     };

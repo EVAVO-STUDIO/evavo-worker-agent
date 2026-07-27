@@ -225,9 +225,9 @@ async function updateSafeSettings(
   const normalized = normalizeSafeSettings(parsed.value.settings);
   if (!normalized.ok) return json(normalized, { status: 400 });
   const actor = boundedReviewText(parsed.value.actor, "actor", 120);
-  if (!actor.ok) return json({ ok: false, ...actor }, { status: 400 });
+  if (!actor.ok) return json({ ...actor, ok: false }, { status: 400 });
   const reason = boundedReviewText(parsed.value.reason, "reason", 500);
-  if (!reason.ok) return json({ ok: false, ...reason }, { status: 400 });
+  if (!reason.ok) return json({ ...reason, ok: false }, { status: 400 });
 
   const requestReceipt = {
     contract: parsed.contract,
@@ -330,11 +330,11 @@ async function updateDraftDecision(
     }, { status: 400 });
   }
   const actor = boundedReviewText(parsed.value.actor, "actor", 120);
-  if (!actor.ok) return json({ ok: false, ...actor }, { status: 400 });
+  if (!actor.ok) return json({ ...actor, ok: false }, { status: 400 });
   const reason = boundedReviewText(parsed.value.reason, "reason", 500);
-  if (!reason.ok) return json({ ok: false, ...reason }, { status: 400 });
+  if (!reason.ok) return json({ ...reason, ok: false }, { status: 400 });
   const notes = boundedReviewText(parsed.value.notes, "notes", 4_000, { preserveLineBreaks: true });
-  if (!notes.ok) return json({ ok: false, ...notes }, { status: 400 });
+  if (!notes.ok) return json({ ...notes, ok: false }, { status: 400 });
 
   const requestReceipt = {
     contract: parsed.contract,

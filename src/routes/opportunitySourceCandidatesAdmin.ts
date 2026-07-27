@@ -117,11 +117,11 @@ export async function handleOpportunitySourceCandidatesAdmin(
   }
 
   const selected = normalizedCandidateUrls(parsed.value.urls);
-  if (!selected.ok) return json({ ok: false, ...selected }, { status: 400 });
+  if (!selected.ok) return json({ ...selected, ok: false }, { status: 400 });
   const reason = boundedReviewText(parsed.value.reason, "reason", 500);
-  if (!reason.ok) return json({ ok: false, ...reason }, { status: 400 });
+  if (!reason.ok) return json({ ...reason, ok: false }, { status: 400 });
   const actor = boundedReviewText(parsed.value.actor, "actor", 120);
-  if (!actor.ok) return json({ ok: false, ...actor }, { status: 400 });
+  if (!actor.ok) return json({ ...actor, ok: false }, { status: 400 });
 
   const requestReceipt = {
     contract: parsed.contract,

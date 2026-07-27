@@ -91,11 +91,11 @@ export async function reviewDraft(
   if (!draft) return { ok: false, error: "draft_not_found" };
 
   const reason = boundedReviewText(input.reason, "reason", 500);
-  if (!reason.ok) return { ok: false, ...reason };
+  if (!reason.ok) return { ...reason, ok: false };
   const notes = boundedReviewText(input.notes, "notes", 4_000, { preserveLineBreaks: true });
-  if (!notes.ok) return { ok: false, ...notes };
+  if (!notes.ok) return { ...notes, ok: false };
   const strategyInput = boundedReviewText(input.strategyKey, "strategyKey", 160);
-  if (!strategyInput.ok) return { ok: false, ...strategyInput };
+  if (!strategyInput.ok) return { ...strategyInput, ok: false };
 
   const now = nowISO();
   const reviewId = uuid();

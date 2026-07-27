@@ -9,6 +9,7 @@ scripts/check-helper-scripts.mjs
 scripts/check-historical-data-compatibility.mjs
 scripts/check-readme-operating-posture.mjs
 scripts/check-worker-credential-contract.mjs
+scripts/check-worker-route-policy.mjs
 scripts/check-worker-source-secrets.mjs
 src/core/growthCapabilities.ts
 src/core/growthZeroCostEnvelope.ts

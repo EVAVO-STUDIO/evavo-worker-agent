@@ -103,10 +103,9 @@ write(safety_path, safety)
 # actual production workflow separately. A validation-only workflow may use a
 # writable token without weakening the production contract.
 parity_path = "scripts/check-growth-route-parity.mjs"
-parity = read(parity_path)
 replace_once(
     parity_path,
-    '''requireTokens("Worker workflow parity", workflowParity, [
+    r'''requireTokens("Worker workflow parity", workflowParity, [
   'permissions:\n  contents: read',
   'node-version: "24"',
 ''',
@@ -119,7 +118,7 @@ parity = read(parity_path)
 old_workflow_tokens = '''requireTokens("Worker contract workflow", workflow, [
   "Verify Growth route parity",
 '''
-new_workflow_tokens = '''requireTokens("Worker contract workflow", workflow, [
+new_workflow_tokens = r'''requireTokens("Worker contract workflow", workflow, [
   "permissions:\n  contents: read",
   "Verify Growth route parity",
 '''

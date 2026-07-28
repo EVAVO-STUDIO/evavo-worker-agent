@@ -23,8 +23,10 @@ for (const token of [
   "executable: false",
   "deliverable: false",
   "authoritativeForExecution: false",
-  "business_audit_pack_reads_v2_minimized",
+  "business_audit_pack_reads_v3_score_provenance",
+  "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
   "const minimizedPacks = packs.map(minimiseBusinessAuditPackResponse)",
+  "): Readonly<Record<string, unknown>>",
 ]) {
   if (!source.includes(token)) errors.push(`Audit pack read minimisation is missing: ${token}`);
 }
@@ -34,6 +36,7 @@ for (const forbidden of [
   "metadataRedacted: false",
   "deliverable: true",
   "authoritativeForExecution: true",
+  "business_audit_pack_reads_v2_minimized",
 ]) {
   if (source.includes(forbidden)) errors.push(`Audit pack read surface contains unsafe token: ${forbidden}`);
 }
@@ -49,10 +52,11 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run busine
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-audit-pack-response-minimisation",
+  contract: "business-audit-pack-response-minimisation-v3-score-provenance",
   arbitraryMetadataRedacted: true,
   findingsPreservedForInternalReview: true,
   recommendationsPreservedForInternalReview: true,
+  scoreProvenancePreserved: true,
   executable: false,
   deliverable: false,
   authoritativeForExecution: false,

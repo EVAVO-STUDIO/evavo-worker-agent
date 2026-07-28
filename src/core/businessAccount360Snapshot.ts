@@ -127,7 +127,9 @@ const SQL = Object.freeze({
     FROM business_service_matches WHERE organization_id = ?
     ORDER BY match_score DESC, updated_at DESC LIMIT ?`,
   auditPacks: `SELECT id, opportunity_id AS opportunityId, title, summary,
-    audit_type AS auditType, risk_flags_json AS riskFlagsJson,
+    audit_type AS auditType, findings_json AS findingsJson,
+    recommendations_json AS recommendationsJson,
+    risk_flags_json AS riskFlagsJson,
     confidence_score AS confidenceScore,
     confidence_score_observed AS confidenceScoreObserved,
     status, created_at AS createdAt, updated_at AS updatedAt

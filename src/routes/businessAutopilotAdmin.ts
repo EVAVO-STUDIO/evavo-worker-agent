@@ -40,13 +40,12 @@ import {
   saveBusinessContentIdea,
   saveBusinessFollowup,
   saveBusinessLearningEvent,
-  saveBusinessOpportunity,
-  saveBusinessOrganization,
-  saveBusinessServiceMatch,
-  saveBusinessSignal,
   saveBusinessSuppression,
 } from "../core/businessAutopilotRecords";
-import { businessAuditPackReadPayload, listBusinessAuditPacks, saveBusinessAuditPack } from "../core/businessAutopilotAuditPackRecords";
+import {
+  businessAuditPackReadPayload,
+  listBusinessAuditPacks,
+} from "../core/businessAutopilotAuditPackRecords";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 import {
   buildBusinessAccount360,
@@ -54,10 +53,18 @@ import {
   parseBusinessAccount360Limit,
   parseBusinessAccount360Path,
 } from "../core/businessAccount360";
+import {
+  saveBusinessAuditPack,
+  saveBusinessOpportunity,
+  saveBusinessOrganization,
+  saveBusinessServiceMatch,
+  saveBusinessSignal,
+} from "../core/businessScoreProvenanceWriters";
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 const schemaMissingMessage = "Business Autopilot schema is missing or unavailable.";
+const scoreProvenanceMissingMessage = "Business score provenance schema is missing or unavailable.";
 const routeFailedMessage = "Business Autopilot route failed before a safe response could be returned.";
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
@@ -108,13 +115,25 @@ function errorText(error: unknown) {
 }
 
 function migrationError(error: unknown) {
-  const missingTable = /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|action_drafts|approval_requests|execution_records|suppression_list|content_ideas|content_calendar|followups|learning_events)/i.test(errorText(error));
+  const message = errorText(error);
+  const missingScoreProvenance = /(?:no such column:\s*[^\s]*_observed|has no column named\s+[^\s]*_observed)/i.test(message);
+  const missingTable = /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|action_drafts|approval_requests|execution_records|suppression_list|content_ideas|content_calendar|followups|learning_events)/i.test(message);
+  const schemaMissing = missingScoreProvenance || missingTable;
   return {
     ok: false,
     mode: "business_autopilot_error",
-    error: missingTable ? "business_autopilot_schema_missing" : "business_autopilot_failed",
-    message: missingTable ? schemaMissingMessage : routeFailedMessage,
-    requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql" : null,
+    error: schemaMissing ? "business_autopilot_schema_missing" : "business_autopilot_failed",
+    message: missingScoreProvenance
+      ? scoreProvenanceMissingMessage
+      : missingTable
+        ? schemaMissingMessage
+        : routeFailedMessage,
+    requiredMigration: missingScoreProvenance
+      ? "0024_business_score_observation_flags.sql"
+      : missingTable
+        ? "0021_business_autopilot_foundation.sql"
+        : null,
+    rawErrorExposed: false,
     safety: businessAutopilotReadSafety(),
   };
 }

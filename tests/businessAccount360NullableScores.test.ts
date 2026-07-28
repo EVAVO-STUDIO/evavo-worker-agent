@@ -114,7 +114,7 @@ function fixture(): Env {
 
 test("Account 360 preserves unknown score evidence instead of inventing zero", async () => {
   const account = await buildBusinessAccount360(fixture(), "organization-1", 25);
-  assert.ok(account);
+  if (!account) throw new Error("ACCOUNT_360_FIXTURE_NOT_FOUND");
 
   assert.equal(account.numericEvidenceContract, "business_account_360_nullable_scores_v1");
   assert.equal(account.organization.fitScore, 70);

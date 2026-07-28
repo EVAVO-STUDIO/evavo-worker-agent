@@ -62,7 +62,22 @@ function results(): FakeBatchResult[] {
             createdAt: "2026-07-20T00:00:00.000Z",
             updatedAt: "2026-07-27T00:00:00.000Z",
           }]
-        : [],
+        : key === "auditPacks"
+          ? [{
+              id: "audit-pack-1",
+              title: "Reviewed audit pack",
+              summary: "Reduced account evidence.",
+              auditType: "website_teardown",
+              findingsJson: '[{"title":"private finding"}]',
+              recommendationsJson: '[{"title":"private recommendation"}]',
+              riskFlagsJson: "[]",
+              confidenceScore: 75,
+              confidenceScoreObserved: 1,
+              status: "ready_for_review",
+              createdAt: "2026-07-24T00:00:00.000Z",
+              updatedAt: "2026-07-28T00:00:00.000Z",
+            }]
+          : [],
   }));
 }
 
@@ -110,6 +125,12 @@ test("batched Account 360 performs one real D1 batch and no follow-up D1 reads",
     account.accountEvidence.dimensions.technology.maximumSignalStrengthScore,
     0,
   );
+  assert.equal(account.accountEvidence.auditPacks[0]?.findingsPresent, true);
+  assert.equal(account.accountEvidence.auditPacks[0]?.recommendationsPresent, true);
+  assert.deepEqual(account.accountEvidence.auditPacks[0]?.findings, []);
+  assert.deepEqual(account.accountEvidence.auditPacks[0]?.recommendations, []);
+  assert.equal(account.accountEvidence.auditPacks[0]?.findingsRedacted, true);
+  assert.equal(account.accountEvidence.auditPacks[0]?.recommendationsRedacted, true);
   assert.equal(Object.isFrozen(account), true);
   assert.equal(Object.isFrozen(account.deterministicIndicators), true);
 });

@@ -9,6 +9,7 @@ function read(relativePath: string): string {
 
 const snapshot = read("src/core/businessAccount360Snapshot.ts");
 const adapter = read("src/core/businessAccount360Batched.ts");
+const legacyComposer = read("src/core/businessAccount360.ts");
 const handler = read("src/routes/businessAccount360Admin.ts");
 const entrypoint = read("src/index.ts");
 const genericHandler = read("src/routes/businessAutopilotAdmin.ts");
@@ -92,9 +93,10 @@ test("transactional handler preserves the existing read-only authority boundary"
   }
 });
 
-test("legacy generic implementation remains unchanged but is no longer Account Intelligence dispatch", () => {
+test("legacy composer remains available for reuse but is no longer the live D1 reader", () => {
   assert.equal(genericHandler.includes("buildBusinessAccount360("), true);
-  assert.equal(genericHandler.includes('snapshotConsistency: "best_effort_bounded_multi_query"'), true);
+  assert.equal(legacyComposer.includes('snapshotConsistency: "best_effort_bounded_multi_query"'), true);
   assert.equal(genericHandler.includes("buildBusinessAccount360Batched"), false);
   assert.equal(entrypoint.includes("handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse)"), true);
+  assert.equal(entrypoint.includes("handleBusinessAccount360Admin(req, env, pathname, jsonResponse)"), true);
 });

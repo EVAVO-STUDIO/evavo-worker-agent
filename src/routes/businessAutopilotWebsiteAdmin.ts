@@ -8,13 +8,16 @@ import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } fro
 import {
   businessWebsiteReadPayload,
   businessWebsiteWritePayload,
-  listBusinessAuditObservations,
   listBusinessPages,
-  listBusinessWebsiteAuditRuns,
   listBusinessWebsites,
   saveBusinessPage,
   saveBusinessWebsite,
 } from "../core/businessAutopilotWebsiteRecords";
+import { BUSINESS_SCORE_PROVENANCE_CONTRACT } from "../core/businessScoreProvenance";
+import {
+  listBusinessAuditObservationsWithScoreProvenance,
+  listBusinessWebsiteAuditRunsWithScoreProvenance,
+} from "../core/businessScoreProvenanceReaders";
 import {
   saveBusinessAuditObservation,
   saveBusinessWebsiteAuditRun,
@@ -77,6 +80,13 @@ function migrationError(error: unknown) {
   };
 }
 
+function scoreReadPayload<T>(items: T[], key: string) {
+  return {
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
+    ...businessWebsiteReadPayload(items, key),
+  };
+}
+
 export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env: Env, pathname: string, json: JsonResponse): Promise<Response> {
   if (!(await isAdminRequestAuthorized(request, env))) return json({ ok: false, error: "Unauthorized" }, { status: 401 });
   if (request.method === "OPTIONS") {
@@ -110,8 +120,8 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
     }
 
     if (request.method === "GET" && pathname === "/admin/business/website-audit-runs") {
-      const auditRuns = await listBusinessWebsiteAuditRuns(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_website_audit_runs", ...businessWebsiteReadPayload(auditRuns, "websiteAuditRuns") });
+      const auditRuns = await listBusinessWebsiteAuditRunsWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
+      return json({ mode: "business_website_audit_runs", ...scoreReadPayload(auditRuns, "websiteAuditRuns") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/website-audit-runs") {
@@ -122,8 +132,8 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
     }
 
     if (request.method === "GET" && pathname === "/admin/business/audit-observations") {
-      const observations = await listBusinessAuditObservations(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("category") || undefined);
-      return json({ mode: "business_audit_observations", ...businessWebsiteReadPayload(observations, "auditObservations") });
+      const observations = await listBusinessAuditObservationsWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("category") || undefined);
+      return json({ mode: "business_audit_observations", ...scoreReadPayload(observations, "auditObservations") });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/audit-observations") {

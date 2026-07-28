@@ -79,6 +79,25 @@ test("rejects query confirmation before reading the body", async () => {
   assert.equal(result.payload.rawInputExposed, false);
 });
 
+test("rejects unsupported media types with a finite non-echoing 415 response", async () => {
+  const result = await readBusinessMetadataWriteRequest(new Request(
+    "https://worker.example/admin/business/test",
+    {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: "must-not-leak",
+    },
+  ), options());
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.status, 415);
+  assert.equal(result.payload.error, "json_content_type_required");
+  assert.equal(result.payload.rawInputExposed, false);
+  assert.equal(result.payload.externalExecutionAllowed, false);
+  assert.equal(JSON.stringify(result.payload).includes("must-not-leak"), false);
+});
+
 test("rejects coercive confirmations", async () => {
   for (const confirm of [1, "1", false, null]) {
     const result = await readBusinessMetadataWriteRequest(

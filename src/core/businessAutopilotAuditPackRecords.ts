@@ -1,6 +1,7 @@
 import { Env, nowISO, safeJsonParse, uuid } from "../db";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "./businessAutopilotSafety";
 import { BusinessAuditPackInput, buildBusinessAuditPack } from "./businessAutopilotAuditPacks";
+import { projectBusinessReadRecord } from "./businessReadProjection";
 import {
   BUSINESS_SCORE_PROVENANCE_CONTRACT,
   readBusinessObservedScore,
@@ -30,10 +31,12 @@ function numberValue(value: unknown, fallback = 0) {
 }
 
 function minimiseBusinessAuditPackResponse(pack: Record<string, unknown>) {
-  const metadataPresent = Boolean(pack.metadata && typeof pack.metadata === "object" && Object.keys(pack.metadata as object).length > 0);
-  const { metadata: _metadata, ...reviewContext } = pack;
+  const projected = projectBusinessReadRecord(pack);
+  const metadataPresent = typeof projected.metadataPresent === "boolean"
+    ? projected.metadataPresent
+    : false;
   return {
-    ...reviewContext,
+    ...projected,
     metadata: {},
     metadataPresent,
     metadataRedacted: true,

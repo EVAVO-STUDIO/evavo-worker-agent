@@ -94,6 +94,7 @@ test("transactional handler preserves the existing read-only authority boundary"
 
 test("legacy generic implementation remains unchanged but is no longer Account Intelligence dispatch", () => {
   assert.equal(genericHandler.includes("buildBusinessAccount360("), true);
-  assert.equal(genericHandler.includes('snapshotConsistency: "best_effort_bounded_multi_query"'), false);
+  assert.equal(genericHandler.includes('snapshotConsistency: "best_effort_bounded_multi_query"'), true);
+  assert.equal(genericHandler.includes("buildBusinessAccount360Batched"), false);
   assert.equal(entrypoint.includes("handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse)"), true);
 });

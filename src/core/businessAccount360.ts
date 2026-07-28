@@ -45,7 +45,7 @@ function finiteNumber(value: unknown): number | null {
 
 function scoreValue(value: unknown): number | null {
   const parsed = finiteNumber(value);
-  return parsed !== null && parsed >= 0 && parsed <= 100 ? parsed : null;
+  return parsed !== null && parsed > 0 && parsed <= 100 ? parsed : null;
 }
 
 function httpStatusValue(value: unknown): number | null {
@@ -170,7 +170,8 @@ function uncertainties(input: {
     }
   }
   result.push(
-    "Missing or invalid score values are returned as null and are never treated as zero.",
+    "Missing or invalid score values are returned as null.",
+    "Legacy zero-valued scores are returned as null because D1 defaults cannot distinguish unassessed from genuine zero.",
     "Invalid or future-dated evidence timestamps are excluded from latest-evidence chronology.",
     "Relationship health is not computed because canonical conversations, meetings, email and project history belong to Operations Core.",
     "Budget amounts are not inferred; only stored likelihood indicators are shown.",
@@ -537,7 +538,7 @@ export async function buildBusinessAccount360(
 
   return {
     auditEvidenceContract: "business_account_360_audit_evidence_v1",
-    numericEvidenceContract: "business_account_360_nullable_scores_v1",
+    numericEvidenceContract: "business_account_360_zero_ambiguous_scores_v1",
     timelineEvidenceContract: "business_account_360_bounded_chronology_v1",
     organization: {
       id: text(organization.id, 128),
@@ -601,9 +602,10 @@ export async function buildBusinessAccount360(
         futureTimestampsExcluded: true,
       },
       scoreSemantics: {
-        range: "0_to_100",
+        range: "greater_than_0_to_100",
         missingValue: null,
-        missingValuesAreZero: false,
+        zeroValuesAreAmbiguous: true,
+        zeroValuesReturnedAsNull: true,
       },
       countsAreReturnedRowsOnly: true,
       recordsMayBeTruncated,

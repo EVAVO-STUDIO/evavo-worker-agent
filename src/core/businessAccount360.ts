@@ -100,12 +100,22 @@ function statusCounts(records: readonly Row[]): Record<string, number> {
   return valueCounts(records, "status");
 }
 
-function latestTimestamp(records: readonly Row[]): string | null {
-  const timestamps = records
-    .flatMap((record) => [text(record.updatedAt, 64), text(record.createdAt, 64)])
-    .filter((value): value is string => Boolean(value))
-    .sort();
-  return timestamps.at(-1) ?? null;
+function timestampMilliseconds(value: unknown, observedAt: number): number | null {
+  const candidate = text(value, 64);
+  if (!candidate) return null;
+  const parsed = Date.parse(candidate);
+  return Number.isFinite(parsed) && parsed <= observedAt ? parsed : null;
+}
+
+function latestTimestamp(records: readonly Row[], observedAt: number): string | null {
+  let latest: number | null = null;
+  for (const record of records) {
+    for (const value of [record.updatedAt, record.createdAt]) {
+      const parsed = timestampMilliseconds(value, observedAt);
+      if (parsed !== null && (latest === null || parsed > latest)) latest = parsed;
+    }
+  }
+  return latest === null ? null : new Date(latest).toISOString();
 }
 
 function dimensionCoverage(signalTypes: readonly string[]) {
@@ -161,6 +171,7 @@ function uncertainties(input: {
   }
   result.push(
     "Missing or invalid score values are returned as null and are never treated as zero.",
+    "Invalid or future-dated evidence timestamps are excluded from latest-evidence chronology.",
     "Relationship health is not computed because canonical conversations, meetings, email and project history belong to Operations Core.",
     "Budget amounts are not inferred; only stored likelihood indicators are shown.",
   );
@@ -239,6 +250,7 @@ export async function buildBusinessAccount360(
   env: Env,
   organizationId: string,
   limit: number,
+  observedAt = Date.now(),
 ) {
   const organization = await env.DB.prepare(`
     SELECT id, name, domain, website_url AS websiteUrl, industry, location,
@@ -524,6 +536,7 @@ export async function buildBusinessAccount360(
   return {
     auditEvidenceContract: "business_account_360_audit_evidence_v1",
     numericEvidenceContract: "business_account_360_nullable_scores_v1",
+    timelineEvidenceContract: "business_account_360_bounded_chronology_v1",
     organization: {
       id: text(organization.id, 128),
       name: text(organization.name, 255) ?? "Unknown organization",
@@ -579,7 +592,12 @@ export async function buildBusinessAccount360(
       opportunityStatusCounts: statusCounts(opportunityContext),
       followupStatusCounts: statusCounts(followupContext),
       dimensionCoverage: coverage,
-      latestEvidenceAt: latestTimestamp(allProjected),
+      latestEvidenceAt: latestTimestamp(allProjected, observedAt),
+      timelineSemantics: {
+        output: "canonical_iso_8601",
+        invalidTimestampsExcluded: true,
+        futureTimestampsExcluded: true,
+      },
       scoreSemantics: {
         range: "0_to_100",
         missingValue: null,

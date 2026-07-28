@@ -13,7 +13,7 @@ function fixture(): Env {
       name: "Jamie Example",
       confidenceScore: null,
       createdAt: "2026-07-01T00:00:00Z",
-      updatedAt: "2026-07-20T00:00:00Z",
+      updatedAt: "not-a-timestamp",
     }],
     business_websites: [],
     business_pages: [{
@@ -46,7 +46,7 @@ function fixture(): Env {
       signalStrength: " 80 ",
       confidenceScore: 101,
       createdAt: "2026-07-01T00:00:00Z",
-      updatedAt: "2026-07-21T00:00:00Z",
+      updatedAt: "2099-01-01T00:00:00Z",
     }],
     business_opportunities: [{
       id: "opportunity-1",
@@ -112,11 +112,13 @@ function fixture(): Env {
   } as unknown as Env;
 }
 
-test("Account 360 preserves unknown score evidence instead of inventing zero", async () => {
-  const account = await buildBusinessAccount360(fixture(), "organization-1", 25);
+test("Account 360 preserves unknown scores and bounds evidence chronology", async () => {
+  const observedAt = Date.parse("2026-07-28T00:00:00.000Z");
+  const account = await buildBusinessAccount360(fixture(), "organization-1", 25, observedAt);
   if (!account) throw new Error("ACCOUNT_360_FIXTURE_NOT_FOUND");
 
   assert.equal(account.numericEvidenceContract, "business_account_360_nullable_scores_v1");
+  assert.equal(account.timelineEvidenceContract, "business_account_360_bounded_chronology_v1");
   assert.equal(account.organization.fitScore, 70);
   assert.equal(account.organization.priorityScore, null);
   assert.equal(account.organization.riskScore, 0, "a genuine zero remains zero");
@@ -148,9 +150,21 @@ test("Account 360 preserves unknown score evidence instead of inventing zero", a
     missingValue: null,
     missingValuesAreZero: false,
   });
+  assert.equal(account.deterministicIndicators.latestEvidenceAt, "2026-07-22T00:00:00.000Z");
+  assert.deepEqual(account.deterministicIndicators.timelineSemantics, {
+    output: "canonical_iso_8601",
+    invalidTimestampsExcluded: true,
+    futureTimestampsExcluded: true,
+  });
   assert.equal(
     account.uncertainties.includes(
       "Missing or invalid score values are returned as null and are never treated as zero.",
+    ),
+    true,
+  );
+  assert.equal(
+    account.uncertainties.includes(
+      "Invalid or future-dated evidence timestamps are excluded from latest-evidence chronology.",
     ),
     true,
   );

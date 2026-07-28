@@ -1,5 +1,9 @@
 import type { Env } from "../db";
 import { businessAutopilotReadSafety } from "./businessAutopilotSafety";
+import {
+  BUSINESS_SCORE_PROVENANCE_CONTRACT,
+  readBusinessObservedScore,
+} from "./businessScoreProvenance";
 import { validatePublicResearchUrl } from "./publicResearchFetch";
 
 type Row = Record<string, unknown>;
@@ -41,11 +45,6 @@ function finiteNumber(value: unknown): number | null {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function scoreValue(value: unknown): number | null {
-  const parsed = finiteNumber(value);
-  return parsed !== null && parsed > 0 && parsed <= 100 ? parsed : null;
 }
 
 function httpStatusValue(value: unknown): number | null {
@@ -170,8 +169,8 @@ function uncertainties(input: {
     }
   }
   result.push(
-    "Missing or invalid score values are returned as null.",
-    "Legacy zero-valued scores are returned as null because D1 defaults cannot distinguish unassessed from genuine zero.",
+    "Scores are returned only when their corresponding D1 observation flags are set.",
+    "Explicit observed zero scores are preserved; legacy, missing or invalid scores are returned as null.",
     "Invalid or future-dated evidence timestamps are excluded from latest-evidence chronology.",
     "Relationship health is not computed because canonical conversations, meetings, email and project history belong to Operations Core.",
     "Budget amounts are not inferred; only stored likelihood indicators are shown.",
@@ -256,8 +255,10 @@ export async function buildBusinessAccount360(
   const organization = await env.DB.prepare(`
     SELECT id, name, domain, website_url AS websiteUrl, industry, location,
            source_type AS sourceType, source_url AS sourceUrl, status,
-           fit_score AS fitScore, priority_score AS priorityScore,
-           risk_score AS riskScore, confidence_score AS confidenceScore,
+           fit_score AS fitScore, fit_score_observed AS fitScoreObserved,
+           priority_score AS priorityScore, priority_score_observed AS priorityScoreObserved,
+           risk_score AS riskScore, risk_score_observed AS riskScoreObserved,
+           confidence_score AS confidenceScore, confidence_score_observed AS confidenceScoreObserved,
            created_at AS createdAt, updated_at AS updatedAt
     FROM business_organizations WHERE id = ? LIMIT 1
   `).bind(organizationId).first<Row>();
@@ -278,6 +279,7 @@ export async function buildBusinessAccount360(
     readRows(env, `SELECT id, name, role, source_type AS sourceType,
       allowed_use AS allowedUse, contact_status AS contactStatus,
       confidence_score AS confidenceScore,
+      confidence_score_observed AS confidenceScoreObserved,
       CASE WHEN email IS NOT NULL AND trim(email) <> '' THEN 1 ELSE 0 END AS emailPresent,
       CASE WHEN phone IS NOT NULL AND trim(phone) <> '' THEN 1 ELSE 0 END AS phonePresent,
       CASE WHEN profile_url IS NOT NULL AND trim(profile_url) <> '' THEN 1 ELSE 0 END AS profileUrlPresent,
@@ -299,15 +301,19 @@ export async function buildBusinessAccount360(
       audit_type AS auditType, source,
       CASE WHEN requested_by IS NOT NULL AND trim(requested_by) <> '' THEN 1 ELSE 0 END AS requestedByPresent,
       started_at AS startedAt, completed_at AS completedAt,
-      readiness_score AS readinessScore, risk_score AS riskScore,
-      confidence_score AS confidenceScore, summary,
-      created_at AS createdAt, updated_at AS updatedAt
+      readiness_score AS readinessScore,
+      readiness_score_observed AS readinessScoreObserved,
+      risk_score AS riskScore, risk_score_observed AS riskScoreObserved,
+      confidence_score AS confidenceScore,
+      confidence_score_observed AS confidenceScoreObserved,
+      summary, created_at AS createdAt, updated_at AS updatedAt
       FROM business_website_audit_runs WHERE organization_id = ?
       ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
     readRows(env, `SELECT id, audit_run_id AS auditRunId, website_id AS websiteId,
       page_id AS pageId, signal_id AS signalId, category, severity, title,
       evidence_summary AS evidenceSummary, recommendation,
       confidence_score AS confidenceScore,
+      confidence_score_observed AS confidenceScoreObserved,
       created_at AS createdAt, updated_at AS updatedAt
       FROM business_audit_observations WHERE organization_id = ?
       ORDER BY CASE severity
@@ -315,31 +321,45 @@ export async function buildBusinessAccount360(
         WHEN 'low' THEN 3 ELSE 4 END,
         updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
     readRows(env, `SELECT id, website_id AS websiteId, page_id AS pageId,
-      signal_type AS signalType, signal_strength AS signalStrength,
+      signal_type AS signalType,
+      signal_strength AS signalStrength,
+      signal_strength_observed AS signalStrengthObserved,
       evidence_summary AS evidenceSummary, evidence_url AS evidenceUrl,
-      confidence_score AS confidenceScore, risk_flags_json AS riskFlagsJson,
+      confidence_score AS confidenceScore,
+      confidence_score_observed AS confidenceScoreObserved,
+      risk_flags_json AS riskFlagsJson,
       created_at AS createdAt, updated_at AS updatedAt
       FROM business_signals WHERE organization_id = ?
       ORDER BY signal_strength DESC, updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
     readRows(env, `SELECT id, opportunity_type AS opportunityType, status, priority,
-      fit_score AS fitScore, need_score AS needScore, urgency_score AS urgencyScore,
+      fit_score AS fitScore, fit_score_observed AS fitScoreObserved,
+      need_score AS needScore, need_score_observed AS needScoreObserved,
+      urgency_score AS urgencyScore, urgency_score_observed AS urgencyScoreObserved,
       budget_likelihood_score AS budgetLikelihoodScore,
+      budget_likelihood_score_observed AS budgetLikelihoodScoreObserved,
       contactability_score AS contactabilityScore,
-      evidence_quality_score AS evidenceQualityScore, risk_score AS riskScore,
-      confidence_score AS confidenceScore, recommended_service AS recommendedService,
+      contactability_score_observed AS contactabilityScoreObserved,
+      evidence_quality_score AS evidenceQualityScore,
+      evidence_quality_score_observed AS evidenceQualityScoreObserved,
+      risk_score AS riskScore, risk_score_observed AS riskScoreObserved,
+      confidence_score AS confidenceScore,
+      confidence_score_observed AS confidenceScoreObserved,
+      recommended_service AS recommendedService,
       recommended_angle AS recommendedAngle, next_step AS nextStep,
       created_at AS createdAt, updated_at AS updatedAt
       FROM business_opportunities WHERE organization_id = ?
       ORDER BY fit_score DESC, need_score DESC, updated_at DESC LIMIT ?`, organizationId, limit),
     readRows(env, `SELECT id, opportunity_id AS opportunityId, signal_id AS signalId,
-      service_key AS serviceKey, match_score AS matchScore, reason,
+      service_key AS serviceKey, match_score AS matchScore,
+      match_score_observed AS matchScoreObserved, reason,
       evidence_json AS evidenceJson, created_at AS createdAt, updated_at AS updatedAt
       FROM business_service_matches WHERE organization_id = ?
       ORDER BY match_score DESC, updated_at DESC LIMIT ?`, organizationId, limit),
     readRows(env, `SELECT id, opportunity_id AS opportunityId, title, summary,
       audit_type AS auditType, risk_flags_json AS riskFlagsJson,
-      confidence_score AS confidenceScore, status,
-      created_at AS createdAt, updated_at AS updatedAt
+      confidence_score AS confidenceScore,
+      confidence_score_observed AS confidenceScoreObserved,
+      status, created_at AS createdAt, updated_at AS updatedAt
       FROM business_audit_packs WHERE organization_id = ?
       ORDER BY updated_at DESC, created_at DESC LIMIT ?`, organizationId, limit),
     readRows(env, `SELECT id, person_id AS personId, opportunity_id AS opportunityId,
@@ -358,7 +378,10 @@ export async function buildBusinessAccount360(
     sourceType: text(row.sourceType, 64),
     allowedUse: text(row.allowedUse, 64) ?? "unknown",
     contactStatus: text(row.contactStatus, 64) ?? "unknown",
-    confidenceScore: scoreValue(row.confidenceScore),
+    confidenceScore: readBusinessObservedScore(
+      row.confidenceScore,
+      row.confidenceScoreObserved,
+    ),
     emailPresent: Boolean(row.emailPresent),
     phonePresent: Boolean(row.phonePresent),
     profileUrlPresent: Boolean(row.profileUrlPresent),
@@ -405,9 +428,15 @@ export async function buildBusinessAccount360(
     requestedByRedacted: true,
     startedAt: text(row.startedAt, 64),
     completedAt: text(row.completedAt, 64),
-    readinessScore: scoreValue(row.readinessScore),
-    riskScore: scoreValue(row.riskScore),
-    confidenceScore: scoreValue(row.confidenceScore),
+    readinessScore: readBusinessObservedScore(
+      row.readinessScore,
+      row.readinessScoreObserved,
+    ),
+    riskScore: readBusinessObservedScore(row.riskScore, row.riskScoreObserved),
+    confidenceScore: readBusinessObservedScore(
+      row.confidenceScore,
+      row.confidenceScoreObserved,
+    ),
     summary: text(row.summary, 2_000),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
@@ -424,7 +453,10 @@ export async function buildBusinessAccount360(
     title: text(row.title, 512) ?? "Untitled observation",
     evidenceSummary: text(row.evidenceSummary, 2_000),
     recommendation: text(row.recommendation, 2_000),
-    confidenceScore: scoreValue(row.confidenceScore),
+    confidenceScore: readBusinessObservedScore(
+      row.confidenceScore,
+      row.confidenceScoreObserved,
+    ),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
     updatedAt: text(row.updatedAt, 64),
@@ -434,10 +466,16 @@ export async function buildBusinessAccount360(
     websiteId: text(row.websiteId, 128),
     pageId: text(row.pageId, 128),
     signalType: text(row.signalType, 128) ?? "unknown",
-    signalStrength: scoreValue(row.signalStrength),
+    signalStrength: readBusinessObservedScore(
+      row.signalStrength,
+      row.signalStrengthObserved,
+    ),
     evidenceSummary: text(row.evidenceSummary, 2_000),
     evidenceUrl: publicUrl(row.evidenceUrl),
-    confidenceScore: scoreValue(row.confidenceScore),
+    confidenceScore: readBusinessObservedScore(
+      row.confidenceScore,
+      row.confidenceScoreObserved,
+    ),
     riskFlags: stringArray(row.riskFlagsJson),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
@@ -448,14 +486,29 @@ export async function buildBusinessAccount360(
     opportunityType: text(row.opportunityType, 128) ?? "general",
     status: text(row.status, 64) ?? "unknown",
     priority: text(row.priority, 32) ?? "unknown",
-    fitScore: scoreValue(row.fitScore),
-    needScore: scoreValue(row.needScore),
-    urgencyScore: scoreValue(row.urgencyScore),
-    budgetLikelihoodScore: scoreValue(row.budgetLikelihoodScore),
-    contactabilityScore: scoreValue(row.contactabilityScore),
-    evidenceQualityScore: scoreValue(row.evidenceQualityScore),
-    riskScore: scoreValue(row.riskScore),
-    confidenceScore: scoreValue(row.confidenceScore),
+    fitScore: readBusinessObservedScore(row.fitScore, row.fitScoreObserved),
+    needScore: readBusinessObservedScore(row.needScore, row.needScoreObserved),
+    urgencyScore: readBusinessObservedScore(
+      row.urgencyScore,
+      row.urgencyScoreObserved,
+    ),
+    budgetLikelihoodScore: readBusinessObservedScore(
+      row.budgetLikelihoodScore,
+      row.budgetLikelihoodScoreObserved,
+    ),
+    contactabilityScore: readBusinessObservedScore(
+      row.contactabilityScore,
+      row.contactabilityScoreObserved,
+    ),
+    evidenceQualityScore: readBusinessObservedScore(
+      row.evidenceQualityScore,
+      row.evidenceQualityScoreObserved,
+    ),
+    riskScore: readBusinessObservedScore(row.riskScore, row.riskScoreObserved),
+    confidenceScore: readBusinessObservedScore(
+      row.confidenceScore,
+      row.confidenceScoreObserved,
+    ),
     recommendedService: text(row.recommendedService, 255),
     recommendedAngle: text(row.recommendedAngle, 2_000),
     nextStep: text(row.nextStep, 2_000),
@@ -469,7 +522,7 @@ export async function buildBusinessAccount360(
     opportunityId: text(row.opportunityId, 128),
     signalId: text(row.signalId, 128),
     serviceKey: text(row.serviceKey, 128) ?? "unknown",
-    matchScore: scoreValue(row.matchScore),
+    matchScore: readBusinessObservedScore(row.matchScore, row.matchScoreObserved),
     reason: text(row.reason, 2_000),
     evidenceItemCount: evidenceCount(row.evidenceJson),
     evidencePayloadRedacted: true,
@@ -484,7 +537,10 @@ export async function buildBusinessAccount360(
     summary: text(row.summary, 2_000),
     auditType: text(row.auditType, 128) ?? "unknown",
     riskFlags: stringArray(row.riskFlagsJson),
-    confidenceScore: scoreValue(row.confidenceScore),
+    confidenceScore: readBusinessObservedScore(
+      row.confidenceScore,
+      row.confidenceScoreObserved,
+    ),
     status: text(row.status, 64) ?? "unknown",
     findingsRedacted: true,
     recommendationsRedacted: true,
@@ -538,7 +594,8 @@ export async function buildBusinessAccount360(
 
   return {
     auditEvidenceContract: "business_account_360_audit_evidence_v1",
-    numericEvidenceContract: "business_account_360_zero_ambiguous_scores_v1",
+    numericEvidenceContract: "business_account_360_observed_scores_v1",
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     timelineEvidenceContract: "business_account_360_bounded_chronology_v1",
     organization: {
       id: text(organization.id, 128),
@@ -550,10 +607,22 @@ export async function buildBusinessAccount360(
       sourceType: text(organization.sourceType, 64),
       sourceUrl: publicUrl(organization.sourceUrl),
       status: text(organization.status, 64) ?? "unknown",
-      fitScore: scoreValue(organization.fitScore),
-      priorityScore: scoreValue(organization.priorityScore),
-      riskScore: scoreValue(organization.riskScore),
-      confidenceScore: scoreValue(organization.confidenceScore),
+      fitScore: readBusinessObservedScore(
+        organization.fitScore,
+        organization.fitScoreObserved,
+      ),
+      priorityScore: readBusinessObservedScore(
+        organization.priorityScore,
+        organization.priorityScoreObserved,
+      ),
+      riskScore: readBusinessObservedScore(
+        organization.riskScore,
+        organization.riskScoreObserved,
+      ),
+      confidenceScore: readBusinessObservedScore(
+        organization.confidenceScore,
+        organization.confidenceScoreObserved,
+      ),
       metadata: {},
       metadataRedacted: true,
       createdAt: text(organization.createdAt, 64),
@@ -602,10 +671,11 @@ export async function buildBusinessAccount360(
         futureTimestampsExcluded: true,
       },
       scoreSemantics: {
-        range: "greater_than_0_to_100",
+        range: "0_to_100",
         missingValue: null,
-        zeroValuesAreAmbiguous: true,
-        zeroValuesReturnedAsNull: true,
+        observationFlagsRequired: true,
+        explicitZeroPreserved: true,
+        unobservedValuesReturnedAsNull: true,
       },
       countsAreReturnedRowsOnly: true,
       recordsMayBeTruncated,
@@ -622,22 +692,27 @@ function errorText(error: unknown): string {
 
 export function businessAccount360Failure(error: unknown) {
   const errorMessage = errorText(error);
+  const missingScoreProvenance = /(?:no such column:\s*[^\s]*_observed|has no column named\s+[^\s]*_observed)/i.test(errorMessage);
   const missingAuditTable = /no such table: business_(website_audit_runs|audit_observations)/i.test(errorMessage);
   const missingFoundationTable = /no such table: business_(organizations|people|websites|pages|signals|opportunities|service_matches|audit_packs|followups)/i.test(errorMessage);
-  const missingTable = missingAuditTable || missingFoundationTable;
+  const missingTable = missingScoreProvenance || missingAuditTable || missingFoundationTable;
   return {
     ok: false,
     mode: "business_account_360_error",
     contract: "business_account_360_read_v1",
     error: missingTable ? "business_autopilot_schema_missing" : "business_account_360_failed",
-    message: missingTable
-      ? "Account 360 requires the Business Autopilot foundation and website audit schemas."
-      : "Account 360 failed before a safe evidence view could be returned.",
-    requiredMigration: missingAuditTable
-      ? "0022_business_website_audit_records.sql"
-      : missingFoundationTable
-        ? "0021_business_autopilot_foundation.sql"
-        : null,
+    message: missingScoreProvenance
+      ? "Account 360 requires the Business score observation provenance schema."
+      : missingTable
+        ? "Account 360 requires the Business Autopilot foundation and website audit schemas."
+        : "Account 360 failed before a safe evidence view could be returned.",
+    requiredMigration: missingScoreProvenance
+      ? "0024_business_score_observation_flags.sql"
+      : missingAuditTable
+        ? "0022_business_website_audit_records.sql"
+        : missingFoundationTable
+          ? "0021_business_autopilot_foundation.sql"
+          : null,
     rawErrorExposed: false,
     contactDetailsExposed: false,
     metadataExposed: false,

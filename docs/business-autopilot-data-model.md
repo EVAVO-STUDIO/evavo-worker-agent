@@ -140,6 +140,51 @@ business_organizations
 
 There is no active pipeline from either relationship into delivery.
 
+## Website/page relationship layer
+
+The website/page layer preserves the exact internal relationship from an organisation to stored website metadata, stored page metadata, audit-run evidence and structured observations. It is a metadata memory surface, not an acquisition or execution system.
+
+```text
+business_organizations
+→ business_websites
+→ business_pages
+→ business_website_audit_runs
+→ business_audit_observations
+→ business_audit_observation_candidates
+```
+
+The bounded authenticated read routes are:
+
+```text
+GET  /admin/business/websites?limit=25
+GET  /admin/business/pages?limit=25
+GET  /admin/business/website-audit-runs?limit=25
+GET  /admin/business/audit-observations?limit=25
+GET  /admin/business/audit-observation-candidates?limit=25
+```
+
+The confirmed internal metadata writes are:
+
+```text
+POST /admin/business/websites?confirm=1
+POST /admin/business/pages?confirm=1
+POST /admin/business/website-audit-runs?confirm=1
+POST /admin/business/audit-observations?confirm=1
+```
+
+Their route identities are:
+
+```text
+business_website_save
+business_page_save
+business_website_audit_run_save
+business_audit_observation_save
+```
+
+Every confirmed write is internal metadata only. Confirmation does not authorise crawling, fetching, browsing, AI calls, delivery or any third-party state change. There is no crawling, no fetching and no network calls from metadata routes.
+
+Audit observation candidates are read-only and unsaved. They are derived from already stored internal metadata and can become durable only through a separate explicitly confirmed `business_audit_observation_save` request. The candidate route cannot crawl or fetch a source to fill missing evidence.
+
 ## Intelligence family
 
 ### business_signals

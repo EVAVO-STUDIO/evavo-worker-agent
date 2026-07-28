@@ -114,7 +114,9 @@ export async function saveBusinessAuditPack(env: Env, input: BusinessAuditPackIn
   return { ...record, id, opportunityId: input.opportunityId || null, createdAt: now, updatedAt: now, safety: businessAutopilotMetadataWriteSafety() };
 }
 
-export function businessAuditPackReadPayload(packs: Record<string, unknown>[]) {
+export function businessAuditPackReadPayload(
+  packs: Record<string, unknown>[],
+): Readonly<Record<string, unknown>> {
   const minimizedPacks = packs.map(minimiseBusinessAuditPackResponse);
   return {
     ok: true,

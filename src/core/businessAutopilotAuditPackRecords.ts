@@ -1,6 +1,10 @@
 import { Env, nowISO, safeJsonParse, uuid } from "../db";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "./businessAutopilotSafety";
 import { BusinessAuditPackInput, buildBusinessAuditPack } from "./businessAutopilotAuditPacks";
+import {
+  BUSINESS_SCORE_PROVENANCE_CONTRACT,
+  readBusinessObservedScore,
+} from "./businessScoreProvenance";
 
 function stringify(value: unknown) {
   return JSON.stringify(value ?? null);
@@ -48,7 +52,7 @@ export async function listBusinessAuditPacks(env: Env, limit = 25, status?: stri
     params.push(sanitizeString(status, "draft", 64));
   }
   params.push(safeLimit(limit));
-  const rows = await env.DB.prepare(`SELECT * FROM business_audit_packs ${where} ORDER BY confidence_score DESC, created_at DESC LIMIT ?`).bind(...params).all<any>();
+  const rows = await env.DB.prepare(`SELECT * FROM business_audit_packs ${where} ORDER BY confidence_score_observed DESC, confidence_score DESC, created_at DESC LIMIT ?`).bind(...params).all<any>();
   return (rows.results || []).map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
@@ -59,9 +63,13 @@ export async function listBusinessAuditPacks(env: Env, limit = 25, status?: stri
     findings: parse(row.findings_json, []),
     recommendations: parse(row.recommendations_json, []),
     riskFlags: parse(row.risk_flags_json, []),
-    confidenceScore: numberValue(row.confidence_score),
+    confidenceScore: readBusinessObservedScore(
+      row.confidence_score,
+      row.confidence_score_observed,
+    ),
     status: row.status,
     metadata: parse(row.metadata_json, {}),
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -97,7 +105,7 @@ export async function saveBusinessAuditPack(env: Env, input: BusinessAuditPackIn
     stringify(record.findings),
     stringify(record.recommendations),
     stringify(record.riskFlags),
-    record.confidenceScore,
+    numberValue(record.confidenceScore),
     record.status,
     stringify(record.metadata),
     now,
@@ -110,7 +118,8 @@ export function businessAuditPackReadPayload(packs: Record<string, unknown>[]) {
   const minimizedPacks = packs.map(minimiseBusinessAuditPackResponse);
   return {
     ok: true,
-    contract: "business_audit_pack_reads_v2_minimized",
+    contract: "business_audit_pack_reads_v3_score_provenance",
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     auditPacks: minimizedPacks,
     count: minimizedPacks.length,
     metadataRedacted: true,

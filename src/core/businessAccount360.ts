@@ -517,6 +517,8 @@ export async function buildBusinessAccount360(
     auditPacks: auditPackEvidence.length,
     followups: followupContext.length,
   };
+  const recordsMayBeTruncated = Object.values(returnedCounts)
+    .some((returnedCount) => returnedCount >= limit);
   const signalTypes = signalEvidence.map((row) => row.signalType);
   const coverage = dimensionCoverage(signalTypes);
   const allProjected = [
@@ -604,7 +606,7 @@ export async function buildBusinessAccount360(
         missingValuesAreZero: false,
       },
       countsAreReturnedRowsOnly: true,
-      recordsMayBeTruncated: true,
+      recordsMayBeTruncated,
       snapshotConsistency: "best_effort_bounded_multi_query",
     },
     uncertainties: uncertainties({ organization, returnedCounts, coverage }),

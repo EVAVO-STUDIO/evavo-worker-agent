@@ -1,4 +1,8 @@
 import { businessAutopilotReadSafety } from "./businessAutopilotSafety";
+import {
+  BUSINESS_READ_QUERY_GUARDED_PATHS,
+  type BusinessReadQueryGuardedPath,
+} from "./businessRoutePaths";
 
 export const BUSINESS_METADATA_READ_QUERY_CONTRACT =
   "business_metadata_read_query_v1" as const;
@@ -39,7 +43,7 @@ const MAX_QUERY_FIELDS = 16;
 const MAX_QUERY_KEY_LENGTH = 64;
 const MAX_QUERY_VALUE_LENGTH = 256;
 
-const BUSINESS_READ_ROUTE_OPTIONS: Readonly<Record<string, BusinessMetadataReadQueryOptions>> = Object.freeze({
+const BUSINESS_READ_ROUTE_OPTIONS: Readonly<Record<BusinessReadQueryGuardedPath, BusinessMetadataReadQueryOptions>> = Object.freeze({
   "/admin/business/organizations": { textFields: { status: { maxLength: 64 } } },
   "/admin/business/signals": { textFields: { signalType: { maxLength: 128 } } },
   "/admin/business/opportunities": { textFields: { status: { maxLength: 64 } } },
@@ -220,6 +224,11 @@ export function parseBusinessMetadataReadRouteQuery(
   method: string,
 ): BusinessMetadataReadQueryResult | null {
   if (method !== "GET") return null;
-  const options = BUSINESS_READ_ROUTE_OPTIONS[pathname];
-  return options ? parseBusinessMetadataReadQuery(url, options) : null;
+  if (!BUSINESS_READ_QUERY_GUARDED_PATHS.includes(
+    pathname as BusinessReadQueryGuardedPath,
+  )) return null;
+  return parseBusinessMetadataReadQuery(
+    url,
+    BUSINESS_READ_ROUTE_OPTIONS[pathname as BusinessReadQueryGuardedPath],
+  );
 }

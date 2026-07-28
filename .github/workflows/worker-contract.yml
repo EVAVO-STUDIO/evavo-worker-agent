@@ -73,7 +73,20 @@ jobs:
         run: npm run worker:package-identity:check
 
       - name: Verify Worker workflow parity
-        run: node scripts/check-worker-contract-workflow.mjs
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          set -o pipefail
+          node scripts/check-worker-contract-workflow.mjs 2>&1 | tee diagnostics/worker-contract-workflow.log
+
+      - name: Retain Worker workflow parity diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: worker-contract-parity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/worker-contract-workflow.log
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Verify read-only health contract
         run: node scripts/check-worker-health-contract.mjs

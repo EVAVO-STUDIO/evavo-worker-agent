@@ -37,6 +37,7 @@ git rev-parse HEAD
 npm run business:draft-runtime-safety:check
 npm run business:historical-record-posture:check
 npm run business:autopilot:check
+npm run business:score-provenance:check
 npm run business:website-pages:docs:check
 npm run business:route-policy:check
 npm run safety:gates:check
@@ -52,14 +53,17 @@ The validation contracts cover:
 
 ```text
 business docs
-0021 and 0022 migration presence
+0021, 0022 and 0024 migration presence
 Business safety helpers
+Business score observation provenance helpers
+atomic score and observation-flag writers
 Business core types
 Business people records
 Business website/page records
 service matching
 opportunity scoring
 audit-pack persistence
+Account 360 observed-score reads
 historical review-record builder
 non-authoritative approval compatibility builder
 review bundle with approval creation disabled
@@ -82,6 +86,47 @@ business_page_save
 /admin/business/websites?limit=5
 /admin/business/pages?limit=5
 ```
+
+## Score provenance and Account 360
+
+Migration `0024_business_score_observation_flags.sql` adds one observation flag beside every score used by Account 360. The flag distinguishes a deliberately observed score of `0` from an old `NOT NULL DEFAULT 0` sentinel.
+
+The active read contracts are:
+
+```text
+business_account_360_observed_scores_v1
+business_score_observation_flags_v1
+business_account_360_bounded_chronology_v1
+```
+
+The required score semantics are:
+
+```text
+observationFlagsRequired: true
+explicitZeroPreserved: true
+unobservedValuesReturnedAsNull: true
+```
+
+A score-bearing write must save the numeric value and its observation flag in one D1 statement. Active organization, person, signal, opportunity, service-match, audit-pack, website-audit-run and audit-observation routes use the shared atomic provenance writers.
+
+Account 360 must:
+
+```text
+show an explicitly observed zero as 0
+return an unobserved, missing, malformed or out-of-range score as null
+exclude invalid or future timestamps from latest-evidence chronology
+report whether a bounded collection may be truncated
+withhold scores when the exact provenance contract is absent
+return 0024_business_score_observation_flags.sql as the required migration when observation columns are missing
+```
+
+The focused repository guard is:
+
+```powershell
+npm run business:score-provenance:check
+```
+
+The guard checks source contracts and executable fixtures. It does not apply migration `0024`.
 
 ## Active route catalogue
 
@@ -222,6 +267,25 @@ npm run growth:route-catalogue:apply
 
 Migration execution requires a separate, explicit database-target decision and the repository migration-safety workflow. Generated-route application is a maintenance action, not a validation step.
 
+Before activating the observed-score runtime against a D1 target, verify that `0024` is absent, then use the guarded migration command separately from validation:
+
+```powershell
+npm run db:verify:print -- --remote
+npm run db:migration:one -- 0024_business_score_observation_flags.sql --remote --confirm-database evavo_outbound_agent
+npm run db:migration:one -- 0024_business_score_observation_flags.sql --remote --execute --confirm-database evavo_outbound_agent --confirm-unapplied
+```
+
+Do not reapply `0024` after its columns exist. The migration is one-time schema work and is not executed by any repository check.
+
 ## Dashboard verification
 
-The Worker repository does not validate the Next dashboard by mutating it. Dashboard verification is read-only and should confirm that historical draft and approval records are labelled as non-executable, while all delivery controls remain absent.
+The Worker repository does not validate the Next dashboard by mutating it. Dashboard verification is read-only and should confirm that:
+
+```text
+historical draft and approval records are labelled as non-executable
+all delivery controls remain absent
+explicit observed zero scores render as 0
+unobserved scores render as Not recorded
+scores are withheld when the provenance contract is missing
+latest-evidence time is withheld when bounded chronology is unverified
+```

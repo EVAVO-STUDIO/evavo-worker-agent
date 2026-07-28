@@ -112,16 +112,16 @@ function fixture(): Env {
   } as unknown as Env;
 }
 
-test("Account 360 preserves unknown scores and bounds evidence chronology", async () => {
+test("Account 360 preserves unknown and legacy-zero score uncertainty", async () => {
   const observedAt = Date.parse("2026-07-28T00:00:00.000Z");
   const account = await buildBusinessAccount360(fixture(), "organization-1", 25, observedAt);
   if (!account) throw new Error("ACCOUNT_360_FIXTURE_NOT_FOUND");
 
-  assert.equal(account.numericEvidenceContract, "business_account_360_nullable_scores_v1");
+  assert.equal(account.numericEvidenceContract, "business_account_360_zero_ambiguous_scores_v1");
   assert.equal(account.timelineEvidenceContract, "business_account_360_bounded_chronology_v1");
   assert.equal(account.organization.fitScore, 70);
   assert.equal(account.organization.priorityScore, null);
-  assert.equal(account.organization.riskScore, 0, "a genuine zero remains zero");
+  assert.equal(account.organization.riskScore, null, "legacy schema zero remains explicitly ambiguous");
   assert.equal(account.organization.confidenceScore, 85);
 
   assert.equal(account.relationshipContext.stakeholders[0]?.confidenceScore, null);
@@ -146,9 +146,10 @@ test("Account 360 preserves unknown scores and bounds evidence chronology", asyn
   assert.equal(account.commercialContext.serviceMatches[0]?.matchScore, null);
   assert.equal(account.accountEvidence.auditPacks[0]?.confidenceScore, 70);
   assert.deepEqual(account.deterministicIndicators.scoreSemantics, {
-    range: "0_to_100",
+    range: "greater_than_0_to_100",
     missingValue: null,
-    missingValuesAreZero: false,
+    zeroValuesAreAmbiguous: true,
+    zeroValuesReturnedAsNull: true,
   });
   assert.equal(account.deterministicIndicators.latestEvidenceAt, "2026-07-22T00:00:00.000Z");
   assert.deepEqual(account.deterministicIndicators.timelineSemantics, {
@@ -169,7 +170,7 @@ test("Account 360 preserves unknown scores and bounds evidence chronology", asyn
 
   assert.equal(
     account.uncertainties.includes(
-      "Missing or invalid score values are returned as null and are never treated as zero.",
+      "Legacy zero-valued scores are returned as null because D1 defaults cannot distinguish unassessed from genuine zero.",
     ),
     true,
   );

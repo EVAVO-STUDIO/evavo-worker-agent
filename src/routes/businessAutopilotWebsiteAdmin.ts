@@ -4,6 +4,7 @@ import {
   buildBusinessAuditObservationCandidates,
   businessAuditObservationCandidatePayload,
 } from "../core/businessAutopilotAuditObservationCandidates";
+import { projectBusinessReadCollection } from "../core/businessReadProjection";
 import { businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 import {
   businessWebsiteReadPayload,
@@ -96,7 +97,13 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
   try {
     if (request.method === "GET" && pathname === "/admin/business/websites") {
       const websites = await listBusinessWebsites(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_websites", ...businessWebsiteReadPayload(websites, "websites") });
+      return json({
+        mode: "business_websites",
+        ...businessWebsiteReadPayload(
+          projectBusinessReadCollection(websites),
+          "websites",
+        ),
+      });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/websites") {
@@ -126,7 +133,13 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
 
     if (request.method === "GET" && pathname === "/admin/business/pages") {
       const pages = await listBusinessPages(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("pageType") || undefined);
-      return json({ mode: "business_pages", ...businessWebsiteReadPayload(pages, "pages") });
+      return json({
+        mode: "business_pages",
+        ...businessWebsiteReadPayload(
+          projectBusinessReadCollection(pages),
+          "pages",
+        ),
+      });
     }
 
     if (request.method === "POST" && pathname === "/admin/business/pages") {

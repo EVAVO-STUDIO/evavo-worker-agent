@@ -142,3 +142,28 @@ test("coverage projection remains compatible while using the richer register as 
   assert.equal(Object.isFrozen(coverage), true);
   assert.equal(Object.isFrozen(coverage.products), true);
 });
+
+test("dimension keyword matching respects token boundaries", () => {
+  const register = buildBusinessAccountDimensionEvidence([
+    signal("signal-preventive", "preventive_maintenance"),
+    signal("signal-projector", "projector_upgrade"),
+    signal("signal-event", "event_launch"),
+    signal("signal-project", "project_replacement"),
+  ], OBSERVED_AT);
+
+  assert.deepEqual(register.news.matchedSignalTypes, ["event_launch"]);
+  assert.deepEqual(register.news.evidenceItems.map((item) => item.signalId), [
+    "signal-event",
+  ]);
+  assert.deepEqual(register.buyingSignals.matchedSignalTypes, [
+    "project_replacement",
+  ]);
+  assert.deepEqual(
+    register.buyingSignals.evidenceItems.map((item) => item.signalId),
+    ["signal-project"],
+  );
+  assert.equal(register.news.evidenceItems.some(
+    (item) => item.signalId === "signal-preventive"), false);
+  assert.equal(register.buyingSignals.evidenceItems.some(
+    (item) => item.signalId === "signal-projector"), false);
+});

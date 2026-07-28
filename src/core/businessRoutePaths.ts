@@ -1,3 +1,5 @@
+export const BUSINESS_ROUTE_PREFIX = "/admin/business" as const;
+
 export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN =
   "/admin/business/organizations/:organizationId/account-360" as const;
 
@@ -36,3 +38,7 @@ export const BUSINESS_READ_QUERY_GUARDED_PATHS = Object.freeze([
 
 export type BusinessReadQueryGuardedPath =
   (typeof BUSINESS_READ_QUERY_GUARDED_PATHS)[number];
+
+export function isBusinessRoutePath(pathname: string): boolean {
+  return pathname === BUSINESS_ROUTE_PREFIX || pathname.startsWith(`${BUSINESS_ROUTE_PREFIX}/`);
+}

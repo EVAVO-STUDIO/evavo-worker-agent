@@ -3,7 +3,10 @@ import type { Env } from "./db";
 import { logEvent } from "./db";
 import { isAdminRequestAuthorized } from "./core/adminAuthentication";
 import { boundedJsonFailurePayload, isExplicitJsonConfirmation, readBoundedJsonObject } from "./core/boundedJsonRequest";
-import { parseBusinessMetadataReadRouteQuery } from "./core/businessMetadataReadBoundary";
+import {
+  parseBusinessMetadataReadRouteQuery,
+  preflightBusinessMetadataReadQuery,
+} from "./core/businessMetadataReadBoundary";
 import { handlePublic } from "./routes/public";
 import { handleAdmin } from "./routes/adminProtected";
 import { handleTools } from "./routes/tools";
@@ -152,6 +155,11 @@ export default {
 
       const sourceConfirmationFailure = await sourceActionConfirmationFailure(req, pathname);
       if (sourceConfirmationFailure) return sourceConfirmationFailure;
+
+      const businessReadPreflight = preflightBusinessMetadataReadQuery(url, pathname, req.method);
+      if (businessReadPreflight && !businessReadPreflight.ok) {
+        return jsonResponse(businessReadPreflight.payload, { status: businessReadPreflight.status });
+      }
 
       const businessReadQuery = parseBusinessMetadataReadRouteQuery(url, pathname, req.method);
       if (businessReadQuery && !businessReadQuery.ok) {

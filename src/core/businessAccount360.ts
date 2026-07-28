@@ -32,9 +32,27 @@ function text(value: unknown, max: number): string | null {
     : normalized.slice(0, max);
 }
 
-function numberValue(value: unknown): number {
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string" || value.trim() !== value || !value) {
+    return null;
+  }
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function scoreValue(value: unknown): number | null {
+  const parsed = finiteNumber(value);
+  return parsed !== null && parsed >= 0 && parsed <= 100 ? parsed : null;
+}
+
+function httpStatusValue(value: unknown): number | null {
+  const parsed = finiteNumber(value);
+  return parsed !== null && Number.isInteger(parsed) && parsed >= 100 && parsed <= 599
+    ? parsed
+    : null;
 }
 
 function publicUrl(value: unknown): string | null {
@@ -142,6 +160,7 @@ function uncertainties(input: {
     }
   }
   result.push(
+    "Missing or invalid score values are returned as null and are never treated as zero.",
     "Relationship health is not computed because canonical conversations, meetings, email and project history belong to Operations Core.",
     "Budget amounts are not inferred; only stored likelihood indicators are shown.",
   );
@@ -326,7 +345,7 @@ export async function buildBusinessAccount360(
     sourceType: text(row.sourceType, 64),
     allowedUse: text(row.allowedUse, 64) ?? "unknown",
     contactStatus: text(row.contactStatus, 64) ?? "unknown",
-    confidenceScore: numberValue(row.confidenceScore),
+    confidenceScore: scoreValue(row.confidenceScore),
     emailPresent: Boolean(row.emailPresent),
     phonePresent: Boolean(row.phonePresent),
     profileUrlPresent: Boolean(row.profileUrlPresent),
@@ -357,7 +376,7 @@ export async function buildBusinessAccount360(
     title: text(row.title, 512),
     status: text(row.status, 64) ?? "unknown",
     lastFetchedAt: text(row.lastFetchedAt, 64),
-    httpStatus: row.httpStatus === null ? null : numberValue(row.httpStatus),
+    httpStatus: httpStatusValue(row.httpStatus),
     contentHashPresent: Boolean(text(row.contentHash, 256)),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
@@ -373,9 +392,9 @@ export async function buildBusinessAccount360(
     requestedByRedacted: true,
     startedAt: text(row.startedAt, 64),
     completedAt: text(row.completedAt, 64),
-    readinessScore: numberValue(row.readinessScore),
-    riskScore: numberValue(row.riskScore),
-    confidenceScore: numberValue(row.confidenceScore),
+    readinessScore: scoreValue(row.readinessScore),
+    riskScore: scoreValue(row.riskScore),
+    confidenceScore: scoreValue(row.confidenceScore),
     summary: text(row.summary, 2_000),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
@@ -392,7 +411,7 @@ export async function buildBusinessAccount360(
     title: text(row.title, 512) ?? "Untitled observation",
     evidenceSummary: text(row.evidenceSummary, 2_000),
     recommendation: text(row.recommendation, 2_000),
-    confidenceScore: numberValue(row.confidenceScore),
+    confidenceScore: scoreValue(row.confidenceScore),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
     updatedAt: text(row.updatedAt, 64),
@@ -402,10 +421,10 @@ export async function buildBusinessAccount360(
     websiteId: text(row.websiteId, 128),
     pageId: text(row.pageId, 128),
     signalType: text(row.signalType, 128) ?? "unknown",
-    signalStrength: numberValue(row.signalStrength),
+    signalStrength: scoreValue(row.signalStrength),
     evidenceSummary: text(row.evidenceSummary, 2_000),
     evidenceUrl: publicUrl(row.evidenceUrl),
-    confidenceScore: numberValue(row.confidenceScore),
+    confidenceScore: scoreValue(row.confidenceScore),
     riskFlags: stringArray(row.riskFlagsJson),
     metadataRedacted: true,
     createdAt: text(row.createdAt, 64),
@@ -416,14 +435,14 @@ export async function buildBusinessAccount360(
     opportunityType: text(row.opportunityType, 128) ?? "general",
     status: text(row.status, 64) ?? "unknown",
     priority: text(row.priority, 32) ?? "unknown",
-    fitScore: numberValue(row.fitScore),
-    needScore: numberValue(row.needScore),
-    urgencyScore: numberValue(row.urgencyScore),
-    budgetLikelihoodScore: numberValue(row.budgetLikelihoodScore),
-    contactabilityScore: numberValue(row.contactabilityScore),
-    evidenceQualityScore: numberValue(row.evidenceQualityScore),
-    riskScore: numberValue(row.riskScore),
-    confidenceScore: numberValue(row.confidenceScore),
+    fitScore: scoreValue(row.fitScore),
+    needScore: scoreValue(row.needScore),
+    urgencyScore: scoreValue(row.urgencyScore),
+    budgetLikelihoodScore: scoreValue(row.budgetLikelihoodScore),
+    contactabilityScore: scoreValue(row.contactabilityScore),
+    evidenceQualityScore: scoreValue(row.evidenceQualityScore),
+    riskScore: scoreValue(row.riskScore),
+    confidenceScore: scoreValue(row.confidenceScore),
     recommendedService: text(row.recommendedService, 255),
     recommendedAngle: text(row.recommendedAngle, 2_000),
     nextStep: text(row.nextStep, 2_000),
@@ -437,7 +456,7 @@ export async function buildBusinessAccount360(
     opportunityId: text(row.opportunityId, 128),
     signalId: text(row.signalId, 128),
     serviceKey: text(row.serviceKey, 128) ?? "unknown",
-    matchScore: numberValue(row.matchScore),
+    matchScore: scoreValue(row.matchScore),
     reason: text(row.reason, 2_000),
     evidenceItemCount: evidenceCount(row.evidenceJson),
     evidencePayloadRedacted: true,
@@ -452,7 +471,7 @@ export async function buildBusinessAccount360(
     summary: text(row.summary, 2_000),
     auditType: text(row.auditType, 128) ?? "unknown",
     riskFlags: stringArray(row.riskFlagsJson),
-    confidenceScore: numberValue(row.confidenceScore),
+    confidenceScore: scoreValue(row.confidenceScore),
     status: text(row.status, 64) ?? "unknown",
     findingsRedacted: true,
     recommendationsRedacted: true,
@@ -504,6 +523,7 @@ export async function buildBusinessAccount360(
 
   return {
     auditEvidenceContract: "business_account_360_audit_evidence_v1",
+    numericEvidenceContract: "business_account_360_nullable_scores_v1",
     organization: {
       id: text(organization.id, 128),
       name: text(organization.name, 255) ?? "Unknown organization",
@@ -514,10 +534,10 @@ export async function buildBusinessAccount360(
       sourceType: text(organization.sourceType, 64),
       sourceUrl: publicUrl(organization.sourceUrl),
       status: text(organization.status, 64) ?? "unknown",
-      fitScore: numberValue(organization.fitScore),
-      priorityScore: numberValue(organization.priorityScore),
-      riskScore: numberValue(organization.riskScore),
-      confidenceScore: numberValue(organization.confidenceScore),
+      fitScore: scoreValue(organization.fitScore),
+      priorityScore: scoreValue(organization.priorityScore),
+      riskScore: scoreValue(organization.riskScore),
+      confidenceScore: scoreValue(organization.confidenceScore),
       metadata: {},
       metadataRedacted: true,
       createdAt: text(organization.createdAt, 64),
@@ -560,6 +580,11 @@ export async function buildBusinessAccount360(
       followupStatusCounts: statusCounts(followupContext),
       dimensionCoverage: coverage,
       latestEvidenceAt: latestTimestamp(allProjected),
+      scoreSemantics: {
+        range: "0_to_100",
+        missingValue: null,
+        missingValuesAreZero: false,
+      },
       countsAreReturnedRowsOnly: true,
       recordsMayBeTruncated: true,
       snapshotConsistency: "best_effort_bounded_multi_query",

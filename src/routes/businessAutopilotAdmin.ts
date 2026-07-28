@@ -31,10 +31,6 @@ import {
   listBusinessContentIdeas,
   listBusinessFollowups,
   listBusinessLearningEvents,
-  listBusinessOpportunities,
-  listBusinessOrganizations,
-  listBusinessServiceMatches,
-  listBusinessSignals,
   listBusinessSuppression,
   saveBusinessActionDraft,
   saveBusinessContentIdea,
@@ -44,7 +40,6 @@ import {
 } from "../core/businessAutopilotRecords";
 import {
   businessAuditPackReadPayload,
-  listBusinessAuditPacks,
 } from "../core/businessAutopilotAuditPackRecords";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 import {
@@ -53,6 +48,14 @@ import {
   parseBusinessAccount360Limit,
   parseBusinessAccount360Path,
 } from "../core/businessAccount360";
+import { BUSINESS_SCORE_PROVENANCE_CONTRACT } from "../core/businessScoreProvenance";
+import {
+  listBusinessAuditPacksWithScoreProvenance,
+  listBusinessOpportunitiesWithScoreProvenance,
+  listBusinessOrganizationsWithScoreProvenance,
+  listBusinessServiceMatchesWithScoreProvenance,
+  listBusinessSignalsWithScoreProvenance,
+} from "../core/businessScoreProvenanceReaders";
 import {
   saveBusinessAuditPack,
   saveBusinessOpportunity,
@@ -135,6 +138,13 @@ function migrationError(error: unknown) {
         : null,
     rawErrorExposed: false,
     safety: businessAutopilotReadSafety(),
+  };
+}
+
+function scoreReadPayload<T>(items: T[], key: string) {
+  return {
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
+    ...businessReadPayload(items, key),
   };
 }
 
@@ -245,24 +255,28 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
 
   try {
     if (request.method === "GET" && pathname === "/admin/business/organizations") {
-      const organizations = await listBusinessOrganizations(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_organizations", ...businessReadPayload(organizations, "organizations") });
+      const organizations = await listBusinessOrganizationsWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
+      return json({ mode: "business_organizations", ...scoreReadPayload(organizations, "organizations") });
     }
     if (request.method === "GET" && pathname === "/admin/business/signals") {
-      const signals = await listBusinessSignals(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("signalType") || undefined);
-      return json({ mode: "business_signals", ...businessReadPayload(signals, "signals") });
+      const signals = await listBusinessSignalsWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("signalType") || undefined);
+      return json({ mode: "business_signals", ...scoreReadPayload(signals, "signals") });
     }
     if (request.method === "GET" && pathname === "/admin/business/opportunities") {
-      const opportunities = await listBusinessOpportunities(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_opportunities", ...businessReadPayload(opportunities, "opportunities") });
+      const opportunities = await listBusinessOpportunitiesWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
+      return json({ mode: "business_opportunities", ...scoreReadPayload(opportunities, "opportunities") });
     }
     if (request.method === "GET" && pathname === "/admin/business/service-matches") {
-      const matches = await listBusinessServiceMatches(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("serviceKey") || undefined);
-      return json({ mode: "business_service_matches", ...businessReadPayload(matches, "serviceMatches") });
+      const matches = await listBusinessServiceMatchesWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("serviceKey") || undefined);
+      return json({ mode: "business_service_matches", ...scoreReadPayload(matches, "serviceMatches") });
     }
     if (request.method === "GET" && pathname === "/admin/business/audit-packs") {
-      const packs = await listBusinessAuditPacks(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
-      return json({ mode: "business_audit_packs", ...businessAuditPackReadPayload(packs) });
+      const packs = await listBusinessAuditPacksWithScoreProvenance(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);
+      return json({
+        mode: "business_audit_packs",
+        scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
+        ...businessAuditPackReadPayload(packs),
+      });
     }
     if (request.method === "GET" && pathname === "/admin/business/action-drafts") {
       const drafts = await listBusinessActionDrafts(env, intParam(url, "limit", 25, 1, 100), url.searchParams.get("status") || undefined);

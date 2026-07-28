@@ -28,7 +28,7 @@ npm run db:migrations:print -- --remote
 Optional selectors require an unambiguous complete filename when duplicate prefixes exist:
 
 ```powershell
-npm run db:migrations:print -- --remote --only 0023_growth_activity_budget_ledger.sql
+npm run db:migrations:print -- --remote --only 0024_business_score_observation_flags.sql
 npm run db:migrations:print -- --remote --from 0014_growth_campaign_intelligence.sql
 ```
 
@@ -41,8 +41,8 @@ Target selection is always explicit.
 ### One-time schema migration, local
 
 ```powershell
-npm run db:migration:one -- 0023_growth_activity_budget_ledger.sql --local
-npm run db:migration:one -- 0023_growth_activity_budget_ledger.sql --local --execute --confirm-unapplied
+npm run db:migration:one -- 0024_business_score_observation_flags.sql --local
+npm run db:migration:one -- 0024_business_score_observation_flags.sql --local --execute --confirm-unapplied
 ```
 
 ### One-time schema migration, remote
@@ -51,8 +51,8 @@ Before execution, verify that the migration has not already been applied.
 
 ```powershell
 npm run db:verify:print -- --remote
-npm run db:migration:one -- 0023_growth_activity_budget_ledger.sql --remote --confirm-database evavo_outbound_agent
-npm run db:migration:one -- 0023_growth_activity_budget_ledger.sql --remote --execute --confirm-database evavo_outbound_agent --confirm-unapplied
+npm run db:migration:one -- 0024_business_score_observation_flags.sql --remote --confirm-database evavo_outbound_agent
+npm run db:migration:one -- 0024_business_score_observation_flags.sql --remote --execute --confirm-database evavo_outbound_agent --confirm-unapplied
 ```
 
 ### Rerunnable data migration
@@ -103,15 +103,18 @@ npm run db:migration:one -- 0011_source_expansion_strategy_origin_yield_backfill
 22. `0021_business_autopilot_foundation.sql`
 23. `0022_business_website_audit_records.sql`
 24. `0023_growth_activity_budget_ledger.sql`
+25. `0024_business_score_observation_flags.sql`
 
 ## Migration notes
 
 - `0006_agent_settings.sql` and `0006_opportunity_run_audit.sql` intentionally share the `0006` prefix and are ordered by complete filename.
 - `0010_source_expansion_strategy_origin_yield.sql` is a one-time schema migration.
 - `0011_source_expansion_strategy_origin_yield_backfill.sql` is rerunnable data maintenance.
-- `0012` through `0023` are additive metadata and control-plane migrations. They do not enable sending, posting, form submission, browser automation, AI calls, ad buying or external execution.
+- `0012` through `0024` are additive metadata and control-plane migrations. They do not enable sending, posting, form submission, browser automation, AI calls, ad buying or external execution.
 - `0023_growth_activity_budget_ledger.sql` atomically admits activity against one daily counter row, stores only hashed domain keys, forbids paid/AI/browser/external-action budgets, prevents claim deletion, and permits only one final completed or failed outcome.
 - The `0023` ledger reserves conservative capacity before work begins. It does not claim to measure unrelated Cloudflare account activity and must remain below the reviewed Worker, D1 and Queue planning envelope.
+- `0024_business_score_observation_flags.sql` adds one boolean provenance flag beside every Account 360 score. It marks only valid nonzero legacy values as observed, leaves ambiguous legacy zero defaults unobserved, and allows future writes to represent an explicitly observed score of zero without guessing.
+- `0024` is one-time schema work. Verify the target first and do not reapply it after the columns exist.
 - No one-time migration should be reapplied merely because a report looks stale. Inspect schema and saved metadata first.
 
 ## Growth zero-source autonomous discovery data model

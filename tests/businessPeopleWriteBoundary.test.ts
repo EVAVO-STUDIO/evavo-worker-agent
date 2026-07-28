@@ -101,13 +101,17 @@ test("Business people reads keep the documented default and reject ambiguous que
     "/admin/business/people",
     json,
   );
+  const readResult = await payload(response);
   assert.equal(response.status, 200);
   assert.equal(boundValues().at(-1), 25);
+  assert.equal(readResult.queryContract, "business_metadata_read_query_v1");
 
   for (const path of [
     "/admin/business/people?limit=0",
     "/admin/business/people?limit=25&limit=50",
     "/admin/business/people?unexpected=1",
+    "/admin/business/people?contactStatus=%20active",
+    `/admin/business/people?${Array.from({ length: 17 }, (_, index) => `x${index}=1`).join("&")}`,
   ]) {
     const fixture = environment();
     const rejected = await handleBusinessAutopilotPeopleAdmin(
@@ -149,6 +153,7 @@ test("query and coerced confirmation cannot authorize Business people writes", a
     const result = await payload(response);
     assert.equal(response.status, 400, fixture.path);
     assert.equal(result.error, fixture.error, fixture.path);
+    assert.equal(result.boundaryContract, "business_metadata_write_boundary_v1");
     assert.equal(touched(), 0, fixture.path);
     assert.equal(JSON.stringify(result).includes("Query confirmation"), false);
   }
@@ -188,6 +193,7 @@ test("Business people writes use bounded JSON and exact reviewed fields", async 
     );
     const result = await payload(response);
     assert.equal(response.status >= 400, true);
+    assert.equal(result.boundaryContract, "business_metadata_write_boundary_v1");
     assert.equal(touched(), 0);
     assert.equal(JSON.stringify(result).includes("must-not-store"), false);
   }
@@ -231,6 +237,10 @@ test("valid Business people writes persist once and return only reduced contact 
   assert.equal(result.exactBooleanConfirmation, true);
   assert.equal(result.confirmationCoercionAllowed, false);
   assert.equal(result.queryConfirmationAllowed, false);
+  assert.equal(
+    (result.requestReceipt as Record<string, unknown>).boundaryContract,
+    "business_metadata_write_boundary_v1",
+  );
   assert.equal(text.includes(rawEmail), false);
   assert.equal(text.includes("internal context"), false);
   assert.equal(text.includes("bodySha256"), false);

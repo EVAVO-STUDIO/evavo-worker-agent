@@ -4,7 +4,7 @@ import {
   buildBusinessAuditObservationCandidates,
   businessAuditObservationCandidatePayload,
 } from "../core/businessAutopilotAuditObservationCandidates";
-import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
+import { businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 import {
   businessWebsiteReadPayload,
   businessWebsiteWritePayload,
@@ -13,6 +13,10 @@ import {
   saveBusinessPage,
   saveBusinessWebsite,
 } from "../core/businessAutopilotWebsiteRecords";
+import {
+  readBusinessMetadataWriteRequest,
+  type BusinessMetadataWriteReceipt,
+} from "../core/businessMetadataWriteBoundary";
 import { BUSINESS_SCORE_PROVENANCE_CONTRACT } from "../core/businessScoreProvenance";
 import {
   listBusinessAuditObservationsWithScoreProvenance,
@@ -28,6 +32,7 @@ export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 const schemaMissingMessage = "Business website/page schema is missing or unavailable.";
 const scoreProvenanceMissingMessage = "Business website audit score provenance schema is missing or unavailable.";
 const routeFailedMessage = "Business website/page route failed before a safe response could be returned.";
+const SCORE_RANGE = Object.freeze({ min: 0, max: 100 });
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
   const value = Number(url.searchParams.get(key));
@@ -35,21 +40,15 @@ function intParam(url: URL, key: string, fallback: number, min: number, max: num
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-async function parseBody(request: Request): Promise<any> {
-  return request.json().catch(() => ({}));
-}
-
-function confirmed(url: URL, body: any): boolean {
-  return url.searchParams.get("confirm") === "1" || body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
-}
-
-function blockedWrite(json: JsonResponse) {
-  return json({
-    ok: false,
-    error: "confirm_required",
-    reason: "Business website/page/audit writes require confirmation and only save internal metadata. They do not crawl, fetch, send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.",
-    safety: businessAutopilotMetadataWriteSafety(),
-  }, { status: 400 });
+function confirmedWriteMetadata(receipt: BusinessMetadataWriteReceipt) {
+  return {
+    exactBooleanConfirmation: true,
+    confirmationCoercionAllowed: false,
+    queryConfirmationAllowed: false,
+    internalMetadataOnly: true,
+    externalExecutionAllowed: false,
+    requestReceipt: receipt,
+  };
 }
 
 function errorText(error: unknown) {
@@ -101,10 +100,28 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
     }
 
     if (request.method === "POST" && pathname === "/admin/business/websites") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const website = await saveBusinessWebsite(env, body.website || body);
-      return json({ mode: "business_website_saved", ...businessWebsiteWritePayload(website, "website") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "website",
+        allowedEntityFields: new Set([
+          "id", "organizationId", "url", "domain", "status", "lastCheckedAt", "robotsStatus",
+          "crawlAllowed", "techHints", "metadata",
+        ]),
+        requiredTextFields: new Set(["url"]),
+        textFields: new Set(["id", "organizationId", "url", "domain", "status", "lastCheckedAt", "robotsStatus"]),
+        arrayFields: new Set(["techHints"]),
+        objectFields: new Set(["metadata"]),
+        booleanFields: new Set(["crawlAllowed"]),
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const website = await saveBusinessWebsite(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessWebsite>[1],
+      );
+      return json({
+        mode: "business_website_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWebsiteWritePayload(website, "website"),
+      });
     }
 
     if (request.method === "GET" && pathname === "/admin/business/pages") {
@@ -113,10 +130,27 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
     }
 
     if (request.method === "POST" && pathname === "/admin/business/pages") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const page = await saveBusinessPage(env, body.page || body);
-      return json({ mode: "business_page_saved", ...businessWebsiteWritePayload(page, "page") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "page",
+        allowedEntityFields: new Set([
+          "id", "websiteId", "organizationId", "url", "pageType", "title", "status",
+          "lastFetchedAt", "httpStatus", "contentHash", "metadata",
+        ]),
+        requiredTextFields: new Set(["url"]),
+        textFields: new Set(["id", "websiteId", "organizationId", "url", "pageType", "title", "status", "lastFetchedAt", "contentHash"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: { httpStatus: { min: 100, max: 599, integer: true } },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const page = await saveBusinessPage(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessPage>[1],
+      );
+      return json({
+        mode: "business_page_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWebsiteWritePayload(page, "page"),
+      });
     }
 
     if (request.method === "GET" && pathname === "/admin/business/website-audit-runs") {
@@ -125,10 +159,30 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
     }
 
     if (request.method === "POST" && pathname === "/admin/business/website-audit-runs") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const auditRun = await saveBusinessWebsiteAuditRun(env, body.auditRun || body);
-      return json({ mode: "business_website_audit_run_saved", ...businessWebsiteWritePayload(auditRun, "websiteAuditRun") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "auditRun",
+        allowedEntityFields: new Set([
+          "id", "websiteId", "organizationId", "status", "auditType", "source", "requestedBy",
+          "startedAt", "completedAt", "readinessScore", "riskScore", "confidenceScore", "summary", "metadata",
+        ]),
+        textFields: new Set(["id", "websiteId", "organizationId", "status", "auditType", "source", "requestedBy", "startedAt", "completedAt", "summary"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: {
+          readinessScore: SCORE_RANGE,
+          riskScore: SCORE_RANGE,
+          confidenceScore: SCORE_RANGE,
+        },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const auditRun = await saveBusinessWebsiteAuditRun(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessWebsiteAuditRun>[1],
+      );
+      return json({
+        mode: "business_website_audit_run_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWebsiteWritePayload(auditRun, "websiteAuditRun"),
+      });
     }
 
     if (request.method === "GET" && pathname === "/admin/business/audit-observations") {
@@ -137,10 +191,27 @@ export async function handleBusinessAutopilotWebsiteAdmin(request: Request, env:
     }
 
     if (request.method === "POST" && pathname === "/admin/business/audit-observations") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const observation = await saveBusinessAuditObservation(env, body.observation || body);
-      return json({ mode: "business_audit_observation_saved", ...businessWebsiteWritePayload(observation, "auditObservation") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "observation",
+        allowedEntityFields: new Set([
+          "id", "auditRunId", "websiteId", "organizationId", "pageId", "signalId", "category",
+          "severity", "title", "evidenceSummary", "recommendation", "confidenceScore", "metadata",
+        ]),
+        requiredTextFields: new Set(["title"]),
+        textFields: new Set(["id", "auditRunId", "websiteId", "organizationId", "pageId", "signalId", "category", "severity", "title", "evidenceSummary", "recommendation"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: { confidenceScore: SCORE_RANGE },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const observation = await saveBusinessAuditObservation(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessAuditObservation>[1],
+      );
+      return json({
+        mode: "business_audit_observation_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWebsiteWritePayload(observation, "auditObservation"),
+      });
     }
 
     if (request.method === "GET" && pathname === "/admin/business/audit-observation-candidates") {

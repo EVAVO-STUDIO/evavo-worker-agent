@@ -29,6 +29,7 @@ function forbidTokens(label, source, tokens) {
 
 const migration = read("migrations/0024_business_score_observation_flags.sql");
 const helper = read("src/core/businessScoreProvenance.ts");
+const readProjection = read("src/core/businessReadProjection.ts");
 const readers = read("src/core/businessScoreProvenanceReaders.ts");
 const writers = read("src/core/businessScoreProvenanceWriters.ts");
 const peopleRecords = read("src/core/businessAutopilotPeopleRecords.ts");
@@ -39,6 +40,7 @@ const peopleRoute = read("src/routes/businessAutopilotPeopleAdmin.ts");
 const websiteRoute = read("src/routes/businessAutopilotWebsiteAdmin.ts");
 const provenanceTest = read("tests/businessScoreProvenance.test.ts");
 const readerTest = read("tests/businessScoreProvenanceReaders.test.ts");
+const projectionTest = read("tests/businessReadProjection.test.ts");
 const accountTest = read("tests/businessAccount360NullableScores.test.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
@@ -66,7 +68,28 @@ requireTokens("score helper", helper, [
   "return { value: parsed, observed: 1, supplied }",
 ]);
 
+requireTokens("Business read projection", readProjection, [
+  '"business_read_projection_v1"',
+  "projectBusinessReadRecord",
+  "projectBusinessReadCollection",
+  'field === "metadata" || field === "requestedBy"',
+  "redactContactDetails",
+  "existingBoolean",
+  "metadataPresent",
+  "metadataRedacted = true",
+  "requestedByPresent",
+  "requesterIdentityRedacted = true",
+  "contactDetailsRedacted = true",
+  "Object.freeze(projected)",
+]);
+forbidTokens("Business read projection", readProjection, [
+  "projected.metadata = record.metadata",
+  "projected.requestedBy = record.requestedBy",
+]);
+
 requireTokens("provenance readers", readers, [
+  'from "./businessReadProjection"',
+  "projectBusinessReadCollection",
   "listBusinessOrganizationsWithScoreProvenance",
   "listBusinessPeopleWithScoreProvenance",
   "listBusinessSignalsWithScoreProvenance",
@@ -82,6 +105,7 @@ requireTokens("provenance readers", readers, [
   "match_score_observed DESC",
   "confidence_score_observed DESC",
   "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
+  "{ redactContactDetails: true }",
 ]);
 
 requireTokens("atomic provenance writers", writers, [
@@ -120,6 +144,10 @@ requireTokens("people collection reads", peopleRecords, [
 requireTokens("audit-pack collection reads", auditPackRecords, [
   "readBusinessObservedScore",
   "row.confidence_score_observed",
+  'from "./businessReadProjection"',
+  "projectBusinessReadRecord(pack)",
+  'typeof projected.metadataPresent === "boolean"',
+  "metadata: {}",
   'contract: "business_audit_pack_reads_v3_score_provenance"',
   "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
@@ -148,6 +176,8 @@ for (const [label, route, tokens] of [
     "exact JSON confirmation",
   ]],
   ["website route", websiteRoute, [
+    'from "../core/businessReadProjection"',
+    "projectBusinessReadCollection",
     'from "../core/businessScoreProvenanceReaders"',
     'from "../core/businessScoreProvenanceWriters"',
     "listBusinessWebsiteAuditRunsWithScoreProvenance",
@@ -189,14 +219,30 @@ requireTokens("provenance writer executable test", provenanceTest, [
   "business_score_observation_flags_v1",
 ]);
 requireTokens("provenance reader executable test", readerTest, [
-  "all active Business score collections preserve explicit zero",
+  "all active Business score collections preserve observed scores and minimize private read data",
   "listBusinessOrganizationsWithScoreProvenance",
   "listBusinessPeopleWithScoreProvenance",
   "listBusinessWebsiteAuditRunsWithScoreProvenance",
   "priorityScore, null",
   "signalStrength, 0",
   "matchScore, 0",
+  "metadataPresent, true",
+  "contactDetailsRedacted, true",
+  "requesterIdentityRedacted, true",
+  "reader projection must not mutate D1 rows",
   "business_score_observation_flags_v1",
+]);
+requireTokens("Business read projection executable test", projectionTest, [
+  "Business read projection removes arbitrary metadata and requester identity without mutating evidence",
+  "Business people projection preserves presence evidence while redacting contact values",
+  "repeated projection preserves existing redaction and presence flags",
+  "collection projection and audit-pack minimisation preserve metadata-presence truth",
+  "business_read_projection_v1",
+  "private-operator-context-must-not-leak",
+  "projectBusinessReadCollection",
+  "businessAuditPackReadPayload",
+  "metadataPresent, true",
+  "Object.isFrozen(projected)",
 ]);
 requireTokens("Account 360 provenance test", accountTest, [
   '"business_account_360_observed_scores_v1"',
@@ -213,15 +259,22 @@ if (packageJson.scripts?.["business:score-provenance:check"] !== expectedCommand
 if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run business:score-provenance:check")) {
   errors.push("check:local must include business:score-provenance:check");
 }
+if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run test:core")) {
+  errors.push("check:local must execute test:core so read-projection contracts cannot be skipped");
+}
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-score-provenance-v2-atomic-writes-and-reads",
+  contract: "business-score-provenance-v3-minimized-observed-reads",
   explicitObservedZeroPreserved: true,
   unobservedScoresReturnedAsNull: true,
   scoreAndObservationFlagWrittenAtomically: true,
   activeListReadsProvenanceAware: true,
+  arbitraryMetadataRedactedFromCollections: true,
+  requesterIdentityRedactedFromAuditRuns: true,
+  personContactDetailsRedactedFromCollections: true,
+  auditPackMetadataPresencePreserved: true,
   missingMigrationFailsClosed: true,
   migrationExecutedByThisCheck: false,
   externalExecutionEnabled: false,

@@ -5,6 +5,7 @@ import {
   BUSINESS_METADATA_READ_QUERY_CONTRACT,
   parseBusinessMetadataReadQuery,
   parseBusinessMetadataReadRouteQuery,
+  preflightBusinessMetadataReadQuery,
 } from "../src/core/businessMetadataReadBoundary";
 
 function parse(query = "") {
@@ -112,6 +113,60 @@ test("route guard covers Business collection reads and preserves specialised rou
     new URL("https://worker.example/admin/business/people?limit=25"),
     "/admin/business/people",
     "GET",
+  ), null);
+});
+
+test("preflight structurally guards specialised and unknown Business GET paths", () => {
+  const accountPath = "/admin/business/organizations/org-1/account-360";
+  const account = preflightBusinessMetadataReadQuery(
+    new URL(`https://worker.example${accountPath}?limit=25`),
+    accountPath,
+    "GET",
+  );
+  assert.equal(account?.ok, true);
+  if (account?.ok) assert.equal(account.contract, BUSINESS_METADATA_READ_QUERY_CONTRACT);
+
+  const duplicate = preflightBusinessMetadataReadQuery(
+    new URL(`https://worker.example${accountPath}?limit=25&limit=30`),
+    accountPath,
+    "GET",
+  );
+  assert.equal(duplicate?.ok, false);
+  if (duplicate && !duplicate.ok) {
+    assert.equal(duplicate.payload.error, "duplicate_query_parameter");
+    assert.deepEqual(duplicate.payload.fields, ["limit"]);
+  }
+
+  const secretValue = "must-not-leak";
+  const peoplePath = "/admin/business/people";
+  const unsafePeople = preflightBusinessMetadataReadQuery(
+    new URL(`https://worker.example${peoplePath}?${encodeURIComponent("secret key")}=${secretValue}`),
+    peoplePath,
+    "GET",
+  );
+  assert.equal(unsafePeople?.ok, false);
+  if (unsafePeople && !unsafePeople.ok) {
+    assert.equal(unsafePeople.payload.error, "invalid_query_key");
+    assert.equal(JSON.stringify(unsafePeople.payload).includes(secretValue), false);
+  }
+
+  const unknownPath = "/admin/business/not-a-route";
+  const unknown = preflightBusinessMetadataReadQuery(
+    new URL(`https://worker.example${unknownPath}?debug=bounded`),
+    unknownPath,
+    "GET",
+  );
+  assert.equal(unknown?.ok, true);
+
+  assert.equal(preflightBusinessMetadataReadQuery(
+    new URL("https://worker.example/admin/opportunities?limit=10"),
+    "/admin/opportunities",
+    "GET",
+  ), null);
+  assert.equal(preflightBusinessMetadataReadQuery(
+    new URL(`https://worker.example${peoplePath}?limit=10`),
+    peoplePath,
+    "POST",
   ), null);
 });
 

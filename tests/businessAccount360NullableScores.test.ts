@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { Env } from "../src/db";
 import { buildBusinessAccount360 } from "../src/core/businessAccount360";
+import { BUSINESS_ACCOUNT_DIMENSION_KEYS } from "../src/core/businessAccountDimensionEvidence";
 
 type TableRows = Record<string, Record<string, unknown>[]>;
 
@@ -50,8 +51,11 @@ function fixture(): Env {
       signalType: "technology_stack",
       signalStrength: " 80 ",
       signalStrengthObserved: 1,
+      evidenceSummary: "Reviewed technology stack evidence.",
+      evidenceUrl: "https://example.test/technology",
       confidenceScore: 101,
       confidenceScoreObserved: 1,
+      riskFlagsJson: "[]",
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2099-01-01T00:00:00Z",
     }],
@@ -133,7 +137,7 @@ function fixture(): Env {
   } as unknown as Env;
 }
 
-test("Account 360 preserves explicit zero and withholds unobserved scores", async () => {
+test("Account 360 preserves explicit zero, withholds unobserved scores and registers bounded dimension evidence", async () => {
   const observedAt = Date.parse("2026-07-28T00:00:00.000Z");
   const account = await buildBusinessAccount360(fixture(), "organization-1", 25, observedAt);
   if (!account) throw new Error("ACCOUNT_360_FIXTURE_NOT_FOUND");
@@ -141,6 +145,7 @@ test("Account 360 preserves explicit zero and withholds unobserved scores", asyn
   assert.equal(account.numericEvidenceContract, "business_account_360_observed_scores_v1");
   assert.equal(account.scoreProvenanceContract, "business_score_observation_flags_v1");
   assert.equal(account.timelineEvidenceContract, "business_account_360_bounded_chronology_v1");
+  assert.equal(account.dimensionEvidenceContract, "business_account_360_dimension_evidence_v1");
   assert.equal(account.organization.fitScore, 70);
   assert.equal(account.organization.priorityScore, null);
   assert.equal(account.organization.riskScore, 0, "an observed zero remains visible");
@@ -182,6 +187,31 @@ test("Account 360 preserves explicit zero and withholds unobserved scores", asyn
   });
   assert.equal(account.deterministicIndicators.recordsMayBeTruncated, false);
 
+  const dimensions = account.accountEvidence.dimensions;
+  assert.deepEqual(Object.keys(dimensions), [...BUSINESS_ACCOUNT_DIMENSION_KEYS]);
+  assert.equal(dimensions.technology.status, "stored_evidence_present");
+  assert.equal(dimensions.technology.evidenceCount, 1);
+  assert.deepEqual(dimensions.technology.matchedSignalTypes, ["technology_stack"]);
+  assert.equal(dimensions.technology.maximumSignalStrengthScore, null);
+  assert.equal(dimensions.technology.maximumConfidenceScore, null);
+  assert.equal(dimensions.technology.latestEvidenceAt, "2026-07-01T00:00:00.000Z");
+  assert.equal(dimensions.technology.evidenceItems[0]?.signalId, "signal-1");
+  assert.equal(dimensions.technology.evidenceItems[0]?.evidenceSummary, "Reviewed technology stack evidence.");
+  assert.equal(dimensions.products.status, "not_evidenced");
+  assert.equal(dimensions.products.evidenceCount, 0);
+  assert.equal(dimensions.products.latestEvidenceAt, null);
+  assert.deepEqual(account.deterministicIndicators.dimensionCoverage.technology, {
+    status: "stored_evidence_present",
+    matchedSignalTypes: ["technology_stack"],
+  });
+  assert.deepEqual(account.deterministicIndicators.dimensionSemantics, {
+    source: "bounded_returned_signal_rows",
+    classification: "deterministic_signal_type_keywords",
+    evidenceItemsPerDimension: 5,
+    missingDimensionsRemainUnknown: true,
+    externalResearchTriggered: false,
+  });
+
   const boundedAccount = await buildBusinessAccount360(
     fixture(),
     "organization-1",
@@ -193,6 +223,12 @@ test("Account 360 preserves explicit zero and withholds unobserved scores", asyn
 
   assert.equal(
     account.uncertainties.includes(
+      "Dimension evidence is built only from the bounded signals returned in this snapshot.",
+    ),
+    true,
+  );
+  assert.equal(
+    account.uncertainties.includes(
       "Explicit observed zero scores are preserved; legacy, missing or invalid scores are returned as null.",
     ),
     true,
@@ -200,6 +236,12 @@ test("Account 360 preserves explicit zero and withholds unobserved scores", asyn
   assert.equal(
     account.uncertainties.includes(
       "Invalid or future-dated evidence timestamps are excluded from latest-evidence chronology.",
+    ),
+    true,
+  );
+  assert.equal(
+    account.reviewPrompts.includes(
+      "Review product and competitor evidence before finalising an account plan.",
     ),
     true,
   );

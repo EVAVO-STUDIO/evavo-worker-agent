@@ -36,6 +36,12 @@ for (const id of ids) {
 
 for (const token of [
   'import { resolveBusinessRouteHandlerId } from "./routes/businessRoutePolicy"',
+  'preflightBusinessMetadataReadQuery,',
+  'parseBusinessMetadataReadRouteQuery,',
+  'const businessReadPreflight = preflightBusinessMetadataReadQuery(url, pathname, req.method)',
+  'return jsonResponse(businessReadPreflight.payload, { status: businessReadPreflight.status })',
+  'const businessReadQuery = parseBusinessMetadataReadRouteQuery(url, pathname, req.method)',
+  'return jsonResponse(businessReadQuery.payload, { status: businessReadQuery.status })',
   'switch (resolveBusinessRouteHandlerId(pathname))',
   'case "account-intelligence":',
   'return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse)',
@@ -44,6 +50,13 @@ for (const token of [
   'return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse)',
 ]) {
   if (!index.includes(token)) errors.push(`Business dispatcher is missing: ${token}`);
+}
+
+const preflightPosition = index.indexOf("const businessReadPreflight = preflightBusinessMetadataReadQuery");
+const collectionParserPosition = index.indexOf("const businessReadQuery = parseBusinessMetadataReadRouteQuery");
+const businessDispatchPosition = index.indexOf("switch (resolveBusinessRouteHandlerId(pathname))");
+if (!(preflightPosition >= 0 && collectionParserPosition > preflightPosition && businessDispatchPosition > collectionParserPosition)) {
+  errors.push("Business GET family preflight must run before collection parsing and Business dispatch");
 }
 
 for (const raw of [
@@ -73,6 +86,7 @@ for (const unsafe of [
 }
 
 for (const required of [
+  'export const BUSINESS_ROUTE_PREFIX = "/admin/business" as const',
   'export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN =',
   '"/admin/business/organizations/:organizationId/account-360" as const',
   'export const BUSINESS_PEOPLE_PATH = "/admin/business/people" as const',
@@ -81,6 +95,8 @@ for (const required of [
   'export const BUSINESS_FALLBACK_COLLECTION_PATHS',
   'export const BUSINESS_READ_QUERY_GUARDED_PATHS',
   'export type BusinessReadQueryGuardedPath',
+  'export function isBusinessRoutePath(pathname: string): boolean',
+  'pathname === BUSINESS_ROUTE_PREFIX || pathname.startsWith(`${BUSINESS_ROUTE_PREFIX}/`)',
 ]) {
   if (!routePaths.includes(required)) errors.push(`Business path registry is missing: ${required}`);
 }
@@ -122,11 +138,14 @@ for (const forbidden of [
 
 for (const required of [
   'BUSINESS_READ_QUERY_GUARDED_PATHS',
+  'isBusinessRoutePath',
   'type BusinessReadQueryGuardedPath',
   'Record<BusinessReadQueryGuardedPath, BusinessMetadataReadQueryOptions>',
+  'export function preflightBusinessMetadataReadQuery(',
+  'if (method !== "GET" || !isBusinessRoutePath(pathname)) return null',
   'BUSINESS_READ_QUERY_GUARDED_PATHS.includes',
 ]) {
-  if (!readBoundary.includes(required)) errors.push(`Business read boundary is missing path parity token: ${required}`);
+  if (!readBoundary.includes(required)) errors.push(`Business read boundary is missing path parity or preflight token: ${required}`);
 }
 
 for (const required of [
@@ -199,12 +218,16 @@ for (const route of [...expectedFallbackPaths, ...expectedWebsitePaths, ...expec
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "typed-business-route-policy-v4-canonical-paths",
+  contract: "typed-business-route-policy-v5-family-read-preflight",
   compatibility: {
-    contract: "typed-business-route-policy-v3-account-intelligence-read-only",
+    contract: "typed-business-route-policy-v4-canonical-paths",
   },
   routeGroups: ids,
   canonicalPathRegistry: true,
+  businessFamilyPrefixCanonical: true,
+  businessFamilyReadPreflightActive: true,
+  specialisedBusinessReadsStructurallyPreflighted: true,
+  unknownBusinessReadsStructurallyPreflighted: true,
   readGuardPathParityTyped: true,
   accountIntelligenceRouteGroupExplicit: true,
   accountIntelligenceReadOnly: true,

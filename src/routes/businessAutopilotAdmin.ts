@@ -48,6 +48,10 @@ import {
   parseBusinessAccount360Limit,
   parseBusinessAccount360Path,
 } from "../core/businessAccount360";
+import {
+  readBusinessMetadataWriteRequest,
+  type BusinessMetadataWriteReceipt,
+} from "../core/businessMetadataWriteBoundary";
 import { BUSINESS_SCORE_PROVENANCE_CONTRACT } from "../core/businessScoreProvenance";
 import {
   listBusinessAuditPacksWithScoreProvenance,
@@ -69,6 +73,7 @@ export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 const schemaMissingMessage = "Business Autopilot schema is missing or unavailable.";
 const scoreProvenanceMissingMessage = "Business score provenance schema is missing or unavailable.";
 const routeFailedMessage = "Business Autopilot route failed before a safe response could be returned.";
+const SCORE_RANGE = Object.freeze({ min: 0, max: 100 });
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
   const value = Number(url.searchParams.get(key));
@@ -76,21 +81,15 @@ function intParam(url: URL, key: string, fallback: number, min: number, max: num
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-async function parseBody(request: Request): Promise<any> {
-  return request.json().catch(() => ({}));
-}
-
-function confirmed(url: URL, body: any): boolean {
-  return url.searchParams.get("confirm") === "1" || body?.confirm === true || body?.confirm === 1 || body?.confirm === "1";
-}
-
-function blockedWrite(json: JsonResponse) {
-  return json({
-    ok: false,
-    error: "confirm_required",
-    reason: "Business Autopilot writes require confirmation and only save internal metadata. They do not send, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.",
-    safety: businessAutopilotMetadataWriteSafety(),
-  }, { status: 400 });
+function confirmedWriteMetadata(receipt: BusinessMetadataWriteReceipt) {
+  return {
+    exactBooleanConfirmation: true,
+    confirmationCoercionAllowed: false,
+    queryConfirmationAllowed: false,
+    internalMetadataOnly: true,
+    externalExecutionAllowed: false,
+    requestReceipt: receipt,
+  };
 }
 
 function blockedHistoricalRecordWrite(json: JsonResponse, mode: string) {
@@ -368,39 +367,151 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
     }
 
     if (request.method === "POST" && pathname === "/admin/business/organizations") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const organization = await saveBusinessOrganization(env, body.organization || body);
-      return json({ mode: "business_organization_saved", ...businessWritePayload(organization, "organization") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "organization",
+        allowedEntityFields: new Set([
+          "id", "name", "domain", "websiteUrl", "industry", "location", "sourceType", "sourceUrl",
+          "fitScore", "priorityScore", "riskScore", "confidenceScore", "metadata",
+        ]),
+        requiredTextFields: new Set(["name"]),
+        textFields: new Set(["id", "name", "domain", "websiteUrl", "industry", "location", "sourceType", "sourceUrl"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: {
+          fitScore: SCORE_RANGE,
+          priorityScore: SCORE_RANGE,
+          riskScore: SCORE_RANGE,
+          confidenceScore: SCORE_RANGE,
+        },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const organization = await saveBusinessOrganization(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessOrganization>[1],
+      );
+      return json({
+        mode: "business_organization_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(organization, "organization"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/signals") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const signal = await saveBusinessSignal(env, body.signal || body);
-      return json({ mode: "business_signal_saved", ...businessWritePayload(signal, "signal") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "signal",
+        allowedEntityFields: new Set([
+          "id", "organizationId", "websiteId", "pageId", "signalType", "signalStrength",
+          "evidenceSummary", "evidenceUrl", "confidenceScore", "riskFlags", "metadata",
+        ]),
+        requiredTextFields: new Set(["signalType"]),
+        textFields: new Set(["id", "organizationId", "websiteId", "pageId", "signalType", "evidenceSummary", "evidenceUrl"]),
+        arrayFields: new Set(["riskFlags"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: { signalStrength: SCORE_RANGE, confidenceScore: SCORE_RANGE },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const signal = await saveBusinessSignal(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessSignal>[1],
+      );
+      return json({
+        mode: "business_signal_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(signal, "signal"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/opportunities") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const opportunity = await saveBusinessOpportunity(env, body.opportunity || body);
-      return json({ mode: "business_opportunity_saved", ...businessWritePayload(opportunity, "opportunity") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "opportunity",
+        allowedEntityFields: new Set([
+          "id", "organizationId", "opportunityType", "recommendedService", "recommendedAngle", "nextStep",
+          "fitScore", "needScore", "urgencyScore", "budgetLikelihoodScore", "contactabilityScore",
+          "evidenceQualityScore", "riskScore", "confidenceScore", "metadata",
+        ]),
+        textFields: new Set(["id", "organizationId", "opportunityType", "recommendedService", "recommendedAngle", "nextStep"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: {
+          fitScore: SCORE_RANGE,
+          needScore: SCORE_RANGE,
+          urgencyScore: SCORE_RANGE,
+          budgetLikelihoodScore: SCORE_RANGE,
+          contactabilityScore: SCORE_RANGE,
+          evidenceQualityScore: SCORE_RANGE,
+          riskScore: SCORE_RANGE,
+          confidenceScore: SCORE_RANGE,
+        },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const opportunity = await saveBusinessOpportunity(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessOpportunity>[1],
+      );
+      return json({
+        mode: "business_opportunity_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(opportunity, "opportunity"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/service-matches") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const serviceMatch = await saveBusinessServiceMatch(env, body.serviceMatch || body);
-      return json({ mode: "business_service_match_saved", ...businessWritePayload(serviceMatch, "serviceMatch") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "serviceMatch",
+        allowedEntityFields: new Set([
+          "id", "organizationId", "opportunityId", "signalId", "serviceKey", "matchScore", "reason", "evidence", "metadata",
+        ]),
+        requiredTextFields: new Set(["serviceKey"]),
+        textFields: new Set(["id", "organizationId", "opportunityId", "signalId", "serviceKey", "reason"]),
+        arrayFields: new Set(["evidence"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: { matchScore: SCORE_RANGE },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const serviceMatch = await saveBusinessServiceMatch(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessServiceMatch>[1],
+      );
+      return json({
+        mode: "business_service_match_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(serviceMatch, "serviceMatch"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/audit-packs") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const auditPack = await saveBusinessAuditPack(env, body.auditPack || body);
-      return json({ mode: "business_audit_pack_saved", ...businessWritePayload(auditPack, "auditPack") });
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "auditPack",
+        allowedEntityFields: new Set([
+          "id", "organizationId", "organizationName", "domain", "websiteUrl", "industry", "location",
+          "hasContactPath", "signals", "riskFlags", "notes", "opportunityId",
+        ]),
+        requiredTextFields: new Set(["organizationName"]),
+        textFields: new Set(["id", "organizationId", "organizationName", "domain", "websiteUrl", "industry", "location", "notes", "opportunityId"]),
+        arrayFields: new Set(["signals", "riskFlags"]),
+        booleanFields: new Set(["hasContactPath"]),
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const auditPack = await saveBusinessAuditPack(
+        env,
+        parsed.entity as Parameters<typeof saveBusinessAuditPack>[1],
+      );
+      return json({
+        mode: "business_audit_pack_saved",
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(auditPack, "auditPack"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/action-drafts/build") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const built = buildBusinessDraftOnlyAction(body.draftRequest || body);
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "draftRequest",
+        allowedEntityFields: new Set([
+          "intent", "organizationId", "organizationName", "personId", "opportunityId", "auditPackId",
+          "recommendedService", "recommendedAngle", "evidenceSummary", "nextStep", "contactName", "tone",
+        ]),
+        textFields: new Set([
+          "intent", "organizationId", "organizationName", "personId", "opportunityId", "auditPackId",
+          "recommendedService", "recommendedAngle", "evidenceSummary", "nextStep", "contactName", "tone",
+        ]),
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const built = buildBusinessDraftOnlyAction(
+        parsed.entity as Parameters<typeof buildBusinessDraftOnlyAction>[0],
+      );
       const reviewRecord = await saveBusinessActionDraft(env, built.draft);
       return json({
         ok: true,
@@ -412,10 +523,10 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
         executable: false,
         deliverable: false,
         authoritativeForExecution: false,
-        externalExecutionAllowed: false,
         reviewChecklist: built.reviewChecklist,
         explicitBlocks: built.explicitBlocks,
         riskFlags: built.riskFlags,
+        ...confirmedWriteMetadata(parsed.requestReceipt),
         safety: built.safety,
       });
     }
@@ -426,9 +537,15 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
       return blockedHistoricalRecordWrite(json, "business_approval_request_write_disabled");
     }
     if (request.method === "POST" && pathname === "/admin/business/suppression") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const normalized = normalizeBusinessSuppressionInput(body.suppression || body);
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "suppression",
+        allowedEntityFields: new Set(["id", "scopeType", "scopeValue", "reason", "source", "active", "expiresAt", "metadata"]),
+        textFields: new Set(["id", "scopeType", "scopeValue", "reason", "source", "expiresAt"]),
+        booleanFields: new Set(["active"]),
+        objectFields: new Set(["metadata"]),
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const normalized = normalizeBusinessSuppressionInput(parsed.entity);
       const suppression = markBusinessSuppressionRecord(await saveBusinessSuppression(env, normalized));
       return json({
         mode: "business_suppression_saved",
@@ -439,28 +556,70 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
         executable: false,
         deliverable: false,
         authoritativeForExecution: false,
-        externalExecutionAllowed: false,
+        ...confirmedWriteMetadata(parsed.requestReceipt),
         ...businessWritePayload(suppression, "suppression"),
       });
     }
     if (request.method === "POST" && pathname === "/admin/business/content-ideas") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const normalized = normalizeBusinessContentIdeaInput(body.contentIdea || body);
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "contentIdea",
+        allowedEntityFields: new Set([
+          "id", "title", "contentType", "summary", "sourceSignalIds", "targetSegment",
+          "recommendedChannel", "priorityScore", "status", "metadata",
+        ]),
+        requiredTextFields: new Set(["title"]),
+        textFields: new Set(["id", "title", "contentType", "summary", "targetSegment", "recommendedChannel", "status"]),
+        arrayFields: new Set(["sourceSignalIds"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: { priorityScore: SCORE_RANGE },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const normalized = normalizeBusinessContentIdeaInput(parsed.entity);
       const contentIdea = markBusinessInternalPlanningRecord(await saveBusinessContentIdea(env, normalized));
-      return json({ mode: "business_content_idea_saved", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessWritePayload(contentIdea, "contentIdea") });
+      return json({
+        mode: "business_content_idea_saved",
+        reviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(contentIdea, "contentIdea"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/followups") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const normalized = normalizeBusinessFollowupInput(body.followup || body);
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "followup",
+        allowedEntityFields: new Set([
+          "id", "organizationId", "personId", "opportunityId", "actionDraftId", "followupType",
+          "dueAt", "status", "notes", "metadata",
+        ]),
+        textFields: new Set(["id", "organizationId", "personId", "opportunityId", "actionDraftId", "followupType", "dueAt", "status", "notes"]),
+        objectFields: new Set(["metadata"]),
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const normalized = normalizeBusinessFollowupInput(parsed.entity);
       const followup = markBusinessInternalPlanningRecord(await saveBusinessFollowup(env, normalized));
-      return json({ mode: "business_followup_saved", reviewOnly: true, executable: false, deliverable: false, authoritativeForExecution: false, ...businessWritePayload(followup, "followup") });
+      return json({
+        mode: "business_followup_saved",
+        reviewOnly: true,
+        executable: false,
+        deliverable: false,
+        authoritativeForExecution: false,
+        ...confirmedWriteMetadata(parsed.requestReceipt),
+        ...businessWritePayload(followup, "followup"),
+      });
     }
     if (request.method === "POST" && pathname === "/admin/business/learning") {
-      const body = await parseBody(request);
-      if (!confirmed(url, body)) return blockedWrite(json);
-      const normalized = normalizeBusinessLearningEventInput(body.learningEvent || body);
+      const parsed = await readBusinessMetadataWriteRequest(request, {
+        entityKey: "learningEvent",
+        allowedEntityFields: new Set(["id", "entityType", "entityId", "eventType", "outcome", "scoreDelta", "notes", "metadata"]),
+        requiredTextFields: new Set(["entityId"]),
+        textFields: new Set(["id", "entityType", "entityId", "eventType", "outcome", "notes"]),
+        objectFields: new Set(["metadata"]),
+        numberFields: { scoreDelta: { min: -10, max: 10 } },
+      });
+      if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
+      const normalized = normalizeBusinessLearningEventInput(parsed.entity);
       const learningEvent = markBusinessLearningEventRecord(await saveBusinessLearningEvent(env, normalized));
       return json({
         mode: "business_learning_event_saved",
@@ -469,7 +628,7 @@ export async function handleBusinessAutopilotAdmin(request: Request, env: Env, p
         executable: false,
         deliverable: false,
         authoritativeForExecution: false,
-        externalExecutionAllowed: false,
+        ...confirmedWriteMetadata(parsed.requestReceipt),
         ...businessWritePayload(learningEvent, "learningEvent"),
       });
     }

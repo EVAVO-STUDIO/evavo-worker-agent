@@ -11,6 +11,10 @@ business_metadata_read_query_v1
 Before Business collection handlers run, the Worker entrypoint validates the exact route query shape. The guard:
 
 - permits only `limit` and the route's documented filter;
+- limits the encoded query string to 2,048 characters;
+- limits each request to 16 query parameters;
+- limits query keys to 64 safe characters and values to 256 decoded characters;
+- redacts unsafe or oversized parameter names from failure responses;
 - rejects unknown parameters;
 - rejects duplicate parameters;
 - accepts only canonical base-10 integer limits;

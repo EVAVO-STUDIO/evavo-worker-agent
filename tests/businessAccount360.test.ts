@@ -25,6 +25,7 @@ function fixture(): Fixture {
       allowedUse: "review_only",
       contactStatus: "new",
       confidenceScore: 75,
+      confidenceScoreObserved: 1,
       emailPresent: 1,
       phonePresent: 0,
       profileUrlPresent: 1,
@@ -67,8 +68,11 @@ function fixture(): Fixture {
       startedAt: "2026-07-20T00:00:00Z",
       completedAt: "2026-07-21T00:00:00Z",
       readinessScore: 72,
+      readinessScoreObserved: 1,
       riskScore: 38,
+      riskScoreObserved: 1,
       confidenceScore: 82,
+      confidenceScoreObserved: 1,
       summary: "Reviewed website and funnel evidence.",
       createdAt: "2026-07-20T00:00:00Z",
       updatedAt: "2026-07-21T00:00:00Z",
@@ -85,6 +89,7 @@ function fixture(): Fixture {
       evidenceSummary: "The reviewed page evidence shows a weak enquiry transition.",
       recommendation: "Review the enquiry path before preparing any outreach angle.",
       confidenceScore: 78,
+      confidenceScoreObserved: 1,
       createdAt: "2026-07-21T00:00:00Z",
       updatedAt: "2026-07-22T00:00:00Z",
     }],
@@ -94,9 +99,11 @@ function fixture(): Fixture {
       pageId: "page-1",
       signalType: "technology_stack",
       signalStrength: 80,
+      signalStrengthObserved: 1,
       evidenceSummary: "Public technology evidence",
       evidenceUrl: "https://evavo.com.au/work",
       confidenceScore: 85,
+      confidenceScoreObserved: 1,
       riskFlagsJson: "[]",
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-21T00:00:00Z",
@@ -107,13 +114,21 @@ function fixture(): Fixture {
       status: "review",
       priority: "B",
       fitScore: 75,
+      fitScoreObserved: 1,
       needScore: 60,
+      needScoreObserved: 1,
       urgencyScore: 40,
+      urgencyScoreObserved: 1,
       budgetLikelihoodScore: 30,
+      budgetLikelihoodScoreObserved: 1,
       contactabilityScore: 50,
+      contactabilityScoreObserved: 1,
       evidenceQualityScore: 80,
+      evidenceQualityScoreObserved: 1,
       riskScore: 20,
+      riskScoreObserved: 1,
       confidenceScore: 65,
+      confidenceScoreObserved: 1,
       recommendedService: "Website strategy",
       recommendedAngle: "Review only",
       nextStep: "Owner review",
@@ -126,6 +141,7 @@ function fixture(): Fixture {
       signalId: "signal-1",
       serviceKey: "website_strategy",
       matchScore: 70,
+      matchScoreObserved: 1,
       reason: "Evidence-linked fit",
       evidenceJson: '["signal-1"]',
       createdAt: "2026-07-01T00:00:00Z",
@@ -139,6 +155,7 @@ function fixture(): Fixture {
       auditType: "website_teardown",
       riskFlagsJson: "[]",
       confidenceScore: 70,
+      confidenceScoreObserved: 1,
       status: "draft",
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-22T00:00:00Z",
@@ -177,9 +194,13 @@ function fixture(): Fixture {
                   sourceUrl: "https://evavo.com.au/about",
                   status: "reviewed",
                   fitScore: 70,
+                  fitScoreObserved: 1,
                   priorityScore: 65,
+                  priorityScoreObserved: 1,
                   riskScore: 15,
+                  riskScoreObserved: 1,
                   confidenceScore: 80,
+                  confidenceScoreObserved: 1,
                   createdAt: "2026-07-01T00:00:00Z",
                   updatedAt: "2026-07-19T00:00:00Z",
                 } as T;
@@ -248,6 +269,8 @@ test("Account 360 returns bounded evidence and reduced relationship context", as
   );
   assert.ok(account);
   assert.equal(account.auditEvidenceContract, "business_account_360_audit_evidence_v1");
+  assert.equal(account.numericEvidenceContract, "business_account_360_observed_scores_v1");
+  assert.equal(account.scoreProvenanceContract, "business_score_observation_flags_v1");
   assert.equal(account.organization.name, "Example Co");
   assert.deepEqual(account.organization.metadata, {});
   assert.equal(
@@ -345,6 +368,19 @@ test("Account 360 failures are finite and never expose raw D1 errors", () => {
   );
   assert.equal(
     JSON.stringify(missingAudit).includes("business_audit_observations"),
+    false,
+  );
+
+  const missingProvenance = businessAccount360Failure(
+    new Error("no such column: fit_score_observed"),
+  );
+  assert.equal(missingProvenance.error, "business_autopilot_schema_missing");
+  assert.equal(
+    missingProvenance.requiredMigration,
+    "0024_business_score_observation_flags.sql",
+  );
+  assert.equal(
+    JSON.stringify(missingProvenance).includes("fit_score_observed"),
     false,
   );
 });

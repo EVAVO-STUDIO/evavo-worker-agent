@@ -81,7 +81,7 @@ requireTokens("atomic provenance writers", writers, [
   "INSERT INTO business_audit_observations",
   "confidence_score_observed = excluded.confidence_score_observed",
   "fit_score_observed = excluded.fit_score_observed",
-  "explicit",
+  "scoreResult",
   "BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
 forbidTokens("atomic provenance writers", writers, [

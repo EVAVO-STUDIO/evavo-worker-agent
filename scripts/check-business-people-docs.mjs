@@ -51,6 +51,8 @@ requireTokens("Business people route documentation", routeDoc, [
   "Content-Type: application/json",
   '"confirm": true',
   '"person": {',
+  "business_metadata_read_query_v1",
+  "business_metadata_write_boundary_v1",
   "bounded_admin_json_request_v1",
   "maximum request body: 32,768 bytes",
   "queryConfirmationAllowed: false",
@@ -93,33 +95,51 @@ requireTokens("Business validation document", validation, [
 ]);
 
 requireTokens("Business people route", route, [
-  'import {\n  boundedJsonFailurePayload,\n  isExplicitJsonConfirmation,\n  readBoundedJsonObject,\n} from "../core/boundedJsonRequest"',
+  'import { parseBusinessMetadataReadQuery } from "../core/businessMetadataReadBoundary"',
+  'from "../core/businessMetadataWriteBoundary"',
+  'import { BUSINESS_PEOPLE_PATH } from "../core/businessRoutePaths"',
   'import { validatePublicResearchUrl } from "../core/publicResearchFetch"',
-  'const ROUTE_PATH = "/admin/business/people"',
-  'const TOP_LEVEL_WRITE_KEYS = new Set(["confirm", "person"])',
-  "function containsSensitiveInputKey",
-  "function validatePerson",
-  "function parseLimit",
-  "function parseContactStatus",
-  "url.searchParams.getAll(\"limit\")",
-  "url.searchParams.getAll(\"contactStatus\")",
-  "readBoundedJsonObject<BusinessPersonWriteBody>(request, {",
+  "type BusinessMetadataWriteBoundaryOptions",
+  "const PERSON_WRITE_BOUNDARY = Object.freeze({",
+  'entityKey: "person"',
+  "allowedEntityFields: PERSON_WRITE_KEYS",
+  'requiredTextFields: new Set(["name"])',
+  'objectFields: new Set(["metadata"])',
+  "confidenceScore: { min: 0, max: 100 }",
   "maxBytes: 32_768",
-  "if (!isExplicitJsonConfirmation(parsed.value)) return blockedWrite(json)",
-  "const extraKeys = unexpectedKeys(parsed.value, TOP_LEVEL_WRITE_KEYS)",
-  "const personInput = validatePerson(parsed.value.person)",
+  "const PEOPLE_READ_QUERY_OPTIONS = Object.freeze({",
+  "contactStatus: { maxLength: 64 }",
+  "function validatePerson",
   "validatePublicResearchUrl(text.value)",
-  "forbidden_business_input_key",
+  'pathname !== BUSINESS_PEOPLE_PATH',
+  "const query = parseBusinessMetadataReadQuery(url, PEOPLE_READ_QUERY_OPTIONS)",
+  "query.text.contactStatus",
+  "queryContract: query.contract",
+  "const parsed = await readBusinessMetadataWriteRequest(",
+  "PERSON_WRITE_BOUNDARY",
+  "const personInput = validatePerson(parsed.entity)",
+  "requestReceipt: parsed.requestReceipt",
   "exactBooleanConfirmation: true",
   "confirmationCoercionAllowed: false",
   "queryConfirmationAllowed: false",
-  "bodyHashAvailable: true",
   "rawErrorExposed: false",
   "contactDetailsRedacted: true",
   "metadataRedacted: true",
   "return json(migrationError(error), { status: 503 })",
 ]);
 forbidTokens("Business people route", route, [
+  'from "../core/boundedJsonRequest"',
+  "readBoundedJsonObject",
+  "isExplicitJsonConfirmation",
+  "boundedJsonFailurePayload",
+  'const ROUTE_PATH = "/admin/business/people"',
+  "TOP_LEVEL_WRITE_KEYS",
+  "GET_QUERY_KEYS",
+  "function containsSensitiveInputKey",
+  "function parseLimit",
+  "function parseContactStatus",
+  'url.searchParams.getAll("limit")',
+  'url.searchParams.getAll("contactStatus")',
   "request.json()",
   "request.clone().json()",
   "function confirmed(",
@@ -130,19 +150,19 @@ forbidTokens("Business people route", route, [
   "const value = Number(url.searchParams.get(key))",
   "Unknown person",
   "bodySha256: parsed.bodySha256",
-  "error instanceof Error ? error.message",
 ]);
 
 const authPosition = route.indexOf("await isAdminRequestAuthorized(request, env)");
 const optionsPosition = route.indexOf('request.method === "OPTIONS"');
-const boundedPosition = route.indexOf(
-  "readBoundedJsonObject<BusinessPersonWriteBody>(request, {",
+const readQueryPosition = route.indexOf(
+  "const query = parseBusinessMetadataReadQuery(url, PEOPLE_READ_QUERY_OPTIONS)",
 );
-const confirmationPosition = route.indexOf(
-  "if (!isExplicitJsonConfirmation(parsed.value)) return blockedWrite(json)",
+const readPersistencePosition = route.indexOf("const people = await listBusinessPeople(");
+const sharedWriteBoundaryPosition = route.indexOf(
+  "const parsed = await readBusinessMetadataWriteRequest(",
 );
 const validationPosition = route.indexOf(
-  "const personInput = validatePerson(parsed.value.person)",
+  "const personInput = validatePerson(parsed.entity)",
 );
 const persistencePosition = route.indexOf(
   "const person = await saveBusinessPerson(env, personInput.value)",
@@ -150,13 +170,14 @@ const persistencePosition = route.indexOf(
 if (!(
   authPosition >= 0 &&
   optionsPosition > authPosition &&
-  boundedPosition > optionsPosition &&
-  confirmationPosition > boundedPosition &&
-  validationPosition > confirmationPosition &&
+  readQueryPosition > optionsPosition &&
+  readPersistencePosition > readQueryPosition &&
+  sharedWriteBoundaryPosition > optionsPosition &&
+  validationPosition > sharedWriteBoundaryPosition &&
   persistencePosition > validationPosition
 )) {
   errors.push(
-    "Business people writes must authenticate, bound the body, require exact confirmation, validate the person, and persist last.",
+    "Business people reads and writes must authenticate, apply shared boundaries, validate semantic fields, and access D1 last.",
   );
 }
 
@@ -169,6 +190,7 @@ requireTokens("Business people storage compatibility", records, [
   "profileUrl: nullable(input.profileUrl",
   "sourceUrl: nullable(input.sourceUrl",
   "metadata: input.metadata || {}",
+  "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
 
 requireTokens("Business people behavioral contract", tests, [
@@ -179,6 +201,9 @@ requireTokens("Business people behavioral contract", tests, [
   'test("valid Business people writes persist once and return only reduced contact posture"',
   'test("Business people database failures are finite and never expose raw input or errors"',
   'assert.equal(boundValues().at(-1), 25)',
+  'assert.equal(readResult.queryContract, "business_metadata_read_query_v1")',
+  'assert.equal(result.boundaryContract, "business_metadata_write_boundary_v1")',
+  '"business_metadata_write_boundary_v1",',
   'assert.equal(text.includes(rawEmail), false)',
   'assert.equal(text.includes("bodySha256"), false)',
   'assert.equal(result.rawErrorExposed, false)',
@@ -207,8 +232,8 @@ if (errors.length) {
 }
 
 console.log("Business people route contract passed.");
-console.log("- reads preserve the documented default and reject unknown or duplicate query fields");
-console.log("- writes use bounded JSON, exact Boolean confirmation, exact field sets and public URL validation");
+console.log("- reads use the shared bounded query parser and preserve the documented default");
+console.log("- writes use the shared metadata boundary plus public URL and identifier validation");
 console.log("- query and coerced confirmation fail before D1 access");
 console.log("- credential-shaped nested metadata is rejected and contact responses remain reduced");
 console.log("- storage failures expose finite 503 diagnostics without raw input or database errors");

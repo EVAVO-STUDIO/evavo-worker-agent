@@ -12,15 +12,18 @@ import {
   listBusinessPages,
   listBusinessWebsiteAuditRuns,
   listBusinessWebsites,
-  saveBusinessAuditObservation,
   saveBusinessPage,
   saveBusinessWebsite,
-  saveBusinessWebsiteAuditRun,
 } from "../core/businessAutopilotWebsiteRecords";
+import {
+  saveBusinessAuditObservation,
+  saveBusinessWebsiteAuditRun,
+} from "../core/businessScoreProvenanceWriters";
 
 export type JsonResponse = (data: any, init?: ResponseInit) => Response;
 
 const schemaMissingMessage = "Business website/page schema is missing or unavailable.";
+const scoreProvenanceMissingMessage = "Business website audit score provenance schema is missing or unavailable.";
 const routeFailedMessage = "Business website/page route failed before a safe response could be returned.";
 
 function intParam(url: URL, key: string, fallback: number, min: number, max: number): number {
@@ -51,13 +54,25 @@ function errorText(error: unknown) {
 }
 
 function migrationError(error: unknown) {
-  const missingTable = /no such table: business_(websites|pages|website_audit_runs|audit_observations|signals)/i.test(errorText(error));
+  const message = errorText(error);
+  const missingScoreProvenance = /(?:no such column:\s*[^\s]*_observed|has no column named\s+[^\s]*_observed)/i.test(message);
+  const missingTable = /no such table: business_(websites|pages|website_audit_runs|audit_observations|signals)/i.test(message);
+  const schemaMissing = missingScoreProvenance || missingTable;
   return {
     ok: false,
     mode: "business_website_error",
-    error: missingTable ? "business_autopilot_schema_missing" : "business_website_failed",
-    message: missingTable ? schemaMissingMessage : routeFailedMessage,
-    requiredMigration: missingTable ? "0021_business_autopilot_foundation.sql + 0022_business_website_audit_records.sql" : null,
+    error: schemaMissing ? "business_autopilot_schema_missing" : "business_website_failed",
+    message: missingScoreProvenance
+      ? scoreProvenanceMissingMessage
+      : missingTable
+        ? schemaMissingMessage
+        : routeFailedMessage,
+    requiredMigration: missingScoreProvenance
+      ? "0024_business_score_observation_flags.sql"
+      : missingTable
+        ? "0021_business_autopilot_foundation.sql + 0022_business_website_audit_records.sql"
+        : null,
+    rawErrorExposed: false,
     safety: businessAutopilotReadSafety(),
   };
 }

@@ -31,6 +31,7 @@ const expected = [
   "0021_business_autopilot_foundation.sql",
   "0022_business_website_audit_records.sql",
   "0023_growth_activity_budget_ledger.sql",
+  "0024_business_score_observation_flags.sql",
 ];
 
 const allowedDuplicatePrefixes = new Map([

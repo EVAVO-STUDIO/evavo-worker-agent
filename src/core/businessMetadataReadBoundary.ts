@@ -1,6 +1,7 @@
 import { businessAutopilotReadSafety } from "./businessAutopilotSafety";
 import {
   BUSINESS_READ_QUERY_GUARDED_PATHS,
+  isBusinessRoutePath,
   type BusinessReadQueryGuardedPath,
 } from "./businessRoutePaths";
 
@@ -35,6 +36,24 @@ export type BusinessMetadataReadQuerySuccess = Readonly<{
 export type BusinessMetadataReadQueryResult =
   | BusinessMetadataReadQueryFailure
   | BusinessMetadataReadQuerySuccess;
+
+export type BusinessMetadataReadQueryPreflightSuccess = Readonly<{
+  ok: true;
+  contract: typeof BUSINESS_METADATA_READ_QUERY_CONTRACT;
+}>;
+
+export type BusinessMetadataReadQueryPreflightResult =
+  | BusinessMetadataReadQueryFailure
+  | BusinessMetadataReadQueryPreflightSuccess;
+
+type StructuredQuerySuccess = Readonly<{
+  ok: true;
+  values: ReadonlyMap<string, readonly string[]>;
+}>;
+
+type StructuredQueryResult =
+  | BusinessMetadataReadQueryFailure
+  | StructuredQuerySuccess;
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const SAFE_QUERY_KEY = /^[A-Za-z0-9._-]+$/;
@@ -106,7 +125,7 @@ function queryEntries(url: URL): Array<readonly [string, string]> {
   return entries;
 }
 
-function queryValues(entries: readonly (readonly [string, string])[]): Map<string, string[]> {
+function queryValues(entries: readonly (readonly [string, string])[]): ReadonlyMap<string, readonly string[]> {
   const values = new Map<string, string[]>();
   for (const [key, value] of entries) {
     const existing = values.get(key);
@@ -116,16 +135,7 @@ function queryValues(entries: readonly (readonly [string, string])[]): Map<strin
   return values;
 }
 
-export function parseBusinessMetadataReadQuery(
-  url: URL,
-  options: BusinessMetadataReadQueryOptions = {},
-): BusinessMetadataReadQueryResult {
-  const maxLimit = boundedInteger(options.maxLimit, 100, 1, 100);
-  const defaultLimit = boundedInteger(options.defaultLimit, Math.min(25, maxLimit), 1, maxLimit);
-  const textRules = options.textFields ?? {};
-  const booleanFields = options.booleanFields ?? new Set<string>();
-  const allowedFields = new Set(["limit", ...Object.keys(textRules), ...booleanFields]);
-
+function parseQueryStructure(url: URL): StructuredQueryResult {
   if (url.search.length > MAX_QUERY_STRING_LENGTH) {
     return failure("query_string_too_large", { maxQueryStringLength: MAX_QUERY_STRING_LENGTH });
   }
@@ -161,14 +171,45 @@ export function parseBusinessMetadataReadQuery(
   }
 
   const values = queryValues(entries);
-  const unsupported = [...values.keys()].filter((key) => !allowedFields.has(key)).sort();
-  if (unsupported.length) return failure("query_not_supported", safeFieldSummary(unsupported));
-
   const duplicate = [...values.entries()]
     .filter(([, fieldValues]) => fieldValues.length !== 1)
     .map(([key]) => key)
     .sort();
-  if (duplicate.length) return failure("duplicate_query_parameter", safeFieldSummary(duplicate));
+  if (duplicate.length) {
+    return failure("duplicate_query_parameter", safeFieldSummary(duplicate));
+  }
+
+  return { ok: true, values };
+}
+
+export function preflightBusinessMetadataReadQuery(
+  url: URL,
+  pathname: string,
+  method: string,
+): BusinessMetadataReadQueryPreflightResult | null {
+  if (method !== "GET" || !isBusinessRoutePath(pathname)) return null;
+  const structure = parseQueryStructure(url);
+  return structure.ok
+    ? { ok: true, contract: BUSINESS_METADATA_READ_QUERY_CONTRACT }
+    : structure;
+}
+
+export function parseBusinessMetadataReadQuery(
+  url: URL,
+  options: BusinessMetadataReadQueryOptions = {},
+): BusinessMetadataReadQueryResult {
+  const structure = parseQueryStructure(url);
+  if (!structure.ok) return structure;
+
+  const maxLimit = boundedInteger(options.maxLimit, 100, 1, 100);
+  const defaultLimit = boundedInteger(options.defaultLimit, Math.min(25, maxLimit), 1, maxLimit);
+  const textRules = options.textFields ?? {};
+  const booleanFields = options.booleanFields ?? new Set<string>();
+  const allowedFields = new Set(["limit", ...Object.keys(textRules), ...booleanFields]);
+  const values = structure.values;
+
+  const unsupported = [...values.keys()].filter((key) => !allowedFields.has(key)).sort();
+  if (unsupported.length) return failure("query_not_supported", safeFieldSummary(unsupported));
 
   let limit = defaultLimit;
   const limitValue = values.get("limit")?.[0];

@@ -82,6 +82,12 @@ function normalizedSignalType(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function signalTypeContainsKeyword(signalType: string, keyword: string): boolean {
+  const normalized = normalizedSignalType(signalType);
+  if (!normalized) return false;
+  return `_${normalized}_`.includes(`_${keyword}_`);
+}
+
 function nullableScore(value: unknown): number | null {
   return typeof value === "number"
     && Number.isFinite(value)
@@ -121,9 +127,8 @@ function signalMatchesDimension(
   signalType: string,
   dimension: BusinessAccountDimensionKey,
 ): boolean {
-  const normalized = normalizedSignalType(signalType);
   return DIMENSION_KEYWORDS[dimension].some((keyword) =>
-    normalized.includes(keyword));
+    signalTypeContainsKeyword(signalType, keyword));
 }
 
 function evidenceItem(

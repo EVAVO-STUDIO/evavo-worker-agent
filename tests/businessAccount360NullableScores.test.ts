@@ -11,7 +11,8 @@ function fixture(): Env {
     business_people: [{
       id: "person-1",
       name: "Jamie Example",
-      confidenceScore: null,
+      confidenceScore: 0,
+      confidenceScoreObserved: 0,
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "not-a-timestamp",
     }],
@@ -25,9 +26,12 @@ function fixture(): Env {
     business_website_audit_runs: [{
       id: "audit-run-1",
       status: "completed",
-      readinessScore: null,
+      readinessScore: 0,
+      readinessScoreObserved: 1,
       riskScore: 38,
+      riskScoreObserved: 1,
       confidenceScore: "not-a-score",
+      confidenceScoreObserved: 1,
       createdAt: "2026-07-20T00:00:00Z",
       updatedAt: "2026-07-21T00:00:00Z",
     }],
@@ -37,6 +41,7 @@ function fixture(): Env {
       category: "conversion_friction",
       title: "Review enquiry path friction",
       confidenceScore: 78,
+      confidenceScoreObserved: 1,
       createdAt: "2026-07-21T00:00:00Z",
       updatedAt: "2026-07-22T00:00:00Z",
     }],
@@ -44,32 +49,44 @@ function fixture(): Env {
       id: "signal-1",
       signalType: "technology_stack",
       signalStrength: " 80 ",
+      signalStrengthObserved: 1,
       confidenceScore: 101,
+      confidenceScoreObserved: 1,
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2099-01-01T00:00:00Z",
     }],
     business_opportunities: [{
       id: "opportunity-1",
       fitScore: 75,
+      fitScoreObserved: 1,
       needScore: -1,
+      needScoreObserved: 1,
       urgencyScore: 40,
-      budgetLikelihoodScore: null,
+      urgencyScoreObserved: 1,
+      budgetLikelihoodScore: 0,
+      budgetLikelihoodScoreObserved: 0,
       contactabilityScore: false,
+      contactabilityScoreObserved: 1,
       evidenceQualityScore: 80,
-      riskScore: 20,
+      evidenceQualityScoreObserved: 1,
+      riskScore: 0,
+      riskScoreObserved: 1,
       confidenceScore: Number.POSITIVE_INFINITY,
+      confidenceScoreObserved: 1,
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-22T00:00:00Z",
     }],
     business_service_matches: [{
       id: "service-match-1",
-      matchScore: 101,
+      matchScore: 0,
+      matchScoreObserved: 1,
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-22T00:00:00Z",
     }],
     business_audit_packs: [{
       id: "audit-pack-1",
       confidenceScore: "70",
+      confidenceScoreObserved: 1,
       createdAt: "2026-07-01T00:00:00Z",
       updatedAt: "2026-07-22T00:00:00Z",
     }],
@@ -89,9 +106,13 @@ function fixture(): Env {
                   id: "organization-1",
                   name: "Example Co",
                   fitScore: 70,
-                  priorityScore: null,
+                  fitScoreObserved: 1,
+                  priorityScore: 0,
+                  priorityScoreObserved: 0,
                   riskScore: 0,
+                  riskScoreObserved: 1,
                   confidenceScore: "85",
+                  confidenceScoreObserved: 1,
                   createdAt: "2026-07-01T00:00:00Z",
                   updatedAt: "2026-07-19T00:00:00Z",
                 } as T;
@@ -112,21 +133,22 @@ function fixture(): Env {
   } as unknown as Env;
 }
 
-test("Account 360 preserves unknown and legacy-zero score uncertainty", async () => {
+test("Account 360 preserves explicit zero and withholds unobserved scores", async () => {
   const observedAt = Date.parse("2026-07-28T00:00:00.000Z");
   const account = await buildBusinessAccount360(fixture(), "organization-1", 25, observedAt);
   if (!account) throw new Error("ACCOUNT_360_FIXTURE_NOT_FOUND");
 
-  assert.equal(account.numericEvidenceContract, "business_account_360_zero_ambiguous_scores_v1");
+  assert.equal(account.numericEvidenceContract, "business_account_360_observed_scores_v1");
+  assert.equal(account.scoreProvenanceContract, "business_score_observation_flags_v1");
   assert.equal(account.timelineEvidenceContract, "business_account_360_bounded_chronology_v1");
   assert.equal(account.organization.fitScore, 70);
   assert.equal(account.organization.priorityScore, null);
-  assert.equal(account.organization.riskScore, null, "legacy schema zero remains explicitly ambiguous");
+  assert.equal(account.organization.riskScore, 0, "an observed zero remains visible");
   assert.equal(account.organization.confidenceScore, 85);
 
   assert.equal(account.relationshipContext.stakeholders[0]?.confidenceScore, null);
   assert.equal(account.accountEvidence.pages[0]?.httpStatus, null);
-  assert.equal(account.accountEvidence.auditRuns[0]?.readinessScore, null);
+  assert.equal(account.accountEvidence.auditRuns[0]?.readinessScore, 0);
   assert.equal(account.accountEvidence.auditRuns[0]?.riskScore, 38);
   assert.equal(account.accountEvidence.auditRuns[0]?.confidenceScore, null);
   assert.equal(account.accountEvidence.auditObservations[0]?.confidenceScore, 78);
@@ -140,16 +162,17 @@ test("Account 360 preserves unknown and legacy-zero score uncertainty", async ()
   assert.equal(opportunity?.budgetLikelihoodScore, null);
   assert.equal(opportunity?.contactabilityScore, null);
   assert.equal(opportunity?.evidenceQualityScore, 80);
-  assert.equal(opportunity?.riskScore, 20);
+  assert.equal(opportunity?.riskScore, 0);
   assert.equal(opportunity?.confidenceScore, null);
 
-  assert.equal(account.commercialContext.serviceMatches[0]?.matchScore, null);
+  assert.equal(account.commercialContext.serviceMatches[0]?.matchScore, 0);
   assert.equal(account.accountEvidence.auditPacks[0]?.confidenceScore, 70);
   assert.deepEqual(account.deterministicIndicators.scoreSemantics, {
-    range: "greater_than_0_to_100",
+    range: "0_to_100",
     missingValue: null,
-    zeroValuesAreAmbiguous: true,
-    zeroValuesReturnedAsNull: true,
+    observationFlagsRequired: true,
+    explicitZeroPreserved: true,
+    unobservedValuesReturnedAsNull: true,
   });
   assert.equal(account.deterministicIndicators.latestEvidenceAt, "2026-07-22T00:00:00.000Z");
   assert.deepEqual(account.deterministicIndicators.timelineSemantics, {
@@ -170,7 +193,7 @@ test("Account 360 preserves unknown and legacy-zero score uncertainty", async ()
 
   assert.equal(
     account.uncertainties.includes(
-      "Legacy zero-valued scores are returned as null because D1 defaults cannot distinguish unassessed from genuine zero.",
+      "Explicit observed zero scores are preserved; legacy, missing or invalid scores are returned as null.",
     ),
     true,
   );

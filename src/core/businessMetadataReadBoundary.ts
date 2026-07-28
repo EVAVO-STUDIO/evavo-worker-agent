@@ -33,6 +33,11 @@ export type BusinessMetadataReadQueryResult =
   | BusinessMetadataReadQuerySuccess;
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+const SAFE_QUERY_KEY = /^[A-Za-z0-9._-]+$/;
+const MAX_QUERY_STRING_LENGTH = 2_048;
+const MAX_QUERY_FIELDS = 16;
+const MAX_QUERY_KEY_LENGTH = 64;
+const MAX_QUERY_VALUE_LENGTH = 256;
 
 const BUSINESS_READ_ROUTE_OPTIONS: Readonly<Record<string, BusinessMetadataReadQueryOptions>> = Object.freeze({
   "/admin/business/organizations": { textFields: { status: { maxLength: 64 } } },
@@ -80,13 +85,30 @@ function failure(
   };
 }
 
-function queryValues(url: URL): Map<string, string[]> {
+function safeFieldSummary(fields: readonly string[]): Record<string, unknown> {
+  return {
+    fieldCount: fields.length,
+    fields: fields.slice(0, 8).map((field) =>
+      field.length <= MAX_QUERY_KEY_LENGTH && SAFE_QUERY_KEY.test(field)
+        ? field
+        : "[redacted]"
+    ),
+  };
+}
+
+function queryEntries(url: URL): Array<readonly [string, string]> {
+  const entries: Array<readonly [string, string]> = [];
+  url.searchParams.forEach((value, key) => entries.push([key, value]));
+  return entries;
+}
+
+function queryValues(entries: readonly (readonly [string, string])[]): Map<string, string[]> {
   const values = new Map<string, string[]>();
-  url.searchParams.forEach((value, key) => {
+  for (const [key, value] of entries) {
     const existing = values.get(key);
     if (existing) existing.push(value);
     else values.set(key, [value]);
-  });
+  }
   return values;
 }
 
@@ -99,16 +121,50 @@ export function parseBusinessMetadataReadQuery(
   const textRules = options.textFields ?? {};
   const booleanFields = options.booleanFields ?? new Set<string>();
   const allowedFields = new Set(["limit", ...Object.keys(textRules), ...booleanFields]);
-  const values = queryValues(url);
 
+  if (url.search.length > MAX_QUERY_STRING_LENGTH) {
+    return failure("query_string_too_large", { maxQueryStringLength: MAX_QUERY_STRING_LENGTH });
+  }
+
+  const entries = queryEntries(url);
+  if (entries.length > MAX_QUERY_FIELDS) {
+    return failure("query_structure_too_large", {
+      maxQueryFields: MAX_QUERY_FIELDS,
+      fieldCount: entries.length,
+    });
+  }
+
+  const invalidKeys = entries
+    .map(([key]) => key)
+    .filter((key) =>
+      !key ||
+      key.length > MAX_QUERY_KEY_LENGTH ||
+      !SAFE_QUERY_KEY.test(key) ||
+      CONTROL_CHARACTERS.test(key)
+    );
+  if (invalidKeys.length) {
+    return failure("invalid_query_key", { fieldCount: invalidKeys.length });
+  }
+
+  const invalidValueFields = entries
+    .filter(([, value]) => value.length > MAX_QUERY_VALUE_LENGTH || CONTROL_CHARACTERS.test(value))
+    .map(([key]) => key);
+  if (invalidValueFields.length) {
+    return failure("invalid_query_value", {
+      ...safeFieldSummary(invalidValueFields),
+      maxQueryValueLength: MAX_QUERY_VALUE_LENGTH,
+    });
+  }
+
+  const values = queryValues(entries);
   const unsupported = [...values.keys()].filter((key) => !allowedFields.has(key)).sort();
-  if (unsupported.length) return failure("query_not_supported", { fields: unsupported });
+  if (unsupported.length) return failure("query_not_supported", safeFieldSummary(unsupported));
 
   const duplicate = [...values.entries()]
     .filter(([, fieldValues]) => fieldValues.length !== 1)
     .map(([key]) => key)
     .sort();
-  if (duplicate.length) return failure("duplicate_query_parameter", { fields: duplicate });
+  if (duplicate.length) return failure("duplicate_query_parameter", safeFieldSummary(duplicate));
 
   let limit = defaultLimit;
   const limitValue = values.get("limit")?.[0];

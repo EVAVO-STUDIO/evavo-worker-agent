@@ -1,5 +1,6 @@
 import {
   BUSINESS_HISTORICAL_PATHS,
+  isBusinessRoutePath,
   BUSINESS_PEOPLE_PATH,
   BUSINESS_WEBSITE_AUDIT_PATHS,
 } from "../core/businessRoutePaths";
@@ -8,8 +9,10 @@ export {
   BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN,
   BUSINESS_FALLBACK_COLLECTION_PATHS,
   BUSINESS_HISTORICAL_PATHS,
+  isBusinessRoutePath,
   BUSINESS_PEOPLE_PATH,
   BUSINESS_READ_QUERY_GUARDED_PATHS,
+  BUSINESS_ROUTE_PREFIX,
   BUSINESS_WEBSITE_AUDIT_PATHS,
 } from "../core/businessRoutePaths";
 
@@ -103,7 +106,7 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
     historicalOnly: false,
     retiredWritesFailClosed: false,
     ...internalWriteSafety,
-    matches: (pathname: string) => pathname === "/admin/business" || pathname.startsWith("/admin/business/"),
+    matches: (pathname: string) => isBusinessRoutePath(pathname),
   }),
 ]);
 

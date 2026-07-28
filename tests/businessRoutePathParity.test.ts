@@ -7,9 +7,14 @@ import {
   BUSINESS_HISTORICAL_PATHS,
   BUSINESS_PEOPLE_PATH,
   BUSINESS_READ_QUERY_GUARDED_PATHS,
+  BUSINESS_ROUTE_PREFIX,
   BUSINESS_WEBSITE_AUDIT_PATHS,
+  isBusinessRoutePath,
 } from "../src/core/businessRoutePaths";
-import { parseBusinessMetadataReadRouteQuery } from "../src/core/businessMetadataReadBoundary";
+import {
+  parseBusinessMetadataReadRouteQuery,
+  preflightBusinessMetadataReadQuery,
+} from "../src/core/businessMetadataReadBoundary";
 import { resolveBusinessRouteHandlerId } from "../src/routes/businessRoutePolicy";
 
 test("Business query-guard paths equal the canonical collection path union", () => {
@@ -22,26 +27,44 @@ test("Business query-guard paths equal the canonical collection path union", () 
   assert.equal(new Set(BUSINESS_READ_QUERY_GUARDED_PATHS).size, expected.length);
 });
 
-test("every canonical collection path resolves to its intended handler and guard", () => {
+test("every canonical collection path resolves to its intended handler and both read guards", () => {
   for (const pathname of BUSINESS_FALLBACK_COLLECTION_PATHS) {
     assert.equal(resolveBusinessRouteHandlerId(pathname), "business-fallback", pathname);
     assert.notEqual(parseBusinessMetadataReadRouteQuery(new URL(`https://worker.example${pathname}`), pathname, "GET"), null);
+    assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${pathname}`), pathname, "GET")?.ok, true);
   }
   for (const pathname of BUSINESS_WEBSITE_AUDIT_PATHS) {
     assert.equal(resolveBusinessRouteHandlerId(pathname), "website-audit", pathname);
     assert.notEqual(parseBusinessMetadataReadRouteQuery(new URL(`https://worker.example${pathname}`), pathname, "GET"), null);
+    assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${pathname}`), pathname, "GET")?.ok, true);
   }
   for (const pathname of BUSINESS_HISTORICAL_PATHS) {
     assert.equal(resolveBusinessRouteHandlerId(pathname), "business-historical", pathname);
     assert.notEqual(parseBusinessMetadataReadRouteQuery(new URL(`https://worker.example${pathname}`), pathname, "GET"), null);
+    assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${pathname}`), pathname, "GET")?.ok, true);
   }
 });
 
-test("specialised Business parsers remain outside the collection guard", () => {
+test("specialised Business parsers remain outside the collection guard but inside family preflight", () => {
   const accountPath = BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN.replace(":organizationId", "org-1");
   assert.equal(resolveBusinessRouteHandlerId(accountPath), "account-intelligence");
   assert.equal(parseBusinessMetadataReadRouteQuery(new URL(`https://worker.example${accountPath}?limit=25`), accountPath, "GET"), null);
+  assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${accountPath}?limit=25`), accountPath, "GET")?.ok, true);
 
   assert.equal(resolveBusinessRouteHandlerId(BUSINESS_PEOPLE_PATH), "people");
   assert.equal(parseBusinessMetadataReadRouteQuery(new URL(`https://worker.example${BUSINESS_PEOPLE_PATH}?limit=25`), BUSINESS_PEOPLE_PATH, "GET"), null);
+  assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${BUSINESS_PEOPLE_PATH}?limit=25`), BUSINESS_PEOPLE_PATH, "GET")?.ok, true);
+});
+
+test("Business family detection is exact and does not bleed into adjacent route prefixes", () => {
+  assert.equal(BUSINESS_ROUTE_PREFIX, "/admin/business");
+  assert.equal(isBusinessRoutePath("/admin/business"), true);
+  assert.equal(isBusinessRoutePath("/admin/business/unknown"), true);
+  assert.equal(isBusinessRoutePath("/admin/businesses"), false);
+  assert.equal(isBusinessRoutePath("/admin/business-like"), false);
+  assert.equal(preflightBusinessMetadataReadQuery(
+    new URL("https://worker.example/admin/businesses?limit=10&limit=20"),
+    "/admin/businesses",
+    "GET",
+  ), null);
 });

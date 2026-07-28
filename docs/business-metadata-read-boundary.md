@@ -24,15 +24,28 @@ Before Business collection handlers run, the Worker entrypoint validates the exa
 - returns finite, non-echoing `400` failures;
 - performs no D1 query when validation fails.
 
+## Canonical route ownership
+
+Static Business paths are defined once in:
+
+```text
+src/core/businessRoutePaths.ts
+```
+
+The route-policy resolver and read-query guard both consume those constants. The read option map is typed against the complete guarded-path union, so adding a canonical collection path without a query specification fails TypeScript validation rather than silently bypassing the guard.
+
 The guarded collection routes are organizations, signals, opportunities, service matches, audit packs, historical draft and approval reads, suppression, content ideas, follow-ups, learning, websites, pages, website audit runs, audit observations and audit-observation candidates.
 
-The dynamic Account 360 route and the dedicated people route retain their existing specialised parsers.
+The dynamic Account 360 route and the dedicated people route retain their existing specialised parsers and remain outside the collection guard.
 
 Validation is provided by:
 
 ```text
 tests/businessMetadataReadBoundary.test.ts
 tests/businessMetadataReadIndexSource.test.ts
+tests/businessRoutePathParity.test.ts
 ```
+
+The parity contract verifies that every canonical collection path resolves to the intended handler, enters the query guard, and is not duplicated or omitted.
 
 Routine validation does not deploy the Worker, apply migrations or call external systems.

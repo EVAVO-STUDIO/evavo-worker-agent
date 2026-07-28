@@ -1,5 +1,9 @@
 import { Env, nowISO, safeJsonParse, uuid } from "../db";
 import { businessAutopilotMetadataWriteSafety, businessAutopilotReadSafety } from "./businessAutopilotSafety";
+import {
+  BUSINESS_SCORE_PROVENANCE_CONTRACT,
+  readBusinessObservedScore,
+} from "./businessScoreProvenance";
 
 function stringify(value: unknown) {
   return JSON.stringify(value ?? null);
@@ -50,6 +54,7 @@ export function businessPeopleReadPayload<T>(people: T[]) {
     ok: true,
     people,
     count: people.length,
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     safety: businessAutopilotReadSafety(),
   };
 }
@@ -83,8 +88,12 @@ export async function listBusinessPeople(env: Env, limit = 25, contactStatus?: s
     sourceUrl: row.source_url,
     allowedUse: row.allowed_use,
     contactStatus: row.contact_status,
-    confidenceScore: numberValue(row.confidence_score),
+    confidenceScore: readBusinessObservedScore(
+      row.confidence_score,
+      row.confidence_score_observed,
+    ),
     metadata: parse(row.metadata_json, {}),
+    scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));

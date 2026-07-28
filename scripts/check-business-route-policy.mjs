@@ -4,17 +4,23 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
+const pathsPath = path.join(root, "src", "core", "businessRoutePaths.ts");
+const readBoundaryPath = path.join(root, "src", "core", "businessMetadataReadBoundary.ts");
 const policyPath = path.join(root, "src", "routes", "businessRoutePolicy.ts");
 const indexPath = path.join(root, "src", "index.ts");
 const inventoryPath = path.join(root, "src", "core", "growthBusinessRouteInventory.ts");
 const cataloguePath = path.join(root, "src", "routes", "businessAutopilotRouteCatalogue.ts");
 const errors = [];
 
+const routePaths = fs.existsSync(pathsPath) ? fs.readFileSync(pathsPath, "utf8") : "";
+const readBoundary = fs.existsSync(readBoundaryPath) ? fs.readFileSync(readBoundaryPath, "utf8") : "";
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
 const inventory = fs.existsSync(inventoryPath) ? fs.readFileSync(inventoryPath, "utf8") : "";
 const catalogue = fs.existsSync(cataloguePath) ? fs.readFileSync(cataloguePath, "utf8") : "";
 
+if (!routePaths) errors.push("Missing canonical Business route path registry");
+if (!readBoundary) errors.push("Missing Business read query boundary");
 if (!policy) errors.push("Missing typed Business route policy registry");
 if (!index) errors.push("Missing Worker dispatcher");
 if (!inventory) errors.push("Missing Worker route inventory");
@@ -67,8 +73,21 @@ for (const unsafe of [
 }
 
 for (const required of [
+  'export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN =',
+  '"/admin/business/organizations/:organizationId/account-360" as const',
+  'export const BUSINESS_PEOPLE_PATH = "/admin/business/people" as const',
+  'export const BUSINESS_WEBSITE_AUDIT_PATHS',
+  'export const BUSINESS_HISTORICAL_PATHS',
+  'export const BUSINESS_FALLBACK_COLLECTION_PATHS',
+  'export const BUSINESS_READ_QUERY_GUARDED_PATHS',
+  'export type BusinessReadQueryGuardedPath',
+]) {
+  if (!routePaths.includes(required)) errors.push(`Business path registry is missing: ${required}`);
+}
+
+for (const required of [
+  'from "../core/businessRoutePaths"',
   'export type BusinessMutationPosture = "read-only" | "mixed-internal" | "historical-read-retired-write"',
-  'export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN = "/admin/business/organizations/:organizationId/account-360" as const',
   'const accountIntelligencePath = /^\\/admin\\/business\\/organizations\\/[^/]+\\/account-360$/',
   'authentication: "handler-enforced"',
   'readMethods: Object.freeze(["GET"] as const)',
@@ -87,9 +106,27 @@ for (const required of [
   'mutationPosture: "historical-read-retired-write" as const',
   'historicalOnly: true',
   'retiredWritesFailClosed: true',
-  'export const BUSINESS_HISTORICAL_PATHS',
+  'pathname === BUSINESS_PEOPLE_PATH',
+  'BUSINESS_WEBSITE_AUDIT_PATHS.includes',
+  'BUSINESS_HISTORICAL_PATHS.includes',
 ]) {
   if (!policy.includes(required)) errors.push(`Business policy is missing: ${required}`);
+}
+
+for (const forbidden of [
+  'const websiteAuditPaths =',
+  'const historicalBusinessPaths =',
+]) {
+  if (policy.includes(forbidden)) errors.push(`Business policy duplicates canonical paths: ${forbidden}`);
+}
+
+for (const required of [
+  'BUSINESS_READ_QUERY_GUARDED_PATHS',
+  'type BusinessReadQueryGuardedPath',
+  'Record<BusinessReadQueryGuardedPath, BusinessMetadataReadQueryOptions>',
+  'BUSINESS_READ_QUERY_GUARDED_PATHS.includes',
+]) {
+  if (!readBoundary.includes(required)) errors.push(`Business read boundary is missing path parity token: ${required}`);
 }
 
 for (const required of [
@@ -132,6 +169,17 @@ for (const specific of ['id: "account-intelligence"', 'id: "people"', 'id: "webs
   }
 }
 
+const expectedFallbackPaths = [
+  "/admin/business/organizations",
+  "/admin/business/signals",
+  "/admin/business/opportunities",
+  "/admin/business/service-matches",
+  "/admin/business/audit-packs",
+  "/admin/business/suppression",
+  "/admin/business/content-ideas",
+  "/admin/business/followups",
+  "/admin/business/learning",
+];
 const expectedWebsitePaths = [
   "/admin/business/websites",
   "/admin/business/pages",
@@ -139,26 +187,25 @@ const expectedWebsitePaths = [
   "/admin/business/audit-observations",
   "/admin/business/audit-observation-candidates",
 ];
-for (const route of expectedWebsitePaths) {
-  if (!policy.includes(`"${route}"`)) errors.push(`Business website/audit policy is missing ${route}`);
-}
-
 const expectedHistoricalPaths = [
   "/admin/business/action-drafts",
   "/admin/business/approval-requests",
 ];
-for (const route of expectedHistoricalPaths) {
-  if (!policy.includes(`"${route}"`)) errors.push(`Business historical policy is missing ${route}`);
+for (const route of [...expectedFallbackPaths, ...expectedWebsitePaths, ...expectedHistoricalPaths]) {
+  const routeCount = routePaths.split(`"${route}"`).length - 1;
+  if (routeCount !== 1) errors.push(`Canonical Business path must exist exactly once (${routeCount}): ${route}`);
 }
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "typed-business-route-policy-v3-account-intelligence-read-only",
+  contract: "typed-business-route-policy-v4-canonical-paths",
   compatibility: {
-    contract: "typed-business-route-policy-v2-historical-explicit",
+    contract: "typed-business-route-policy-v3-account-intelligence-read-only",
   },
   routeGroups: ids,
+  canonicalPathRegistry: true,
+  readGuardPathParityTyped: true,
   accountIntelligenceRouteGroupExplicit: true,
   accountIntelligenceReadOnly: true,
   accountIntelligencePostSupported: false,

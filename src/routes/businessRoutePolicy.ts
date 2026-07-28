@@ -1,3 +1,18 @@
+import {
+  BUSINESS_HISTORICAL_PATHS,
+  BUSINESS_PEOPLE_PATH,
+  BUSINESS_WEBSITE_AUDIT_PATHS,
+} from "../core/businessRoutePaths";
+
+export {
+  BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN,
+  BUSINESS_FALLBACK_COLLECTION_PATHS,
+  BUSINESS_HISTORICAL_PATHS,
+  BUSINESS_PEOPLE_PATH,
+  BUSINESS_READ_QUERY_GUARDED_PATHS,
+  BUSINESS_WEBSITE_AUDIT_PATHS,
+} from "../core/businessRoutePaths";
+
 export type BusinessRouteHandlerId = "account-intelligence" | "people" | "website-audit" | "business-historical" | "business-fallback";
 
 export type BusinessMutationPosture = "read-only" | "mixed-internal" | "historical-read-retired-write";
@@ -20,22 +35,7 @@ export type BusinessRoutePolicy = Readonly<{
   matches(pathname: string): boolean;
 }>;
 
-export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN = "/admin/business/organizations/:organizationId/account-360" as const;
-
 const accountIntelligencePath = /^\/admin\/business\/organizations\/[^/]+\/account-360$/;
-
-const websiteAuditPaths = Object.freeze([
-  "/admin/business/websites",
-  "/admin/business/pages",
-  "/admin/business/website-audit-runs",
-  "/admin/business/audit-observations",
-  "/admin/business/audit-observation-candidates",
-] as const);
-
-const historicalBusinessPaths = Object.freeze([
-  "/admin/business/action-drafts",
-  "/admin/business/approval-requests",
-] as const);
 
 const sharedSafety = Object.freeze({
   authentication: "handler-enforced" as const,
@@ -76,7 +76,7 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
     historicalOnly: false,
     retiredWritesFailClosed: false,
     ...internalWriteSafety,
-    matches: (pathname: string) => pathname === "/admin/business/people",
+    matches: (pathname: string) => pathname === BUSINESS_PEOPLE_PATH,
   }),
   Object.freeze({
     id: "website-audit",
@@ -85,7 +85,7 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
     historicalOnly: false,
     retiredWritesFailClosed: false,
     ...internalWriteSafety,
-    matches: (pathname: string) => websiteAuditPaths.includes(pathname as (typeof websiteAuditPaths)[number]),
+    matches: (pathname: string) => BUSINESS_WEBSITE_AUDIT_PATHS.includes(pathname as (typeof BUSINESS_WEBSITE_AUDIT_PATHS)[number]),
   }),
   Object.freeze({
     id: "business-historical",
@@ -94,7 +94,7 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
     historicalOnly: true,
     retiredWritesFailClosed: true,
     ...internalWriteSafety,
-    matches: (pathname: string) => historicalBusinessPaths.includes(pathname as (typeof historicalBusinessPaths)[number]),
+    matches: (pathname: string) => BUSINESS_HISTORICAL_PATHS.includes(pathname as (typeof BUSINESS_HISTORICAL_PATHS)[number]),
   }),
   Object.freeze({
     id: "business-fallback",
@@ -108,8 +108,6 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
 ]);
 
 export const BUSINESS_ROUTE_POLICIES: readonly BusinessRoutePolicy[] = policies;
-export const BUSINESS_WEBSITE_AUDIT_PATHS: readonly string[] = websiteAuditPaths;
-export const BUSINESS_HISTORICAL_PATHS: readonly string[] = historicalBusinessPaths;
 
 export function resolveBusinessRouteHandlerId(pathname: string): BusinessRouteHandlerId | null {
   return policies.find((policy) => policy.matches(pathname))?.id ?? null;

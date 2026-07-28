@@ -37,7 +37,7 @@ export type BusinessMetadataWriteBoundaryOptions = Readonly<{
 
 export type BusinessMetadataWriteBoundaryFailure = Readonly<{
   ok: false;
-  status: 400 | 413;
+  status: 400 | 413 | 415;
   payload: Record<string, unknown>;
 }>;
 
@@ -104,7 +104,7 @@ function unexpectedKeys(record: JsonRecord, allowed: ReadonlySet<string>): strin
 }
 
 function failure(
-  status: 400 | 413,
+  status: 400 | 413 | 415,
   error: string,
   extras: Record<string, unknown> = {},
 ): BusinessMetadataWriteBoundaryFailure {
@@ -202,7 +202,9 @@ export async function readBusinessMetadataWriteRequest(
   options: BusinessMetadataWriteBoundaryOptions,
 ): Promise<BusinessMetadataWriteBoundaryResult> {
   const url = new URL(request.url);
-  const queryFields = [...new Set(url.searchParams.keys())].sort();
+  const queryFieldNames: string[] = [];
+  url.searchParams.forEach((_value, key) => queryFieldNames.push(key));
+  const queryFields = Array.from(new Set(queryFieldNames)).sort();
   if (queryFields.length) {
     return failure(400, "query_not_supported", { fields: queryFields });
   }
@@ -226,6 +228,7 @@ export async function readBusinessMetadataWriteRequest(
         exactBooleanConfirmation: true,
         confirmationCoercionAllowed: false,
         queryConfirmationAllowed: false,
+        rawInputExposed: false,
         externalExecutionAllowed: false,
         safety: businessAutopilotMetadataWriteSafety(),
       },

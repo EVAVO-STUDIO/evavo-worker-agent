@@ -12,10 +12,12 @@ The shared boundary contract is:
 business_metadata_write_boundary_v1
 ```
 
-Every active generic Business POST must:
+Every active Business metadata POST must:
 
 - authenticate through the central Worker admin-token boundary;
 - reject every query parameter, including `?confirm=1`;
+- require an `application/json` or `application/*+json` content type;
+- return a finite, non-echoing `415 Unsupported Media Type` response for other media types;
 - read no more than 32 KiB of UTF-8 JSON;
 - bound JSON depth, node count, array length, string length and key length;
 - require an object body;
@@ -33,6 +35,11 @@ Confirmation coercion is not allowed. Values such as `1`, `"1"`, `false` and `nu
 
 ```text
 /admin/business/organizations          { confirm: true, organization: { ... } }
+/admin/business/people                 { confirm: true, person: { ... } }
+/admin/business/websites               { confirm: true, website: { ... } }
+/admin/business/pages                  { confirm: true, page: { ... } }
+/admin/business/website-audit-runs     { confirm: true, auditRun: { ... } }
+/admin/business/audit-observations     { confirm: true, observation: { ... } }
 /admin/business/signals                { confirm: true, signal: { ... } }
 /admin/business/opportunities          { confirm: true, opportunity: { ... } }
 /admin/business/service-matches        { confirm: true, serviceMatch: { ... } }
@@ -44,17 +51,11 @@ Confirmation coercion is not allowed. Values such as `1`, `"1"`, `false` and `nu
 /admin/business/learning               { confirm: true, learningEvent: { ... } }
 ```
 
-The dedicated people route has an equivalent bounded exact-confirmation boundary:
-
-```text
-/admin/business/people                 { confirm: true, person: { ... } }
-```
-
-Website, page, website-audit-run and audit-observation routes are separate route handlers and must retain equivalent bounded write contracts before they are treated as fully aligned.
+The people handler has its own equivalent bounded parser and response minimisation. The generic Business handler and the website, page, website-audit-run and audit-observation handler use the shared `readBusinessMetadataWriteRequest` boundary.
 
 ## Score fields
 
-Score-bearing generic routes accept only finite JSON numbers from `0` through `100`, or explicit `null` where the persistence layer supports clearing an observation.
+Score-bearing routes accept only finite JSON numbers from `0` through `100`, or explicit `null` where the persistence layer supports clearing an observation.
 
 An explicit zero is a valid observed score. A missing field is not equivalent to zero. String numbers are rejected.
 
@@ -76,7 +77,7 @@ authorization
 cookie
 ```
 
-The error response does not echo the rejected value.
+The error response does not echo the rejected key value or request body.
 
 ## Reduced request receipt
 
@@ -111,8 +112,9 @@ The executable contracts are:
 ```text
 tests/businessMetadataWriteBoundary.test.ts
 tests/businessMetadataWriteRouteSource.test.ts
+tests/businessWebsiteMetadataWriteRouteSource.test.ts
 ```
 
-They verify exact confirmation, query rejection, field allowlists, sensitive-key rejection, bounded payloads, safe error responses and route-level removal of legacy raw-body fallbacks.
+They verify exact confirmation, query rejection, media-type rejection, field allowlists, sensitive-key rejection, bounded payloads, safe error responses, website and audit field bounds, and route-level removal of legacy raw-body fallbacks.
 
 Routine validation does not deploy the Worker, apply D1 migrations or call external systems.

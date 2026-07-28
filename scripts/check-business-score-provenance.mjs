@@ -29,12 +29,16 @@ function forbidTokens(label, source, tokens) {
 
 const migration = read("migrations/0024_business_score_observation_flags.sql");
 const helper = read("src/core/businessScoreProvenance.ts");
+const readers = read("src/core/businessScoreProvenanceReaders.ts");
 const writers = read("src/core/businessScoreProvenanceWriters.ts");
+const peopleRecords = read("src/core/businessAutopilotPeopleRecords.ts");
+const auditPackRecords = read("src/core/businessAutopilotAuditPackRecords.ts");
 const account360 = read("src/core/businessAccount360.ts");
 const businessRoute = read("src/routes/businessAutopilotAdmin.ts");
 const peopleRoute = read("src/routes/businessAutopilotPeopleAdmin.ts");
 const websiteRoute = read("src/routes/businessAutopilotWebsiteAdmin.ts");
 const provenanceTest = read("tests/businessScoreProvenance.test.ts");
+const readerTest = read("tests/businessScoreProvenanceReaders.test.ts");
 const accountTest = read("tests/businessAccount360NullableScores.test.ts");
 const packageJson = JSON.parse(read("package.json") || "{}");
 
@@ -60,6 +64,24 @@ requireTokens("score helper", helper, [
   "businessOpportunityPriorityFromScores",
   "parsed >= 0 && parsed <= 100",
   "return { value: parsed, observed: 1, supplied }",
+]);
+
+requireTokens("provenance readers", readers, [
+  "listBusinessOrganizationsWithScoreProvenance",
+  "listBusinessPeopleWithScoreProvenance",
+  "listBusinessSignalsWithScoreProvenance",
+  "listBusinessOpportunitiesWithScoreProvenance",
+  "listBusinessServiceMatchesWithScoreProvenance",
+  "listBusinessAuditPacksWithScoreProvenance",
+  "listBusinessWebsiteAuditRunsWithScoreProvenance",
+  "listBusinessAuditObservationsWithScoreProvenance",
+  "readBusinessObservedScore",
+  "priority_score_observed DESC",
+  "signal_strength_observed DESC",
+  "fit_score_observed DESC",
+  "match_score_observed DESC",
+  "confidence_score_observed DESC",
+  "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
 
 requireTokens("atomic provenance writers", writers, [
@@ -90,9 +112,28 @@ forbidTokens("atomic provenance writers", writers, [
   "requireScoreColumns",
 ]);
 
+requireTokens("people collection reads", peopleRecords, [
+  "readBusinessObservedScore",
+  "row.confidence_score_observed",
+  "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
+]);
+requireTokens("audit-pack collection reads", auditPackRecords, [
+  "readBusinessObservedScore",
+  "row.confidence_score_observed",
+  'contract: "business_audit_pack_reads_v3_score_provenance"',
+  "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
+]);
+
 for (const [label, route, tokens] of [
   ["Business route", businessRoute, [
+    'from "../core/businessScoreProvenanceReaders"',
     'from "../core/businessScoreProvenanceWriters"',
+    "listBusinessOrganizationsWithScoreProvenance",
+    "listBusinessSignalsWithScoreProvenance",
+    "listBusinessOpportunitiesWithScoreProvenance",
+    "listBusinessServiceMatchesWithScoreProvenance",
+    "listBusinessAuditPacksWithScoreProvenance",
+    "scoreReadPayload",
     "saveBusinessOrganization",
     "saveBusinessSignal",
     "saveBusinessOpportunity",
@@ -107,7 +148,11 @@ for (const [label, route, tokens] of [
     "exact JSON confirmation",
   ]],
   ["website route", websiteRoute, [
+    'from "../core/businessScoreProvenanceReaders"',
     'from "../core/businessScoreProvenanceWriters"',
+    "listBusinessWebsiteAuditRunsWithScoreProvenance",
+    "listBusinessAuditObservationsWithScoreProvenance",
+    "scoreReadPayload",
     "saveBusinessWebsiteAuditRun",
     "saveBusinessAuditObservation",
     '"0024_business_score_observation_flags.sql"',
@@ -135,12 +180,22 @@ forbidTokens("Account 360", account360, [
   "zeroValuesReturnedAsNull",
 ]);
 
-requireTokens("provenance executable test", provenanceTest, [
+requireTokens("provenance writer executable test", provenanceTest, [
   "explicit zero",
   "buildBusinessScoreWrite(0)",
   "confidenceScoreObserved",
   "single atomic write statement",
   "missing provenance schema",
+  "business_score_observation_flags_v1",
+]);
+requireTokens("provenance reader executable test", readerTest, [
+  "all active Business score collections preserve explicit zero",
+  "listBusinessOrganizationsWithScoreProvenance",
+  "listBusinessPeopleWithScoreProvenance",
+  "listBusinessWebsiteAuditRunsWithScoreProvenance",
+  "priorityScore, null",
+  "signalStrength, 0",
+  "matchScore, 0",
   "business_score_observation_flags_v1",
 ]);
 requireTokens("Account 360 provenance test", accountTest, [
@@ -162,10 +217,11 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run busine
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-score-provenance-v1-atomic-observation-flags",
+  contract: "business-score-provenance-v2-atomic-writes-and-reads",
   explicitObservedZeroPreserved: true,
   unobservedScoresReturnedAsNull: true,
   scoreAndObservationFlagWrittenAtomically: true,
+  activeListReadsProvenanceAware: true,
   missingMigrationFailsClosed: true,
   migrationExecutedByThisCheck: false,
   externalExecutionEnabled: false,

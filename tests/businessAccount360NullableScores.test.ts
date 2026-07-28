@@ -156,6 +156,17 @@ test("Account 360 preserves unknown scores and bounds evidence chronology", asyn
     invalidTimestampsExcluded: true,
     futureTimestampsExcluded: true,
   });
+  assert.equal(account.deterministicIndicators.recordsMayBeTruncated, false);
+
+  const boundedAccount = await buildBusinessAccount360(
+    fixture(),
+    "organization-1",
+    1,
+    observedAt,
+  );
+  if (!boundedAccount) throw new Error("ACCOUNT_360_BOUNDED_FIXTURE_NOT_FOUND");
+  assert.equal(boundedAccount.deterministicIndicators.recordsMayBeTruncated, true);
+
   assert.equal(
     account.uncertainties.includes(
       "Missing or invalid score values are returned as null and are never treated as zero.",

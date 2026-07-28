@@ -27,24 +27,26 @@ function forbidTokens(label, source, tokens) {
   }
 }
 
-const migration = read("migrations/0024_business_score_observation_flags.sql");
-const helper = read("src/core/businessScoreProvenance.ts");
-const readProjection = read("src/core/businessReadProjection.ts");
-const readers = read("src/core/businessScoreProvenanceReaders.ts");
-const writers = read("src/core/businessScoreProvenanceWriters.ts");
-const peopleRecords = read("src/core/businessAutopilotPeopleRecords.ts");
-const auditPackRecords = read("src/core/businessAutopilotAuditPackRecords.ts");
-const account360 = read("src/core/businessAccount360.ts");
-const businessRoute = read("src/routes/businessAutopilotAdmin.ts");
-const peopleRoute = read("src/routes/businessAutopilotPeopleAdmin.ts");
-const websiteRoute = read("src/routes/businessAutopilotWebsiteAdmin.ts");
-const provenanceTest = read("tests/businessScoreProvenance.test.ts");
-const readerTest = read("tests/businessScoreProvenanceReaders.test.ts");
-const projectionTest = read("tests/businessReadProjection.test.ts");
-const accountTest = read("tests/businessAccount360NullableScores.test.ts");
+const sources = {
+  migration: read("migrations/0024_business_score_observation_flags.sql"),
+  helper: read("src/core/businessScoreProvenance.ts"),
+  projection: read("src/core/businessReadProjection.ts"),
+  readers: read("src/core/businessScoreProvenanceReaders.ts"),
+  writers: read("src/core/businessScoreProvenanceWriters.ts"),
+  peopleRecords: read("src/core/businessAutopilotPeopleRecords.ts"),
+  auditPackRecords: read("src/core/businessAutopilotAuditPackRecords.ts"),
+  account360: read("src/core/businessAccount360.ts"),
+  businessRoute: read("src/routes/businessAutopilotAdmin.ts"),
+  peopleRoute: read("src/routes/businessAutopilotPeopleAdmin.ts"),
+  websiteRoute: read("src/routes/businessAutopilotWebsiteAdmin.ts"),
+  writerTest: read("tests/businessScoreProvenance.test.ts"),
+  readerTest: read("tests/businessScoreProvenanceReaders.test.ts"),
+  projectionTest: read("tests/businessReadProjection.test.ts"),
+  accountTest: read("tests/businessAccount360NullableScores.test.ts"),
+};
 const packageJson = JSON.parse(read("package.json") || "{}");
 
-requireTokens("score migration", migration, [
+requireTokens("score migration", sources.migration, [
   "Business score observation provenance v1",
   "fit_score_observed INTEGER NOT NULL DEFAULT 0",
   "priority_score_observed INTEGER NOT NULL DEFAULT 0",
@@ -58,7 +60,7 @@ requireTokens("score migration", migration, [
   "does not enable",
 ]);
 
-requireTokens("score helper", helper, [
+requireTokens("score helper", sources.helper, [
   '"business_score_observation_flags_v1"',
   "buildBusinessScoreWrite",
   "businessScoreObserved",
@@ -68,7 +70,7 @@ requireTokens("score helper", helper, [
   "return { value: parsed, observed: 1, supplied }",
 ]);
 
-requireTokens("Business read projection", readProjection, [
+requireTokens("Business read projection", sources.projection, [
   '"business_read_projection_v1"',
   "projectBusinessReadRecord",
   "projectBusinessReadCollection",
@@ -82,12 +84,12 @@ requireTokens("Business read projection", readProjection, [
   "contactDetailsRedacted = true",
   "Object.freeze(projected)",
 ]);
-forbidTokens("Business read projection", readProjection, [
+forbidTokens("Business read projection", sources.projection, [
   "projected.metadata = record.metadata",
   "projected.requestedBy = record.requestedBy",
 ]);
 
-requireTokens("provenance readers", readers, [
+requireTokens("provenance readers", sources.readers, [
   'from "./businessReadProjection"',
   "projectBusinessReadCollection",
   "listBusinessOrganizationsWithScoreProvenance",
@@ -108,7 +110,7 @@ requireTokens("provenance readers", readers, [
   "{ redactContactDetails: true }",
 ]);
 
-requireTokens("atomic provenance writers", writers, [
+requireTokens("atomic provenance writers", sources.writers, [
   "saveBusinessOrganization",
   "saveBusinessSignal",
   "saveBusinessOpportunity",
@@ -130,18 +132,18 @@ requireTokens("atomic provenance writers", writers, [
   "scoreResult",
   "BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
-forbidTokens("atomic provenance writers", writers, [
+forbidTokens("atomic provenance writers", sources.writers, [
   "saveBusinessPersonBase",
   "saveBusinessOpportunityBase",
   "requireScoreColumns",
 ]);
 
-requireTokens("people collection reads", peopleRecords, [
+requireTokens("people collection reads", sources.peopleRecords, [
   "readBusinessObservedScore",
   "row.confidence_score_observed",
   "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
-requireTokens("audit-pack collection reads", auditPackRecords, [
+requireTokens("audit-pack collection reads", sources.auditPackRecords, [
   "readBusinessObservedScore",
   "row.confidence_score_observed",
   'from "./businessReadProjection"',
@@ -151,9 +153,12 @@ requireTokens("audit-pack collection reads", auditPackRecords, [
   'contract: "business_audit_pack_reads_v3_score_provenance"',
   "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
 ]);
+forbidTokens("audit-pack collection reads", sources.auditPackRecords, [
+  "const metadataPresent = Boolean(pack.metadata",
+]);
 
-for (const [label, route, tokens] of [
-  ["Business route", businessRoute, [
+for (const [label, source, tokens] of [
+  ["Business route", sources.businessRoute, [
     'from "../core/businessScoreProvenanceReaders"',
     'from "../core/businessScoreProvenanceWriters"',
     "listBusinessOrganizationsWithScoreProvenance",
@@ -169,13 +174,14 @@ for (const [label, route, tokens] of [
     "saveBusinessAuditPack",
     '"0024_business_score_observation_flags.sql"',
   ]],
-  ["people route", peopleRoute, [
+  ["people route", sources.peopleRoute, [
+    "readBusinessMetadataWriteRequest",
     'from "../core/businessScoreProvenanceWriters"',
     "saveBusinessPerson",
+    "requestReceipt: parsed.requestReceipt",
     '"0024_business_score_observation_flags.sql"',
-    "exact JSON confirmation",
   ]],
-  ["website route", websiteRoute, [
+  ["website route", sources.websiteRoute, [
     'from "../core/businessReadProjection"',
     "projectBusinessReadCollection",
     'from "../core/businessScoreProvenanceReaders"',
@@ -188,10 +194,10 @@ for (const [label, route, tokens] of [
     '"0024_business_score_observation_flags.sql"',
   ]],
 ]) {
-  requireTokens(label, route, tokens);
+  requireTokens(label, source, tokens);
 }
 
-requireTokens("Account 360", account360, [
+requireTokens("Account 360", sources.account360, [
   'numericEvidenceContract: "business_account_360_observed_scores_v1"',
   "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
   "readBusinessObservedScore",
@@ -204,13 +210,13 @@ requireTokens("Account 360", account360, [
   "unobservedValuesReturnedAsNull: true",
   '"0024_business_score_observation_flags.sql"',
 ]);
-forbidTokens("Account 360", account360, [
+forbidTokens("Account 360", sources.account360, [
   "business_account_360_zero_ambiguous_scores_v1",
   "zeroValuesAreAmbiguous",
   "zeroValuesReturnedAsNull",
 ]);
 
-requireTokens("provenance writer executable test", provenanceTest, [
+requireTokens("provenance writer executable test", sources.writerTest, [
   "explicit zero",
   "buildBusinessScoreWrite(0)",
   "confidenceScoreObserved",
@@ -218,7 +224,7 @@ requireTokens("provenance writer executable test", provenanceTest, [
   "missing provenance schema",
   "business_score_observation_flags_v1",
 ]);
-requireTokens("provenance reader executable test", readerTest, [
+requireTokens("provenance reader executable test", sources.readerTest, [
   "all active Business score collections preserve observed scores and minimize private read data",
   "listBusinessOrganizationsWithScoreProvenance",
   "listBusinessPeopleWithScoreProvenance",
@@ -232,7 +238,7 @@ requireTokens("provenance reader executable test", readerTest, [
   "reader projection must not mutate D1 rows",
   "business_score_observation_flags_v1",
 ]);
-requireTokens("Business read projection executable test", projectionTest, [
+requireTokens("Business read projection executable test", sources.projectionTest, [
   "Business read projection removes arbitrary metadata and requester identity without mutating evidence",
   "Business people projection preserves presence evidence while redacting contact values",
   "repeated projection preserves existing redaction and presence flags",
@@ -244,7 +250,7 @@ requireTokens("Business read projection executable test", projectionTest, [
   "metadataPresent, true",
   "Object.isFrozen(projected)",
 ]);
-requireTokens("Account 360 provenance test", accountTest, [
+requireTokens("Account 360 provenance test", sources.accountTest, [
   '"business_account_360_observed_scores_v1"',
   '"business_score_observation_flags_v1"',
   "an observed zero remains visible",
@@ -252,14 +258,16 @@ requireTokens("Account 360 provenance test", accountTest, [
   "explicitZeroPreserved: true",
 ]);
 
+const scripts = packageJson.scripts || {};
 const expectedCommand = "node scripts/check-business-score-provenance.mjs";
-if (packageJson.scripts?.["business:score-provenance:check"] !== expectedCommand) {
+if (scripts["business:score-provenance:check"] !== expectedCommand) {
   errors.push(`package.json must expose business:score-provenance:check as ${expectedCommand}`);
 }
-if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run business:score-provenance:check")) {
+const localGate = String(scripts["check:local"] || "");
+if (!localGate.includes("npm run business:score-provenance:check")) {
   errors.push("check:local must include business:score-provenance:check");
 }
-if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run test:core")) {
+if (!localGate.includes("npm run test:core")) {
   errors.push("check:local must execute test:core so read-projection contracts cannot be skipped");
 }
 

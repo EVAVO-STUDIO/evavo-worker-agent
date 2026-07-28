@@ -31,6 +31,7 @@ const sources = {
   migration: read("migrations/0024_business_score_observation_flags.sql"),
   helper: read("src/core/businessScoreProvenance.ts"),
   projection: read("src/core/businessReadProjection.ts"),
+  dimensionEvidence: read("src/core/businessAccountDimensionEvidence.ts"),
   readers: read("src/core/businessScoreProvenanceReaders.ts"),
   writers: read("src/core/businessScoreProvenanceWriters.ts"),
   peopleRecords: read("src/core/businessAutopilotPeopleRecords.ts"),
@@ -42,6 +43,7 @@ const sources = {
   writerTest: read("tests/businessScoreProvenance.test.ts"),
   readerTest: read("tests/businessScoreProvenanceReaders.test.ts"),
   projectionTest: read("tests/businessReadProjection.test.ts"),
+  dimensionEvidenceTest: read("tests/businessAccountDimensionEvidence.test.ts"),
   accountTest: read("tests/businessAccount360NullableScores.test.ts"),
 };
 const packageJson = JSON.parse(read("package.json") || "{}");
@@ -87,6 +89,29 @@ requireTokens("Business read projection", sources.projection, [
 forbidTokens("Business read projection", sources.projection, [
   "projected.metadata = record.metadata",
   "projected.requestedBy = record.requestedBy",
+]);
+
+requireTokens("Account 360 dimension evidence", sources.dimensionEvidence, [
+  '"business_account_360_dimension_evidence_v1"',
+  "BUSINESS_ACCOUNT_DIMENSION_ITEM_LIMIT = 5",
+  "BUSINESS_ACCOUNT_DIMENSION_KEYS",
+  "buildBusinessAccountDimensionEvidence",
+  "businessAccountDimensionCoverage",
+  "deterministic_signal_type_keywords",
+  "maximumSignalStrengthScore",
+  "maximumConfidenceScore",
+  "evidenceItemsMayBeTruncated",
+  "Stored evidence is bounded and supports review only",
+  "no conclusion is available",
+  "validatePublicResearchUrl",
+  "parsed > observedAt",
+  "Object.freeze(register)",
+]);
+forbidTokens("Account 360 dimension evidence", sources.dimensionEvidence, [
+  "callsAI",
+  "fetch(",
+  "sendEmail",
+  "postToSocial",
 ]);
 
 requireTokens("provenance readers", sources.readers, [
@@ -198,6 +223,17 @@ for (const [label, source, tokens] of [
 }
 
 requireTokens("Account 360", sources.account360, [
+  'from "./businessAccountDimensionEvidence"',
+  "BUSINESS_ACCOUNT_DIMENSION_EVIDENCE_CONTRACT",
+  "buildBusinessAccountDimensionEvidence",
+  "businessAccountDimensionCoverage",
+  'dimensionEvidenceContract: BUSINESS_ACCOUNT_DIMENSION_EVIDENCE_CONTRACT',
+  "dimensions,",
+  'source: "bounded_returned_signal_rows"',
+  'classification: "deterministic_signal_type_keywords"',
+  "evidenceItemsPerDimension: 5",
+  "missingDimensionsRemainUnknown: true",
+  "externalResearchTriggered: false",
   'numericEvidenceContract: "business_account_360_observed_scores_v1"',
   "scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT",
   "readBusinessObservedScore",
@@ -214,6 +250,8 @@ forbidTokens("Account 360", sources.account360, [
   "business_account_360_zero_ambiguous_scores_v1",
   "zeroValuesAreAmbiguous",
   "zeroValuesReturnedAsNull",
+  "const DIMENSIONS =",
+  "function dimensionCoverage(",
 ]);
 
 requireTokens("provenance writer executable test", sources.writerTest, [
@@ -250,12 +288,26 @@ requireTokens("Business read projection executable test", sources.projectionTest
   "metadataPresent, true",
   "Object.isFrozen(projected)",
 ]);
+requireTokens("Account dimension evidence executable test", sources.dimensionEvidenceTest, [
+  "dimension register is complete, deterministic and preserves observed zero",
+  "dimension evidence is bounded, newest-first and explicit about item truncation",
+  "invalid scores, unsafe URLs and future timestamps are withheld without inventing evidence",
+  "coverage projection remains compatible while using the richer register as source",
+  "business_account_360_dimension_evidence_v1",
+  "maximumSignalStrengthScore, 0",
+  "evidenceItemsMayBeTruncated, true",
+  "no conclusion is available",
+]);
 requireTokens("Account 360 provenance test", sources.accountTest, [
   '"business_account_360_observed_scores_v1"',
   '"business_score_observation_flags_v1"',
+  '"business_account_360_dimension_evidence_v1"',
+  "BUSINESS_ACCOUNT_DIMENSION_KEYS",
+  "registers bounded dimension evidence",
   "an observed zero remains visible",
-  "observationFlagsRequired: true",
-  "explicitZeroPreserved: true",
+  "dimensionSemantics",
+  "externalResearchTriggered: false",
+  "Review product and competitor evidence before finalising an account plan.",
 ]);
 
 const scripts = packageJson.scripts || {};
@@ -268,13 +320,13 @@ if (!localGate.includes("npm run business:score-provenance:check")) {
   errors.push("check:local must include business:score-provenance:check");
 }
 if (!localGate.includes("npm run test:core")) {
-  errors.push("check:local must execute test:core so read-projection contracts cannot be skipped");
+  errors.push("check:local must execute test:core so read-projection and dimension-evidence contracts cannot be skipped");
 }
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-score-provenance-v3-minimized-observed-reads",
+  contract: "business-score-provenance-v4-account-dimension-evidence",
   explicitObservedZeroPreserved: true,
   unobservedScoresReturnedAsNull: true,
   scoreAndObservationFlagWrittenAtomically: true,
@@ -283,6 +335,10 @@ console.log(JSON.stringify({
   requesterIdentityRedactedFromAuditRuns: true,
   personContactDetailsRedactedFromCollections: true,
   auditPackMetadataPresencePreserved: true,
+  accountDimensionEvidenceBounded: true,
+  accountDimensionEvidenceDeterministic: true,
+  missingDimensionsRemainUnknown: true,
+  dimensionEvidenceTriggersExternalResearch: false,
   missingMigrationFailsClosed: true,
   migrationExecutedByThisCheck: false,
   externalExecutionEnabled: false,

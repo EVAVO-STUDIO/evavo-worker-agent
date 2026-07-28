@@ -1,4 +1,9 @@
 import type { Env } from "../db";
+import {
+  BUSINESS_ACCOUNT_DIMENSION_EVIDENCE_CONTRACT,
+  buildBusinessAccountDimensionEvidence,
+  businessAccountDimensionCoverage,
+} from "./businessAccountDimensionEvidence";
 import { businessAutopilotReadSafety } from "./businessAutopilotSafety";
 import {
   BUSINESS_SCORE_PROVENANCE_CONTRACT,
@@ -10,23 +15,14 @@ type Row = Record<string, unknown>;
 type Account360Path =
   | Readonly<{ matched: false }>
   | Readonly<{ matched: true; organizationId: string | null }>;
+type Coverage = Readonly<Record<string, Readonly<{
+  status: string;
+  matchedSignalTypes: readonly string[];
+}>>>;
 
 const PATH = /^\/admin\/business\/organizations\/([^/]+)\/account-360$/;
 const IDENTIFIER = /^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,127})$/;
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
-const DIMENSIONS = Object.freeze({
-  products: ["product", "service", "offering"],
-  competitors: ["competitor", "competition"],
-  technology: ["technology", "tech", "platform", "stack"],
-  hiring: ["hiring", "recruitment", "job", "vacancy"],
-  news: ["news", "announcement", "press"],
-  funding: ["funding", "investment", "capital", "grant"],
-  procurement: ["procurement", "tender", "rfp", "rfq"],
-  digitalMaturity: ["digital_maturity"],
-  painPoints: ["pain", "problem", "friction", "risk"],
-  budgetSignals: ["budget", "spend", "investment"],
-  buyingSignals: ["buying", "intent", "trigger", "need"],
-} as const);
 
 function text(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -37,12 +33,8 @@ function text(value: unknown, max: number): string | null {
 }
 
 function finiteNumber(value: unknown): number | null {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value !== "string" || value.trim() !== value || !value) {
-    return null;
-  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || value.trim() !== value || !value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -117,23 +109,10 @@ function latestTimestamp(records: readonly Row[], observedAt: number): string | 
   return latest === null ? null : new Date(latest).toISOString();
 }
 
-function dimensionCoverage(signalTypes: readonly string[]) {
-  const normalized = signalTypes.map((value) =>
-    value.toLowerCase().replace(/[-\s]+/g, "_"));
-  return Object.fromEntries(Object.entries(DIMENSIONS).map(([dimension, keywords]) => {
-    const matchedSignalTypes = signalTypes.filter((_, index) =>
-      keywords.some((keyword) => normalized[index].includes(keyword)));
-    return [dimension, {
-      status: matchedSignalTypes.length ? "stored_evidence_present" : "not_evidenced",
-      matchedSignalTypes: [...new Set(matchedSignalTypes)].sort(),
-    }];
-  }));
-}
-
 function uncertainties(input: {
   organization: Row;
   returnedCounts: Record<string, number>;
-  coverage: Record<string, { status: string; matchedSignalTypes: string[] }>;
+  coverage: Coverage;
 }): string[] {
   const result: string[] = [];
   if (!text(input.organization.industry, 255)) {
@@ -169,6 +148,7 @@ function uncertainties(input: {
     }
   }
   result.push(
+    "Dimension evidence is built only from the bounded signals returned in this snapshot.",
     "Scores are returned only when their corresponding D1 observation flags are set.",
     "Explicit observed zero scores are preserved; legacy, missing or invalid scores are returned as null.",
     "Invalid or future-dated evidence timestamps are excluded from latest-evidence chronology.",
@@ -178,7 +158,7 @@ function uncertainties(input: {
   return result;
 }
 
-function reviewPrompts(counts: Record<string, number>): string[] {
+function reviewPrompts(counts: Record<string, number>, coverage: Coverage): string[] {
   const prompts: string[] = [];
   if (!counts.websites) prompts.push("Review and link a public organization website.");
   if (!counts.people) prompts.push("Research public stakeholder context for owner review.");
@@ -197,6 +177,20 @@ function reviewPrompts(counts: Record<string, number>): string[] {
   }
   if (!counts.followups && counts.opportunities) {
     prompts.push("Consider an internal follow-up plan; no message or meeting will be sent.");
+  }
+  if (
+    counts.signals
+    && coverage.procurement?.status === "not_evidenced"
+    && coverage.buyingSignals?.status === "not_evidenced"
+  ) {
+    prompts.push("Review procurement and buying-signal evidence before estimating timing or budget.");
+  }
+  if (
+    counts.signals
+    && coverage.products?.status === "not_evidenced"
+    && coverage.competitors?.status === "not_evidenced"
+  ) {
+    prompts.push("Review product and competitor evidence before finalising an account plan.");
   }
   return prompts;
 }
@@ -577,7 +571,11 @@ export async function buildBusinessAccount360(
   const recordsMayBeTruncated = Object.values(returnedCounts)
     .some((returnedCount) => returnedCount >= limit);
   const signalTypes = signalEvidence.map((row) => row.signalType);
-  const coverage = dimensionCoverage(signalTypes);
+  const dimensions = buildBusinessAccountDimensionEvidence(
+    signalEvidence,
+    observedAt,
+  );
+  const coverage = businessAccountDimensionCoverage(dimensions);
   const allProjected = [
     { createdAt: text(organization.createdAt, 64), updatedAt: text(organization.updatedAt, 64) },
     ...stakeholders,
@@ -594,6 +592,7 @@ export async function buildBusinessAccount360(
 
   return {
     auditEvidenceContract: "business_account_360_audit_evidence_v1",
+    dimensionEvidenceContract: BUSINESS_ACCOUNT_DIMENSION_EVIDENCE_CONTRACT,
     numericEvidenceContract: "business_account_360_observed_scores_v1",
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     timelineEvidenceContract: "business_account_360_bounded_chronology_v1",
@@ -635,6 +634,7 @@ export async function buildBusinessAccount360(
       auditObservations: auditObservationEvidence,
       signals: signalEvidence,
       auditPacks: auditPackEvidence,
+      dimensions,
     },
     relationshipContext: {
       stakeholders,
@@ -677,12 +677,19 @@ export async function buildBusinessAccount360(
         explicitZeroPreserved: true,
         unobservedValuesReturnedAsNull: true,
       },
+      dimensionSemantics: {
+        source: "bounded_returned_signal_rows",
+        classification: "deterministic_signal_type_keywords",
+        evidenceItemsPerDimension: 5,
+        missingDimensionsRemainUnknown: true,
+        externalResearchTriggered: false,
+      },
       countsAreReturnedRowsOnly: true,
       recordsMayBeTruncated,
       snapshotConsistency: "best_effort_bounded_multi_query",
     },
     uncertainties: uncertainties({ organization, returnedCounts, coverage }),
-    reviewPrompts: reviewPrompts(returnedCounts),
+    reviewPrompts: reviewPrompts(returnedCounts, coverage),
   };
 }
 

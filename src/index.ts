@@ -22,6 +22,7 @@ import { handleGrowthInternalOperatorPackAdmin } from "./routes/growthInternalOp
 import { handleGrowthStrategyMemoryAdmin } from "./routes/growthStrategyMemoryAdmin";
 import { handleGrowthBlackboardAdmin } from "./routes/growthBlackboardAdmin";
 import { handleGrowthApprovalRequestsAdmin } from "./routes/growthApprovalRequestsAdmin";
+import { handleBusinessAccount360Admin } from "./routes/businessAccount360Admin";
 import { handleBusinessAutopilotAdmin } from "./routes/businessAutopilotAdmin";
 import { handleBusinessAutopilotWebsiteAdmin } from "./routes/businessAutopilotWebsiteAdmin";
 import { handleBusinessAutopilotPeopleAdmin } from "./routes/businessAutopilotPeopleAdmin";
@@ -222,6 +223,7 @@ export default {
 
       switch (resolveBusinessRouteHandlerId(pathname)) {
         case "account-intelligence":
+          return await handleBusinessAccount360Admin(req, env, pathname, jsonResponse);
         case "business-historical":
         case "business-fallback":
           return await handleBusinessAutopilotAdmin(req, env, pathname, jsonResponse);

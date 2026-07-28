@@ -1,30 +1,24 @@
 import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
+import { parseBusinessMetadataReadQuery } from "../core/businessMetadataReadBoundary";
 import {
-  boundedJsonFailurePayload,
-  isExplicitJsonConfirmation,
-  readBoundedJsonObject,
-} from "../core/boundedJsonRequest";
-import {
-  businessAutopilotMetadataWriteSafety,
-  businessAutopilotReadSafety,
-} from "../core/businessAutopilotSafety";
+  readBusinessMetadataWriteRequest,
+  type BusinessMetadataWriteBoundaryOptions,
+} from "../core/businessMetadataWriteBoundary";
+import { businessAutopilotReadSafety } from "../core/businessAutopilotSafety";
 import {
   businessPeopleReadPayload,
   businessPersonWritePayload,
   listBusinessPeople,
   type BusinessPersonInput,
 } from "../core/businessAutopilotPeopleRecords";
+import { BUSINESS_PEOPLE_PATH } from "../core/businessRoutePaths";
 import { saveBusinessPerson } from "../core/businessScoreProvenanceWriters";
 import { validatePublicResearchUrl } from "../core/publicResearchFetch";
 
 export type JsonResponse = (data: unknown, init?: ResponseInit) => Response;
 
 type JsonRecord = Record<string, unknown>;
-type BusinessPersonWriteBody = JsonRecord & {
-  confirm?: unknown;
-  person?: unknown;
-};
 
 type ValidationFailure = Readonly<{
   ok: false;
@@ -34,13 +28,11 @@ type ValidationFailure = Readonly<{
 }>;
 type ValidationSuccess<T> = Readonly<{ ok: true; value: T }>;
 
-const ROUTE_PATH = "/admin/business/people";
 const schemaMissingMessage = "Business people schema is missing or unavailable.";
 const scoreProvenanceMissingMessage =
   "Business people score provenance schema is missing or unavailable.";
 const routeFailedMessage =
   "Business people route failed before a safe response could be returned.";
-const TOP_LEVEL_WRITE_KEYS = new Set(["confirm", "person"]);
 const PERSON_WRITE_KEYS = new Set([
   "id",
   "organizationId",
@@ -56,52 +48,41 @@ const PERSON_WRITE_KEYS = new Set([
   "confidenceScore",
   "metadata",
 ]);
-const GET_QUERY_KEYS = new Set(["limit", "contactStatus"]);
-const SENSITIVE_KEY_FRAGMENTS = Object.freeze([
-  "token",
-  "secret",
-  "password",
-  "apikey",
-  "privatekey",
-  "servicerole",
-] as const);
-const SENSITIVE_EXACT_KEYS = new Set(["authorization", "cookie"]);
+const PERSON_TEXT_FIELDS = new Set([
+  "id",
+  "organizationId",
+  "name",
+  "role",
+  "email",
+  "phone",
+  "profileUrl",
+  "sourceType",
+  "sourceUrl",
+  "allowedUse",
+  "contactStatus",
+]);
+const PERSON_WRITE_BOUNDARY = Object.freeze({
+  entityKey: "person",
+  allowedEntityFields: PERSON_WRITE_KEYS,
+  requiredTextFields: new Set(["name"]),
+  textFields: PERSON_TEXT_FIELDS,
+  objectFields: new Set(["metadata"]),
+  numberFields: {
+    confidenceScore: { min: 0, max: 100 },
+  },
+  maxBytes: 32_768,
+} satisfies BusinessMetadataWriteBoundaryOptions);
+const PEOPLE_READ_QUERY_OPTIONS = Object.freeze({
+  textFields: {
+    contactStatus: { maxLength: 64 },
+  },
+  maxLimit: 100,
+});
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,127})$/;
 
 function isJsonRecord(value: unknown): value is JsonRecord {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function normalizedKey(value: string): string {
-  return value.replace(/[^a-z0-9]/gi, "").toLowerCase();
-}
-
-function containsSensitiveInputKey(value: unknown): boolean {
-  const stack: unknown[] = [value];
-  while (stack.length) {
-    const current = stack.pop();
-    if (Array.isArray(current)) {
-      stack.push(...current);
-      continue;
-    }
-    if (!isJsonRecord(current)) continue;
-    for (const [key, child] of Object.entries(current)) {
-      const normalized = normalizedKey(key);
-      if (
-        SENSITIVE_EXACT_KEYS.has(normalized) ||
-        SENSITIVE_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment))
-      ) {
-        return true;
-      }
-      stack.push(child);
-    }
-  }
-  return false;
-}
-
-function unexpectedKeys(record: JsonRecord, allowed: ReadonlySet<string>): string[] {
-  return Object.keys(record).filter((key) => !allowed.has(key)).sort();
 }
 
 function validateOptionalText(
@@ -169,14 +150,6 @@ function setOptional<K extends keyof BusinessPersonInput>(
 function validatePerson(value: unknown): ValidationSuccess<BusinessPersonInput> | ValidationFailure {
   if (!isJsonRecord(value)) {
     return { ok: false, error: "person_object_required", field: "person" };
-  }
-
-  const extraKeys = unexpectedKeys(value, PERSON_WRITE_KEYS);
-  if (extraKeys.length) {
-    return { ok: false, error: "unsupported_person_fields", fields: extraKeys };
-  }
-  if (containsSensitiveInputKey(value)) {
-    return { ok: false, error: "forbidden_business_input_key" };
   }
 
   const name = validateRequiredName(value.name);
@@ -265,31 +238,6 @@ function validatePerson(value: unknown): ValidationSuccess<BusinessPersonInput> 
   return { ok: true, value: person };
 }
 
-function parseLimit(url: URL): ValidationSuccess<number> | ValidationFailure {
-  const values = url.searchParams.getAll("limit");
-  if (values.length === 0) return { ok: true, value: 25 };
-  if (values.length !== 1 || !/^[1-9]\d*$/.test(values[0])) {
-    return { ok: false, error: "invalid_limit", field: "limit" };
-  }
-  const parsed = Number(values[0]);
-  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 100
-    ? { ok: true, value: parsed }
-    : { ok: false, error: "invalid_limit", field: "limit" };
-}
-
-function parseContactStatus(
-  url: URL,
-): ValidationSuccess<string | undefined> | ValidationFailure {
-  const values = url.searchParams.getAll("contactStatus");
-  if (values.length === 0) return { ok: true, value: undefined };
-  if (values.length !== 1) {
-    return { ok: false, error: "invalid_contact_status", field: "contactStatus" };
-  }
-  const text = validateOptionalText(values[0], "contactStatus", 64);
-  if (!text.ok) return text;
-  return { ok: true, value: text.value ?? undefined };
-}
-
 function invalidRequest(json: JsonResponse, failure: ValidationFailure): Response {
   return json({
     ok: false,
@@ -299,19 +247,6 @@ function invalidRequest(json: JsonResponse, failure: ValidationFailure): Respons
     internalMetadataOnly: true,
     externalExecutionAllowed: false,
     rawInputExposed: false,
-  }, { status: 400 });
-}
-
-function blockedWrite(json: JsonResponse): Response {
-  return json({
-    ok: false,
-    error: "confirm_required",
-    reason:
-      "Business people writes require exact JSON confirmation and save internal metadata only. They do not enrich contacts, scrape profiles, send email, post, comment, submit forms, call AI, browse, buy ads, execute browser actions, or mutate external systems.",
-    requiredPayload: { confirm: true },
-    confirmationCoercionAllowed: false,
-    queryConfirmationAllowed: false,
-    safety: businessAutopilotMetadataWriteSafety(),
   }, { status: 400 });
 }
 
@@ -397,7 +332,7 @@ export async function handleBusinessAutopilotPeopleAdmin(
       { status: 405, headers: { allow: "GET, POST" } },
     );
   }
-  if (pathname !== ROUTE_PATH) {
+  if (pathname !== BUSINESS_PEOPLE_PATH) {
     return json(
       { ok: false, error: "not_found", path: pathname, method: request.method },
       { status: 404 },
@@ -407,30 +342,19 @@ export async function handleBusinessAutopilotPeopleAdmin(
   const url = new URL(request.url);
 
   if (request.method === "GET") {
-    const queryKeys = [...new Set(url.searchParams.keys())];
-    const unsupported = queryKeys.filter((key) => !GET_QUERY_KEYS.has(key)).sort();
-    if (unsupported.length) {
-      return invalidRequest(json, {
-        ok: false,
-        error: "query_not_supported",
-        fields: unsupported,
-      });
-    }
-
-    const limit = parseLimit(url);
-    if (!limit.ok) return invalidRequest(json, limit);
-    const contactStatus = parseContactStatus(url);
-    if (!contactStatus.ok) return invalidRequest(json, contactStatus);
+    const query = parseBusinessMetadataReadQuery(url, PEOPLE_READ_QUERY_OPTIONS);
+    if (!query.ok) return json(query.payload, { status: query.status });
 
     try {
       const people = await listBusinessPeople(
         env,
-        limit.value,
-        contactStatus.value,
+        query.limit,
+        query.text.contactStatus,
       );
       const redactedPeople = people.map(minimiseBusinessPersonResponse);
       return json({
         mode: "business_people",
+        queryContract: query.contract,
         contactDetailsRedacted: true,
         metadataRedacted: true,
         internalReviewOnly: true,
@@ -445,39 +369,13 @@ export async function handleBusinessAutopilotPeopleAdmin(
   }
 
   if (request.method === "POST") {
-    if ([...url.searchParams.keys()].length > 0) {
-      return json({
-        ok: false,
-        error: "query_not_supported",
-        queryConfirmationAllowed: false,
-        internalMetadataOnly: true,
-        externalExecutionAllowed: false,
-      }, { status: 400 });
-    }
+    const parsed = await readBusinessMetadataWriteRequest(
+      request,
+      PERSON_WRITE_BOUNDARY,
+    );
+    if (!parsed.ok) return json(parsed.payload, { status: parsed.status });
 
-    const parsed = await readBoundedJsonObject<BusinessPersonWriteBody>(request, {
-      maxBytes: 32_768,
-      maxDepth: 8,
-      maxNodes: 500,
-      maxArrayLength: 100,
-      maxStringLength: 16_384,
-      maxKeyLength: 160,
-    });
-    if (!parsed.ok) {
-      return json(boundedJsonFailurePayload(parsed), { status: parsed.status });
-    }
-    if (!isExplicitJsonConfirmation(parsed.value)) return blockedWrite(json);
-
-    const extraKeys = unexpectedKeys(parsed.value, TOP_LEVEL_WRITE_KEYS);
-    if (extraKeys.length) {
-      return invalidRequest(json, {
-        ok: false,
-        error: "unsupported_request_fields",
-        fields: extraKeys,
-      });
-    }
-
-    const personInput = validatePerson(parsed.value.person);
+    const personInput = validatePerson(parsed.entity);
     if (!personInput.ok) return invalidRequest(json, personInput);
 
     try {
@@ -494,11 +392,7 @@ export async function handleBusinessAutopilotPeopleAdmin(
         exactBooleanConfirmation: true,
         confirmationCoercionAllowed: false,
         queryConfirmationAllowed: false,
-        requestReceipt: {
-          contract: parsed.contract,
-          bytes: parsed.bytes,
-          bodyHashAvailable: true,
-        },
+        requestReceipt: parsed.requestReceipt,
         ...businessPersonWritePayload(redactedPerson),
       });
     } catch (error) {

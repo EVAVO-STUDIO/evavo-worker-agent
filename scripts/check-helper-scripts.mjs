@@ -135,7 +135,7 @@ requireTokens("src/core/adminAuthentication.ts", [
   'authorization.startsWith("Bearer ")',
   'authorization.slice("Bearer ".length)',
   "value.trim() !== value",
-  "/\s/.test(value)",
+  "/\\s/.test(value)",
   'crypto.subtle.digest("SHA-256"',
   "difference |= leftDigest[index] ^ rightDigest[index]",
   "!expected || !provided || !hasValidAdminTokenShape(expected)",

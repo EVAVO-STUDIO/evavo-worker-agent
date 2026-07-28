@@ -114,3 +114,27 @@ test("route guard covers Business collection reads and preserves specialised rou
     "GET",
   ), null);
 });
+
+test("bounds query structure and redacts unsafe field names", () => {
+  const tooMany = parse(`?${Array.from({ length: 17 }, (_, index) => `x${index}=1`).join("&")}`);
+  assert.equal(tooMany.ok, false);
+  if (!tooMany.ok) {
+    assert.equal(tooMany.payload.error, "query_structure_too_large");
+    assert.equal(tooMany.payload.maxQueryFields, 16);
+  }
+
+  const unsafeKey = parse(`?${encodeURIComponent("secret key")}=must-not-leak`);
+  assert.equal(unsafeKey.ok, false);
+  if (!unsafeKey.ok) {
+    assert.equal(unsafeKey.payload.error, "invalid_query_key");
+    assert.equal(JSON.stringify(unsafeKey.payload).includes("secret key"), false);
+    assert.equal(JSON.stringify(unsafeKey.payload).includes("must-not-leak"), false);
+  }
+
+  const largeValue = parse(`?status=${"x".repeat(257)}`);
+  assert.equal(largeValue.ok, false);
+  if (!largeValue.ok) {
+    assert.equal(largeValue.payload.error, "invalid_query_value");
+    assert.deepEqual(largeValue.payload.fields, ["status"]);
+  }
+});

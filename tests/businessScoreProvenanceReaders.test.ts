@@ -15,6 +15,13 @@ import {
 
 type Row = Record<string, unknown>;
 
+const PRIVATE_METADATA = "private-business-context-must-not-leak";
+const PRIVATE_EMAIL = "jamie.private@example.test";
+const PRIVATE_PHONE = "+61 400 000 000";
+const PRIVATE_PROFILE = "https://example.test/private-profile";
+const PRIVATE_SOURCE = "https://example.test/private-source";
+const PRIVATE_REQUESTER = "private-requester@example.test";
+
 const tableRows: Record<string, Row[]> = {
   business_organizations: [{
     id: "organization-1",
@@ -27,14 +34,18 @@ const tableRows: Record<string, Row[]> = {
     risk_score_observed: 1,
     confidence_score: 80,
     confidence_score_observed: 1,
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_people: [{
     id: "person-1",
     name: "Jamie Example",
+    email: PRIVATE_EMAIL,
+    phone: PRIVATE_PHONE,
+    profile_url: PRIVATE_PROFILE,
+    source_url: PRIVATE_SOURCE,
     confidence_score: 0,
     confidence_score_observed: 0,
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_signals: [{
     id: "signal-1",
@@ -44,7 +55,7 @@ const tableRows: Record<string, Row[]> = {
     confidence_score: 101,
     confidence_score_observed: 1,
     risk_flags_json: "[]",
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_opportunities: [{
     id: "opportunity-1",
@@ -65,14 +76,14 @@ const tableRows: Record<string, Row[]> = {
     risk_score_observed: 1,
     confidence_score: 65,
     confidence_score_observed: 1,
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_service_matches: [{
     id: "service-match-1",
     match_score: 0,
     match_score_observed: 1,
     evidence_json: "[]",
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_audit_packs: [{
     id: "audit-pack-1",
@@ -81,24 +92,25 @@ const tableRows: Record<string, Row[]> = {
     findings_json: "[]",
     recommendations_json: "[]",
     risk_flags_json: "[]",
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_website_audit_runs: [{
     id: "audit-run-1",
+    requested_by: PRIVATE_REQUESTER,
     readiness_score: 0,
     readiness_score_observed: 1,
     risk_score: 38,
     risk_score_observed: 1,
     confidence_score: 0,
     confidence_score_observed: 0,
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
   business_audit_observations: [{
     id: "observation-1",
     title: "Review friction",
     confidence_score: 78,
     confidence_score_observed: 1,
-    metadata_json: "{}",
+    metadata_json: JSON.stringify({ note: PRIVATE_METADATA }),
   }],
 };
 
@@ -128,7 +140,7 @@ function fixture() {
   return { env, calls };
 }
 
-test("all active Business score collections preserve explicit zero and null unobserved values", async () => {
+test("all active Business score collections preserve observed scores and minimize private read data", async () => {
   const { env, calls } = fixture();
 
   const organizations = await listBusinessOrganizationsWithScoreProvenance(env, 25);
@@ -155,7 +167,7 @@ test("all active Business score collections preserve explicit zero and null unob
   assert.equal(auditRuns[0]?.confidenceScore, null);
   assert.equal(observations[0]?.confidenceScore, 78);
 
-  for (const collection of [
+  const collections = [
     organizations,
     people,
     signals,
@@ -164,12 +176,54 @@ test("all active Business score collections preserve explicit zero and null unob
     auditPacks,
     auditRuns,
     observations,
-  ]) {
-    assert.equal(
-      collection[0]?.scoreProvenanceContract,
-      "business_score_observation_flags_v1",
-    );
+  ];
+  for (const collection of collections) {
+    const record = collection[0];
+    assert.equal(record?.scoreProvenanceContract, "business_score_observation_flags_v1");
+    assert.equal(record?.metadataPresent, true);
+    assert.equal(record?.metadataRedacted, true);
+    assert.equal(Object.prototype.hasOwnProperty.call(record ?? {}, "metadata"), false);
+    assert.equal(Object.isFrozen(record), true);
   }
+
+  const person = people[0];
+  assert.equal(person?.email, null);
+  assert.equal(person?.phone, null);
+  assert.equal(person?.profileUrl, null);
+  assert.equal(person?.sourceUrl, null);
+  assert.equal(person?.emailPresent, true);
+  assert.equal(person?.phonePresent, true);
+  assert.equal(person?.profileUrlPresent, true);
+  assert.equal(person?.sourceUrlPresent, true);
+  assert.equal(person?.contactDetailsRedacted, true);
+
+  const auditRun = auditRuns[0];
+  assert.equal(Object.prototype.hasOwnProperty.call(auditRun ?? {}, "requestedBy"), false);
+  assert.equal(auditRun?.requestedByPresent, true);
+  assert.equal(auditRun?.requesterIdentityRedacted, true);
+
+  const outputText = JSON.stringify(collections);
+  for (const privateValue of [
+    PRIVATE_METADATA,
+    PRIVATE_EMAIL,
+    PRIVATE_PHONE,
+    PRIVATE_PROFILE,
+    PRIVATE_SOURCE,
+    PRIVATE_REQUESTER,
+  ]) {
+    assert.equal(outputText.includes(privateValue), false, privateValue);
+  }
+
+  assert.equal(
+    tableRows.business_people[0]?.email,
+    PRIVATE_EMAIL,
+    "reader projection must not mutate D1 rows",
+  );
+  assert.equal(
+    tableRows.business_website_audit_runs[0]?.requested_by,
+    PRIVATE_REQUESTER,
+    "reader projection must not mutate D1 rows",
+  );
 
   assert.equal(calls.length, 8);
   assert.equal(

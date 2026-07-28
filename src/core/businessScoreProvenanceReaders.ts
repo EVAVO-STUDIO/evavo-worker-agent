@@ -1,5 +1,6 @@
 import type { Env } from "../db";
 import { safeJsonParse } from "../db";
+import { projectBusinessReadCollection } from "./businessReadProjection";
 import {
   BUSINESS_SCORE_PROVENANCE_CONTRACT,
   readBusinessObservedScore,
@@ -44,7 +45,7 @@ export async function listBusinessOrganizationsWithScoreProvenance(
     ORDER BY priority_score_observed DESC, priority_score DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     name: row.name,
     domain: row.domain,
@@ -62,7 +63,7 @@ export async function listBusinessOrganizationsWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }
 
 export async function listBusinessPeopleWithScoreProvenance(
@@ -79,7 +80,7 @@ export async function listBusinessPeopleWithScoreProvenance(
     ORDER BY updated_at DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
     name: row.name,
@@ -96,7 +97,7 @@ export async function listBusinessPeopleWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })), { redactContactDetails: true });
 }
 
 export async function listBusinessSignalsWithScoreProvenance(
@@ -113,7 +114,7 @@ export async function listBusinessSignalsWithScoreProvenance(
     ORDER BY signal_strength_observed DESC, signal_strength DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
     websiteId: row.website_id,
@@ -128,7 +129,7 @@ export async function listBusinessSignalsWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }
 
 export async function listBusinessOpportunitiesWithScoreProvenance(
@@ -146,7 +147,7 @@ export async function listBusinessOpportunitiesWithScoreProvenance(
       need_score_observed DESC, need_score DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
     opportunityType: row.opportunity_type,
@@ -176,7 +177,7 @@ export async function listBusinessOpportunitiesWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }
 
 export async function listBusinessServiceMatchesWithScoreProvenance(
@@ -193,7 +194,7 @@ export async function listBusinessServiceMatchesWithScoreProvenance(
     ORDER BY match_score_observed DESC, match_score DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
     opportunityId: row.opportunity_id,
@@ -206,7 +207,7 @@ export async function listBusinessServiceMatchesWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }
 
 export async function listBusinessAuditPacksWithScoreProvenance(
@@ -223,7 +224,7 @@ export async function listBusinessAuditPacksWithScoreProvenance(
     ORDER BY confidence_score_observed DESC, confidence_score DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
     opportunityId: row.opportunity_id,
@@ -239,7 +240,7 @@ export async function listBusinessAuditPacksWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }
 
 export async function listBusinessWebsiteAuditRunsWithScoreProvenance(
@@ -256,7 +257,7 @@ export async function listBusinessWebsiteAuditRunsWithScoreProvenance(
     ORDER BY updated_at DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     websiteId: row.website_id,
     organizationId: row.organization_id,
@@ -274,7 +275,7 @@ export async function listBusinessWebsiteAuditRunsWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }
 
 export async function listBusinessAuditObservationsWithScoreProvenance(
@@ -291,7 +292,7 @@ export async function listBusinessAuditObservationsWithScoreProvenance(
     ORDER BY updated_at DESC, created_at DESC
     LIMIT ?
   `).bind(...params).all<Row>();
-  return rows(result).map((row) => ({
+  return projectBusinessReadCollection(rows(result).map((row) => ({
     id: row.id,
     auditRunId: row.audit_run_id,
     websiteId: row.website_id,
@@ -308,5 +309,5 @@ export async function listBusinessAuditObservationsWithScoreProvenance(
     scoreProvenanceContract: BUSINESS_SCORE_PROVENANCE_CONTRACT,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  })));
 }

@@ -13,9 +13,9 @@ import {
   businessPeopleReadPayload,
   businessPersonWritePayload,
   listBusinessPeople,
-  saveBusinessPerson,
   type BusinessPersonInput,
 } from "../core/businessAutopilotPeopleRecords";
+import { saveBusinessPerson } from "../core/businessScoreProvenanceWriters";
 import { validatePublicResearchUrl } from "../core/publicResearchFetch";
 
 export type JsonResponse = (data: unknown, init?: ResponseInit) => Response;
@@ -36,6 +36,8 @@ type ValidationSuccess<T> = Readonly<{ ok: true; value: T }>;
 
 const ROUTE_PATH = "/admin/business/people";
 const schemaMissingMessage = "Business people schema is missing or unavailable.";
+const scoreProvenanceMissingMessage =
+  "Business people score provenance schema is missing or unavailable.";
 const routeFailedMessage =
   "Business people route failed before a safe response could be returned.";
 const TOP_LEVEL_WRITE_KEYS = new Set(["confirm", "person"]);
@@ -315,17 +317,25 @@ function blockedWrite(json: JsonResponse): Response {
 
 function migrationError(error: unknown) {
   const text = error instanceof Error ? error.message : String(error);
+  const missingScoreProvenance = /(?:no such column:\s*[^\s]*_observed|has no column named\s+[^\s]*_observed)/i.test(text);
   const missingTable = /no such table: business_people/i.test(text);
+  const schemaMissing = missingScoreProvenance || missingTable;
   return {
     ok: false,
     mode: "business_people_error",
-    error: missingTable
+    error: schemaMissing
       ? "business_autopilot_schema_missing"
       : "business_people_failed",
-    message: missingTable ? schemaMissingMessage : routeFailedMessage,
-    requiredMigration: missingTable
-      ? "0021_business_autopilot_foundation.sql"
-      : null,
+    message: missingScoreProvenance
+      ? scoreProvenanceMissingMessage
+      : missingTable
+        ? schemaMissingMessage
+        : routeFailedMessage,
+    requiredMigration: missingScoreProvenance
+      ? "0024_business_score_observation_flags.sql"
+      : missingTable
+        ? "0021_business_autopilot_foundation.sql"
+        : null,
     rawErrorExposed: false,
     contactDetailsExposed: false,
     metadataExposed: false,

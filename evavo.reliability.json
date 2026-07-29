@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.0",
+  "repository": "EVAVO-STUDIO/evavo-worker-agent",
+  "defaultBranch": "main",
+  "authority": "canonical-growth-research-worker",
+  "workload": "cloudflare-worker",
+  "requiredVisibility": "private",
+  "packageManager": {
+    "name": "npm",
+    "lockfilePolicy": "committed-frozen",
+    "install": "npm ci --no-audit --no-fund"
+  },
+  "runtime": {
+    "node": "24.x",
+    "wrangler": "4.x",
+    "cloudflareWorkerName": "evavo-outbound-agent",
+    "publicProductName": "EVAVO Growth Research Worker"
+  },
+  "validation": [
+    "node scripts/check-worker-repository-visibility.mjs --live",
+    "npm ci --no-audit --no-fund",
+    "npm run check:local",
+    "npm run growth:generated-routes:check",
+    "npm run worker:powershell:check",
+    "npm run growth:backend:aggregate:check",
+    "npm exec wrangler -- deploy --dry-run --outdir .evavo-confirmation/worker-bundle"
+  ],
+  "providerConfirmation": {
+    "workflow": ".github/workflows/evavo-mainline-confirmation.yml",
+    "githubRunner": "ubuntu-latest",
+    "exactMainShaRequired": true,
+    "livePrivateVisibilityRequired": true,
+    "cloudflareDeploymentNotPerformedByConfirmation": true,
+    "deploymentRequiresSeparateReviewedCloudflareCredentials": true
+  },
+  "branchPolicy": {
+    "mode": "direct-main",
+    "exclusiveResource": "repository-main:EVAVO-STUDIO/evavo-worker-agent",
+    "exclusiveLeaseRequired": true,
+    "forcePushAllowed": false
+  },
+  "capabilityBoundary": {
+    "allowed": [
+      "bounded public research",
+      "internal defensive settings",
+      "internal planning and review records",
+      "read-only or review-safe operator surfaces"
+    ],
+    "prohibited": [
+      "email sending",
+      "social posting",
+      "browser automation",
+      "unreviewed outbound execution",
+      "credential mutation",
+      "production repository mutation"
+    ]
+  },
+  "autoRepair": {
+    "allowed": true,
+    "blockedEffects": [
+      "repository-visibility-change-without-admin-remediation-contract",
+      "credential-change",
+      "cloudflare-resource-rename",
+      "database-destructive-migration",
+      "external-communication",
+      "outbound-execution-enablement"
+    ]
+  }
+}

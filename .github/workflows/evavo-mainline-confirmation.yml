@@ -1,0 +1,103 @@
+name: EVAVO mainline confirmation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact 40-character main commit SHA to validate
+        required: true
+        type: string
+      request_source:
+        description: Governed dispatcher identity
+        required: true
+        default: evavo-development-studio
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evavo-mainline-${{ inputs.expected_sha }}
+  cancel-in-progress: false
+
+jobs:
+  validate-worker:
+    name: Confirm EVAVO Growth Research Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Validate dispatch input
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          REQUEST_SOURCE: ${{ inputs.request_source }}
+        run: |
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid expected_sha" >&2
+            exit 1
+          fi
+          if [[ "$REQUEST_SOURCE" != "evavo-development-studio" ]]; then
+            echo "Unsupported request_source" >&2
+            exit 1
+          fi
+
+      - name: Check out exact mainline commit
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Verify live private repository visibility
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-worker-repository-visibility.mjs --live
+
+      - name: Install committed dependency graph
+        run: npm ci --no-audit --no-fund
+
+      - name: Run complete local worker contract chain
+        run: npm run check:local
+
+      - name: Run predeployment source gates without branch mutation
+        run: |
+          npm run growth:generated-routes:check
+          npm run worker:powershell:check
+          npm run growth:backend:aggregate:check
+
+      - name: Compile Cloudflare Worker without deployment
+        run: npm exec wrangler -- deploy --dry-run --outdir .evavo-confirmation/worker-bundle
+
+      - name: Record confirmation receipt
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          mkdir -p .evavo-confirmation
+          printf '{"schemaVersion":"1.0","repository":"EVAVO-STUDIO/evavo-worker-agent","sha":"%s","workflow":"evavo-mainline-confirmation.yml","runner":"ubuntu-latest","deployment":"dry-run-only","requiredVisibility":"private"}\n' "$EXPECTED_SHA" > .evavo-confirmation/receipt.json
+
+      - name: Upload bounded worker evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: growth-worker-mainline-${{ inputs.expected_sha }}
+          path: .evavo-confirmation/
+          if-no-files-found: warn
+          retention-days: 14

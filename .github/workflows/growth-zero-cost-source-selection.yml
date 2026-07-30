@@ -1,60 +1,62 @@
 name: Growth zero-cost source selection
 
 on:
-  pull_request:
-    paths:
-      - src/core/growthActivityBudget.ts
-      - src/core/growthActivityBudgetLedger.ts
-      - src/core/growthActivityBudgetSettings.ts
-      - src/core/opportunitySourceSelection.ts
-      - src/core/growthCapabilities.ts
-      - src/opportunityAutonomy.ts
-      - src/routes/opportunityRunDueAdmin.ts
-      - tests/growthActivityBudget.test.ts
-      - tests/growthActivityBudgetLedger.test.ts
-      - tests/growthActivityBudgetSettings.test.ts
-      - tests/opportunitySourceSelection.test.ts
-      - scripts/check-growth-activity-budget.mjs
-      - scripts/check-growth-activity-budget-ledger.mjs
-      - migrations/0023_growth_activity_budget_ledger.sql
-      - package.json
-      - package-lock.json
-      - .github/workflows/growth-zero-cost-source-selection.yml
-  push:
-    branches:
-      - main
-    paths:
-      - src/core/growthActivityBudget.ts
-      - src/core/growthActivityBudgetLedger.ts
-      - src/core/growthActivityBudgetSettings.ts
-      - src/core/opportunitySourceSelection.ts
-      - src/core/growthCapabilities.ts
-      - src/opportunityAutonomy.ts
-      - src/routes/opportunityRunDueAdmin.ts
-      - tests/growthActivityBudget.test.ts
-      - tests/growthActivityBudgetLedger.test.ts
-      - tests/growthActivityBudgetSettings.test.ts
-      - tests/opportunitySourceSelection.test.ts
-      - scripts/check-growth-activity-budget.mjs
-      - scripts/check-growth-activity-budget-ledger.mjs
-      - migrations/0023_growth_activity_budget_ledger.sql
-      - package.json
-      - package-lock.json
-      - .github/workflows/growth-zero-cost-source-selection.yml
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact 40-character main commit SHA to validate
+        required: true
+        type: string
+      request_source:
+        description: Governed dispatcher identity
+        required: true
+        default: evavo-development-studio
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: growth-zero-cost-${{ inputs.expected_sha }}
+  cancel-in-progress: false
 
 jobs:
   source-selection:
     name: Source budget and adaptive selection
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
     steps:
-      - name: Checkout
+      - name: Validate dispatch input
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          REQUEST_SOURCE: ${{ inputs.request_source }}
+        run: |
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid expected_sha" >&2
+            exit 1
+          fi
+          if [[ "$REQUEST_SOURCE" != "evavo-development-studio" ]]; then
+            echo "Unsupported request_source" >&2
+            exit 1
+          fi
+
+      - name: Check out exact mainline commit
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify checked-out commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -73,3 +75,21 @@ jobs:
 
       - name: Type-check Worker integration
         run: npm run typecheck
+
+      - name: Record source-selection receipt
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          mkdir -p diagnostics
+          printf '{"schemaVersion":"1.0","repository":"EVAVO-STUDIO/evavo-worker-agent","sha":"%s","workflow":"growth-zero-cost-source-selection.yml","externalSpend":"disabled","deployment":"disabled"}\n' "$EXPECTED_SHA" > diagnostics/growth-zero-cost-receipt.json
+
+      - name: Upload bounded source-selection evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: growth-zero-cost-${{ inputs.expected_sha }}
+          path: diagnostics/growth-zero-cost-receipt.json
+          if-no-files-found: error
+          retention-days: 14

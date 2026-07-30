@@ -1,22 +1,29 @@
 {
   "schemaVersion": "1.0",
+  "id": "evavo-worker-agent",
   "repository": "EVAVO-STUDIO/evavo-worker-agent",
   "defaultBranch": "main",
   "authority": "canonical-growth-research-worker",
+  "stack": "node-npm-cloudflare-worker",
   "workload": "cloudflare-worker",
   "requiredVisibility": "private",
   "packageManager": {
     "name": "npm",
+    "exactVersion": "11.16.0",
+    "lockfilePath": "package-lock.json",
     "lockfilePolicy": "committed-frozen",
     "install": "npm ci --no-audit --no-fund"
   },
   "runtime": {
-    "node": "24.x",
-    "wrangler": "4.x",
+    "node": "24.18.0",
+    "npm": "11.16.0",
+    "wrangler": "^4.66.0",
     "cloudflareWorkerName": "evavo-outbound-agent",
     "publicProductName": "EVAVO Growth Research Worker"
   },
   "validation": [
+    "node scripts/check-repository-toolchain.mjs",
+    "node scripts/test-repository-toolchain.mjs",
     "node scripts/check-worker-repository-visibility.mjs --live",
     "npm ci --no-audit --no-fund",
     "npm run check:local",
@@ -65,5 +72,10 @@
       "external-communication",
       "outbound-execution-enablement"
     ]
-  }
+  },
+  "notes": [
+    "The committed npm lockfile is authoritative and must be installed with npm ci.",
+    "Automatic workflow triggers, workflow write permissions and persisted checkout credentials remain prohibited.",
+    "A green validation result does not authorize outbound execution, Cloudflare deployment, D1 mutation, external spend or customer communication."
+  ]
 }

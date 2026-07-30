@@ -8,6 +8,7 @@ const errors = [];
 const CHECKOUT_SHA = "08eba0b27e820071cde6df949e0beb9ba4906955";
 const SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020";
 const UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02";
+const EXACT_NODE_VERSION = "24.18.0";
 const automaticEvents = Object.freeze([
   "push",
   "pull_request",
@@ -32,6 +33,8 @@ const commonRequired = Object.freeze([
   'test "$ACTUAL_SHA" = "$EXPECTED_SHA"',
   'git merge-base --is-ancestor "$EXPECTED_SHA" origin/main',
   `actions/setup-node@${SETUP_NODE_SHA} # v4.4.0`,
+  `node-version: "${EXACT_NODE_VERSION}"`,
+  "node scripts/check-repository-toolchain.mjs",
   `actions/upload-artifact@${UPLOAD_ARTIFACT_SHA} # v4.6.2`,
   "retention-days: 14",
 ]);
@@ -40,11 +43,13 @@ const workflows = Object.freeze([
   {
     label: "Worker contract workflow",
     relativePath: ".github/workflows/worker-contract.yml",
+    readOnlyRepositoryTokenAllowed: false,
     required: Object.freeze([
       "name: Worker contract",
       "group: worker-contract-${{ inputs.expected_sha }}",
-      'node-version: "24"',
       "cache: npm",
+      "cache-dependency-path: package-lock.json",
+      "node scripts/test-repository-toolchain.mjs",
       "npm ci --no-audit --no-fund",
       "npm run worker:source-secret-safety:check",
       "npm run worker:package-identity:check",
@@ -56,10 +61,10 @@ const workflows = Object.freeze([
   {
     label: "Worker repository confidentiality workflow",
     relativePath: ".github/workflows/worker-repository-confidentiality.yml",
+    readOnlyRepositoryTokenAllowed: true,
     required: Object.freeze([
       "name: Worker repository confidentiality",
       "group: worker-confidentiality-${{ inputs.expected_sha }}",
-      'node-version: "24"',
       "package-manager-cache: false",
       "GITHUB_TOKEN: ${{ github.token }}",
       "node scripts/check-worker-repository-visibility.mjs --live",
@@ -69,17 +74,37 @@ const workflows = Object.freeze([
   {
     label: "Growth zero-cost source selection workflow",
     relativePath: ".github/workflows/growth-zero-cost-source-selection.yml",
+    readOnlyRepositoryTokenAllowed: false,
     required: Object.freeze([
       "name: Growth zero-cost source selection",
       "group: growth-zero-cost-${{ inputs.expected_sha }}",
-      'node-version: "24"',
       "cache: npm",
+      "cache-dependency-path: package-lock.json",
+      "node scripts/test-repository-toolchain.mjs",
       "npm ci --ignore-scripts --no-audit --no-fund",
       "node scripts/check-growth-activity-budget.mjs",
       "node --test tests/growthActivityBudgetSettings.test.ts tests/opportunitySourceSelection.test.ts",
       "npm run typecheck",
       '"externalSpend":"disabled"',
       '"deployment":"disabled"',
+    ]),
+  },
+  {
+    label: "EVAVO mainline confirmation workflow",
+    relativePath: ".github/workflows/evavo-mainline-confirmation.yml",
+    readOnlyRepositoryTokenAllowed: true,
+    required: Object.freeze([
+      "name: EVAVO mainline confirmation",
+      "group: evavo-mainline-${{ inputs.expected_sha }}",
+      "cache: npm",
+      "cache-dependency-path: package-lock.json",
+      "node scripts/test-repository-toolchain.mjs",
+      "GITHUB_TOKEN: ${{ github.token }}",
+      "node scripts/check-worker-repository-visibility.mjs --live",
+      "npm ci --no-audit --no-fund",
+      "npm run check:local",
+      "npm exec wrangler -- deploy --dry-run",
+      '"deployment":"dry-run-only"',
     ]),
   },
 ]);
@@ -129,6 +154,9 @@ for (const contract of workflows) {
       errors.push(`${contract.label} contains mutable or unsafe token: ${token}`);
     }
   }
+  if (/^\s*node-version:\s*"24"\s*$/m.test(workflow)) {
+    errors.push(`${contract.label} contains an active floating Node.js major.`);
+  }
 
   const actionUses = [...workflow.matchAll(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)].map(
     (match) => match[1],
@@ -143,10 +171,7 @@ for (const contract of workflows) {
     }
   }
 
-  if (
-    contract.relativePath !== ".github/workflows/worker-repository-confidentiality.yml" &&
-    workflow.includes("GITHUB_TOKEN")
-  ) {
+  if (!contract.readOnlyRepositoryTokenAllowed && workflow.includes("GITHUB_TOKEN")) {
     errors.push(`${contract.label} must not request the built-in repository token.`);
   }
 }
@@ -156,11 +181,12 @@ console.log(
     {
       passed: errors.length === 0,
       activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-      contract: "worker-workflow-release-policy-v4-exact-sha",
+      contract: "worker-workflow-release-policy-v5-exact-runtime",
       guardedWorkflows: workflows.map((workflow) => workflow.relativePath),
       checkoutPinnedCommit: CHECKOUT_SHA,
       setupNodePinnedCommit: SETUP_NODE_SHA,
       uploadArtifactPinnedCommit: UPLOAD_ARTIFACT_SHA,
+      exactNodeVersion: EXACT_NODE_VERSION,
       automaticWorkflowTriggersAllowed: false,
       exactMainShaRequired: true,
       persistedCheckoutCredentialsAllowed: false,
@@ -168,7 +194,7 @@ console.log(
       oidcWritePermissionAllowed: false,
       deploymentAllowed: false,
       applicationCredentialsRequired: false,
-      builtInReadOnlyRepositoryTokenAllowedOnlyForVisibilityCheck: true,
+      builtInReadOnlyRepositoryTokenAllowedOnlyForVisibilityChecks: true,
       evidenceRetentionDays: 14,
       errors,
     },

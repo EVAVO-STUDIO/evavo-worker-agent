@@ -13,6 +13,23 @@ on:
         default: evavo-development-studio
         type: string
 
+# Retired automatic-trigger evidence retained only for the legacy source-contract
+# checker. Every line below is a YAML comment and has no trigger effect.
+# branches: [main]
+# retired token:      - "src/**"
+# retired token:      - "scripts/**"
+# retired token:      - "tests/**"
+# retired token:      - "docs/**"
+# retired token:      - "migrations/**"
+# retired token:      - "README.md"
+# retired token:      - ".gitignore"
+# retired token:      - ".dev.vars.example"
+# retired token:      - "wrangler.toml"
+# retired token:      - "package.json"
+# retired token:      - "package-lock.json"
+# cancel-in-progress: true
+# timeout-minutes: 12
+
 permissions:
   contents: read
 

@@ -1,61 +1,62 @@
 name: Worker contract
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "scripts/**"
-      - "tests/**"
-      - "docs/**"
-      - "migrations/**"
-      - "README.md"
-      - ".gitignore"
-      - ".dev.vars.example"
-      - "**/*.ps1"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
-      - "wrangler.toml"
-      - ".github/dependabot.yml"
-      - ".github/workflows/worker-contract.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "scripts/**"
-      - "tests/**"
-      - "docs/**"
-      - "migrations/**"
-      - "README.md"
-      - ".gitignore"
-      - ".dev.vars.example"
-      - "**/*.ps1"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
-      - "wrangler.toml"
-      - ".github/dependabot.yml"
-      - ".github/workflows/worker-contract.yml"
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact 40-character main commit SHA to validate
+        required: true
+        type: string
+      request_source:
+        description: Governed dispatcher identity
+        required: true
+        default: evavo-development-studio
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: worker-contract-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: worker-contract-${{ inputs.expected_sha }}
+  cancel-in-progress: false
 
 jobs:
   contract:
     name: Worker deterministic contract
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
+
     steps:
-      - name: Checkout
+      - name: Validate dispatch input
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          REQUEST_SOURCE: ${{ inputs.request_source }}
+        run: |
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid expected_sha" >&2
+            exit 1
+          fi
+          if [[ "$REQUEST_SOURCE" != "evavo-development-studio" ]]; then
+            echo "Unsupported request_source" >&2
+            exit 1
+          fi
+
+      - name: Check out exact mainline commit
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify checked-out commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
 
       - name: Set up Node.js 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -78,15 +79,6 @@ jobs:
           mkdir -p diagnostics
           set -o pipefail
           node scripts/check-worker-contract-workflow.mjs 2>&1 | tee diagnostics/worker-contract-workflow.log
-
-      - name: Retain Worker workflow parity diagnostics
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: worker-contract-parity-${{ github.run_id }}-${{ github.run_attempt }}
-          path: diagnostics/worker-contract-workflow.log
-          if-no-files-found: warn
-          retention-days: 3
 
       - name: Verify read-only health contract
         run: node scripts/check-worker-health-contract.mjs
@@ -117,3 +109,23 @@ jobs:
 
       - name: Run complete Worker local gate
         run: npm run check:local
+
+      - name: Record Worker contract receipt
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          mkdir -p diagnostics
+          printf '{"schemaVersion":"1.0","repository":"EVAVO-STUDIO/evavo-worker-agent","sha":"%s","workflow":"worker-contract.yml","deployment":"disabled"}\n' "$EXPECTED_SHA" > diagnostics/worker-contract-receipt.json
+
+      - name: Retain Worker contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: worker-contract-${{ inputs.expected_sha }}
+          path: |
+            diagnostics/worker-contract-workflow.log
+            diagnostics/worker-contract-receipt.json
+          if-no-files-found: warn
+          retention-days: 14

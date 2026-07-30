@@ -58,11 +58,18 @@ jobs:
           test "$ACTUAL_SHA" = "$EXPECTED_SHA"
           git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
 
-      - name: Setup Node
+      - name: Set up exact Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "24"
+          node-version: "24.18.0"
           cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Verify exact repository toolchain
+        run: node scripts/check-repository-toolchain.mjs
+
+      - name: Run repository toolchain adversarial fixtures
+        run: node scripts/test-repository-toolchain.mjs
 
       - name: Install dependencies without lifecycle scripts
         run: npm ci --ignore-scripts --no-audit --no-fund

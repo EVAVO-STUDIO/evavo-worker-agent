@@ -27,6 +27,7 @@ on:
 # retired token:      - "wrangler.toml"
 # retired token:      - "package.json"
 # retired token:      - "package-lock.json"
+# retired token: node-version: "24"
 # cancel-in-progress: true
 # timeout-minutes: 12
 
@@ -75,11 +76,18 @@ jobs:
           test "$ACTUAL_SHA" = "$EXPECTED_SHA"
           git merge-base --is-ancestor "$EXPECTED_SHA" origin/main
 
-      - name: Set up Node.js 24
+      - name: Set up exact Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "24"
+          node-version: "24.18.0"
           cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Verify exact repository toolchain
+        run: node scripts/check-repository-toolchain.mjs
+
+      - name: Run repository toolchain adversarial fixtures
+        run: node scripts/test-repository-toolchain.mjs
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund

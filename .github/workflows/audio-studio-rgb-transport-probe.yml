@@ -20,34 +20,66 @@ jobs:
       EXPECTED_CHUNK_BYTES: "599427"
     steps:
       - name: Decode and checksum the transported pixels
+        id: decode
+        shell: bash
+        run: |
+          set -u
+          exact=false
+          diagnostic=""
+          if ! python -m pip install --disable-pip-version-check pillow==11.3.0 >/tmp/pip.log 2>&1; then
+            diagnostic="Pillow installation failed"
+          elif ! curl --fail --location --silent --show-error "$IMAGE_URL" --output /tmp/chunk.png 2>/tmp/curl.log; then
+            diagnostic="Image download failed"
+          else
+            python - <<'PY' > /tmp/result.json
+          from PIL import Image
+          import hashlib, json, os
+          try:
+              image = Image.open('/tmp/chunk.png').convert('RGB')
+              raw = image.tobytes()[:int(os.environ['EXPECTED_CHUNK_BYTES'])]
+              actual = hashlib.sha256(raw).hexdigest()
+              result = {
+                  'schema': 'evavo-audio-studio-rgb-transport-probe-v1',
+                  'status': 'passed' if actual == os.environ['EXPECTED_CHUNK_SHA256'] else 'failed',
+                  'width': image.width,
+                  'height': image.height,
+                  'decodedBytes': len(raw),
+                  'expectedSha256': os.environ['EXPECTED_CHUNK_SHA256'],
+                  'actualSha256': actual,
+                  'exact': actual == os.environ['EXPECTED_CHUNK_SHA256'],
+              }
+          except Exception as exc:
+              result = {
+                  'schema': 'evavo-audio-studio-rgb-transport-probe-v1',
+                  'status': 'failed',
+                  'exact': False,
+                  'diagnostic': f'{type(exc).__name__}: {exc}',
+              }
+          print(json.dumps(result, indent=2))
+          PY
+            exact="$(python -c 'import json; print(str(json.load(open("/tmp/result.json"))["exact"]).lower())')"
+          fi
+          if [ ! -s /tmp/result.json ]; then
+            python - "$diagnostic" <<'PY' > /tmp/result.json
+          import json, sys
+          print(json.dumps({'schema':'evavo-audio-studio-rgb-transport-probe-v1','status':'failed','exact':False,'diagnostic':sys.argv[1]}, indent=2))
+          PY
+          fi
+          echo "exact=$exact" >> "$GITHUB_OUTPUT"
+
+      - name: Publish immutable transport receipt
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check pillow==11.3.0
-          curl --fail --location --silent --show-error "$IMAGE_URL" --output /tmp/chunk.png
-          python - <<'PY' > /tmp/result.json
-          from PIL import Image
-          import hashlib, json, os
-          image = Image.open('/tmp/chunk.png').convert('RGB')
-          raw = image.tobytes()[:int(os.environ['EXPECTED_CHUNK_BYTES'])]
-          actual = hashlib.sha256(raw).hexdigest()
-          result = {
-              'schema': 'evavo-audio-studio-rgb-transport-probe-v1',
-              'status': 'passed' if actual == os.environ['EXPECTED_CHUNK_SHA256'] else 'failed',
-              'width': image.width,
-              'height': image.height,
-              'decodedBytes': len(raw),
-              'expectedSha256': os.environ['EXPECTED_CHUNK_SHA256'],
-              'actualSha256': actual,
-              'exact': actual == os.environ['EXPECTED_CHUNK_SHA256'],
-          }
-          print(json.dumps(result, indent=2))
-          if not result['exact']:
-              raise SystemExit(1)
-          PY
           receipt_path=".evavo-confirmation/audio-studio-rgb-probe-${GITHUB_SHA}.json"
           content="$(base64 -w0 /tmp/result.json)"
           gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${receipt_path}" \
             -f message="ci: record Audio Studio RGB transport probe" \
             -f content="$content" \
             -f branch=main >/dev/null
+
+      - name: Enforce byte-exact transport
+        if: always()
+        shell: bash
+        run: test "${{ steps.decode.outputs.exact }}" = "true"

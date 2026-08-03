@@ -1,0 +1,10 @@
+{
+  "schema": "evavo-audio-studio-rgb-transport-probe-v1",
+  "status": "failed",
+  "width": 447,
+  "height": 447,
+  "decodedBytes": 599427,
+  "expectedSha256": "a6cecbb07b0127c329addac6ba7c450d5206af3dba838f527fdc139f92f74723",
+  "actualSha256": "23ed9528d6c487696cc5f8c574f86416d76e6aaa129ca600be0a172b1f1155e4",
+  "exact": false
+}

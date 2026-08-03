@@ -1,0 +1,13 @@
+{
+  "schema": "evavo-audio-studio-calibrated-transport-probe-v1",
+  "status": "failed",
+  "width": 447,
+  "height": 447,
+  "decodedBytes": 146784,
+  "maximumCentroidDistance": 134.63929748535156,
+  "meanCentroidDistance": 41.52117156982422,
+  "minimumCentroidSeparation": 1.8435513973236084,
+  "expectedSha256": "afa2baa911e24ac586c0f7adb82d2437eaa28b2f5b2cca0437d379467d7d0950",
+  "actualSha256": "18bdcfb774d2ae9336a66b40a830b713782e22c2496a8412ae04d729ac8e189d",
+  "exact": false
+}

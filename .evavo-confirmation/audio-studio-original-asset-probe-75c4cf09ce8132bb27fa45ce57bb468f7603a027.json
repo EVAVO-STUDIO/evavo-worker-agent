@@ -1,0 +1,10 @@
+{
+  "schema": "evavo-audio-studio-original-asset-transport-probe-v1",
+  "status": "passed",
+  "width": 200,
+  "height": 200,
+  "decodedBytes": 120000,
+  "expectedSha256": "c442008f9f234c90e41452d5b597a21b03d0199b1a267c1aa607e34a3f30f352",
+  "actualSha256": "c442008f9f234c90e41452d5b597a21b03d0199b1a267c1aa607e34a3f30f352",
+  "exact": true
+}

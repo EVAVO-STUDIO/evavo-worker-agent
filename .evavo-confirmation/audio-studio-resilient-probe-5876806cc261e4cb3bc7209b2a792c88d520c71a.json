@@ -1,0 +1,12 @@
+{
+  "schema": "evavo-audio-studio-resilient-transport-probe-v1",
+  "status": "failed",
+  "width": 447,
+  "height": 447,
+  "decodedBytes": 149856,
+  "maximumLevelDistance": 42,
+  "meanLevelDistance": 21.094713784998007,
+  "expectedSha256": "d6e2d1de749be59d7e25c31959c63ebbd5bd6a3511962a821e3e8efae89693d7",
+  "actualSha256": "420481d29e9f1af0a36adae75cbccdb99f0564ede88ab294acae7e8a66e32ed3",
+  "exact": false
+}

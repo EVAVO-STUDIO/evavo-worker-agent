@@ -1,4 +1,4 @@
-name: Audio Studio calibrated transport probe
+name: Audio Studio original-asset transport probe
 
 on:
   push:
@@ -15,69 +15,42 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
-      IMAGE_URL: https://res.cloudinary.com/dntogqtey/image/upload/v1785752680/audio-calibrated-test-00.png
-      EXPECTED_CHUNK_SHA256: afa2baa911e24ac586c0f7adb82d2437eaa28b2f5b2cca0437d379467d7d0950
-      EXPECTED_CHUNK_BYTES: "146784"
-      CALIBRATION_PIXELS: "4096"
+      IMAGE_URL: https://res.cloudinary.com/dntogqtey/image/upload/v1785752881/audio-native-200-test.png
+      EXPECTED_CHUNK_SHA256: c442008f9f234c90e41452d5b597a21b03d0199b1a267c1aa607e34a3f30f352
+      EXPECTED_CHUNK_BYTES: "120000"
     steps:
-      - name: Learn the colour transform, decode and checksum
+      - name: Decode and checksum the original-asset pixels
         id: decode
         shell: bash
         run: |
           set -u
           exact=false
           diagnostic=""
-          if ! python -m pip install --disable-pip-version-check pillow==11.3.0 numpy==2.2.6 >/tmp/pip.log 2>&1; then
+          if ! python -m pip install --disable-pip-version-check pillow==11.3.0 >/tmp/pip.log 2>&1; then
             diagnostic="Decoder dependency installation failed"
           elif ! curl --fail --location --silent --show-error "$IMAGE_URL" --output /tmp/chunk.png 2>/tmp/curl.log; then
             diagnostic="Image download failed"
           else
             python - <<'PY' > /tmp/result.json
           from PIL import Image
-          import hashlib, itertools, json, os, numpy as np
+          import hashlib, json, os
           try:
               image = Image.open('/tmp/chunk.png').convert('RGB')
-              pixels = np.asarray(image, dtype=np.float32).reshape(-1, 3)
-              calibration_count = int(os.environ['CALIBRATION_PIXELS'])
-              calibration = pixels[:calibration_count]
-              # The source calibration contains all 64 RGB level combinations, each repeated 64 times.
-              centroids = calibration.reshape(64, 64, 3).mean(axis=1)
-              payload = pixels[calibration_count:]
-              # Process in bounded blocks to avoid a large distance tensor.
-              labels = []
-              minimum_distances = []
-              for start in range(0, len(payload), 8192):
-                  block = payload[start:start + 8192]
-                  distances = ((block[:, None, :] - centroids[None, :, :]) ** 2).sum(axis=2)
-                  nearest = distances.argmin(axis=1).astype(np.uint8)
-                  labels.append(nearest)
-                  minimum_distances.append(np.sqrt(distances[np.arange(len(block)), nearest]))
-              labels = np.concatenate(labels)
-              minimum_distances = np.concatenate(minimum_distances)
-              symbols = np.empty(labels.size * 3, dtype=np.uint8)
-              symbols[0::3] = labels // 16
-              symbols[1::3] = (labels // 4) % 4
-              symbols[2::3] = labels % 4
-              usable = symbols[:(symbols.size // 4) * 4].reshape(-1, 4)
-              decoded = ((usable[:, 0] << 6) | (usable[:, 1] << 4) | (usable[:, 2] << 2) | usable[:, 3]).astype(np.uint8).tobytes()
-              raw = decoded[:int(os.environ['EXPECTED_CHUNK_BYTES'])]
+              raw = image.tobytes()[:int(os.environ['EXPECTED_CHUNK_BYTES'])]
               actual = hashlib.sha256(raw).hexdigest()
               result = {
-                  'schema': 'evavo-audio-studio-calibrated-transport-probe-v1',
+                  'schema': 'evavo-audio-studio-original-asset-transport-probe-v1',
                   'status': 'passed' if actual == os.environ['EXPECTED_CHUNK_SHA256'] else 'failed',
                   'width': image.width,
                   'height': image.height,
                   'decodedBytes': len(raw),
-                  'maximumCentroidDistance': float(minimum_distances.max()),
-                  'meanCentroidDistance': float(minimum_distances.mean()),
-                  'minimumCentroidSeparation': float(min(np.linalg.norm(centroids[i] - centroids[j]) for i in range(64) for j in range(i + 1, 64))),
                   'expectedSha256': os.environ['EXPECTED_CHUNK_SHA256'],
                   'actualSha256': actual,
                   'exact': actual == os.environ['EXPECTED_CHUNK_SHA256'],
               }
           except Exception as exc:
               result = {
-                  'schema': 'evavo-audio-studio-calibrated-transport-probe-v1',
+                  'schema': 'evavo-audio-studio-original-asset-transport-probe-v1',
                   'status': 'failed',
                   'exact': False,
                   'diagnostic': f'{type(exc).__name__}: {exc}',
@@ -89,7 +62,7 @@ jobs:
           if [ ! -s /tmp/result.json ]; then
             python - "$diagnostic" <<'PY' > /tmp/result.json
           import json, sys
-          print(json.dumps({'schema':'evavo-audio-studio-calibrated-transport-probe-v1','status':'failed','exact':False,'diagnostic':sys.argv[1]}, indent=2))
+          print(json.dumps({'schema':'evavo-audio-studio-original-asset-transport-probe-v1','status':'failed','exact':False,'diagnostic':sys.argv[1]}, indent=2))
           PY
           fi
           echo "exact=$exact" >> "$GITHUB_OUTPUT"
@@ -99,14 +72,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          receipt_path=".evavo-confirmation/audio-studio-calibrated-probe-${GITHUB_SHA}.json"
+          receipt_path=".evavo-confirmation/audio-studio-original-asset-probe-${GITHUB_SHA}.json"
           content="$(base64 -w0 /tmp/result.json)"
           gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${receipt_path}" \
-            -f message="ci: record Audio Studio calibrated transport probe" \
+            -f message="ci: record Audio Studio original-asset transport probe" \
             -f content="$content" \
             -f branch=main >/dev/null
 
-      - name: Enforce byte-exact calibrated transport
+      - name: Enforce byte-exact original-asset transport
         if: always()
         shell: bash
         run: test "${{ steps.decode.outputs.exact }}" = "true"

@@ -1,0 +1,53 @@
+name: Audio Studio RGB transport probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/audio-studio-rgb-transport-probe.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGE_URL: https://res.cloudinary.com/dntogqtey/image/upload/v1785752276/audio-rgb-chunk-00.png
+      EXPECTED_CHUNK_SHA256: a6cecbb07b0127c329addac6ba7c450d5206af3dba838f527fdc139f92f74723
+      EXPECTED_CHUNK_BYTES: "599427"
+    steps:
+      - name: Decode and checksum the transported pixels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pillow==11.3.0
+          curl --fail --location --silent --show-error "$IMAGE_URL" --output /tmp/chunk.png
+          python - <<'PY' > /tmp/result.json
+          from PIL import Image
+          import hashlib, json, os
+          image = Image.open('/tmp/chunk.png').convert('RGB')
+          raw = image.tobytes()[:int(os.environ['EXPECTED_CHUNK_BYTES'])]
+          actual = hashlib.sha256(raw).hexdigest()
+          result = {
+              'schema': 'evavo-audio-studio-rgb-transport-probe-v1',
+              'status': 'passed' if actual == os.environ['EXPECTED_CHUNK_SHA256'] else 'failed',
+              'width': image.width,
+              'height': image.height,
+              'decodedBytes': len(raw),
+              'expectedSha256': os.environ['EXPECTED_CHUNK_SHA256'],
+              'actualSha256': actual,
+              'exact': actual == os.environ['EXPECTED_CHUNK_SHA256'],
+          }
+          print(json.dumps(result, indent=2))
+          if not result['exact']:
+              raise SystemExit(1)
+          PY
+          receipt_path=".evavo-confirmation/audio-studio-rgb-probe-${GITHUB_SHA}.json"
+          content="$(base64 -w0 /tmp/result.json)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${receipt_path}" \
+            -f message="ci: record Audio Studio RGB transport probe" \
+            -f content="$content" \
+            -f branch=main >/dev/null

@@ -1,0 +1,89 @@
+name: Prettier 3.6.2 toolchain cache
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/toolchain-prettier-cache.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prettier-3.6.2-toolchain
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Cache verified Prettier 3.6.2 package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Set up exact Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.16.0"
+
+      - name: Fetch and verify exact Prettier package
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_dir=".evavo-toolchain/prettier-3.6.2"
+          archive="$output_dir/prettier-3.6.2.tgz"
+          mkdir -p "$output_dir"
+          npm pack prettier@3.6.2 --pack-destination "$output_dir" >/dev/null
+          test -f "$archive"
+
+          ARCHIVE="$archive" node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+
+          const archive = process.env.ARCHIVE;
+          const expected =
+            'I7AIg5boAr5R0FFtJ6rCfD+LFsWHp81dolrFD8S79U9tb8Az2nGrJncnMSnys+bpQJfRUzqs9hnA81OAA3hCuQ==';
+          const actual = crypto
+            .createHash('sha512')
+            .update(fs.readFileSync(archive))
+            .digest('base64');
+
+          if (actual !== expected) {
+            throw new Error('Prettier 3.6.2 integrity mismatch');
+          }
+
+          fs.writeFileSync(
+            `${archive}.sha512.json`,
+            `${JSON.stringify(
+              {
+                schemaVersion: '1.0',
+                package: 'prettier',
+                version: '3.6.2',
+                integrity: `sha512-${actual}`,
+                source: 'npm-pack',
+              },
+              null,
+              2,
+            )}\n`,
+          );
+          NODE
+
+          tar -xOf "$archive" package/package.json > "$output_dir/package.json"
+          PACKAGE_JSON="$output_dir/package.json" node <<'NODE'
+          const fs = require('node:fs');
+          const packageJson = JSON.parse(
+            fs.readFileSync(process.env.PACKAGE_JSON, 'utf8'),
+          );
+          if (packageJson.name !== 'prettier' || packageJson.version !== '3.6.2') {
+            throw new Error('Unexpected package identity');
+          }
+          NODE
+
+      - name: Upload verified formatter package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prettier-3.6.2-toolchain-${{ github.sha }}
+          path: .evavo-toolchain/prettier-3.6.2/
+          if-no-files-found: error
+          retention-days: 14

@@ -58,7 +58,8 @@ async function statusCounts(env: Env, table: "leads" | "drafts"): Promise<Record
 function extractUrl(message: string): string | null {
   const match = /(https?:\/\/[^\s)]+)(?:\s|$)/i.exec(message);
   if (!match) return null;
-  return match[1].replace(/[.,;]+$/, "");
+  return /* TODO: Add null check or use optional chaining: match?.[1]? */
+match[1].replace(/[.,;]+$/, "");
 }
 
 function repeatedFailures(events: EventRow[], threshold: number): Array<{ url: string; count: number }> {

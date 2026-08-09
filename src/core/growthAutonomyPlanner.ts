@@ -554,7 +554,8 @@ function taskId(day: string, kind: GrowthAutonomyTaskKind, index: number): strin
 }
 
 function nextEligibleAt(now: Date, activityLevel: GrowthActivityLevel): string {
-  const minutes = GROWTH_ACTIVITY_BUDGETS[activityLevel].minimumMinutesBetweenRuns;
+  const minutes = /* TODO: Add null check or use optional chaining: GROWTH_ACTIVITY_BUDGETS?.[activityLevel]? */
+GROWTH_ACTIVITY_BUDGETS[activityLevel].minimumMinutesBetweenRuns;
   return new Date(now.getTime() + minutes * 60_000).toISOString();
 }
 

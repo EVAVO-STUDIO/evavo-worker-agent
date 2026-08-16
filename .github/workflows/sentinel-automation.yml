@@ -1,317 +1,218 @@
-name: SENTINEL Full Automation & Enhancement
+name: Sentinel repository admission (read-only)
 
 on:
-  # Daily scheduled automation
-  schedule:
-    - cron: '0 1 * * *'  # 1 AM UTC daily
-    - cron: '0 13 * * *' # 1 PM UTC daily
-
-  # Manual trigger
   workflow_dispatch:
     inputs:
-      mode:
-        description: 'Automation mode'
+      expected_sha:
+        description: Exact current default-branch commit SHA to inspect
         required: true
-        default: 'full'
-        type: choice
-        options:
-          - full      # Full analysis, fixes, enhancements, commit, push
-          - analyze   # Analysis only
-          - fix       # Fixes only
-          - enhance   # Enhancements only
-          - dry-run   # See what would change without applying
+        type: string
 
-  # Trigger on push to specific branches
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - 'src/**'
-      - 'package.json'
-      - 'tsconfig.json'
+permissions:
+  contents: read
+
+concurrency:
+  group: sentinel-admission-${{ github.repository }}-${{ inputs.expected_sha }}
+  cancel-in-progress: false
 
 jobs:
-  sentinel-automation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      actions: write
+  inventory:
+    name: Collect exact architecture and repair-admission evidence
+    if: github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SENTINEL_REPORT: ${{ runner.temp }}/sentinel/repository-admission.json
 
     steps:
-      # Step 1: Checkout code
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+      - name: Validate exact default-branch authority
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_SHA" = "$SOURCE_SHA"
+          test "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH"
+
+      - name: Check out the exact source without credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          lfs: false
+          submodules: false
 
-      # Step 2: Setup Node.js
-      - name: 📦 Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Prove checked-out identity and pristine starting state
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git merge-base --is-ancestor "$EXPECTED_SHA" "origin/$DEFAULT_BRANCH"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up isolated inventory runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 22.16.0
+          package-manager-cache: false
 
-      # Step 3: Configure Git
-      - name: ⚙️ Configure Git
+      - name: Collect repository-native architecture and validation evidence
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
-          git config --local user.name "SENTINEL Bot"
-          git config --local user.email "sentinel@evavo.studio"
-          echo "Git configured: $(git config user.name)"
+          set -euo pipefail
+          mkdir -p "$(dirname "$SENTINEL_REPORT")"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
 
-      # Step 4: Pull latest
-      - name: 📥 Pull latest changes
-        run: |
-          git fetch origin
-          git pull origin main || git pull origin master || true
+          const root = process.env.GITHUB_WORKSPACE;
+          const exists = (relativePath) => fs.existsSync(path.join(root, relativePath));
+          const rootEntries = fs.readdirSync(root, { withFileTypes: true });
+          const rootFiles = rootEntries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+          const matchingRootFiles = (pattern) => rootFiles.filter((name) => pattern.test(name)).sort();
 
-      # Step 5: Install dependencies
-      - name: 📦 Install dependencies
-        run: |
-          npm ci --prefer-offline --no-audit || npm install
-          npm list --depth=0 || true
-
-      # Step 6: Run Sentinel Analysis
-      - name: 📊 Run Sentinel Analysis
-        continue-on-error: true
-        run: |
-          if [ -f ".sentinel/sentinel-orchestrator.js" ]; then
-            echo "🔍 Running Sentinel v5.0 analysis..."
-            node .sentinel/sentinel-orchestrator.js || true
-          else
-            echo "⚠️ Sentinel not found"
-          fi
-
-      # Step 7: Run Enhanced Analysis
-      - name: 🚀 Run Enhanced Analysis
-        continue-on-error: true
-        run: |
-          if [ -f ".sentinel/ENHANCED_SENTINEL_V6.js" ]; then
-            echo "🚀 Running enhanced analysis..."
-            node .sentinel/ENHANCED_SENTINEL_V6.js || true
-          fi
-
-      # Step 8: TypeScript Fixes
-      - name: 🔧 Fix TypeScript Issues
-        continue-on-error: true
-        run: |
-          echo "🔧 Fixing TypeScript..."
-          npx tsc --noEmit || true
-
-      # Step 9: Lint and Format
-      - name: 📝 Lint and Format Code
-        continue-on-error: true
-        run: |
-          if [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ]; then
-            echo "🧹 Running ESLint..."
-            npx eslint src --fix --quiet || true
-          fi
-          if [ -f ".prettierrc.json" ] || [ -f ".prettierrc" ]; then
-            echo "✨ Running Prettier..."
-            npx prettier --write "src/**/*.{ts,tsx,js,jsx,json}" || true
-          fi
-
-      # Step 10: Apply Auto-fixes
-      - name: 🔨 Apply Auto-fixes
-        continue-on-error: true
-        run: |
-          echo "🔧 Applying fixes..."
-          # Remove console.log statements
-          find src -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" \) -exec sed -i '/console\.\(log\|error\|warn\)/d' {} \; || true
-          # Fix common patterns
-          node -e "
-            const fs = require('fs');
-            const path = require('path');
-            function processDir(dir) {
-              fs.readdirSync(dir).forEach(file => {
-                const full = path.join(dir, file);
-                if (fs.statSync(full).isDirectory()) {
-                  processDir(full);
-                } else if (file.endsWith('.ts') || file.endsWith('.tsx')) {
-                  let content = fs.readFileSync(full, 'utf8');
-                  content = content.replace(/:\s*any/g, ': unknown');
-                  fs.writeFileSync(full, content);
-                }
-              });
+          let packageManifest = null;
+          let packageManifestError = null;
+          if (exists("package.json")) {
+            try {
+              packageManifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+            } catch (error) {
+              packageManifestError = error instanceof Error ? error.message : String(error);
             }
-            if (fs.existsSync('src')) processDir('src');
-          " || true
+          }
 
-      # Step 11: Documentation Updates
-      - name: 📚 Update Documentation
-        continue-on-error: true
-        run: |
-          echo "📚 Ensuring documentation..."
-          if [ ! -f "README.md" ]; then
-            echo "# $(basename $PWD)" > README.md
-            echo "" >> README.md
-            echo "## Description" >> README.md
-            echo "Project description here." >> README.md
-          fi
-          if [ ! -f "CONTRIBUTING.md" ]; then
-            echo "# Contributing" > CONTRIBUTING.md
-            echo "" >> CONTRIBUTING.md
-            echo "Please follow EVAVO standards and patterns." >> CONTRIBUTING.md
-          fi
+          const scripts = packageManifest && typeof packageManifest.scripts === "object"
+            ? packageManifest.scripts
+            : {};
+          const validationNames = ["verify", "check", "typecheck", "lint", "test", "build"];
+          const nativeValidation = Object.fromEntries(
+            Object.entries(scripts)
+              .filter(([name, command]) =>
+                validationNames.some((prefix) => name === prefix || name.startsWith(`${prefix}:`)) &&
+                typeof command === "string",
+              )
+              .sort(([left], [right]) => left.localeCompare(right)),
+          );
 
-      # Step 12: Check for changes
-      - name: 🔍 Check for changes
-        id: check_changes
-        run: |
-          if git diff --quiet; then
-            echo "HAS_CHANGES=false" >> $GITHUB_OUTPUT
-            echo "✅ No changes detected"
-          else
-            echo "HAS_CHANGES=true" >> $GITHUB_OUTPUT
-            echo "⚠️ Changes detected, will commit and push"
-          fi
+          const architectureSignals = {
+            node: ["package.json"].filter(exists),
+            monorepo: ["pnpm-workspace.yaml", "turbo.json", "nx.json", "lerna.json"].filter(exists),
+            python: ["pyproject.toml", "requirements.txt", "setup.py", "uv.lock", "poetry.lock"].filter(exists),
+            rust: ["Cargo.toml", "Cargo.lock"].filter(exists),
+            go: ["go.mod", "go.sum"].filter(exists),
+            godot: ["project.godot"].filter(exists),
+            dotnet: [...matchingRootFiles(/\.(sln|csproj|fsproj)$/i)],
+            java: ["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"].filter(exists),
+            php: ["composer.json", "composer.lock"].filter(exists),
+            ruby: ["Gemfile", "Gemfile.lock"].filter(exists),
+            swift: ["Package.swift"].filter(exists),
+            dart: ["pubspec.yaml", "pubspec.lock"].filter(exists),
+            unity: ["ProjectSettings/ProjectVersion.txt"].filter(exists),
+            unreal: matchingRootFiles(/\.uproject$/i),
+            containers: ["Dockerfile", "compose.yaml", "compose.yml", "docker-compose.yml"].filter(exists),
+          };
 
-      # Step 13: Stage changes
-      - name: 💾 Stage all changes
-        if: steps.check_changes.outputs.HAS_CHANGES == 'true'
-        run: |
-          git add -A
-          echo "Staged files:"
-          git diff --cached --name-only | head -20
+          const lockfiles = [
+            "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb",
+            "uv.lock", "poetry.lock", "Pipfile.lock", "Cargo.lock", "go.sum", "composer.lock", "Gemfile.lock",
+          ].filter(exists);
+          const legacyRuntimeFiles = [
+            ".sentinel/sentinel-orchestrator.js",
+            ".sentinel/ENHANCED_SENTINEL_V6.js",
+            ".sentinel/MASTER_MASS_ANALYSIS.js",
+          ].filter(exists);
+          const detectedArchitectures = Object.entries(architectureSignals)
+            .filter(([, evidence]) => evidence.length > 0)
+            .map(([name]) => name);
 
-      # Step 14: Commit changes
-      - name: 📝 Commit changes
-        if: steps.check_changes.outputs.HAS_CHANGES == 'true'
-        run: |
-          BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          COMMIT_COUNT=$(git diff --cached --name-only | wc -l)
-          git commit -m "chore: sentinel auto-enhancement - fixed and enhanced $COMMIT_COUNT files
+          const report = {
+            schemaVersion: "evavo.sentinel.repository-admission.v1",
+            repository: process.env.GITHUB_REPOSITORY,
+            source: {
+              branch: process.env.DEFAULT_BRANCH,
+              sha: process.env.EXPECTED_SHA,
+              workflowRunId: process.env.GITHUB_RUN_ID,
+            },
+            outcome: packageManifestError
+              ? "blocked-invalid-package-manifest"
+              : "inventory-ready-repository-specific-repair-not-authorized",
+            architecture: {
+              detected: detectedArchitectures,
+              evidence: architectureSignals,
+              packageManager: packageManifest?.packageManager ?? null,
+              nodeEngines: packageManifest?.engines ?? null,
+              lockfiles,
+            },
+            validation: {
+              repositoryNativeScripts: nativeValidation,
+              commandsExecuted: [],
+              reason: "Admission inventories commands but never executes repository code or guesses a toolchain.",
+            },
+            legacy: {
+              runtimeFiles: legacyRuntimeFiles,
+              broadAutomaticMutationQuarantined: true,
+            },
+            repairPolicy: {
+              sourceMutation: "forbidden-in-admission",
+              automaticCommit: false,
+              automaticPush: false,
+              forcePush: false,
+              stylingOrAssetChanges: false,
+              requirements: [
+                "exact failing evidence and first-cause diagnosis",
+                "repository-specific architecture and toolchain plan",
+                "bounded candidate paths with protected product surfaces",
+                "pre-change and post-change validation",
+                "atomic rollback and separately authorized publication",
+              ],
+            },
+            packageManifestError,
+          };
 
-- Auto-fixed TypeScript errors
-- Applied code formatting
-- Removed console statements
-- Updated documentation
-- Enforced code standards
-- Applied EVAVO patterns
-- Sentinel v6.0 automation" || echo "No changes to commit"
+          fs.writeFileSync(process.env.SENTINEL_REPORT, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+          NODE
 
-      # Step 15: Push changes
-      - name: 📤 Push changes to repository
-        if: steps.check_changes.outputs.HAS_CHANGES == 'true'
-        run: |
-          BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          echo "📤 Pushing to $BRANCH..."
-          git push origin $BRANCH --force-with-lease || git push origin $BRANCH || echo "Push failed - may already be up to date"
-
-      # Step 16: Create Pull Request if on develop
-      - name: 🔀 Create Pull Request
-        if: |
-          steps.check_changes.outputs.HAS_CHANGES == 'true' &&
-          github.ref != 'refs/heads/main'
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v5
-        with:
-          commit-message: 'chore: sentinel auto-enhancement PR'
-          title: '✨ SENTINEL Auto-Enhancement'
-          body: |
-            # SENTINEL Auto-Enhancement
-
-            This PR contains automatic improvements applied by SENTINEL v6.0:
-
-            - ✅ TypeScript fixes and improvements
-            - ✅ Code formatting and linting
-            - ✅ Documentation updates
-            - ✅ EVAVO pattern enforcement
-            - ✅ Code quality enhancements
-
-            Please review and merge when ready.
-
-            Generated by: SENTINEL v6.0 Full Automation
-          branch: sentinel/auto-enhancement-${{ github.run_number }}
-          delete-branch: true
-          labels: automation, sentinel, enhancement
-
-      # Step 17: Generate Report
-      - name: 📊 Generate Report
-        continue-on-error: true
-        run: |
-          echo "📊 Generating automation report..."
-          cat > automation-report.md << 'EOF'
-          # SENTINEL Automation Report
-
-          **Timestamp:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          **Repository:** ${{ github.repository }}
-          **Branch:** ${{ github.ref_name }}
-          **Commit:** ${{ github.sha }}
-
-          ## Summary
-          - Repository analyzed and enhanced
-          - TypeScript fixes applied
-          - Code formatting executed
-          - Documentation updated
-          - Changes committed and pushed
-
-          ## Next Steps
-          - Review the changes
-          - Merge if satisfied
-          - Monitor build status
-          EOF
-          cat automation-report.md
-
-      # Step 18: Upload artifacts
-      - name: 📦 Upload artifacts
+      - name: Prove admission did not mutate the repository
         if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: sentinel-automation-report
-          path: |
-            automation-report.md
-            .sentinel/reports/**
-
-      # Step 19: Notify Success
-      - name: ✅ Notify Success
-        if: success()
+        shell: bash
         run: |
-          echo "✅ SENTINEL Full Automation Completed Successfully!"
-          echo "📈 Repository enhanced and optimized"
-          echo "📤 Changes pushed to remote"
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
-      # Step 20: Notify Failure
-      - name: ❌ Notify Failure
-        if: failure()
+      - name: Summarize bounded admission evidence
+        if: always()
+        shell: bash
         run: |
-          echo "❌ SENTINEL Automation had issues"
-          echo "⚠️ Check logs above for details"
-          exit 1
-
-  # Job 2: Mass Repository Analysis (optional, runs separately)
-  mass-analysis:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'full'
-    timeout-minutes: 360
-    needs: sentinel-automation
-
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      - name: 📦 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: 🚀 Run Mass Analysis
-        continue-on-error: true
-        run: |
-          if [ -f ".sentinel/MASTER_MASS_ANALYSIS.js" ]; then
-            echo "🚀 Running mass analysis across all repositories..."
-            node .sentinel/MASTER_MASS_ANALYSIS.js || true
+          if [ -f "$SENTINEL_REPORT" ]; then
+            node -e 'const r=require(process.env.SENTINEL_REPORT); console.log(`## Sentinel repository admission\n\n- Outcome: ${r.outcome}\n- Architectures: ${r.architecture.detected.join(", ") || "unclassified"}\n- Source mutation: forbidden\n- Automatic commit/push: disabled`)' >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: 📤 Push Mass Analysis Results
-        continue-on-error: true
+      - name: Upload bounded admission evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sentinel-repository-admission-${{ inputs.expected_sha }}
+          path: ${{ runner.temp }}/sentinel/repository-admission.json
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: false
+
+      - name: Reject malformed root package metadata
+        if: always()
+        shell: bash
         run: |
-          git config --local user.name "SENTINEL Bot"
-          git config --local user.email "sentinel@evavo.studio"
-          git add .sentinel/reports/ || true
-          git commit -m "chore: sentinel mass analysis report" || true
-          git push origin main || git push origin master || true
+          if [ -f "$SENTINEL_REPORT" ]; then
+            node -e 'const r=require(process.env.SENTINEL_REPORT); if (r.packageManifestError) { console.error(r.packageManifestError); process.exit(1); }'
+          fi

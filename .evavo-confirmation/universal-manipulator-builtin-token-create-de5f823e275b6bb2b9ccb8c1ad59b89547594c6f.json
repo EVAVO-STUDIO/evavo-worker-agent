@@ -1,0 +1,20 @@
+{
+  "boundaries": {
+    "autoInitRequested": false,
+    "existingRepositoryModified": false,
+    "forcePushUsed": false,
+    "privateOnlyRequested": true,
+    "secretValuesDisclosed": false
+  },
+  "created": false,
+  "httpStatus": 403,
+  "kind": "evavo-universal-manipulator-builtin-token-create-receipt",
+  "ok": false,
+  "repository": null,
+  "safeMessage": "Resource not accessible by integration",
+  "schemaVersion": 1,
+  "sourceCommit": "de5f823e275b6bb2b9ccb8c1ad59b89547594c6f",
+  "sourceRepository": "EVAVO-STUDIO/evavo-worker-agent",
+  "targetRepository": "EVAVO-STUDIO/universal-manipulator",
+  "verifiedPrivate": false
+}

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "kind": "evavo-workstation-execution-fabric-client-v2",
+  "client": "EVAVO-STUDIO/evavo-worker-agent",
+  "canonicalContracts": {
+    "executionFabric": "EVAVO-STUDIO/evavo-development-studio:config/local-workstation-execution-fabric-v2.json",
+    "routing": "EVAVO-STUDIO/evavo-development-studio:config/workstation-agent-routing-current-v1.json",
+    "mcpIngress": "EVAVO-STUDIO/evavo-agent-infrastructure:mcp-server/local-agent-mcp-v2.mjs",
+    "brainCurrent": "EVAVO-STUDIO/the-brain:config/automation-fabric-current.json"
+  },
+  "rules": {
+    "backgroundExecutionAuthority": "EVAVO-STUDIO/evavo-local-compute",
+    "structuredRequestRequired": true,
+    "shaBoundScriptFallback": true,
+    "waitForTerminalReceipt": true,
+    "inspectStdoutStderrExitTimeout": true,
+    "newIdForCorrectedSuccessor": true,
+    "blindReplayAfterPossibleEffect": false,
+    "sameMutationRootWriters": 1,
+    "staleRepositoryWriteMustRefetch": true,
+    "foregroundHumanExperienceWins": true
+  }
+}

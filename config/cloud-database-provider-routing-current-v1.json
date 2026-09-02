@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "evavo-cloud-database-provider-routing-current-v1",
+  "owner": "EVAVO-STUDIO/evavo-worker-agent",
+  "authoritativeSources": {
+    "cloudProviders": "EVAVO-STUDIO/evavo-development-studio:config/agent-cloud-provider-capability-plane.json",
+    "connectorCatalog": "EVAVO-STUDIO/evavo-development-studio:config/agent-automation-connectors.json",
+    "databasePlanning": "EVAVO-STUDIO/the-brain:config/database-provider-routing-v1.json",
+    "databaseSandboxes": "EVAVO-STUDIO/evavo-local-compute:config/database-sandbox-registry-v1.json",
+    "execution": "EVAVO-STUDIO/evavo-local-compute"
+  },
+  "rules": {
+    "providerNativeFirst": true,
+    "credentialValuesReturned": false,
+    "readBeforeWrite": true,
+    "writeRequiresPostcondition": true,
+    "destructiveRequiresSeparateEffectLease": true,
+    "rawShellFallbackForProviderCredentialsAllowed": false,
+    "productionSchemaChangesUseProviderBranchMigrationOrSandboxFirst": true
+  }
+}

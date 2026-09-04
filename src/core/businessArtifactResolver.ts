@@ -24,6 +24,13 @@ function clean(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function normalizeSha256(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  const unprefixed = trimmed.startsWith("sha256:") ? trimmed.slice("sha256:".length) : trimmed;
+  if (!/^[a-f0-9]{64}$/.test(unprefixed)) throw new Error("ARTIFACT_CONTENT_HASH_INVALID");
+  return unprefixed;
+}
+
 export function resolveBusinessArtifact(input: Readonly<{
   requestedPurpose: string;
   requestedFilename?: string | null;
@@ -79,5 +86,6 @@ export function assertArtifactReadyForSend(resolution: ArtifactResolution): Arti
   if (!resolution.selected.current) throw new Error("ARTIFACT_NOT_CURRENT");
   if (!resolution.selected.sourceEvidenceIds.length) throw new Error("ARTIFACT_SOURCE_EVIDENCE_REQUIRED");
   if (!resolution.selected.contentHash) throw new Error("ARTIFACT_CONTENT_HASH_REQUIRED");
-  return resolution.selected;
+  const contentHash = normalizeSha256(resolution.selected.contentHash);
+  return Object.freeze({ ...resolution.selected, contentHash });
 }

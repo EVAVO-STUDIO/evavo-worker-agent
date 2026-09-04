@@ -118,7 +118,7 @@ function base(careersPort: CareersRoleTruthPort) {
       cycleId: "cycle-careers-1",
       observedAt: "2026-09-04T22:00:30.000Z",
       decisionAt: "2026-09-04T22:01:00.000Z",
-      scenario: "candidate" as const,
+      scenario: "graduate_or_candidate" as const,
       objective: "Respond accurately to a graduate candidate asking whether a role exists.",
       gmail: {
         threadId: "thread-careers-1",
@@ -149,6 +149,18 @@ function base(careersPort: CareersRoleTruthPort) {
         competingPersonIds: [],
       },
       channel: { currentChannel: "email" as const, canResolveInWriting: true },
+      candidate: {
+        relationshipId: "relationship-careers-1",
+        personId: "person-careers-1",
+        explicitRoleOpen: false,
+        activeRecruitmentProcess: false,
+        materialsSupplied: false,
+        materialsActuallyReviewed: false,
+        relevantSkillsEvidence: false,
+        futureRelevanceEvidence: false,
+        personalizedEffort: true,
+        clearFitEvidence: false,
+      },
       evidenceConfidence: 98,
     },
     context: {

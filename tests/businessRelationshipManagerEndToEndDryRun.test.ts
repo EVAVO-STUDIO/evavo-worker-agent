@@ -6,6 +6,7 @@ import { buildCommunicationDecisionPackage } from "../src/core/businessCommunica
 import { assertAuthorizedCommunicationExecutionRequest } from "../src/core/businessCommunicationExecutionRequest";
 import { reconcileAuthorizedCommunicationExecution } from "../src/core/businessCommunicationExecutionReceipt";
 import { buildCommunicationLifecycleReceipt } from "../src/core/businessCommunicationLifecycleReceipt";
+import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
 import { createCommunicationSendEnvelope } from "../src/core/businessCommunicationSendEnvelope";
 import { projectGmailThreadToCanonicalRelationshipState } from "../src/core/businessGmailRelationshipStateProjection";
 import {
@@ -47,11 +48,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     packageId: "decision-dry-run-1",
     scenario: "general",
     objective: "Answer the client's current delivery-status question using verified project evidence.",
-    thread: {
-      threadId: gmail.threadId,
-      previousState: [],
-      latestObservedState: gmail.latestObservedThreadState,
-    },
+    thread: { threadId: gmail.threadId, previousState: [], latestObservedState: gmail.latestObservedThreadState },
     obligations: gmail.obligations,
     channel: { currentChannel: "email", canResolveInWriting: true },
     evidenceIds: [...gmail.sourceEvidenceIds, "operations:project-dry-run:status"],
@@ -65,17 +62,13 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     meetingJustified: decision.meetingJustified,
     responseTargets: decision.liveResponseTargets,
     prohibitedImplications: decision.prohibitedImplications,
-    blockers: [],
-    warnings: [],
-    detectedFailureModes: [],
+    blockers: [], warnings: [], detectedFailureModes: [],
   });
   assert.equal(scenarioResult.passed, true);
 
   const material = {
     sender: "greg@evavo.com.au",
-    to: ["client@example.com"],
-    cc: [],
-    bcc: [],
+    to: ["client@example.com"], cc: [], bcc: [],
     threadId: gmail.threadId,
     replyMessageId: "gmail-message-inbound-1",
     subject: "Re: Delivery status",
@@ -95,11 +88,26 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     evidenceIds: decision.evidenceIds,
     approvalEvidenceIds: ["operator-approval:dry-run-1"],
   });
+  const operatorApproval: OperatorCommunicationApprovalReceipt = {
+    contract: "business_communication_operator_approval_v1",
+    approvalId: "operator-approval-dry-run-1",
+    authority: "human_operator",
+    approverId: "operator-dry-run",
+    approvedAt: approval.approvedAt,
+    expiresAt: approval.expiresAt,
+    materialSha256: approval.materialSha256,
+    decisionPackageId: decision.packageId,
+    senderKey: "greg",
+    mailboxKey: "greg",
+    evidenceRefs: ["operator-approval:dry-run-1"],
+    sourceSystem: "operator_approval",
+  };
 
   const executionRequest = assertAuthorizedCommunicationExecutionRequest({
     mailbox: DESIRED_EVAVO_MAILBOXES.greg,
     material,
     approval,
+    operatorApprovalReceipt: operatorApproval,
     decisionPackage: decision,
     review: {
       expectedRecipientAddresses: ["client@example.com"],
@@ -131,12 +139,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     lifecycleId: "lifecycle-dry-run-1",
     relationshipId: "relationship-client-dry-run",
     threadId: gmail.threadId,
-    decision: {
-      packageId: decision.packageId,
-      decisionAt: decision.decisionAt,
-      disposition: decision.disposition,
-      evidenceIds: decision.evidenceIds,
-    },
+    decision: { packageId: decision.packageId, decisionAt: decision.decisionAt, disposition: decision.disposition, evidenceIds: decision.evidenceIds },
     approval: {
       envelopeId: approval.envelopeId,
       approvedAt: approval.approvedAt,
@@ -160,6 +163,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     },
   });
 
+  assert.equal(executionRequest.authorization.operatorApprovalId, operatorApproval.approvalId);
   assert.equal(lifecycle.stage, "sent");
   assert.equal(lifecycle.executionVerified, true);
   assert.equal(lifecycle.communicationId, "gmail-message-synthetic-sent-1");

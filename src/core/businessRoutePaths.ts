@@ -4,6 +4,7 @@ export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN =
   "/admin/business/organizations/:organizationId/account-360" as const;
 
 export const BUSINESS_PEOPLE_PATH = "/admin/business/people" as const;
+export const BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH = "/admin/business/relationship-manager/communication-cycle" as const;
 
 export const BUSINESS_WEBSITE_AUDIT_PATHS = Object.freeze([
   "/admin/business/websites",

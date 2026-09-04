@@ -170,3 +170,20 @@ test("approval preparation rejects a routing thread that does not match the cano
 test("approval preparation rejects durable memory from a different relationship cycle", () => {
   assert.throws(() => prepare({ memoryPersistence: { ...persistence(), cycleId: "cycle-other" } }), /MEMORY_CYCLE_MISMATCH/);
 });
+
+test("approval preparation rejects a handoff that belongs to another relationship", () => {
+  const wrongHandoff = handoff();
+  const crossRelationship = {
+    ...wrongHandoff,
+    handoff: { ...wrongHandoff.handoff, relationshipId: "relationship-other" },
+    staffContext: { ...wrongHandoff.staffContext, relationshipId: "relationship-other" },
+  };
+  const wrongWritingEnvelope = {
+    ...writingEnvelope(),
+    provenance: { ...writingEnvelope().provenance, relationshipId: "relationship-other" },
+  };
+  assert.throws(() => prepare({
+    handoff: crossRelationship,
+    writingEnvelope: wrongWritingEnvelope,
+  }), /RELATIONSHIP_MISMATCH/);
+});

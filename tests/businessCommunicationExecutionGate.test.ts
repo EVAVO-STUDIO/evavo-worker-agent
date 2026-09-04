@@ -13,7 +13,7 @@ const material = {
   threadId: "thread-1",
   replyMessageId: "message-1",
   subject: "Re: Graduate enquiry",
-  body: "Hi Ashley,\n\nThanks for getting in touch. We are not advertising a graduate role at the moment, but I appreciate you reaching out.\n\nKind regards,\nGreg",
+  body: "Hi Ashley,\n\nThanks for getting in touch. I don't have a confirmed current graduate opening I can accurately point you to, but I appreciate you reaching out.\n\nKind regards,\nGreg",
   attachments: [],
 } as const;
 
@@ -29,8 +29,8 @@ function approval() {
 
 const review = {
   expectedRecipientAddresses: ["ashley@example.com"],
-  prohibitedClaims: ["we are hiring"],
-  requiredPoints: ["not advertising a graduate role"],
+  prohibitedClaims: ["we are hiring", "we are not hiring"],
+  requiredPoints: ["confirmed current graduate opening"],
   referencedAttachmentNames: [],
   suppressionActive: false,
 };
@@ -45,6 +45,7 @@ test("exact approved material can pass when runtime sending is explicitly enable
     now: new Date("2026-09-04T01:30:00Z"),
   });
   assert.equal(result.allowed, true);
+  assert.equal(result.approvalContextValid, true);
 });
 
 test("runtime sending remains a distinct hard gate", () => {
@@ -92,4 +93,51 @@ test("post-approval body mutation blocks execution", () => {
   });
   assert.equal(result.allowed, false);
   assert.ok(result.reasons.includes("approved_material_changed"));
+});
+
+test("new recipient reply after approval invalidates execution even when approved material is unchanged", () => {
+  const result = evaluateCommunicationExecutionGate({
+    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
+    material,
+    approval: approval(),
+    review,
+    runtimeSendingEnabled: true,
+    contextChangesSinceDecision: [
+      {
+        id: "message-2",
+        occurredAt: "2026-09-04T01:10:00Z",
+        kind: "thread_message",
+        material: true,
+        summary: "Ashley sent another message with additional information.",
+        evidenceIds: ["gmail:message-2"],
+      },
+    ],
+    now: new Date("2026-09-04T01:30:00Z"),
+  });
+  assert.equal(result.allowed, false);
+  assert.equal(result.approvalValid, true);
+  assert.equal(result.approvalContextValid, false);
+  assert.ok(result.reasons.some((reason) => reason.includes("new_material_context:thread_message:message-2")));
+});
+
+test("non-material telemetry after approval does not invalidate execution", () => {
+  const result = evaluateCommunicationExecutionGate({
+    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
+    material,
+    approval: approval(),
+    review,
+    runtimeSendingEnabled: true,
+    contextChangesSinceDecision: [
+      {
+        id: "telemetry-1",
+        occurredAt: "2026-09-04T01:10:00Z",
+        kind: "other",
+        material: false,
+        summary: "Non-material internal telemetry changed.",
+        evidenceIds: ["worker:telemetry-1"],
+      },
+    ],
+    now: new Date("2026-09-04T01:30:00Z"),
+  });
+  assert.equal(result.allowed, true);
 });

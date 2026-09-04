@@ -53,6 +53,7 @@ test("builds one approval-grade decision context from current relationship evide
       ],
     },
   });
+  assert.equal(result.contract, "business_relationship_decision_context_v2");
   assert.equal(result.approvalGradeReady, true);
   assert.equal(result.staffBrief.materialChanges.length, 1);
   assert.equal(result.resolutionPlan.ready, true);
@@ -76,4 +77,55 @@ test("stale approval-critical evidence makes the canonical decision context not 
   assert.equal(result.approvalGradeReady, false);
   assert.ok(result.staffBrief.mustVerify.some((item) => /refresh stale gmail/i.test(item)));
   assert.ok(result.resolutionPlan.orderedSources.includes("gmail"));
+});
+
+test("stale calendar evidence does not block an ordinary email decision by default", () => {
+  const result = buildRelationshipDecisionContext({
+    objective: "Respond to the graduate enquiry without proposing a meeting.",
+    relationship: {
+      ...relationship,
+      evidenceItems: [
+        ...relationship.evidenceItems,
+        {
+          id: "calendar-old",
+          domain: "calendar" as const,
+          summary: "Old calendar snapshot unrelated to this response.",
+          status: "current" as const,
+          authority: "canonical" as const,
+          observedAt: "2026-09-04T09:00:00+10:00",
+          sourceRefs: ["calendar:snapshot:old"],
+        },
+      ],
+    },
+  });
+  assert.equal(result.approvalGradeReady, true);
+  const calendar = result.freshness.findings.find((item) => item.domain === "calendar");
+  assert.equal(calendar?.stale, true);
+  assert.equal(calendar?.relevant, false);
+  assert.equal(calendar?.blocking, false);
+});
+
+test("calendar freshness blocks when scheduling is explicitly part of the decision", () => {
+  const result = buildRelationshipDecisionContext({
+    objective: "Offer a verified meeting time.",
+    requiredFreshnessDomains: ["identity", "gmail", "calendar"],
+    relationship: {
+      ...relationship,
+      evidenceItems: [
+        ...relationship.evidenceItems,
+        {
+          id: "calendar-old",
+          domain: "calendar" as const,
+          summary: "Calendar availability snapshot.",
+          status: "current" as const,
+          authority: "canonical" as const,
+          observedAt: "2026-09-04T09:00:00+10:00",
+          sourceRefs: ["calendar:snapshot:old"],
+        },
+      ],
+    },
+  });
+  assert.equal(result.approvalGradeReady, false);
+  assert.ok(result.freshness.refreshDomains.includes("calendar"));
+  assert.ok(result.staffBrief.mustVerify.some((item) => /refresh stale calendar/i.test(item)));
 });

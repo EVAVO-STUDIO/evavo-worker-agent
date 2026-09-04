@@ -1,9 +1,10 @@
-export const BUSINESS_RELATIONSHIP_SOURCE_READINESS_CONTRACT = "business_relationship_source_readiness_v1" as const;
+export const BUSINESS_RELATIONSHIP_SOURCE_READINESS_CONTRACT = "business_relationship_source_readiness_v2" as const;
 
 export type RelationshipSourceDomain =
   | "identity"
   | "gmail"
   | "operations"
+  | "careers"
   | "support"
   | "document"
   | "calendar"

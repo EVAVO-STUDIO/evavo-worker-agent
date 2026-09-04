@@ -181,8 +181,9 @@ function approvalInputs(canonical = canonicalCycle()) {
 test("canonical approval path creates only a persistence-ready immutable candidate", () => {
   const canonical = canonicalCycle();
   const result = prepareCanonicalRelationshipManagerCommunicationForApproval(approvalInputs(canonical));
-  assert.equal(result.contract, "business_relationship_manager_canonical_approval_runtime_v2");
+  assert.equal(result.contract, "business_relationship_manager_canonical_approval_runtime_v3");
   assert.equal(result.canonicalCycleId, canonical.cycle.cycleId);
+  assert.equal(result.candidatePolicyBound, false);
   assert.equal(result.externalEffectPerformed, false);
   assert.equal(result.preparation.readyForCandidatePersistence, true);
   assert.equal(result.preparation.readyForHumanApproval, false);

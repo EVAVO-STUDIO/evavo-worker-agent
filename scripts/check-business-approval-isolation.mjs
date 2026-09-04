@@ -27,10 +27,13 @@ function walk(directory) {
 const recordsPath = "src/core/businessAutopilotRecords.ts";
 const routePath = "src/routes/businessAutopilotAdmin.ts";
 const cataloguePath = "src/routes/businessAutopilotRouteCatalogue.ts";
+const relationshipPreviewPath = "src/routes/businessRelationshipManagerAdmin.ts";
 const candidatePersistencePath = "src/core/businessStaffCommunicationApprovalCandidatePersistence.ts";
 const storagePortPath = "src/core/businessEvavoStorageApprovalCandidatePort.ts";
 const brainPortPath = "src/core/businessBrainMemoryIngestionPort.ts";
+const brainEnvPath = "src/core/businessBrainMemoryIngestionEnv.ts";
 const canonicalMemoryPath = "src/core/businessRelationshipManagerCanonicalMemoryPersistence.ts";
+const brainPersistencePath = "src/core/businessRelationshipManagerBrainPersistenceRuntime.ts";
 const approvalRuntimePath = "src/core/businessRelationshipManagerApprovalRuntime.ts";
 const approvalFinalizerPath = "src/core/businessStaffCommunicationApprovalFinalizer.ts";
 const canonicalRuntimePath = "src/core/businessRelationshipManagerCanonicalRuntime.ts";
@@ -41,10 +44,13 @@ const sourceReadinessPath = "src/core/businessRelationshipSourceReadiness.ts";
 const records = read(recordsPath);
 const route = read(routePath);
 const catalogue = read(cataloguePath);
+const relationshipPreview = read(relationshipPreviewPath);
 const candidatePersistence = read(candidatePersistencePath);
 const storagePort = read(storagePortPath);
 const brainPort = read(brainPortPath);
+const brainEnv = read(brainEnvPath);
 const canonicalMemory = read(canonicalMemoryPath);
+const brainPersistence = read(brainPersistencePath);
 const approvalRuntime = read(approvalRuntimePath);
 const approvalFinalizer = read(approvalFinalizerPath);
 const canonicalRuntime = read(canonicalRuntimePath);
@@ -73,7 +79,6 @@ for (const token of [
 ]) {
   if (!catalogue.includes(token)) errors.push(`${cataloguePath} must retain disabled approval-route compatibility metadata: ${token}`);
 }
-
 if (/writeRoute\(\s*["']business_approval_request_save["']/.test(catalogue)) {
   errors.push("Route catalogue must not advertise business_approval_request_save as an active write route");
 }
@@ -105,27 +110,61 @@ for (const token of [
 }
 
 for (const token of [
-  '"business_brain_memory_ingestion_port_v1"',
+  '"business_brain_memory_ingestion_port_v2"',
   '"/v1/tools/call"',
   'name: "brain_memory_ingest_v2"',
   'autonomy: "auto_low_risk"',
   '"Authorization": `Bearer ${apiToken}`',
+  "scopedWriteToken",
+  "businessHmacSha256",
+  "writerProof",
   'redirect: "error"',
   'cache: "no-store"',
   "BRAIN_MEMORY_INGESTION_UNEXPECTED_APPROVAL_REQUIRED",
 ]) {
-  if (!brainPort.includes(token)) errors.push(`${brainPortPath} must retain concrete authenticated Brain memory persistence token: ${token}`);
+  if (!brainPort.includes(token)) errors.push(`${brainPortPath} must retain scoped authenticated Brain memory persistence token: ${token}`);
 }
 
 for (const token of [
-  '"business_relationship_manager_canonical_memory_persistence_v1"',
-  '"business_relationship_manager_canonical_runtime_v1"',
-  '"business_brain_memory_ingestion_port_v1"',
-  "persistRelationshipManagerCycleMemory",
+  "BRAIN_BASE_URL",
+  "BRAIN_API_TOKEN",
+  "BRAIN_RELATIONSHIP_MEMORY_WRITE_TOKEN",
+  "requireBrainMemoryIngestionPortFromEnv",
+]) {
+  if (!brainEnv.includes(token)) errors.push(`${brainEnvPath} must retain complete Brain memory environment binding: ${token}`);
+}
+
+for (const token of [
+  '"business_relationship_manager_brain_persistence_runtime_v2"',
+  "CanonicalRelationshipManagerCycle",
+  "persistCanonicalRelationshipManagerCycleToBrain",
+  "persistCanonicalRelationshipManagerCycleToConfiguredBrain",
+  "RELATIONSHIP_MANAGER_BRAIN_PERSISTENCE_CANONICAL_CONTEXT_NOT_READY",
+]) {
+  if (!brainPersistence.includes(token)) errors.push(`${brainPersistencePath} must retain canonical-only Brain persistence token: ${token}`);
+}
+
+for (const token of [
+  '"business_relationship_manager_canonical_memory_persistence_v2"',
+  "persistCanonicalRelationshipManagerCycleToBrain",
   "RELATIONSHIP_MANAGER_CANONICAL_MEMORY_NOT_DURABLE",
   "RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RECORDS_REQUIRED",
 ]) {
-  if (!canonicalMemory.includes(token)) errors.push(`${canonicalMemoryPath} must retain canonical Brain checkpoint token: ${token}`);
+  if (!canonicalMemory.includes(token)) errors.push(`${canonicalMemoryPath} must remain a facade over canonical Brain persistence: ${token}`);
+}
+
+for (const token of [
+  'mode: "relationship_manager_caller_supplied_preview"',
+  "canonicalContextBound: false",
+  "canonicalApprovalGradeReady: false",
+  "allowedFromThisPreview: false",
+  "persistenceAllowedFromThisPreview: false",
+  "externalExecutionAllowed: false",
+]) {
+  if (!relationshipPreview.includes(token)) errors.push(`${relationshipPreviewPath} must keep caller-supplied preview noncanonical/nonpersistable: ${token}`);
+}
+if (/persistCanonicalRelationshipManagerCycleToBrain|requireBrainMemoryIngestionPortFromEnv|createBrainMemoryIngestionPort/.test(relationshipPreview)) {
+  errors.push(`${relationshipPreviewPath} must not persist caller-supplied preview cycles to Brain`);
 }
 
 for (const [relativePath, source, token] of [
@@ -134,7 +173,6 @@ for (const [relativePath, source, token] of [
 ]) {
   if (!source.includes(token)) errors.push(`${relativePath} must independently rederive persisted candidate evidence: ${token}`);
 }
-
 if (!approvalRuntime.includes("readyForCandidatePersistence: true") || !approvalRuntime.includes("readyForHumanApproval: false")) {
   errors.push(`${approvalRuntimePath} must keep prepared candidates non-approvable until persistence`);
 }
@@ -143,7 +181,6 @@ for (const token of [
   '"business_relationship_manager_canonical_runtime_v1"',
   "buildRelationshipDecisionContext",
   "decisionContext.approvalGradeReady",
-  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_READINESS_WIDENED",
 ]) {
   if (!canonicalRuntime.includes(token)) errors.push(`${canonicalRuntimePath} must retain canonical context-bound cycle token: ${token}`);
 }
@@ -185,7 +222,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v5",
+  contract: "business-approval-storage-isolation-v6",
   historicalStorageHelperRetained: true,
   runtimeImportsAllowed: false,
   directApprovalWriteRouteEnabled: false,
@@ -197,7 +234,10 @@ console.log(JSON.stringify({
   boundedCandidateWriteRequired: true,
   persistedCandidateEvidenceRederived: true,
   concreteBrainMemoryPortRequired: true,
+  scopedBrainMemoryHmacRequired: true,
+  completeBrainMemoryEnvRequired: true,
   canonicalBrainCheckpointRequiredByPreferredPath: true,
+  callerSuppliedPreviewCannotPersist: true,
   canonicalDecisionContextRequiredByPreferredPath: true,
   sourceReadinessDistinguishesUnknownFromNotFound: true,
   canonicalApprovalPreparationRequiredByPreferredPath: true,

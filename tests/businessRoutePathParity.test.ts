@@ -57,16 +57,21 @@ test("specialised Business parsers remain outside the collection guard but insid
   assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${BUSINESS_PEOPLE_PATH}?limit=25`), BUSINESS_PEOPLE_PATH, "GET")?.ok, true);
 });
 
-test("Relationship Manager communication cycle has a dedicated internal-only handler before fallback", () => {
+test("Relationship Manager communication cycle is a POST-only internal preview before fallback", () => {
   assert.equal(resolveBusinessRouteHandlerId(BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH), "relationship-manager");
   const policy = BUSINESS_ROUTE_POLICIES.find((item) => item.id === "relationship-manager");
   assert.ok(policy);
+  assert.equal(policy?.mutationPosture, "internal-preview");
+  assert.deepEqual(policy?.readMethods, []);
   assert.deepEqual(policy?.writeMethods, ["POST"]);
+  assert.equal(policy?.writeConfirmation, "not-applicable");
   assert.equal(policy?.callsExternalNetwork, false);
   assert.equal(policy?.callsAI, false);
   assert.equal(policy?.canSendEmail, false);
   assert.equal(policy?.canPostSocial, false);
   assert.equal(policy?.canSubmitForms, false);
+  assert.equal(policy?.historicalOnly, false);
+  assert.equal(policy?.retiredWritesFailClosed, false);
   const fallback = BUSINESS_ROUTE_POLICIES.find((item) => item.id === "business-fallback");
   assert.ok((policy?.priority ?? 999) < (fallback?.priority ?? 0));
 });

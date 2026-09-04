@@ -11,9 +11,10 @@ import {
   type BrainMemoryContextResponse,
 } from "./businessMemoryContextBridge";
 
-export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v3" as const;
+export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v4" as const;
 
 export type CommunicationScenario = "general" | "graduate_or_candidate";
+export type CommunicationDecisionOrigin = "direct" | "relationship_manager_cycle";
 
 export type CommunicationDecisionPackageInput = Readonly<{
   packageId: string;
@@ -30,11 +31,15 @@ export type CommunicationDecisionPackageInput = Readonly<{
   contextResolutionPlan?: RelationshipContextResolutionPlan | null;
   memoryContext?: BrainMemoryContextResponse | null;
   decisionAt?: string | null;
+  origin?: CommunicationDecisionOrigin;
+  relationshipCycleId?: string | null;
 }>;
 
 export type CommunicationDecisionPackage = Readonly<{
   contract: typeof BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT;
   packageId: string;
+  origin: CommunicationDecisionOrigin;
+  relationshipCycleId: string | null;
   scenario: CommunicationScenario;
   objective: string;
   decisionAt: string;
@@ -79,11 +84,23 @@ function memoryConflictIds(memoryContext?: BrainMemoryContextResponse | null): r
     .map((record) => record.id));
 }
 
+function decisionProvenance(input: CommunicationDecisionPackageInput): Readonly<{
+  origin: CommunicationDecisionOrigin;
+  relationshipCycleId: string | null;
+}> {
+  const origin = input.origin ?? "direct";
+  const cycleId = input.relationshipCycleId?.trim() || null;
+  if (origin === "relationship_manager_cycle" && !cycleId) throw new Error("COMMUNICATION_DECISION_RELATIONSHIP_CYCLE_ID_REQUIRED");
+  if (origin === "direct" && cycleId) throw new Error("COMMUNICATION_DECISION_DIRECT_ORIGIN_CANNOT_BIND_CYCLE");
+  return Object.freeze({ origin, relationshipCycleId: cycleId });
+}
+
 export function buildCommunicationDecisionPackage(input: CommunicationDecisionPackageInput): CommunicationDecisionPackage {
   if (!input.evidenceIds.length) throw new Error("COMMUNICATION_DECISION_EVIDENCE_REQUIRED");
   if (input.evidenceConfidence < 0 || input.evidenceConfidence > 100) throw new Error("COMMUNICATION_DECISION_CONFIDENCE_INVALID");
   if (input.memoryContext) assertMemoryContextUsable(input.memoryContext);
 
+  const provenance = decisionProvenance(input);
   const clock = resolveDecisionClock(input.decisionAt);
   const delta = buildBusinessThreadDelta(input.thread);
   const channel = decideRelationshipCommunicationChannel(input.channel);
@@ -171,6 +188,8 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT,
     packageId: input.packageId,
+    origin: provenance.origin,
+    relationshipCycleId: provenance.relationshipCycleId,
     scenario: input.scenario,
     objective: input.objective,
     decisionAt: clock.at,

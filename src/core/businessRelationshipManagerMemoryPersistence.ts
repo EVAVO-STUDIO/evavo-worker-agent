@@ -101,27 +101,25 @@ export async function persistRelationshipManagerCycleMemory(input: Readonly<{
       receipt = validateReceipt(request, await input.write(request));
     } catch (error) {
       const code = error instanceof Error ? error.message : "RELATIONSHIP_MANAGER_MEMORY_WRITE_FAILED";
-      blockers.push(`${request.observation.sourceRef}:${code}`);
+      blockers.push(`${request.requestId}:${code}`);
       continue;
     }
     receipts.push(receipt);
     if (request.observation.material && receipt.status !== "appended" && receipt.status !== "idempotent_replay") {
-      blockers.push(`${request.observation.sourceRef}:material_observation_not_durable:${receipt.status}`);
+      blockers.push(`${request.requestId}:material_observation_not_durable:${receipt.status}`);
     }
   }
 
-  const materialObservations = requests.filter((request) => request.observation.material).length;
+  const materialRequests = requests.filter((request) => request.observation.material);
   const durableReceipts = receipts.filter((receipt) => receipt.status === "appended" || receipt.status === "idempotent_replay");
-  const durableMaterialRefs = new Set(durableReceipts.map((receipt) => receipt.sourceRef));
-  const allMaterialDurable = requests
-    .filter((request) => request.observation.material)
-    .every((request) => durableMaterialRefs.has(request.observation.sourceRef));
+  const durableRequestIds = new Set(durableReceipts.map((receipt) => receipt.requestId));
+  const allMaterialDurable = materialRequests.every((request) => durableRequestIds.has(request.requestId));
 
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_MANAGER_MEMORY_PERSISTENCE_CONTRACT,
     cycleId: input.cycle.cycleId,
     durable: allMaterialDurable && blockers.length === 0,
-    materialObservations,
+    materialObservations: materialRequests.length,
     durableObservations: durableReceipts.length,
     skippedObservations: receipts.filter((receipt) => receipt.status === "skipped").length,
     rejectedObservations: receipts.filter((receipt) => receipt.status === "rejected").length + (requests.length - receipts.length),

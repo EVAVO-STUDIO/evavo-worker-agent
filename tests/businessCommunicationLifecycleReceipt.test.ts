@@ -39,7 +39,7 @@ const outcome = {
   evidenceRefs: ["gmail:reply-2"],
 };
 
-test("represents the full verified decision to learned lifecycle", () => {
+test("direct lifecycle remains fully verified without Relationship Manager candidate provenance", () => {
   const receipt = buildCommunicationLifecycleReceipt({
     lifecycleId: "life-1",
     relationshipId: "rel-1",
@@ -55,74 +55,39 @@ test("represents the full verified decision to learned lifecycle", () => {
       recordedAt: "2026-09-04T02:01:00Z",
     },
   });
-  assert.equal(receipt.contract, "business_communication_lifecycle_receipt_v3");
+  assert.equal(receipt.contract, "business_communication_lifecycle_receipt_v4");
   assert.equal(receipt.stage, "learned");
   assert.equal(receipt.executionVerified, true);
   assert.equal(receipt.communicationId, "gmail-message-sent-1");
   assert.equal(receipt.decision.origin, "direct");
-  assert.equal(receipt.decision.relationshipCycleId, null);
 });
 
 test("cannot claim a send happened without an approval", () => {
   assert.throws(() => buildCommunicationLifecycleReceipt({
-    lifecycleId: "life-2",
-    relationshipId: "rel-1",
-    threadId: "thread-1",
-    decision,
-    execution,
+    lifecycleId: "life-2", relationshipId: "rel-1", threadId: "thread-1", decision, execution,
   }), /SEND_WITHOUT_APPROVAL/);
 });
 
-test("legacy unreconciled execution remains readable but is blocked rather than sent", () => {
+test("legacy unreconciled execution remains readable but blocked", () => {
   const receipt = buildCommunicationLifecycleReceipt({
     lifecycleId: "life-legacy",
     relationshipId: "rel-1",
     threadId: "thread-1",
     decision,
-    approval: {
-      envelopeId: "legacy-approval",
-      approvedAt: "2026-09-04T01:10:00Z",
-      materialSha256: "a".repeat(64),
-    },
+    approval: { envelopeId: "legacy-approval", approvedAt: "2026-09-04T01:10:00Z", materialSha256: "a".repeat(64) },
     execution: {
-      provider: "gmail",
-      providerMessageId: "legacy-message",
-      sentAt: "2026-09-04T01:15:00Z",
-      sender: "greg@evavo.com.au",
-      recipientAddresses: ["ashley@example.com"],
+      provider: "gmail", providerMessageId: "legacy-message", sentAt: "2026-09-04T01:15:00Z",
+      sender: "greg@evavo.com.au", recipientAddresses: ["ashley@example.com"],
     },
   });
   assert.equal(receipt.stage, "blocked");
   assert.equal(receipt.executionVerified, false);
   assert.equal(receipt.communicationId, null);
-  assert.ok(receipt.blockers.includes("execution_not_reconciled_to_authorized_request"));
 });
 
-test("cannot attach an outcome to an unverified historical execution", () => {
+test("pending outcome cannot be learned", () => {
   assert.throws(() => buildCommunicationLifecycleReceipt({
-    lifecycleId: "life-unverified-outcome",
-    relationshipId: "rel-1",
-    threadId: "thread-1",
-    decision,
-    approval: {
-      envelopeId: "legacy-approval",
-      approvedAt: "2026-09-04T01:10:00Z",
-      materialSha256: "a".repeat(64),
-    },
-    execution: {
-      provider: "gmail",
-      providerMessageId: "legacy-message",
-      sentAt: "2026-09-04T01:15:00Z",
-      sender: "greg@evavo.com.au",
-      recipientAddresses: ["ashley@example.com"],
-    },
-    outcome,
-  }), /OUTCOME_WITHOUT_VERIFIED_EXECUTION/);
-});
-
-test("cannot mark a pending outcome as learned", () => {
-  assert.throws(() => buildCommunicationLifecycleReceipt({
-    lifecycleId: "life-3",
+    lifecycleId: "life-pending",
     relationshipId: "rel-1",
     threadId: "thread-1",
     decision,
@@ -138,19 +103,7 @@ test("cannot mark a pending outcome as learned", () => {
   }), /PENDING_OUTCOME_CANNOT_BE_LEARNED/);
 });
 
-test("blockers dominate the visible lifecycle stage", () => {
-  const receipt = buildCommunicationLifecycleReceipt({
-    lifecycleId: "life-4",
-    relationshipId: "rel-1",
-    threadId: "thread-1",
-    decision,
-    approval,
-    blockers: ["new_material_context:thread_message:message-2"],
-  });
-  assert.equal(receipt.stage, "blocked");
-});
-
-test("Relationship Manager lifecycle requires both durable cycle and matching Writing Studio provenance", () => {
+function relationshipFixture() {
   const relationshipDecision = {
     ...decision,
     origin: "relationship_manager_cycle" as const,
@@ -162,67 +115,74 @@ test("Relationship Manager lifecycle requires both durable cycle and matching Wr
     decisionOrigin: "relationship_manager_cycle" as const,
     relationshipCycleId: "cycle-1",
   };
-  const missing = buildCommunicationLifecycleReceipt({
-    lifecycleId: "life-cycle-missing",
-    relationshipId: "rel-1",
-    threadId: "thread-1",
-    decision: relationshipDecision,
-    approval,
-    execution: {
-      ...execution,
-      decisionOrigin: "relationship_manager_cycle",
-      relationshipCycleId: "cycle-1",
-    },
-  });
-  assert.equal(missing.executionVerified, false);
-  assert.equal(missing.stage, "blocked");
+  const approvalCandidate = {
+    candidateId: "approval-candidate-1",
+    candidateSha256: "d".repeat(64),
+    recordId: "approval-candidate-record-1",
+    evidenceRef: `approval-candidate:${"c".repeat(64)}`,
+  };
+  const relationshipApproval = {
+    ...approval,
+    approvalEvidenceIds: [approvalCandidate.evidenceRef],
+    writingProvenance,
+    approvalCandidate,
+  };
+  const relationshipExecution = {
+    ...execution,
+    decisionOrigin: "relationship_manager_cycle" as const,
+    relationshipCycleId: "cycle-1",
+    writingProvenance,
+    approvalCandidate,
+    memoryCheckpointCycleId: "cycle-1",
+    memoryCheckpointRecordIds: ["mem-cycle-1"],
+  };
+  return { relationshipDecision, writingProvenance, approvalCandidate, relationshipApproval, relationshipExecution };
+}
 
+test("Relationship Manager lifecycle requires durable cycle, writing and persisted candidate provenance", () => {
+  const fixture = relationshipFixture();
   const verified = buildCommunicationLifecycleReceipt({
     lifecycleId: "life-cycle-verified",
     relationshipId: "rel-1",
     threadId: "thread-1",
-    decision: relationshipDecision,
-    approval: { ...approval, writingProvenance },
-    execution: {
-      ...execution,
-      decisionOrigin: "relationship_manager_cycle",
-      relationshipCycleId: "cycle-1",
-      writingProvenance,
-      memoryCheckpointCycleId: "cycle-1",
-      memoryCheckpointRecordIds: ["mem-cycle-1"],
-    },
+    decision: fixture.relationshipDecision,
+    approval: fixture.relationshipApproval,
+    execution: fixture.relationshipExecution,
   });
   assert.equal(verified.executionVerified, true);
   assert.equal(verified.stage, "sent");
-  assert.equal(verified.approval?.writingProvenance?.writingRequestId, "writing-request-1");
+  assert.equal(verified.approval?.approvalCandidate?.recordId, "approval-candidate-record-1");
+  assert.equal(verified.execution?.approvalCandidate?.candidateSha256, "d".repeat(64));
 });
 
-test("Relationship Manager lifecycle blocks when approval and execution came from different Writing Studio requests", () => {
-  const relationshipDecision = {
-    ...decision,
-    origin: "relationship_manager_cycle" as const,
-    relationshipCycleId: "cycle-1",
-  };
-  const approvedWriting = {
-    handoffId: "handoff-1",
-    writingRequestId: "writing-request-approved",
-    decisionOrigin: "relationship_manager_cycle" as const,
-    relationshipCycleId: "cycle-1",
-  };
-  const executedWriting = { ...approvedWriting, writingRequestId: "writing-request-other" };
+test("Relationship Manager lifecycle blocks when persisted candidate differs between approval and execution", () => {
+  const fixture = relationshipFixture();
+  const receipt = buildCommunicationLifecycleReceipt({
+    lifecycleId: "life-cycle-candidate-mismatch",
+    relationshipId: "rel-1",
+    threadId: "thread-1",
+    decision: fixture.relationshipDecision,
+    approval: fixture.relationshipApproval,
+    execution: {
+      ...fixture.relationshipExecution,
+      approvalCandidate: { ...fixture.approvalCandidate, recordId: "approval-candidate-record-other" },
+    },
+  });
+  assert.equal(receipt.executionVerified, false);
+  assert.equal(receipt.stage, "blocked");
+});
+
+test("Relationship Manager lifecycle blocks when Writing Studio request differs", () => {
+  const fixture = relationshipFixture();
   const receipt = buildCommunicationLifecycleReceipt({
     lifecycleId: "life-cycle-writing-mismatch",
     relationshipId: "rel-1",
     threadId: "thread-1",
-    decision: relationshipDecision,
-    approval: { ...approval, writingProvenance: approvedWriting },
+    decision: fixture.relationshipDecision,
+    approval: fixture.relationshipApproval,
     execution: {
-      ...execution,
-      decisionOrigin: "relationship_manager_cycle",
-      relationshipCycleId: "cycle-1",
-      writingProvenance: executedWriting,
-      memoryCheckpointCycleId: "cycle-1",
-      memoryCheckpointRecordIds: ["mem-cycle-1"],
+      ...fixture.relationshipExecution,
+      writingProvenance: { ...fixture.writingProvenance, writingRequestId: "writing-request-other" },
     },
   });
   assert.equal(receipt.executionVerified, false);

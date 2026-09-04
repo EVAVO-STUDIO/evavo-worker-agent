@@ -25,6 +25,8 @@ const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     decisionPackageId: "decision-1",
     decisionEvidenceIds: Object.freeze(["gmail:message:gmail-message-1"]),
     approvalEvidenceIds: Object.freeze(["operator-approval:approval-1"]),
+    operatorApprovalId: "operator-approval-1",
+    operatorApprovalSource: "operator_approval",
     approvedBy: "greg",
     approvedAt: "2026-09-04T01:05:00.000Z",
     expiresAt: "2026-09-04T02:05:00.000Z",
@@ -52,32 +54,21 @@ test("observed Gmail send reconciles to the exact authorized request", () => {
   assert.equal(receipt.providerThreadId, request.threadId);
   assert.equal(receipt.authorization.materialSha256, request.authorization.materialSha256);
   assert.equal(receipt.authorization.approvalBindingSha256, request.authorization.approvalBindingSha256);
+  assert.equal(receipt.authorization.operatorApprovalId, "operator-approval-1");
 });
 
 test("wrong thread fails closed", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({
-    request,
-    observed: observed({ providerThreadId: "gmail-thread-other" }),
-  }), /COMMUNICATION_EXECUTION_RECEIPT_THREAD_MISMATCH/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ providerThreadId: "gmail-thread-other" }) }), /COMMUNICATION_EXECUTION_RECEIPT_THREAD_MISMATCH/);
 });
 
 test("recipient drift in provider result fails closed", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({
-    request,
-    observed: observed({ to: ["other@example.com"] }),
-  }), /COMMUNICATION_EXECUTION_RECEIPT_TO_MISMATCH/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ to: ["other@example.com"] }) }), /COMMUNICATION_EXECUTION_RECEIPT_TO_MISMATCH/);
 });
 
 test("send observed at or after approval expiry fails closed", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({
-    request,
-    observed: observed({ sentAt: request.authorization.expiresAt }),
-  }), /COMMUNICATION_EXECUTION_RECEIPT_AFTER_APPROVAL_EXPIRY/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sentAt: request.authorization.expiresAt }) }), /COMMUNICATION_EXECUTION_RECEIPT_AFTER_APPROVAL_EXPIRY/);
 });
 
 test("provider message ID must be backed by returned source evidence", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({
-    request,
-    observed: observed({ sourceEvidenceRefs: ["gmail:message:other"] }),
-  }), /COMMUNICATION_EXECUTION_RECEIPT_MESSAGE_EVIDENCE_MISSING/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sourceEvidenceRefs: ["gmail:message:other"] }) }), /COMMUNICATION_EXECUTION_RECEIPT_MESSAGE_EVIDENCE_MISSING/);
 });

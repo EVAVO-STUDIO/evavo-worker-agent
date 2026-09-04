@@ -197,13 +197,17 @@ export function mergeBusinessObligations(existing: readonly BusinessObligation[]
     }
     const sameIdentity = prior.owner === checked.owner && prior.statement === checked.statement && prior.createdAt === checked.createdAt;
     if (!sameIdentity) throw new Error(`OBLIGATION_ID_CONFLICT:${checked.id}`);
+    const stateChanged = prior.status !== checked.status || prior.supersededById !== checked.supersededById;
+    if (prior.lastTransitionAt && stateChanged && !checked.lastTransitionAt) {
+      throw new Error(`OBLIGATION_STATE_CHRONOLOGY_MISSING:${checked.id}`);
+    }
     if (prior.lastTransitionAt && checked.lastTransitionAt && checked.lastTransitionAt < prior.lastTransitionAt) {
       throw new Error(`OBLIGATION_STATE_REGRESSION:${checked.id}`);
     }
     const priorEvidence = new Set(prior.sourceEvidenceIds);
     const addsEvidence = checked.sourceEvidenceIds.some((id) => !priorEvidence.has(id));
     if (addsEvidence) byId.set(checked.id, validate({ ...checked, sourceEvidenceIds: [...prior.sourceEvidenceIds, ...checked.sourceEvidenceIds] }));
-    else if (prior.status !== checked.status || prior.lastTransitionAt !== checked.lastTransitionAt) byId.set(checked.id, checked);
+    else if (stateChanged || prior.lastTransitionAt !== checked.lastTransitionAt) byId.set(checked.id, checked);
   }
   return Object.freeze([...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)));
 }

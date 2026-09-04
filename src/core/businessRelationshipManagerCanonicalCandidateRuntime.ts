@@ -41,7 +41,7 @@ export type CanonicalRelationshipManagerCandidateResult = Readonly<{
 export async function runCanonicalRelationshipManagerCandidateResponse(
   input: CanonicalRelationshipManagerCandidateInput,
 ): Promise<CanonicalRelationshipManagerCandidateResult> {
-  if (input.sourceHydration.cycle.scenario !== "candidate") {
+  if (input.sourceHydration.cycle.scenario !== "graduate_or_candidate") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_SCENARIO_REQUIRED");
   }
   if (!input.sourceHydration.careersIdentity) {

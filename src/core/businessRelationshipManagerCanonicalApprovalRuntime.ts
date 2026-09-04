@@ -5,7 +5,7 @@ import {
 } from "./businessRelationshipManagerApprovalRuntime";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_approval_runtime_v1" as const;
+  "business_relationship_manager_canonical_approval_runtime_v2" as const;
 
 type LegacyPreparationInput = Parameters<typeof prepareRelationshipManagerCommunicationForApproval>[0];
 
@@ -22,7 +22,7 @@ export function prepareCanonicalRelationshipManagerCommunicationForApproval(
   }>,
 ): CanonicalRelationshipManagerApprovalPreparation {
   const canonical = input.canonicalCycle;
-  if (canonical.contract !== "business_relationship_manager_canonical_runtime_v1") {
+  if (canonical.contract !== "business_relationship_manager_canonical_runtime_v2") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CYCLE_CONTRACT_INVALID");
   }
   if (!canonical.approvalGradeReady || !canonical.decisionContext.approvalGradeReady || !canonical.cycle.decision.approvalGradeReady) {
@@ -39,6 +39,9 @@ export function prepareCanonicalRelationshipManagerCommunicationForApproval(
   }
   if (!canonical.decisionContext.resolutionPlan.ready) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_RESOLUTION_NOT_READY");
+  }
+  if (canonical.decisionContext.sourceReadiness && !canonical.decisionContext.sourceReadiness.ready) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_SOURCE_READINESS_NOT_READY");
   }
 
   const { canonicalCycle: _canonicalCycle, ...preparationInput } = input;

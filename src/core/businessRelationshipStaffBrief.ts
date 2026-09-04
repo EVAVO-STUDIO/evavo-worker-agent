@@ -1,12 +1,15 @@
 import type { Relationship360Context } from "./businessRelationship360Context";
+import type { RelationshipChangeDigest } from "./businessRelationshipChangeDigest";
 
-export const BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT = "business_relationship_staff_brief_v1" as const;
+export const BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT = "business_relationship_staff_brief_v2" as const;
 
 export type RelationshipStaffBrief = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT;
   relationshipId: string;
   objective: string;
   situation: string;
+  whatChanged: string;
+  materialChanges: readonly string[];
   priorities: readonly string[];
   mustVerify: readonly string[];
   mustNotAssume: readonly string[];
@@ -20,18 +23,19 @@ export type RelationshipStaffBrief = Readonly<{
 export function buildRelationshipStaffBrief(input: Readonly<{
   objective: string;
   context: Relationship360Context;
+  changes?: RelationshipChangeDigest | null;
 }>): RelationshipStaffBrief {
   const objective = input.objective.trim();
   if (!objective) throw new Error("RELATIONSHIP_STAFF_BRIEF_OBJECTIVE_REQUIRED");
   const context = input.context;
+  const changes = input.changes ?? null;
   const priorities: string[] = [];
   const mustVerify: string[] = [];
   const mustNotAssume: string[] = [];
   const risks: string[] = [];
 
-  if (context.openEvavoObligations.length) {
-    priorities.push("Address EVAVO-owned obligations before creating avoidable new communication or chasing the counterparty.");
-  }
+  if (changes?.materialChanges.length) priorities.push("Start with what materially changed since the last interaction; do not re-litigate unchanged history.");
+  if (context.openEvavoObligations.length) priorities.push("Address EVAVO-owned obligations before creating avoidable new communication or chasing the counterparty.");
   if (context.support) priorities.push("Account for active support/service context before selecting tone or making commitments.");
   if (context.commercial) priorities.push("Use current commercial truth and stay within explicit commitment authority.");
   if (context.communications) priorities.push("Answer only the live thread state; do not resurrect resolved or quoted-history items.");
@@ -48,18 +52,23 @@ export function buildRelationshipStaffBrief(input: Readonly<{
   if (context.missingCriticalContext.length) risks.push("Critical context is incomplete.");
   if (context.openEvavoObligations.length) risks.push("EVAVO already owes the relationship an action; avoid adding unnecessary communication debt.");
 
+  const materialChanges = changes?.materialChanges.map((change) => `${change.domain}: ${change.summary}`) ?? [];
+  const sourceRefs = [...new Set([...(context.evidenceRefs ?? []), ...(changes?.evidenceRefs ?? [])])];
+
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT,
     relationshipId: context.relationshipId,
     objective,
     situation: context.contextSummary,
+    whatChanged: changes?.summary ?? "No change digest was supplied; rely on the current evidence-backed situation only.",
+    materialChanges: Object.freeze(materialChanges),
     priorities: Object.freeze(priorities),
     mustVerify: Object.freeze([...new Set(mustVerify)]),
     mustNotAssume: Object.freeze([...new Set(mustNotAssume)]),
     obligationsToRespect: context.openEvavoObligations,
     priorDecisionsToRespect: context.priorDecisions,
     relationshipRisks: Object.freeze(risks),
-    sourceRefs: context.evidenceRefs,
-    approvalGradeReady: context.missingCriticalContext.length === 0 && context.conflicts.length === 0 && context.evidenceRefs.length > 0,
+    sourceRefs: Object.freeze(sourceRefs),
+    approvalGradeReady: context.missingCriticalContext.length === 0 && context.conflicts.length === 0 && sourceRefs.length > 0,
   });
 }

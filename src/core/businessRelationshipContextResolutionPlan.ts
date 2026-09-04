@@ -1,9 +1,10 @@
-export const BUSINESS_RELATIONSHIP_CONTEXT_RESOLUTION_PLAN_CONTRACT = "business_relationship_context_resolution_plan_v2" as const;
+export const BUSINESS_RELATIONSHIP_CONTEXT_RESOLUTION_PLAN_CONTRACT = "business_relationship_context_resolution_plan_v3" as const;
 
 export type RelationshipContextSource =
   | "gmail"
   | "calendar"
   | "operations_core"
+  | "careers_registry"
   | "docs_suite"
   | "support_agent"
   | "brain_memory"
@@ -41,8 +42,11 @@ function route(issue: string): RelationshipContextResolutionItem {
   if (/^document:|document|attachment|artifact|version|file|controlling/.test(text)) {
     return { issue, source: "docs_suite", purpose: "Resolve the exact canonical document/version and content identity before claiming review or attaching it.", blocking: true, evidenceRequired: true };
   }
-  if (/^operations:|operations core|project|scope|delivery|commercial|price|pricing|invoice|payment|contract|role|hiring/.test(text)) {
-    return { issue, source: "operations_core", purpose: "Retrieve canonical project, commercial, hiring or operational truth rather than infer it from correspondence.", blocking: true, evidenceRequired: true };
+  if (/^careers:|career|hiring|hire|role opening|open role|vacancy|job opening|position open/.test(text)) {
+    return { issue, source: "careers_registry", purpose: "Retrieve dedicated current careers/role-opening truth. Commercial or project state must not be used as evidence that a role exists or that EVAVO is not hiring.", blocking: true, evidenceRequired: true };
+  }
+  if (/^operations:|operations core|project|scope|delivery|commercial|price|pricing|invoice|payment|contract/.test(text)) {
+    return { issue, source: "operations_core", purpose: "Retrieve canonical project, commercial or operational truth rather than infer it from correspondence.", blocking: true, evidenceRequired: true };
   }
   if (/^support:|support|incident|ticket|service|complaint/.test(text)) {
     return { issue, source: "support_agent", purpose: "Retrieve current support/service state and relationship-risk context.", blocking: true, evidenceRequired: true };
@@ -60,6 +64,7 @@ const SOURCE_ORDER: readonly RelationshipContextSource[] = [
   "identity_directory",
   "gmail",
   "operations_core",
+  "careers_registry",
   "docs_suite",
   "support_agent",
   "calendar",

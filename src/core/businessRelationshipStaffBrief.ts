@@ -2,7 +2,7 @@ import type { Relationship360Context } from "./businessRelationship360Context";
 import type { RelationshipChangeDigest } from "./businessRelationshipChangeDigest";
 import type { ContextFreshnessAssessment } from "./businessRelationshipContextFreshness";
 
-export const BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT = "business_relationship_staff_brief_v3" as const;
+export const BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT = "business_relationship_staff_brief_v4" as const;
 
 export type RelationshipStaffBrief = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_STAFF_BRIEF_CONTRACT;
@@ -42,6 +42,7 @@ export function buildRelationshipStaffBrief(input: Readonly<{
   if (context.openEvavoObligations.length) priorities.push("Address EVAVO-owned obligations before creating avoidable new communication or chasing the counterparty.");
   if (context.support) priorities.push("Account for active support/service context before selecting tone or making commitments.");
   if (context.commercial) priorities.push("Use current commercial truth and stay within explicit commitment authority.");
+  if (context.careers) priorities.push("Use dedicated careers truth for role-opening claims; never infer hiring status from commercial or project state.");
   if (context.communications) priorities.push("Answer only the live thread state; do not resurrect resolved or quoted-history items.");
   if (freshness && !freshness.ready) priorities.push("Refresh stale approval-critical evidence before consequential external action.");
   if (!priorities.length) priorities.push("Resolve the current objective with the lightest useful action supported by evidence.");
@@ -51,7 +52,8 @@ export function buildRelationshipStaffBrief(input: Readonly<{
   for (const domain of freshness?.refreshDomains ?? []) mustVerify.push(`Refresh stale ${domain} evidence before relying on it as current truth.`);
   if (!context.identity) mustNotAssume.push("Do not assume the sender/person identity from name similarity alone.");
   if (!context.project && context.missingCriticalContext.some((item) => /project/i.test(item))) mustNotAssume.push("Do not invent current project status, scope or delivery position.");
-  if (!context.commercial) mustNotAssume.push("Do not invent pricing, hiring, scope, payment, contract or other commercial authority.");
+  if (!context.commercial) mustNotAssume.push("Do not invent pricing, scope, payment, contract or other commercial authority.");
+  if (!context.careers) mustNotAssume.push("Do not invent an open role or a company-wide not-hiring position without dedicated current careers evidence.");
   if (!context.documents) mustNotAssume.push("Do not claim a document was reviewed, attached, current or controlling unless separately verified.");
 
   if (context.conflicts.length) risks.push("Conflicting evidence can make a polished answer wrong; resolve it before consequential external action.");

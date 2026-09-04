@@ -49,6 +49,8 @@ function assessBoundDecision(
   const decisionAt = Date.parse(decision.decisionAt);
   const approvedAt = Date.parse(approval.approvedAt);
   if (!Number.isFinite(decisionAt) || !Number.isFinite(approvedAt) || decisionAt > approvedAt) reasons.push("decision_timestamp_invalid_for_approval");
+  if (decision.origin === "relationship_manager_cycle" && !decision.relationshipCycleId) reasons.push("decision_relationship_cycle_id_missing");
+  if (decision.origin === "direct" && decision.relationshipCycleId) reasons.push("decision_direct_origin_has_cycle_id");
   return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
 }
 
@@ -56,15 +58,16 @@ function assessRelationshipManagerMemoryCheckpoint(
   decision: CommunicationDecisionPackage | null | undefined,
   persistence: RelationshipManagerMemoryPersistenceResult | null | undefined,
 ): Readonly<{ valid: boolean; reasons: readonly string[] }> {
-  if (!decision?.packageId.startsWith("relationship-cycle:")) {
+  if (!decision || decision.origin !== "relationship_manager_cycle") {
     return Object.freeze({ valid: true, reasons: Object.freeze([]) });
   }
-  const expectedCycleId = decision.packageId.slice("relationship-cycle:".length);
+  const expectedCycleId = decision.relationshipCycleId;
   const reasons: string[] = [];
+  if (!expectedCycleId) reasons.push("relationship_manager_memory_checkpoint_cycle_id_missing");
   if (!persistence) reasons.push("relationship_manager_memory_checkpoint_missing");
   else {
     if (persistence.contract !== "business_relationship_manager_memory_persistence_v1") reasons.push("relationship_manager_memory_checkpoint_contract_invalid");
-    if (persistence.cycleId !== expectedCycleId) reasons.push("relationship_manager_memory_checkpoint_cycle_mismatch");
+    if (!expectedCycleId || persistence.cycleId !== expectedCycleId) reasons.push("relationship_manager_memory_checkpoint_cycle_mismatch");
     if (!persistence.durable) reasons.push("relationship_manager_memory_checkpoint_not_durable");
     if (persistence.blockers.length) reasons.push("relationship_manager_memory_checkpoint_has_blockers");
   }

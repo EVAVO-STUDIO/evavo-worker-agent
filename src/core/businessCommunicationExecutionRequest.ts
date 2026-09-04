@@ -5,6 +5,7 @@ import {
   evaluateCommunicationExecutionGate,
   type CommunicationExecutionGateResult,
 } from "./businessCommunicationExecutionGate";
+import type { OperatorCommunicationApprovalReceipt } from "./businessCommunicationOperatorApproval";
 import type { CommunicationDraftReviewInput } from "./businessCommunicationPreSendReview";
 import type {
   CommunicationSendEnvelope,
@@ -34,6 +35,8 @@ export type AuthorizedCommunicationExecutionRequest = Readonly<{
     decisionPackageId: string;
     decisionEvidenceIds: readonly string[];
     approvalEvidenceIds: readonly string[];
+    operatorApprovalId: string;
+    operatorApprovalSource: OperatorCommunicationApprovalReceipt["sourceSystem"];
     approvedBy: string;
     approvedAt: string;
     expiresAt: string;
@@ -54,6 +57,7 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
   mailbox: BusinessMailboxRecord;
   material: CommunicationSendMaterial;
   approval: CommunicationSendEnvelope;
+  operatorApprovalReceipt: OperatorCommunicationApprovalReceipt;
   decisionPackage: CommunicationDecisionPackage;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
@@ -87,6 +91,8 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
       decisionPackageId: binding.decisionPackageId,
       decisionEvidenceIds: binding.evidenceIds,
       approvalEvidenceIds: binding.approvalEvidenceIds,
+      operatorApprovalId: input.operatorApprovalReceipt.approvalId,
+      operatorApprovalSource: input.operatorApprovalReceipt.sourceSystem,
       approvedBy: input.approval.approvedBy,
       approvedAt: input.approval.approvedAt,
       expiresAt: input.approval.expiresAt,

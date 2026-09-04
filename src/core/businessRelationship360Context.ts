@@ -1,7 +1,7 @@
 import type { BusinessObligation } from "./businessObligationLedger";
 import type { BrainMemoryContextResponse } from "./businessMemoryContextBridge";
 
-export const BUSINESS_RELATIONSHIP_360_CONTEXT_CONTRACT = "business_relationship_360_context_v1" as const;
+export const BUSINESS_RELATIONSHIP_360_CONTEXT_CONTRACT = "business_relationship_360_context_v2" as const;
 
 export type Relationship360EvidenceItem = Readonly<{
   id: string;
@@ -56,9 +56,9 @@ export type Relationship360Context = Readonly<{
   evidenceRefs: readonly string[];
 }>;
 
-function iso(value: string): string {
+function iso(value: string, code = "RELATIONSHIP_360_NOW_INVALID"): string {
   const d = new Date(value);
-  if (!value || Number.isNaN(d.getTime())) throw new Error("RELATIONSHIP_360_NOW_INVALID");
+  if (!value || Number.isNaN(d.getTime())) throw new Error(code);
   return d.toISOString();
 }
 
@@ -67,13 +67,48 @@ function clean(value?: string | null): string | null {
   return v || null;
 }
 
+function cleanRefs(values: readonly string[]): readonly string[] {
+  const refs = [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+  if (!refs.length) throw new Error("RELATIONSHIP_360_EVIDENCE_SOURCE_REFS_REQUIRED");
+  return Object.freeze(refs);
+}
+
+function validateEvidenceItem(item: Relationship360EvidenceItem, nowMs: number): Relationship360EvidenceItem {
+  const id = item.id.trim();
+  if (!id) throw new Error("RELATIONSHIP_360_EVIDENCE_ID_REQUIRED");
+  const summary = clean(item.summary);
+  if (!summary) throw new Error("RELATIONSHIP_360_EVIDENCE_SUMMARY_REQUIRED");
+  const observedAt = iso(item.observedAt, "RELATIONSHIP_360_EVIDENCE_OBSERVED_AT_INVALID");
+  if (Date.parse(observedAt) > nowMs + 60_000) throw new Error("RELATIONSHIP_360_EVIDENCE_FUTURE_OBSERVATION");
+  return Object.freeze({
+    ...item,
+    id,
+    summary,
+    observedAt,
+    sourceRefs: cleanRefs(item.sourceRefs),
+  });
+}
+
+function cleanTextList(values: readonly string[] | undefined): readonly string[] {
+  return Object.freeze([...new Set((values ?? []).map((value) => clean(value)).filter((value): value is string => Boolean(value)))]);
+}
+
 export function buildBusinessRelationship360Context(input: Relationship360Input): Relationship360Context {
-  if (!input.relationshipId.trim()) throw new Error("RELATIONSHIP_360_RELATIONSHIP_REQUIRED");
+  const relationshipId = input.relationshipId.trim();
+  if (!relationshipId) throw new Error("RELATIONSHIP_360_RELATIONSHIP_REQUIRED");
   const now = iso(input.now);
-  const currentEvidence = input.evidenceItems.filter((item) => item.status === "current");
-  const historicalEvidence = input.evidenceItems.filter((item) => item.status === "historical");
-  const conflictItems = input.evidenceItems.filter((item) => item.status === "conflicting");
-  const uncertainItems = input.evidenceItems.filter((item) => item.status === "uncertain");
+  const nowMs = Date.parse(now);
+  const evidenceItems = input.evidenceItems.map((item) => validateEvidenceItem(item, nowMs));
+  const ids = new Set<string>();
+  for (const item of evidenceItems) {
+    if (ids.has(item.id)) throw new Error(`RELATIONSHIP_360_DUPLICATE_EVIDENCE_ID:${item.id}`);
+    ids.add(item.id);
+  }
+
+  const currentEvidence = evidenceItems.filter((item) => item.status === "current");
+  const historicalEvidence = evidenceItems.filter((item) => item.status === "historical");
+  const conflictItems = evidenceItems.filter((item) => item.status === "conflicting");
+  const uncertainItems = evidenceItems.filter((item) => item.status === "uncertain");
 
   const conflicts = conflictItems.map((item) => `${item.domain}: ${item.summary}`);
   const missingCriticalContext: string[] = [];
@@ -85,8 +120,8 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
 
   const obligations = input.obligations ?? [];
   const active = obligations.filter((item) => item.status === "open" || item.status === "uncertain");
-  const evavo = active.filter((item) => item.owner === "evavo").map((item) => item.statement);
-  const external = active.filter((item) => item.owner === "counterparty").map((item) => item.statement);
+  const evavo = active.filter((item) => item.owner === "evavo").map((item) => item.statement.trim()).filter(Boolean);
+  const external = active.filter((item) => item.owner === "counterparty").map((item) => item.statement.trim()).filter(Boolean);
 
   const recommendedAttention: string[] = [];
   if (evavo.length) recommendedAttention.push(`EVAVO owns ${evavo.length} active obligation(s); address these before creating new communication debt.`);
@@ -96,9 +131,9 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
 
   const memoryEvidence = input.memory?.records ?? [];
   const evidenceRefs = [...new Set([
-    ...input.evidenceItems.flatMap((item) => item.sourceRefs),
-    ...memoryEvidence.flatMap((item) => item.sourceRefs),
-    ...obligations.flatMap((item) => item.sourceEvidenceIds),
+    ...evidenceItems.flatMap((item) => item.sourceRefs),
+    ...memoryEvidence.flatMap((item) => item.sourceRefs.map((ref) => ref.trim()).filter(Boolean)),
+    ...obligations.flatMap((item) => item.sourceEvidenceIds.map((ref) => ref.trim()).filter(Boolean)),
   ])];
 
   const pieces = [
@@ -114,7 +149,7 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
 
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_360_CONTEXT_CONTRACT,
-    relationshipId: input.relationshipId,
+    relationshipId,
     generatedAt: now,
     identity: clean(input.identitySummary),
     organization: clean(input.organizationSummary),
@@ -125,7 +160,7 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
     documents: clean(input.documentsSummary),
     openEvavoObligations: Object.freeze(evavo),
     openCounterpartyObligations: Object.freeze(external),
-    priorDecisions: Object.freeze([...(input.priorDecisionSummaries ?? [])]),
+    priorDecisions: cleanTextList(input.priorDecisionSummaries),
     currentEvidence: Object.freeze(currentEvidence),
     historicalEvidence: Object.freeze(historicalEvidence),
     conflicts: Object.freeze(conflicts),

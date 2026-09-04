@@ -34,12 +34,13 @@ export type ThreadDelta = Readonly<{
 function validateItem(item: ThreadStateItem): ThreadStateItem {
   if (!item.id.trim()) throw new Error("THREAD_DELTA_ITEM_ID_REQUIRED");
   if (!item.statement.trim()) throw new Error("THREAD_DELTA_STATEMENT_REQUIRED");
-  if (!item.sourceEvidenceIds.length) throw new Error("THREAD_DELTA_EVIDENCE_REQUIRED");
+  const sourceEvidenceIds = Object.freeze([...new Set(item.sourceEvidenceIds.map((value) => value.trim()).filter(Boolean))]);
+  if (!sourceEvidenceIds.length) throw new Error("THREAD_DELTA_EVIDENCE_REQUIRED");
   if (item.lastObservedAt && Number.isNaN(Date.parse(item.lastObservedAt))) throw new Error("THREAD_DELTA_LAST_OBSERVED_AT_INVALID");
   return Object.freeze({
     ...item,
     statement: item.statement.trim(),
-    sourceEvidenceIds: Object.freeze([...new Set(item.sourceEvidenceIds.map((value) => value.trim()).filter(Boolean))]),
+    sourceEvidenceIds,
   });
 }
 
@@ -89,7 +90,7 @@ export function buildBusinessThreadDelta(input: ThreadDeltaInput): ThreadDelta {
 
   return Object.freeze({
     contract: BUSINESS_THREAD_DELTA_CONTRACT,
-    threadId: input.threadId,
+    threadId: input.threadId.trim(),
     newItems: Object.freeze(newItems),
     changedItems: Object.freeze(changedItems),
     resolvedItems: Object.freeze(resolvedItems),

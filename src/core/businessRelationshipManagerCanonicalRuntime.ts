@@ -12,13 +12,14 @@ import type { BrainMemoryContextResponse } from "./businessMemoryContextBridge";
 import { projectGmailThreadToCanonicalRelationshipState } from "./businessGmailRelationshipStateProjection";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_runtime_v1" as const;
+  "business_relationship_manager_canonical_runtime_v2" as const;
 
 export type CanonicalRelationshipContextInput = Readonly<{
   identitySummary: string;
   organizationSummary?: string | null;
   projectSummary?: string | null;
   commercialSummary?: string | null;
+  careersSummary?: string | null;
   supportSummary?: string | null;
   communicationSummary: string;
   documentsSummary?: string | null;
@@ -93,6 +94,7 @@ export function runCanonicalRelationshipManagerCommunicationCycle(
       organizationSummary: input.context.organizationSummary,
       projectSummary: input.context.projectSummary,
       commercialSummary: input.context.commercialSummary,
+      careersSummary: input.context.careersSummary,
       supportSummary: input.context.supportSummary,
       communicationSummary: input.context.communicationSummary,
       documentsSummary: input.context.documentsSummary,

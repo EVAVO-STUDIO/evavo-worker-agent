@@ -33,6 +33,9 @@ export type CommunicationLearningEvent = Readonly<{
   finalClosing: string | null;
   operatorNote?: string | null;
   createdAt: string;
+  authoritativeFor: "relationship_decision_feedback";
+  writingStyleLearningOwner: "evavo-writing-studio";
+  mayMutateVoiceProfile: false;
 }>;
 
 function text(value: string): string {
@@ -84,5 +87,8 @@ export function buildBusinessCommunicationLearningEvent(input: Readonly<{
     finalClosing: lastLine(final),
     operatorNote: input.operatorNote?.trim().slice(0, 1000) || null,
     createdAt: input.createdAt ?? new Date().toISOString(),
+    authoritativeFor: "relationship_decision_feedback",
+    writingStyleLearningOwner: "evavo-writing-studio",
+    mayMutateVoiceProfile: false,
   };
 }

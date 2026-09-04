@@ -1,4 +1,5 @@
 import { decideCandidateRelationship, type CandidateRelationshipInput } from "./businessCandidateRelationship";
+import type { CommunicationEvidenceReadiness } from "./businessCommunicationEvidenceReadiness";
 import { decideRelationshipCommunicationChannel, relationshipConductInstructions, type ChannelDecisionInput } from "./businessRelationshipConductPolicy";
 import { buildBusinessThreadDelta, type ThreadDeltaInput } from "./businessThreadDelta";
 import { assessBusinessObligation, type BusinessObligation } from "./businessObligationLedger";
@@ -17,6 +18,7 @@ export type CommunicationDecisionPackageInput = Readonly<{
   candidate?: CandidateRelationshipInput | null;
   evidenceIds: readonly string[];
   evidenceConfidence: number;
+  evidenceReadiness?: CommunicationEvidenceReadiness | null;
 }>;
 
 export type CommunicationDecisionPackage = Readonly<{
@@ -34,6 +36,7 @@ export type CommunicationDecisionPackage = Readonly<{
   prohibitedImplications: readonly string[];
   evidenceIds: readonly string[];
   evidenceConfidence: number;
+  evidenceReadinessStatus?: CommunicationEvidenceReadiness["status"];
   reasons: readonly string[];
 }>;
 
@@ -69,6 +72,11 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     reasons.push("Evidence confidence is too low for a reliable external communication decision.");
   }
 
+  if (input.evidenceReadiness?.status === "blocked") {
+    disposition = "escalate";
+    reasons.push(...input.evidenceReadiness.blockers.map((blocker) => `Evidence readiness blocker: ${blocker}`));
+  }
+
   if (delta.liveResponseTargets.length === 0 && activeEvavoObligations.length === 0 && input.scenario === "general") {
     disposition = "do_not_reply";
     reasons.push("There is no live response target or EVAVO-owned obligation requiring communication.");
@@ -76,6 +84,9 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
 
   if (!channel.meetingJustified) reasons.push("The matter should stay asynchronous; a meeting adds no clear incremental value.");
   else reasons.push(...channel.reasons);
+
+  const evidenceIds = new Set(input.evidenceIds);
+  for (const id of input.evidenceReadiness?.evidenceIds ?? []) evidenceIds.add(id);
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT,
@@ -90,8 +101,9 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     activeEvavoObligations: Object.freeze(activeEvavoObligations),
     ...(candidateStage ? { candidateStage } : {}),
     prohibitedImplications: Object.freeze([...new Set(prohibitedImplications)]),
-    evidenceIds: Object.freeze([...new Set(input.evidenceIds)]),
+    evidenceIds: Object.freeze([...evidenceIds]),
     evidenceConfidence: input.evidenceConfidence,
-    reasons: Object.freeze(reasons),
+    ...(input.evidenceReadiness ? { evidenceReadinessStatus: input.evidenceReadiness.status } : {}),
+    reasons: Object.freeze([...new Set(reasons)]),
   });
 }

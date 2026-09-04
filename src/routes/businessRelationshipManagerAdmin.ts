@@ -1,10 +1,8 @@
 import type { Env } from "../db";
 import { isAdminRequestAuthorized } from "../core/adminAuthentication";
 import { boundedJsonFailurePayload, readBoundedJsonObject } from "../core/boundedJsonRequest";
-import {
-  runRelationshipManagerCommunicationCycle,
-  type RelationshipManagerCommunicationCycleInput,
-} from "../core/businessRelationshipManagerRuntime";
+import { runRelationshipManagerCommunicationCycle } from "../core/businessRelationshipManagerRuntime";
+import { parseRelationshipManagerCommunicationCycleInput } from "../core/businessRelationshipManagerRuntimeInput";
 import { BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH } from "../core/businessRoutePaths";
 import type { JsonResponse } from "./businessAutopilotAdmin";
 
@@ -49,9 +47,8 @@ export async function handleBusinessRelationshipManagerAdmin(
   if (!parsed.ok) return json(boundedJsonFailurePayload(parsed), { status: parsed.status });
 
   try {
-    const cycle = runRelationshipManagerCommunicationCycle(
-      parsed.value as unknown as RelationshipManagerCommunicationCycleInput,
-    );
+    const cycleInput = parseRelationshipManagerCommunicationCycleInput(parsed.value);
+    const cycle = runRelationshipManagerCommunicationCycle(cycleInput);
     return json({
       ok: true,
       contract: BUSINESS_RELATIONSHIP_MANAGER_ADMIN_CONTRACT,
@@ -74,7 +71,8 @@ export async function handleBusinessRelationshipManagerAdmin(
         disposition: cycle.decision.disposition,
         recommendedChannel: cycle.decision.recommendedChannel,
         meetingJustified: cycle.decision.meetingJustified,
-        approvalGradeReady: cycle.decision.approvalGradeReady,
+        modelApprovalGradeReady: cycle.decision.approvalGradeReady,
+        previewApprovalGradeReady: false,
         prohibitedImplications: cycle.decision.prohibitedImplications,
         mustVerify: cycle.decision.mustVerify,
         mustNotAssume: cycle.decision.mustNotAssume,
@@ -84,8 +82,10 @@ export async function handleBusinessRelationshipManagerAdmin(
         observationCount: cycle.memoryObservations.length,
         kinds: [...new Set(cycle.memoryObservations.map((item) => item.kind))],
         sourceRefs: [...new Set(cycle.memoryObservations.map((item) => item.sourceRef))],
+        persisted: false,
       },
       rawMessageBodiesExposed: false,
+      callerSuppliedTrustedContextAccepted: false,
       canonicalStateMutated: false,
       callsExternalNetwork: false,
       callsAI: false,
@@ -100,6 +100,7 @@ export async function handleBusinessRelationshipManagerAdmin(
       contract: BUSINESS_RELATIONSHIP_MANAGER_ADMIN_CONTRACT,
       mode: "relationship_manager_communication_cycle_preview",
       rawMessageBodiesExposed: false,
+      callerSuppliedTrustedContextAccepted: false,
       canonicalStateMutated: false,
       sendsEmail: false,
       externalExecutionAllowed: false,

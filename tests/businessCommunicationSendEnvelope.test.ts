@@ -30,6 +30,7 @@ function envelope() {
     mailboxKey: "greg",
     decisionPackageId: "decision-package-1",
     evidenceIds: ["gmail:message-1", "worker:decision-package-1"],
+    approvalEvidenceIds: ["operator-approval:approval-1"],
   });
 }
 
@@ -63,6 +64,7 @@ test("attachment identity, version or hash change invalidates approval", () => {
     mailboxKey: "greg",
     decisionPackageId: "decision-package-2",
     evidenceIds: ["docs:portfolio:v1"],
+    approvalEvidenceIds: ["operator-approval:approval-2"],
   });
   const candidate = {
     ...approved.material,
@@ -89,6 +91,20 @@ test("legacy material-only envelope remains readable but has no approval-grade b
   assert.deepEqual(verifyCommunicationApprovalBinding(legacy), { ok: false, reasons: ["approval_binding_missing"] });
 });
 
+test("partial approval binding without operator evidence fails closed", () => {
+  assert.throws(() => createCommunicationSendEnvelope({
+    envelopeId: "partial",
+    approvedAt: "2026-09-04T01:00:00Z",
+    expiresAt: "2026-09-04T02:00:00Z",
+    approvedBy: "greg",
+    material: base,
+    senderKey: "greg",
+    mailboxKey: "greg",
+    decisionPackageId: "decision-package-partial",
+    evidenceIds: ["gmail:message-1"],
+  }), /COMMUNICATION_SEND_APPROVAL_BINDING_INCOMPLETE/);
+});
+
 test("recipient order and case normalize without changing the semantic approval", () => {
   const material = {
     ...base,
@@ -104,6 +120,7 @@ test("recipient order and case normalize without changing the semantic approval"
     mailboxKey: "greg",
     decisionPackageId: "decision-package-order",
     evidenceIds: ["gmail:message-1"],
+    approvalEvidenceIds: ["operator-approval:approval-order"],
   });
   const reordered = { ...material, to: ["ASHLEY@EXAMPLE.COM", "second@example.com"] };
   assert.equal(verifyCommunicationSendEnvelope(approved, reordered, new Date("2026-09-04T01:30:00Z")).ok, true);

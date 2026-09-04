@@ -7,7 +7,7 @@ import {
   type CommunicationOutcomeMemoryRecord,
 } from "./businessCommunicationOutcomeMemory";
 
-export const BUSINESS_COMMUNICATION_OUTCOME_PERSISTENCE_CONTRACT = "business_communication_outcome_persistence_v2" as const;
+export const BUSINESS_COMMUNICATION_OUTCOME_PERSISTENCE_CONTRACT = "business_communication_outcome_persistence_v3" as const;
 
 export type BusinessOutcomeMemoryWriteRequest = Readonly<{
   protocol: "evavo-memory-write-request-v1";
@@ -57,6 +57,9 @@ function provenanceIdentity(value: CommunicationOutcomeLearningProvenance | null
     value.relationshipCycleId?.trim() ?? "",
     value.handoffId?.trim() ?? "",
     value.writingRequestId?.trim() ?? "",
+    value.approvalCandidateId?.trim() ?? "",
+    value.approvalCandidateSha256?.trim().toLowerCase() ?? "",
+    value.approvalCandidateRecordId?.trim() ?? "",
     value.providerMessageId?.trim() ?? "",
   ]);
 }

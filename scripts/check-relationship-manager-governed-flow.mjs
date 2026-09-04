@@ -56,7 +56,7 @@ requireToken("executionRuntime", "externalEffectPerformed: false", "Relationship
 requireToken("executionRuntime", "RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_WRITING_PROVENANCE_REQUIRED", "Execution runtime must require Writing Studio provenance");
 forbidToken("executionRuntime", "gmail.users.messages.send", "Relationship Manager execution runtime must not call Gmail send directly");
 
-requireToken("executionGate", "writing_provenance_missing", "Execution gate must block canonical cycles without approved Writing Studio provenance");
+requireToken("executionGate", "decision_writing_provenance_missing", "Execution gate must block canonical cycles without approved Writing Studio provenance");
 requireToken("lifecycle", "business_communication_lifecycle_receipt_v3", "Lifecycle must use the Writing Studio provenance-aware v3 contract");
 requireToken("lifecycle", "sameWritingProvenance", "Lifecycle must reconcile approval and execution Writing Studio provenance");
 

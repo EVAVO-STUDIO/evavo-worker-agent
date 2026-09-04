@@ -155,7 +155,7 @@ requireTokens("src/core/businessRelationshipStaffBrief.ts", [
 ]);
 requireTokens("src/core/businessRoleOpeningTruth.ts", [
   '"business_role_opening_truth_v2"',
-  'source === "careers_registry" || item.source === "operator"',
+  "ROLE_OPENING_OPERATIONS_CORE_AUTHORITY_FORBIDDEN",
   "maySayNotHiring: false",
 ]);
 const careersPolicy = requireTokens("src/core/businessCareersRelationshipPolicy.ts", [

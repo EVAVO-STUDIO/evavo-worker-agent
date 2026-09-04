@@ -1,6 +1,7 @@
 import type { AuthorizedCommunicationExecutionRequest } from "./businessCommunicationExecutionRequest";
+import { approvalCandidatePersistenceEvidenceRef } from "./businessStaffCommunicationApprovalCandidatePersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT = "business_communication_execution_receipt_v3" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT = "business_communication_execution_receipt_v4" as const;
 
 export type GmailObservedSendResult = Readonly<{
   providerMessageId: string;
@@ -54,7 +55,7 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
   request: AuthorizedCommunicationExecutionRequest;
   observed: GmailObservedSendResult;
 }>): CommunicationExecutionReceipt {
-  if (input.request.contract !== "business_communication_execution_request_v3" || input.request.provider !== "gmail") {
+  if (input.request.contract !== "business_communication_execution_request_v4" || input.request.provider !== "gmail") {
     throw new Error("COMMUNICATION_EXECUTION_RECEIPT_REQUEST_CONTRACT_INVALID");
   }
   const sentAt = iso(input.observed.sentAt, "sent_at");
@@ -94,13 +95,18 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
       throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_IDENTITY_INVALID");
     }
     if (!approvalCandidate) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_MISSING");
-    if (!approvalCandidate.candidateId.trim() || !approvalCandidate.recordId.trim()) {
-      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_IDENTITY_INVALID");
-    }
-    if (!/^[a-f0-9]{64}$/.test(approvalCandidate.candidateSha256)) {
+    const candidateId = approvalCandidate.candidateId.trim();
+    const recordId = approvalCandidate.recordId.trim();
+    const candidateSha256 = approvalCandidate.candidateSha256.trim().toLowerCase();
+    if (!candidateId || !recordId) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_IDENTITY_INVALID");
+    if (!/^[a-f0-9]{64}$/.test(candidateSha256)) {
       throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_HASH_INVALID");
     }
-    if (!input.request.authorization.approvalEvidenceIds.includes(approvalCandidate.evidenceRef)) {
+    const expectedEvidenceRef = approvalCandidatePersistenceEvidenceRef({ candidateId, candidateSha256, recordId });
+    if (approvalCandidate.evidenceRef !== expectedEvidenceRef) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_EVIDENCE_MISMATCH");
+    }
+    if (!input.request.authorization.approvalEvidenceIds.includes(expectedEvidenceRef)) {
       throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_EVIDENCE_MISSING");
     }
   }

@@ -67,7 +67,7 @@ export function buildStaffApprovalCandidateWriteRequest(
   candidate: StaffCommunicationApprovalCandidate,
 ): StaffApprovalCandidateWriteRequest {
   const candidateSha256 = staffApprovalCandidateHash(candidate);
-  const idempotencyKey = `staff-approval-candidate:${candidate.candidateId}:${candidateSha256}`;
+  const idempotencyKey = `staff-approval-candidate:${businessSha256(JSON.stringify({ candidateId: candidate.candidateId, candidateSha256 }))}`;
   const requestId = `approval-candidate-write:${businessSha256(idempotencyKey).slice(0, 32)}`;
   return Object.freeze({
     protocol: "evavo-approval-candidate-write-request-v1",
@@ -93,12 +93,13 @@ export function approvalCandidatePersistenceEvidenceRef(input: Readonly<{
   recordId: string;
 }>): string {
   const candidateId = input.candidateId.trim();
-  const hash = input.candidateSha256.trim().toLowerCase();
+  const candidateSha256 = input.candidateSha256.trim().toLowerCase();
   const recordId = input.recordId.trim();
-  if (!candidateId || !recordId || !/^[a-f0-9]{64}$/.test(hash)) {
+  if (!candidateId || !recordId || !/^[a-f0-9]{64}$/.test(candidateSha256)) {
     throw new Error("STAFF_APPROVAL_CANDIDATE_PERSISTENCE_EVIDENCE_INVALID");
   }
-  return `approval-candidate:${candidateId}:${hash}:${recordId}`;
+  const identitySha256 = businessSha256(JSON.stringify({ candidateId, candidateSha256, recordId }));
+  return `approval-candidate:${identitySha256}`;
 }
 
 export function reconcileStaffApprovalCandidateWriteReceipt(input: Readonly<{

@@ -7,6 +7,7 @@ import {
   BUSINESS_HISTORICAL_PATHS,
   BUSINESS_PEOPLE_PATH,
   BUSINESS_READ_QUERY_GUARDED_PATHS,
+  BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH,
   BUSINESS_ROUTE_PREFIX,
   BUSINESS_WEBSITE_AUDIT_PATHS,
   isBusinessRoutePath,
@@ -15,7 +16,7 @@ import {
   parseBusinessMetadataReadRouteQuery,
   preflightBusinessMetadataReadQuery,
 } from "../src/core/businessMetadataReadBoundary";
-import { resolveBusinessRouteHandlerId } from "../src/routes/businessRoutePolicy";
+import { BUSINESS_ROUTE_POLICIES, resolveBusinessRouteHandlerId } from "../src/routes/businessRoutePolicy";
 
 test("Business query-guard paths equal the canonical collection path union", () => {
   const expected = [
@@ -54,6 +55,20 @@ test("specialised Business parsers remain outside the collection guard but insid
   assert.equal(resolveBusinessRouteHandlerId(BUSINESS_PEOPLE_PATH), "people");
   assert.equal(parseBusinessMetadataReadRouteQuery(new URL(`https://worker.example${BUSINESS_PEOPLE_PATH}?limit=25`), BUSINESS_PEOPLE_PATH, "GET"), null);
   assert.equal(preflightBusinessMetadataReadQuery(new URL(`https://worker.example${BUSINESS_PEOPLE_PATH}?limit=25`), BUSINESS_PEOPLE_PATH, "GET")?.ok, true);
+});
+
+test("Relationship Manager communication cycle has a dedicated internal-only handler before fallback", () => {
+  assert.equal(resolveBusinessRouteHandlerId(BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH), "relationship-manager");
+  const policy = BUSINESS_ROUTE_POLICIES.find((item) => item.id === "relationship-manager");
+  assert.ok(policy);
+  assert.deepEqual(policy?.writeMethods, ["POST"]);
+  assert.equal(policy?.callsExternalNetwork, false);
+  assert.equal(policy?.callsAI, false);
+  assert.equal(policy?.canSendEmail, false);
+  assert.equal(policy?.canPostSocial, false);
+  assert.equal(policy?.canSubmitForms, false);
+  const fallback = BUSINESS_ROUTE_POLICIES.find((item) => item.id === "business-fallback");
+  assert.ok((policy?.priority ?? 999) < (fallback?.priority ?? 0));
 });
 
 test("Business family detection is exact and does not bleed into adjacent route prefixes", () => {

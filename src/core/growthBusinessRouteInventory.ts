@@ -22,7 +22,7 @@ import {
   type OperationsRoutePolicy,
 } from "../routes/operationsRoutePolicy";
 
-export const GROWTH_WORKER_ROUTE_INVENTORY_VERSION = "growth_worker_route_inventory_v2" as const;
+export const GROWTH_WORKER_ROUTE_INVENTORY_VERSION = "growth_worker_route_inventory_v3" as const;
 export const GROWTH_WORKER_ROUTE_INVENTORY_PENDING_GROUPS = Object.freeze([] as const);
 
 export const GROWTH_BUSINESS_ROUTE_INVENTORY_VERSION = GROWTH_WORKER_ROUTE_INVENTORY_VERSION;
@@ -33,6 +33,7 @@ export type GrowthBusinessRouteInventoryPendingGroup = GrowthWorkerRouteInventor
 
 export type WorkerPostClassification =
   | "not-supported"
+  | "internal-preview"
   | "metadata-write"
   | "internal-mutation"
   | "external-dry-run"
@@ -143,6 +144,7 @@ function businessOwnership(handlerId: BusinessRouteHandlerId): GrowthWorkerRoute
 
 function businessEntry(policy: BusinessRoutePolicy): GrowthWorkerRouteInventoryEntry {
   const readOnly = policy.mutationPosture === "read-only";
+  const preview = policy.mutationPosture === "internal-preview";
   const retired = policy.mutationPosture === "historical-read-retired-write";
   return Object.freeze({
     routeFamily: "business",
@@ -151,7 +153,7 @@ function businessEntry(policy: BusinessRoutePolicy): GrowthWorkerRouteInventoryE
     ownership: businessOwnership(policy.id),
     readMethods: Object.freeze([...policy.readMethods]),
     writeMethods: Object.freeze([...policy.writeMethods]),
-    postClassification: readOnly ? "not-supported" : retired ? "retired-write-fail-closed" : "internal-mutation",
+    postClassification: preview ? "internal-preview" : readOnly ? "not-supported" : retired ? "retired-write-fail-closed" : "internal-mutation",
     authentication: policy.authentication,
     confirmation: policy.writeConfirmation,
     networkPosture: "none",
@@ -347,6 +349,7 @@ export function listGrowthWorkerRouteInventory() {
       routeGroups: entries.length,
       postCapableGroups: entries.filter((entry) => entry.writeMethods.length > 0).length,
       readOnlyGroups: entries.filter((entry) => entry.writeMethods.length === 0).length,
+      internalPreviewGroups: entries.filter((entry) => entry.postClassification === "internal-preview").length,
       metadataWriteGroups: entries.filter((entry) => entry.postClassification === "metadata-write").length,
       internalMutationGroups: entries.filter((entry) => entry.postClassification === "internal-mutation").length,
       externalDryRunGroups: entries.filter((entry) => entry.postClassification === "external-dry-run").length,

@@ -20,7 +20,7 @@ export {
 
 export type BusinessRouteHandlerId = "account-intelligence" | "relationship-manager" | "people" | "website-audit" | "business-historical" | "business-fallback";
 
-export type BusinessMutationPosture = "read-only" | "mixed-internal" | "historical-read-retired-write";
+export type BusinessMutationPosture = "read-only" | "internal-preview" | "mixed-internal" | "historical-read-retired-write";
 
 export type BusinessRoutePolicy = Readonly<{
   id: BusinessRouteHandlerId;
@@ -58,6 +58,13 @@ const readOnlySafety = Object.freeze({
   writeConfirmation: "not-applicable" as const,
 });
 
+const internalPreviewSafety = Object.freeze({
+  ...sharedSafety,
+  readMethods: Object.freeze([] as const),
+  writeMethods: Object.freeze(["POST"] as const),
+  writeConfirmation: "not-applicable" as const,
+});
+
 const internalWriteSafety = Object.freeze({
   ...sharedSafety,
   writeMethods: Object.freeze(["POST"] as const),
@@ -77,10 +84,10 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
   Object.freeze({
     id: "relationship-manager",
     priority: 15,
-    mutationPosture: "mixed-internal" as const,
+    mutationPosture: "internal-preview" as const,
     historicalOnly: false,
     retiredWritesFailClosed: false,
-    ...internalWriteSafety,
+    ...internalPreviewSafety,
     matches: (pathname: string) => pathname === BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH,
   }),
   Object.freeze({

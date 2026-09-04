@@ -2,7 +2,7 @@ import type { CandidateRelationshipInput } from "./businessCandidateRelationship
 import type { CommunicationChannel } from "./businessRelationshipConductPolicy";
 import type { RelationshipManagerCommunicationCycleInput } from "./businessRelationshipManagerRuntime";
 
-export const BUSINESS_RELATIONSHIP_MANAGER_RUNTIME_INPUT_CONTRACT = "business_relationship_manager_runtime_input_v1" as const;
+export const BUSINESS_RELATIONSHIP_MANAGER_RUNTIME_INPUT_CONTRACT = "business_relationship_manager_runtime_input_v2" as const;
 
 type JsonObject = Record<string, unknown>;
 
@@ -123,7 +123,7 @@ function identity(value: unknown): RelationshipManagerCommunicationCycleInput["i
 
   if (status === "verified" && !selected) throw new Error("RELATIONSHIP_MANAGER_INPUT_VERIFIED_IDENTITY_SELECTED_REQUIRED");
   return Object.freeze({
-    contract: "business_relationship_identity_resolver_v1",
+    contract: "business_relationship_identity_resolver_v2",
     status: status as "verified" | "ambiguous" | "unresolved",
     ...(selected ? { selected } : {}),
     confidence: boundedNumber(input.confidence, "identity_confidence"),

@@ -16,11 +16,19 @@ export type StaffCommunicationApprovalBuildResult = Readonly<{
   writingCandidateId: string;
 }>;
 
+function requiredSubject(value: string): string {
+  const subject = value.trim();
+  if (!subject || subject.length > 998) throw new Error("STAFF_COMMUNICATION_APPROVAL_SUBJECT_REQUIRED");
+  return subject;
+}
+
 /**
  * Creates an approval envelope from a draft that has already passed the
  * Writing Studio provenance/output boundary. Callers provide routing and
- * attachment material, but cannot substitute different subject/body text or a
+ * attachment material, but cannot substitute different body text or a
  * different decision package while retaining the validated draft provenance.
+ * A Writing Studio subject may refine the canonical thread subject; when the
+ * candidate omits one, the caller-supplied canonical subject is preserved.
  */
 export function buildStaffCommunicationApproval(input: Readonly<{
   envelopeId: string;
@@ -35,6 +43,7 @@ export function buildStaffCommunicationApproval(input: Readonly<{
   bcc?: readonly string[];
   threadId: string;
   replyMessageId?: string | null;
+  canonicalSubject: string;
   boundDraft: BoundStaffDraftSelection;
   attachments?: readonly ApprovedAttachment[];
   evidenceIds: readonly string[];
@@ -45,6 +54,7 @@ export function buildStaffCommunicationApproval(input: Readonly<{
     ...input.boundDraft.sourceRefs.map((item) => item.trim()).filter(Boolean),
   ])];
   if (!evidenceIds.length) throw new Error("STAFF_COMMUNICATION_APPROVAL_EVIDENCE_REQUIRED");
+  const subject = requiredSubject(input.boundDraft.subject ?? input.canonicalSubject);
 
   const approval = createCommunicationSendEnvelope({
     envelopeId: input.envelopeId,
@@ -58,7 +68,7 @@ export function buildStaffCommunicationApproval(input: Readonly<{
       bcc: input.bcc ?? [],
       threadId: input.threadId,
       replyMessageId: input.replyMessageId ?? null,
-      subject: input.boundDraft.subject ?? "",
+      subject,
       body: input.boundDraft.body,
       attachments: input.attachments ?? [],
     },

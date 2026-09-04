@@ -27,11 +27,11 @@ export async function persistCanonicalRelationshipManagerCycleMemory(input: Read
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_PORT_CONTRACT_INVALID");
   }
   const cycle = input.canonicalCycle.cycle;
-  if (cycle.cycleId !== input.canonicalCycle.decisionContext.relationshipId && false) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_UNREACHABLE");
-  }
   if (cycle.decision.relationshipCycleId !== cycle.cycleId) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_DECISION_CYCLE_MISMATCH");
+  }
+  if (input.canonicalCycle.decisionContext.relationshipId !== cycle.projection.relationshipId) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RELATIONSHIP_MISMATCH");
   }
 
   const persistence = await persistRelationshipManagerCycleMemory({

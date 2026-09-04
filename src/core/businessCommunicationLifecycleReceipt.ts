@@ -1,4 +1,4 @@
-export const BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT = "business_communication_lifecycle_receipt_v2" as const;
+export const BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT = "business_communication_lifecycle_receipt_v3" as const;
 
 export type CommunicationLifecycleStage =
   | "decided"
@@ -7,6 +7,13 @@ export type CommunicationLifecycleStage =
   | "outcome_observed"
   | "learned"
   | "blocked";
+
+type LifecycleWritingProvenance = Readonly<{
+  handoffId: string;
+  writingRequestId: string;
+  decisionOrigin: "direct" | "relationship_manager_cycle";
+  relationshipCycleId?: string;
+}>;
 
 export type CommunicationLifecycleReceipt = Readonly<{
   contract: typeof BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT;
@@ -31,6 +38,7 @@ export type CommunicationLifecycleReceipt = Readonly<{
     approvalBindingSha256?: string;
     decisionPackageId?: string;
     approvalEvidenceIds?: readonly string[];
+    writingProvenance?: LifecycleWritingProvenance;
   }> | null;
   execution: Readonly<{
     provider: string;
@@ -46,6 +54,7 @@ export type CommunicationLifecycleReceipt = Readonly<{
     decisionPackageId?: string;
     decisionOrigin?: "direct" | "relationship_manager_cycle";
     relationshipCycleId?: string | null;
+    writingProvenance?: LifecycleWritingProvenance;
     memoryCheckpointCycleId?: string | null;
     memoryCheckpointRecordIds?: readonly string[];
   }> | null;
@@ -81,6 +90,31 @@ function iso(value: string, field: string): string {
 
 function uniqueEvidence(values: readonly string[] | undefined): readonly string[] {
   return Object.freeze([...new Set((values ?? []).map((item) => item.trim()).filter(Boolean))]);
+}
+
+function writingProvenance(value: LifecycleWritingProvenance | undefined, prefix: string): LifecycleWritingProvenance | undefined {
+  if (!value) return undefined;
+  const relationshipCycleId = optionalText(value.relationshipCycleId, `${prefix}_writing_relationship_cycle_id`);
+  if (value.decisionOrigin === "relationship_manager_cycle" && !relationshipCycleId) {
+    throw new Error(`COMMUNICATION_LIFECYCLE_${prefix.toUpperCase()}_WRITING_RELATIONSHIP_CYCLE_REQUIRED`);
+  }
+  if (value.decisionOrigin === "direct" && relationshipCycleId) {
+    throw new Error(`COMMUNICATION_LIFECYCLE_${prefix.toUpperCase()}_WRITING_DIRECT_CYCLE_FORBIDDEN`);
+  }
+  return Object.freeze({
+    handoffId: text(value.handoffId, `${prefix}_writing_handoff_id`),
+    writingRequestId: text(value.writingRequestId, `${prefix}_writing_request_id`),
+    decisionOrigin: value.decisionOrigin,
+    ...(relationshipCycleId ? { relationshipCycleId } : {}),
+  });
+}
+
+function sameWritingProvenance(left: LifecycleWritingProvenance | undefined, right: LifecycleWritingProvenance | undefined): boolean {
+  if (!left || !right) return false;
+  return left.handoffId === right.handoffId
+    && left.writingRequestId === right.writingRequestId
+    && left.decisionOrigin === right.decisionOrigin
+    && (left.relationshipCycleId ?? null) === (right.relationshipCycleId ?? null);
 }
 
 export function buildCommunicationLifecycleReceipt(input: Readonly<{
@@ -121,6 +155,7 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     ...(optionalText(input.approval.approvalBindingSha256, "approval_binding_hash") ? { approvalBindingSha256: optionalText(input.approval.approvalBindingSha256, "approval_binding_hash")!.toLowerCase() } : {}),
     ...(optionalText(input.approval.decisionPackageId, "approval_decision_package_id") ? { decisionPackageId: optionalText(input.approval.decisionPackageId, "approval_decision_package_id") } : {}),
     ...(input.approval.approvalEvidenceIds ? { approvalEvidenceIds: uniqueEvidence(input.approval.approvalEvidenceIds) } : {}),
+    ...(input.approval.writingProvenance ? { writingProvenance: writingProvenance(input.approval.writingProvenance, "approval") } : {}),
   }) : null;
   if (approval && approval.approvedAt < decisionAt) throw new Error("COMMUNICATION_LIFECYCLE_APPROVAL_BEFORE_DECISION");
   if (approval?.decisionPackageId && approval.decisionPackageId !== input.decision.packageId) throw new Error("COMMUNICATION_LIFECYCLE_APPROVAL_DECISION_MISMATCH");
@@ -139,6 +174,7 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     ...(optionalText(input.execution.decisionPackageId, "execution_decision_package_id") ? { decisionPackageId: optionalText(input.execution.decisionPackageId, "execution_decision_package_id") } : {}),
     ...(input.execution.decisionOrigin ? { decisionOrigin: input.execution.decisionOrigin } : {}),
     ...(input.execution.relationshipCycleId !== undefined ? { relationshipCycleId: input.execution.relationshipCycleId } : {}),
+    ...(input.execution.writingProvenance ? { writingProvenance: writingProvenance(input.execution.writingProvenance, "execution") } : {}),
     ...(input.execution.memoryCheckpointCycleId !== undefined ? { memoryCheckpointCycleId: input.execution.memoryCheckpointCycleId } : {}),
     ...(input.execution.memoryCheckpointRecordIds ? { memoryCheckpointRecordIds: uniqueEvidence(input.execution.memoryCheckpointRecordIds) } : {}),
   }) : null;
@@ -172,7 +208,22 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     }
   }
 
-  const executionVerified = commonExecutionVerified && provenanceVerified;
+  let writingVerified = false;
+  if (commonExecutionVerified && approval && execution) {
+    if (decisionOrigin === "relationship_manager_cycle") {
+      writingVerified = sameWritingProvenance(approval.writingProvenance, execution.writingProvenance)
+        && approval.writingProvenance?.decisionOrigin === "relationship_manager_cycle"
+        && approval.writingProvenance.relationshipCycleId === relationshipCycleId;
+    } else if (!approval.writingProvenance && !execution.writingProvenance) {
+      writingVerified = true;
+    } else {
+      writingVerified = sameWritingProvenance(approval.writingProvenance, execution.writingProvenance)
+        && approval.writingProvenance?.decisionOrigin === "direct"
+        && !approval.writingProvenance.relationshipCycleId;
+    }
+  }
+
+  const executionVerified = commonExecutionVerified && provenanceVerified && writingVerified;
   if (execution && !executionVerified) blockers.push("execution_not_reconciled_to_authorized_request");
   if (executionVerified && execution!.providerThreadId !== text(input.threadId, "thread_id")) blockers.push("execution_thread_mismatch");
 

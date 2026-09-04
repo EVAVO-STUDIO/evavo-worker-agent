@@ -13,11 +13,16 @@ BRAIN_BASE_URL="http://127.0.0.1:4317"
 BRAIN_API_TOKEN="replace_me_with_a_distinct_random_brain_api_token"
 BRAIN_RELATIONSHIP_MEMORY_WRITE_TOKEN="replace_me_with_a_distinct_random_memory_write_token"
 
-# Read-only Operations Core grounding for Relationship Manager current commercial
-# and project truth. The scoped token must match Operations Core's server-only
-# OPERATIONS_RELATIONSHIP_READ_TOKEN and grants no write/send/calendar authority.
+# Shared Operations Core origin. Each Relationship Manager source uses its own
+# independently revocable read-only credential.
 OPERATIONS_CORE_BASE_URL="http://127.0.0.1:3000"
+
+# Current commercial/project truth only. Grants no write/send/calendar authority.
 OPERATIONS_RELATIONSHIP_READ_TOKEN="replace_me_with_a_distinct_random_operations_read_token"
+
+# Dedicated role-opening/careers truth only. It is separate from project/commercial
+# state and grants no publication, candidate-message, interview or employment authority.
+OPERATIONS_CAREERS_READ_TOKEN="replace_me_with_a_distinct_random_careers_read_token"
 
 # Optional future private-hub integration origin. Leave empty when unused.
 PUBLIC_BASE_URL=""

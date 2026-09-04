@@ -6,7 +6,7 @@ import { parseRelationshipManagerCommunicationCycleInput } from "../core/busines
 import { BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH } from "../core/businessRoutePaths";
 import type { JsonResponse } from "./businessAutopilotAdmin";
 
-export const BUSINESS_RELATIONSHIP_MANAGER_ADMIN_CONTRACT = "business_relationship_manager_admin_v1" as const;
+export const BUSINESS_RELATIONSHIP_MANAGER_ADMIN_CONTRACT = "business_relationship_manager_admin_v2" as const;
 
 function safeFailure(error: unknown): Readonly<{ ok: false; error: string; rawErrorExposed: false }> {
   const code = error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message)
@@ -52,7 +52,15 @@ export async function handleBusinessRelationshipManagerAdmin(
     return json({
       ok: true,
       contract: BUSINESS_RELATIONSHIP_MANAGER_ADMIN_CONTRACT,
-      mode: "relationship_manager_communication_cycle_preview",
+      mode: "relationship_manager_caller_supplied_preview",
+      trust: {
+        canonicalContextBound: false,
+        callerSuppliedIdentityAndEvidenceUsedForPreview: true,
+        callerSuppliedCanonicalContextAccepted: false,
+        canonicalCycleRequiredBeforeDrafting: true,
+        canonicalCycleRequiredBeforeMemoryPersistence: true,
+        canonicalCycleRequiredBeforeApproval: true,
+      },
       cycleId: cycle.cycleId,
       observedAt: cycle.observedAt,
       normalizedMessageIds: cycle.projection.normalizedMessageIds,
@@ -73,17 +81,16 @@ export async function handleBusinessRelationshipManagerAdmin(
         disposition: cycle.decision.disposition,
         recommendedChannel: cycle.decision.recommendedChannel,
         meetingJustified: cycle.decision.meetingJustified,
-        modelApprovalGradeReady: cycle.decision.approvalGradeReady,
-        previewApprovalGradeReady: false,
+        legacyPreviewModelApprovalGradeReady: cycle.decision.approvalGradeReady,
+        canonicalApprovalGradeReady: false,
         prohibitedImplications: cycle.decision.prohibitedImplications,
         mustVerify: cycle.decision.mustVerify,
         mustNotAssume: cycle.decision.mustNotAssume,
         reasons: cycle.decision.reasons,
       },
       drafting: {
-        canonicalCompilerRequired: cycle.decision.origin === "relationship_manager_cycle",
-        requiredDecisionPackageId: cycle.decision.packageId,
-        requiredRelationshipCycleId: cycle.decision.relationshipCycleId,
+        allowedFromThisPreview: false,
+        canonicalContextBoundCycleRequired: true,
         approvalMustBindWritingProvenance: true,
       },
       memory: {
@@ -91,9 +98,9 @@ export async function handleBusinessRelationshipManagerAdmin(
         kinds: [...new Set(cycle.memoryObservations.map((item) => item.kind))],
         sourceRefs: [...new Set(cycle.memoryObservations.map((item) => item.sourceRef))],
         persisted: false,
+        persistenceAllowedFromThisPreview: false,
       },
       rawMessageBodiesExposed: false,
-      callerSuppliedTrustedContextAccepted: false,
       canonicalStateMutated: false,
       callsExternalNetwork: false,
       callsAI: false,
@@ -106,9 +113,12 @@ export async function handleBusinessRelationshipManagerAdmin(
     return json({
       ...safeFailure(error),
       contract: BUSINESS_RELATIONSHIP_MANAGER_ADMIN_CONTRACT,
-      mode: "relationship_manager_communication_cycle_preview",
+      mode: "relationship_manager_caller_supplied_preview",
+      trust: {
+        canonicalContextBound: false,
+        callerSuppliedCanonicalContextAccepted: false,
+      },
       rawMessageBodiesExposed: false,
-      callerSuppliedTrustedContextAccepted: false,
       canonicalStateMutated: false,
       sendsEmail: false,
       externalExecutionAllowed: false,

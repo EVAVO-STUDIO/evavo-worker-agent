@@ -21,7 +21,7 @@ function base(operationsRequired = true, careersRequired = false) {
       cycleId: "cycle-source-env-1",
       observedAt: "2026-09-04T22:00:30.000Z",
       decisionAt: "2026-09-04T22:01:00.000Z",
-      scenario: careersRequired ? "candidate" as const : "general" as const,
+      scenario: careersRequired ? "graduate_or_candidate" as const : "general" as const,
       objective: careersRequired
         ? "Answer whether a current role exists."
         : operationsRequired
@@ -60,6 +60,20 @@ function base(operationsRequired = true, careersRequired = false) {
         competingPersonIds: [],
       },
       channel: { currentChannel: "email" as const, canResolveInWriting: true },
+      ...(careersRequired ? {
+        candidate: {
+          relationshipId: "relationship-source-env-1",
+          personId: "person-source-env-1",
+          explicitRoleOpen: false,
+          activeRecruitmentProcess: false,
+          materialsSupplied: false,
+          materialsActuallyReviewed: false,
+          relevantSkillsEvidence: false,
+          futureRelevanceEvidence: false,
+          personalizedEffort: true,
+          clearFitEvidence: false,
+        },
+      } : {}),
       evidenceConfidence: 98,
     },
     context: {
@@ -90,10 +104,7 @@ function base(operationsRequired = true, careersRequired = false) {
 }
 
 test("missing Brain and required Operations config remain explicit provider_unavailable sources", async () => {
-  const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-    env: {},
-    ...base(true, false),
-  });
+  const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({ env: {}, ...base(true, false) });
   assert.equal(result.contract, "business_relationship_manager_canonical_source_hydration_env_v2");
   assert.equal(result.brainConfigured, false);
   assert.equal(result.operationsConfigured, false);
@@ -107,10 +118,7 @@ test("missing Brain and required Operations config remain explicit provider_unav
 });
 
 test("missing careers config blocks only when careers truth is required", async () => {
-  const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-    env: {},
-    ...base(false, true),
-  });
+  const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({ env: {}, ...base(false, true) });
   assert.equal(result.careersConfigured, false);
   assert.equal(result.cycle.careersState, "provider_unavailable");
   assert.equal(result.cycle.roleTruth, null);
@@ -118,10 +126,7 @@ test("missing careers config blocks only when careers truth is required", async 
 });
 
 test("Operations and careers configuration are not required when their truth is irrelevant", async () => {
-  const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-    env: {},
-    ...base(false, false),
-  });
+  const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({ env: {}, ...base(false, false) });
   assert.equal(result.operationsConfigured, false);
   assert.equal(result.careersConfigured, false);
   assert.equal(result.cycle.canonical.operationsState, "not_required");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decideCommercialAuthority, prohibitedCommercialCommitmentInstruction } from "../src/core/businessCommercialAuthority";
+import { decideCommercialAuthority, prohibitedCommercialCommitmentInstruction, type CommercialAuthorityGrant } from "../src/core/businessCommercialAuthority";
 
 const grant = {
   kind: "discount" as const,
@@ -26,6 +26,7 @@ const request = {
 
 test("allows only commitments covered by one explicit evidence-backed grant", () => {
   const result = decideCommercialAuthority(request, [grant]);
+  assert.equal(result.contract, "business_commercial_authority_v3");
   assert.equal(result.authorised, true);
   assert.equal(result.humanReviewRequired, false);
   assert.equal(prohibitedCommercialCommitmentInstruction(result, request), null);
@@ -58,6 +59,26 @@ test("accidental unscoped global grants fail closed", () => {
 test("explicit global grant can authorise a delegable commitment", () => {
   const global = { ...grant, scope: "global" as const, relationshipId: null, projectId: null };
   const result = decideCommercialAuthority(request, [global]);
+  assert.equal(result.authorised, true);
+});
+
+test("invalid deserialised scope cannot bypass runtime scope checks", () => {
+  const hostile = { ...grant, scope: "anything" } as unknown as CommercialAuthorityGrant;
+  const result = decideCommercialAuthority(request, [hostile]);
+  assert.equal(result.authorised, false);
+  assert.equal(result.humanReviewRequired, true);
+});
+
+test("malformed grant validity does not crash or authorise", () => {
+  const malformed = { ...grant, validFrom: "not-a-date" };
+  const result = decideCommercialAuthority(request, [malformed]);
+  assert.equal(result.authorised, false);
+  assert.equal(result.humanReviewRequired, true);
+});
+
+test("scope identifiers are compared after trimming", () => {
+  const padded = { ...grant, relationshipId: " rel-client ", projectId: " project-1 " };
+  const result = decideCommercialAuthority({ ...request, relationshipId: " rel-client ", projectId: " project-1 " }, [padded]);
   assert.equal(result.authorised, true);
 });
 

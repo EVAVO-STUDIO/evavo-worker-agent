@@ -4,6 +4,7 @@ import test from "node:test";
 import { DESIRED_EVAVO_MAILBOXES } from "../src/core/businessMailboxRegistry";
 import { buildCommunicationDecisionPackage } from "../src/core/businessCommunicationDecisionPackage";
 import { evaluateCommunicationExecutionGate } from "../src/core/businessCommunicationExecutionGate";
+import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
 import { createCommunicationSendEnvelope } from "../src/core/businessCommunicationSendEnvelope";
 
 const material = {
@@ -58,6 +59,25 @@ function approval() {
   });
 }
 
+function operatorApproval(overrides: Partial<OperatorCommunicationApprovalReceipt> = {}): OperatorCommunicationApprovalReceipt {
+  const envelope = approval();
+  return {
+    contract: "business_communication_operator_approval_v1",
+    approvalId: "operator-approval-1",
+    authority: "human_operator",
+    approverId: "greg",
+    approvedAt: envelope.approvedAt,
+    expiresAt: envelope.expiresAt,
+    materialSha256: envelope.materialSha256,
+    decisionPackageId: "decision-package-1",
+    senderKey: "greg",
+    mailboxKey: "greg",
+    evidenceRefs: ["operator-approval:approval-1"],
+    sourceSystem: "operator_approval",
+    ...overrides,
+  };
+}
+
 const review = {
   expectedRecipientAddresses: ["ashley@example.com"],
   prohibitedClaims: ["we are hiring", "we are not hiring"],
@@ -71,6 +91,7 @@ function evaluate(overrides: Record<string, unknown> = {}) {
     mailbox: DESIRED_EVAVO_MAILBOXES.greg,
     material,
     approval: approval(),
+    operatorApprovalReceipt: operatorApproval(),
     decisionPackage: decisionPackage(),
     review,
     runtimeSendingEnabled: true,
@@ -79,12 +100,26 @@ function evaluate(overrides: Record<string, unknown> = {}) {
   });
 }
 
-test("exact approval-bound material and decision can pass when runtime sending is explicitly enabled", () => {
+test("exact approval-bound material, operator receipt and decision can pass when runtime sending is explicitly enabled", () => {
   const result = evaluate();
   assert.equal(result.allowed, true);
   assert.equal(result.approvalBindingValid, true);
+  assert.equal(result.operatorApprovalValid, true);
   assert.equal(result.approvalContextValid, true);
   assert.equal(result.decisionValid, true);
+});
+
+test("missing operator approval receipt cannot execute", () => {
+  const result = evaluate({ operatorApprovalReceipt: null });
+  assert.equal(result.allowed, false);
+  assert.equal(result.operatorApprovalValid, false);
+  assert.ok(result.reasons.includes("operator_approval_receipt_missing"));
+});
+
+test("operator approval bound to another material hash cannot execute", () => {
+  const result = evaluate({ operatorApprovalReceipt: operatorApproval({ materialSha256: "f".repeat(64) }) });
+  assert.equal(result.allowed, false);
+  assert.ok(result.reasons.includes("operator_approval_material_mismatch"));
 });
 
 test("legacy material-only approval remains inspectable but cannot execute", () => {
@@ -129,7 +164,7 @@ test("runtime sending remains a distinct hard gate", () => {
   assert.ok(result.reasons.includes("runtime_sending_disabled"));
 });
 
-test("unverified Eva mailbox cannot be used even with an otherwise structurally valid approval", () => {
+test("unverified Eva mailbox cannot be used even with otherwise valid bindings", () => {
   const evaMaterial = { ...material, sender: "eva@evavo.com.au" };
   const evaApproval = createCommunicationSendEnvelope({
     envelopeId: "approval-eva",
@@ -143,7 +178,21 @@ test("unverified Eva mailbox cannot be used even with an otherwise structurally 
     evidenceIds: ["gmail:message-1"],
     approvalEvidenceIds: ["operator-approval:approval-eva"],
   });
-  const result = evaluate({ mailbox: DESIRED_EVAVO_MAILBOXES.eva, material: evaMaterial, approval: evaApproval });
+  const result = evaluate({
+    mailbox: DESIRED_EVAVO_MAILBOXES.eva,
+    material: evaMaterial,
+    approval: evaApproval,
+    operatorApprovalReceipt: {
+      ...operatorApproval(),
+      approvalId: "operator-approval-eva",
+      approvedAt: evaApproval.approvedAt,
+      expiresAt: evaApproval.expiresAt,
+      materialSha256: evaApproval.materialSha256,
+      senderKey: "eva",
+      mailboxKey: "eva",
+      evidenceRefs: ["operator-approval:approval-eva"],
+    },
+  });
   assert.equal(result.allowed, false);
   assert.ok(result.reasons.includes("mailbox_not_fully_verified"));
 });

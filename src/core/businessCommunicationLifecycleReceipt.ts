@@ -1,4 +1,4 @@
-export const BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT = "business_communication_lifecycle_receipt_v1" as const;
+export const BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT = "business_communication_lifecycle_receipt_v2" as const;
 
 export type CommunicationLifecycleStage =
   | "decided"
@@ -18,6 +18,8 @@ export type CommunicationLifecycleReceipt = Readonly<{
   executionVerified: boolean;
   decision: Readonly<{
     packageId: string;
+    origin: "direct" | "relationship_manager_cycle";
+    relationshipCycleId: string | null;
     decisionAt: string;
     disposition: string;
     evidenceIds: readonly string[];
@@ -42,6 +44,10 @@ export type CommunicationLifecycleReceipt = Readonly<{
     materialSha256?: string;
     approvalBindingSha256?: string;
     decisionPackageId?: string;
+    decisionOrigin?: "direct" | "relationship_manager_cycle";
+    relationshipCycleId?: string | null;
+    memoryCheckpointCycleId?: string | null;
+    memoryCheckpointRecordIds?: readonly string[];
   }> | null;
   outcome: Readonly<{
     assessedAt: string;
@@ -63,8 +69,8 @@ function text(value: string, field: string): string {
   return clean;
 }
 
-function optionalText(value: string | undefined, field: string): string | undefined {
-  return value === undefined ? undefined : text(value, field);
+function optionalText(value: string | null | undefined, field: string): string | undefined {
+  return value === undefined || value === null ? undefined : text(value, field);
 }
 
 function iso(value: string, field: string): string {
@@ -81,7 +87,14 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
   lifecycleId: string;
   relationshipId: string;
   threadId: string;
-  decision: CommunicationLifecycleReceipt["decision"];
+  decision: Readonly<{
+    packageId: string;
+    origin?: "direct" | "relationship_manager_cycle";
+    relationshipCycleId?: string | null;
+    decisionAt: string;
+    disposition: string;
+    evidenceIds: readonly string[];
+  }>;
   approval?: CommunicationLifecycleReceipt["approval"];
   execution?: CommunicationLifecycleReceipt["execution"];
   outcome?: CommunicationLifecycleReceipt["outcome"];
@@ -92,6 +105,14 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
   const decisionAt = iso(input.decision.decisionAt, "decision_at");
   const decisionEvidenceIds = uniqueEvidence(input.decision.evidenceIds);
   if (!decisionEvidenceIds.length) throw new Error("COMMUNICATION_LIFECYCLE_DECISION_EVIDENCE_REQUIRED");
+  const decisionOrigin = input.decision.origin ?? "direct";
+  const relationshipCycleId = optionalText(input.decision.relationshipCycleId, "relationship_cycle_id") ?? null;
+  if (decisionOrigin === "relationship_manager_cycle" && !relationshipCycleId) {
+    throw new Error("COMMUNICATION_LIFECYCLE_RELATIONSHIP_CYCLE_ID_REQUIRED");
+  }
+  if (decisionOrigin === "direct" && relationshipCycleId) {
+    throw new Error("COMMUNICATION_LIFECYCLE_DIRECT_DECISION_CANNOT_BIND_CYCLE");
+  }
 
   const approval = input.approval ? Object.freeze({
     envelopeId: text(input.approval.envelopeId, "approval_envelope_id"),
@@ -116,12 +137,16 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     ...(optionalText(input.execution.materialSha256, "execution_material_hash") ? { materialSha256: optionalText(input.execution.materialSha256, "execution_material_hash")!.toLowerCase() } : {}),
     ...(optionalText(input.execution.approvalBindingSha256, "execution_approval_binding_hash") ? { approvalBindingSha256: optionalText(input.execution.approvalBindingSha256, "execution_approval_binding_hash")!.toLowerCase() } : {}),
     ...(optionalText(input.execution.decisionPackageId, "execution_decision_package_id") ? { decisionPackageId: optionalText(input.execution.decisionPackageId, "execution_decision_package_id") } : {}),
+    ...(input.execution.decisionOrigin ? { decisionOrigin: input.execution.decisionOrigin } : {}),
+    ...(input.execution.relationshipCycleId !== undefined ? { relationshipCycleId: input.execution.relationshipCycleId } : {}),
+    ...(input.execution.memoryCheckpointCycleId !== undefined ? { memoryCheckpointCycleId: input.execution.memoryCheckpointCycleId } : {}),
+    ...(input.execution.memoryCheckpointRecordIds ? { memoryCheckpointRecordIds: uniqueEvidence(input.execution.memoryCheckpointRecordIds) } : {}),
   }) : null;
   if (execution && !approval) throw new Error("COMMUNICATION_LIFECYCLE_SEND_WITHOUT_APPROVAL");
   if (execution && execution.sentAt < approval!.approvedAt) throw new Error("COMMUNICATION_LIFECYCLE_SEND_BEFORE_APPROVAL");
   if (execution && !execution.recipientAddresses.length) throw new Error("COMMUNICATION_LIFECYCLE_RECIPIENT_REQUIRED");
 
-  const executionVerified = Boolean(execution
+  const commonExecutionVerified = Boolean(execution
     && approval
     && execution.requestId
     && execution.providerThreadId
@@ -132,6 +157,22 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     && execution.decisionPackageId === input.decision.packageId
     && approval.decisionPackageId === input.decision.packageId
     && approval.approvalEvidenceIds?.length);
+
+  let provenanceVerified = false;
+  if (commonExecutionVerified && execution) {
+    if (decisionOrigin === "direct") {
+      provenanceVerified = (execution.decisionOrigin ?? "direct") === "direct"
+        && !execution.relationshipCycleId
+        && !execution.memoryCheckpointCycleId;
+    } else {
+      provenanceVerified = execution.decisionOrigin === "relationship_manager_cycle"
+        && execution.relationshipCycleId === relationshipCycleId
+        && execution.memoryCheckpointCycleId === relationshipCycleId
+        && Boolean(execution.memoryCheckpointRecordIds?.length);
+    }
+  }
+
+  const executionVerified = commonExecutionVerified && provenanceVerified;
   if (execution && !executionVerified) blockers.push("execution_not_reconciled_to_authorized_request");
   if (executionVerified && execution!.providerThreadId !== text(input.threadId, "thread_id")) blockers.push("execution_thread_mismatch");
 
@@ -173,6 +214,8 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     executionVerified,
     decision: Object.freeze({
       packageId: text(input.decision.packageId, "decision_package_id"),
+      origin: decisionOrigin,
+      relationshipCycleId,
       decisionAt,
       disposition: text(input.decision.disposition, "decision_disposition"),
       evidenceIds: decisionEvidenceIds,

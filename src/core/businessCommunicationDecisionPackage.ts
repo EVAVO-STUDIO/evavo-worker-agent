@@ -6,7 +6,7 @@ import type { RelationshipContextResolutionPlan } from "./businessRelationshipCo
 import { buildBusinessThreadDelta, type ThreadDeltaInput } from "./businessThreadDelta";
 import { assessBusinessObligation, type BusinessObligation } from "./businessObligationLedger";
 
-export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v2" as const;
+export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v3" as const;
 
 export type CommunicationScenario = "general" | "graduate_or_candidate";
 
@@ -23,6 +23,7 @@ export type CommunicationDecisionPackageInput = Readonly<{
   evidenceReadiness?: CommunicationEvidenceReadiness | null;
   staffBrief?: RelationshipStaffBrief | null;
   contextResolutionPlan?: RelationshipContextResolutionPlan | null;
+  decisionAt?: string | null;
 }>;
 
 export type CommunicationDecisionPackage = Readonly<{
@@ -30,6 +31,8 @@ export type CommunicationDecisionPackage = Readonly<{
   packageId: string;
   scenario: CommunicationScenario;
   objective: string;
+  decisionAt: string;
+  replayDeterministic: boolean;
   disposition: "reply" | "do_not_reply" | "review_then_reply" | "escalate";
   recommendedChannel: ReturnType<typeof decideRelationshipCommunicationChannel>["recommendedChannel"];
   meetingJustified: boolean;
@@ -49,13 +52,24 @@ export type CommunicationDecisionPackage = Readonly<{
   reasons: readonly string[];
 }>;
 
+function resolveDecisionClock(value?: string | null): Readonly<{ at: string; replayDeterministic: boolean; date: Date }> {
+  if (!value) {
+    const date = new Date();
+    return Object.freeze({ at: date.toISOString(), replayDeterministic: false, date });
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error("COMMUNICATION_DECISION_AT_INVALID");
+  return Object.freeze({ at: date.toISOString(), replayDeterministic: true, date });
+}
+
 export function buildCommunicationDecisionPackage(input: CommunicationDecisionPackageInput): CommunicationDecisionPackage {
   if (!input.evidenceIds.length) throw new Error("COMMUNICATION_DECISION_EVIDENCE_REQUIRED");
   if (input.evidenceConfidence < 0 || input.evidenceConfidence > 100) throw new Error("COMMUNICATION_DECISION_CONFIDENCE_INVALID");
 
+  const clock = resolveDecisionClock(input.decisionAt);
   const delta = buildBusinessThreadDelta(input.thread);
   const channel = decideRelationshipCommunicationChannel(input.channel);
-  const obligationAssessments = input.obligations.map((item) => assessBusinessObligation(item));
+  const obligationAssessments = input.obligations.map((item) => assessBusinessObligation(item, clock.date));
   const activeEvavoObligations = obligationAssessments
     .filter((assessment) => assessment.obligation.owner === "evavo" && (assessment.obligation.status === "open" || assessment.obligation.status === "uncertain"))
     .map((assessment) => assessment.obligation.statement);
@@ -67,6 +81,8 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
   const staffPriorities = [...(input.staffBrief?.priorities ?? [])];
   let disposition: CommunicationDecisionPackage["disposition"] = "reply";
   let candidateStage: CommunicationDecisionPackage["candidateStage"];
+
+  if (!clock.replayDeterministic) reasons.push("Legacy decision path omitted decisionAt; exact replay timing is not guaranteed.");
 
   if (input.scenario === "graduate_or_candidate") {
     if (!input.candidate) throw new Error("COMMUNICATION_DECISION_CANDIDATE_CONTEXT_REQUIRED");
@@ -123,6 +139,8 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     packageId: input.packageId,
     scenario: input.scenario,
     objective: input.objective,
+    decisionAt: clock.at,
+    replayDeterministic: clock.replayDeterministic,
     disposition,
     recommendedChannel: channel.recommendedChannel,
     meetingJustified: channel.meetingJustified,
@@ -141,4 +159,12 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     mustNotAssume: Object.freeze([...new Set(mustNotAssume)]),
     reasons: Object.freeze([...new Set(reasons)]),
   });
+}
+
+export function buildDeterministicCommunicationDecisionPackage(
+  input: CommunicationDecisionPackageInput & Readonly<{ decisionAt: string }>,
+): CommunicationDecisionPackage {
+  const result = buildCommunicationDecisionPackage(input);
+  if (!result.replayDeterministic) throw new Error("COMMUNICATION_DECISION_REPLAY_NOT_DETERMINISTIC");
+  return result;
 }

@@ -8,6 +8,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const files = {
   admin: "src/routes/businessRelationshipManagerAdmin.ts",
   candidateRuntime: "src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts",
+  candidateApproval: "src/core/businessRelationshipManagerCanonicalCandidateApprovalRuntime.ts",
+  canonicalApproval: "src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts",
   careersPolicy: "src/core/businessCareersRelationshipPolicy.ts",
   careersRuntime: "src/core/businessRelationshipManagerCanonicalCareersContextRuntime.ts",
   approvalRuntime: "src/core/businessRelationshipManagerApprovalRuntime.ts",
@@ -21,6 +23,7 @@ const files = {
   learningProvenance: "src/core/businessCommunicationOutcomeLearningProvenance.ts",
   dryRun: "tests/businessRelationshipManagerEndToEndDryRun.test.ts",
   candidateTest: "tests/businessRelationshipManagerCanonicalCandidateRuntime.test.ts",
+  candidateBindingTest: "tests/businessRelationshipManagerCanonicalApprovalCandidateBinding.test.ts",
 };
 
 const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
@@ -47,6 +50,7 @@ requireToken("admin", "sendsEmail: false", "Admin preview must advertise sendsEm
 
 for (const token of [
   "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
+  'scenario !== "graduate_or_candidate"',
   "careersRequired: true",
   "roleTruth: sources.cycle.roleTruth",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_ROLE_TRUTH",
@@ -59,6 +63,16 @@ requireToken("careersPolicy", "business_careers_relationship_policy_v3", "Career
 forbidToken("careersPolicy", "Boolean(input.openRoleConfirmed)", "Careers policy must not trust openRoleConfirmed fallback");
 requireToken("candidateTest", "manual role flags cannot bypass missing canonical careers and Brain truth", "Candidate regression must pin manual-role bypass prevention");
 
+requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v3", "Canonical approval must use v3 candidate-policy-aware contract");
+requireToken("canonicalApproval", "business_candidate_policy_approval_binding_v1", "Canonical approval must define typed candidate policy binding");
+requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_POLICY_BINDING_REQUIRED", "Generic candidate approval must require policy binding");
+requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_ROLE_AUTHORITY_REQUIRED", "Candidate referral/meeting approval must require role authority");
+requireToken("candidateApproval", "business_relationship_manager_canonical_candidate_approval_runtime_v2", "Candidate approval wrapper must use v2 binding contract");
+requireToken("candidateApproval", "BUSINESS_CANDIDATE_POLICY_APPROVAL_BINDING_CONTRACT", "Candidate approval wrapper must generate the policy binding internally");
+requireToken("candidateApproval", "candidatePolicyBinding", "Candidate approval wrapper must pass the policy binding into canonical approval");
+requireToken("candidateApproval", "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_POLICY_BINDING_NOT_PRESERVED", "Candidate approval wrapper must verify binding preservation");
+requireToken("candidateBindingTest", "generic canonical approval refuses a candidate cycle without careers policy binding", "Regression must pin direct generic candidate approval bypass");
+
 requireToken("approvalRuntime", "prepareStaffCommunicationApprovalCandidate", "Approval runtime must use canonical staff approval candidate builder");
 requireToken("approvalRuntime", "bindRelationshipManagerApprovalCandidatePersistence", "Approval runtime must expose candidate-persistence transition");
 requireToken("approvalRuntime", "readyForCandidatePersistence: true", "Unpersisted approval preparation must advertise persistence as next state");
@@ -68,7 +82,7 @@ requireToken("approvalRuntime", "externalExecutionAllowed: false", "Approval run
 requireToken("approvalCandidate", "bindStaffWritingOutputForApproval", "Approval candidate must validate Writing Studio output provenance");
 requireToken("approvalCandidate", "STAFF_APPROVAL_CANDIDATE_MEMORY_NOT_DURABLE", "Approval candidate must fail closed on non-durable Relationship Manager memory");
 requireToken("approvalCandidate", "STAFF_APPROVAL_CANDIDATE_SENDER_IDENTITY_MISMATCH", "Approval candidate must verify sender identity before human approval");
-requireToken("approvalCandidatePersistence", "evavo-approval-candidate-write-request-v1", "Approval candidate persistence must use an explicit durable write request");
+requireToken("approvalCandidatePersistence", "evavo-approval-candidate-write-request-v1", "Approval candidate persistence must use explicit durable write request");
 requireToken("approvalCandidatePersistence", "idempotent_replay", "Approval candidate persistence must support safe idempotent replay");
 requireToken("approvalCandidatePersistence", "approvalCandidatePersistenceEvidenceRef", "Approval candidate persistence must derive immutable human-approval evidence");
 requireToken("approvalFinalizer", "candidatePersistence", "Human approval finalization must require candidate persistence");
@@ -114,10 +128,12 @@ if (failures.length) {
 
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v4_careers_truth",
+  contract: "relationship_manager_governed_flow_check_v5_candidate_policy_binding",
   adminPreviewSendCapable: false,
   candidateUsesCanonicalCareersTruth: true,
   manualRoleFlagsAuthorizeHiring: false,
+  genericCandidateApprovalBypassBlocked: true,
+  candidatePolicyBindingRequired: true,
   approvalRequiresDurableCycle: true,
   approvalRequiresWritingProvenance: true,
   approvalRequiresDurableCandidate: true,

@@ -66,6 +66,8 @@ export async function handleBusinessRelationshipManagerAdmin(
       evidenceReadiness: cycle.evidenceReadiness,
       decision: {
         packageId: cycle.decision.packageId,
+        origin: cycle.decision.origin,
+        relationshipCycleId: cycle.decision.relationshipCycleId,
         decisionAt: cycle.decision.decisionAt,
         replayDeterministic: cycle.decision.replayDeterministic,
         disposition: cycle.decision.disposition,
@@ -77,6 +79,12 @@ export async function handleBusinessRelationshipManagerAdmin(
         mustVerify: cycle.decision.mustVerify,
         mustNotAssume: cycle.decision.mustNotAssume,
         reasons: cycle.decision.reasons,
+      },
+      drafting: {
+        canonicalCompilerRequired: cycle.decision.origin === "relationship_manager_cycle",
+        requiredDecisionPackageId: cycle.decision.packageId,
+        requiredRelationshipCycleId: cycle.decision.relationshipCycleId,
+        approvalMustBindWritingProvenance: true,
       },
       memory: {
         observationCount: cycle.memoryObservations.length,

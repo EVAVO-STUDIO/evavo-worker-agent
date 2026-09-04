@@ -1,11 +1,11 @@
 import type { BusinessObligation } from "./businessObligationLedger";
 import type { BrainMemoryContextResponse } from "./businessMemoryContextBridge";
 
-export const BUSINESS_RELATIONSHIP_360_CONTEXT_CONTRACT = "business_relationship_360_context_v2" as const;
+export const BUSINESS_RELATIONSHIP_360_CONTEXT_CONTRACT = "business_relationship_360_context_v3" as const;
 
 export type Relationship360EvidenceItem = Readonly<{
   id: string;
-  domain: "identity" | "gmail" | "operations" | "support" | "document" | "calendar" | "memory" | "decision" | "obligation" | "other";
+  domain: "identity" | "gmail" | "operations" | "careers" | "support" | "document" | "calendar" | "memory" | "decision" | "obligation" | "other";
   summary: string;
   status: "current" | "historical" | "uncertain" | "conflicting";
   authority: "canonical" | "authoritative" | "supporting" | "observational";
@@ -23,6 +23,7 @@ export type Relationship360Input = Readonly<{
   organizationSummary?: string | null;
   projectSummary?: string | null;
   commercialSummary?: string | null;
+  careersSummary?: string | null;
   supportSummary?: string | null;
   communicationSummary?: string | null;
   documentsSummary?: string | null;
@@ -41,6 +42,7 @@ export type Relationship360Context = Readonly<{
   organization: string | null;
   project: string | null;
   commercial: string | null;
+  careers: string | null;
   support: string | null;
   communications: string | null;
   documents: string | null;
@@ -117,6 +119,7 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
   if (input.threadId && !clean(input.communicationSummary)) missingCriticalContext.push("A communication thread is linked but current thread state is missing.");
   if (uncertainItems.some((item) => item.domain === "document")) missingCriticalContext.push("Document/version context contains unresolved uncertainty.");
   if (uncertainItems.some((item) => item.domain === "identity")) missingCriticalContext.push("Identity context contains unresolved uncertainty.");
+  if (uncertainItems.some((item) => item.domain === "careers")) missingCriticalContext.push("Careers/role-opening context contains unresolved uncertainty.");
 
   const obligations = input.obligations ?? [];
   const active = obligations.filter((item) => item.status === "open" || item.status === "uncertain");
@@ -127,6 +130,7 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
   if (evavo.length) recommendedAttention.push(`EVAVO owns ${evavo.length} active obligation(s); address these before creating new communication debt.`);
   if (conflicts.length) recommendedAttention.push("Resolve conflicting evidence before making a consequential external claim or commitment.");
   if (missingCriticalContext.length) recommendedAttention.push("Fill critical context gaps before approval-grade external action.");
+  if (clean(input.careersSummary)) recommendedAttention.push("Use dedicated careers truth for role-opening claims; do not infer hiring status from project or commercial state.");
   if (clean(input.supportSummary)) recommendedAttention.push("Consider live support/service context before choosing tone, commitments or follow-up pressure.");
 
   const memoryEvidence = input.memory?.records ?? [];
@@ -141,6 +145,7 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
     clean(input.organizationSummary) ? `Organisation: ${clean(input.organizationSummary)}` : null,
     clean(input.projectSummary) ? `Project: ${clean(input.projectSummary)}` : null,
     clean(input.commercialSummary) ? `Commercial: ${clean(input.commercialSummary)}` : null,
+    clean(input.careersSummary) ? `Careers: ${clean(input.careersSummary)}` : null,
     clean(input.supportSummary) ? `Support: ${clean(input.supportSummary)}` : null,
     clean(input.communicationSummary) ? `Communication: ${clean(input.communicationSummary)}` : null,
     evavo.length ? `EVAVO owes: ${evavo.join("; ")}` : null,
@@ -155,6 +160,7 @@ export function buildBusinessRelationship360Context(input: Relationship360Input)
     organization: clean(input.organizationSummary),
     project: clean(input.projectSummary),
     commercial: clean(input.commercialSummary),
+    careers: clean(input.careersSummary),
     support: clean(input.supportSummary),
     communications: clean(input.communicationSummary),
     documents: clean(input.documentsSummary),

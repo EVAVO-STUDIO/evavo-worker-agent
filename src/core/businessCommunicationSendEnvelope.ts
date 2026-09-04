@@ -29,6 +29,7 @@ export type CommunicationApprovalBinding = Readonly<{
   mailboxKey: MailboxKey;
   decisionPackageId: string;
   evidenceIds: readonly string[];
+  approvalEvidenceIds: readonly string[];
   bindingSha256: string;
 }>;
 
@@ -57,6 +58,12 @@ function normaliseAddress(value: string): string {
 
 function normaliseAddresses(values: readonly string[] | undefined): readonly string[] {
   return Object.freeze([...new Set((values ?? []).map(normaliseAddress))].sort());
+}
+
+function normaliseEvidence(values: readonly string[], field: "evidence" | "approval_evidence"): readonly string[] {
+  const normalized = Object.freeze([...new Set(values.map((item) => item.trim()).filter(Boolean))].sort());
+  if (!normalized.length) throw new Error(`COMMUNICATION_SEND_${field.toUpperCase()}_REQUIRED`);
+  return normalized;
 }
 
 function canonicalMaterial(material: CommunicationSendMaterial): CommunicationSendMaterial {
@@ -105,24 +112,27 @@ function buildApprovalBinding(input: Readonly<{
   mailboxKey: MailboxKey;
   decisionPackageId: string;
   evidenceIds: readonly string[];
+  approvalEvidenceIds: readonly string[];
 }>): CommunicationApprovalBinding {
   const sender = EVAVO_COMMUNICATION_SENDERS[input.senderKey];
   if (!sender) throw new Error("COMMUNICATION_SEND_SENDER_KEY_INVALID");
   const decisionPackageId = clean(input.decisionPackageId, "decision_package_id", 300);
-  const evidenceIds = Object.freeze([...new Set(input.evidenceIds.map((item) => item.trim()).filter(Boolean))].sort());
-  if (!evidenceIds.length) throw new Error("COMMUNICATION_SEND_EVIDENCE_REQUIRED");
+  const evidenceIds = normaliseEvidence(input.evidenceIds, "evidence");
+  const approvalEvidenceIds = normaliseEvidence(input.approvalEvidenceIds, "approval_evidence");
   const payload = JSON.stringify({
     materialSha256: input.materialSha256,
     senderKey: input.senderKey,
     mailboxKey: input.mailboxKey,
     decisionPackageId,
     evidenceIds,
+    approvalEvidenceIds,
   });
   return Object.freeze({
     senderKey: input.senderKey,
     mailboxKey: input.mailboxKey,
     decisionPackageId,
     evidenceIds,
+    approvalEvidenceIds,
     bindingSha256: sha256(payload),
   });
 }
@@ -137,6 +147,7 @@ export function createCommunicationSendEnvelope(input: Readonly<{
   mailboxKey?: MailboxKey;
   decisionPackageId?: string;
   evidenceIds?: readonly string[];
+  approvalEvidenceIds?: readonly string[];
 }>): CommunicationSendEnvelope {
   const approvedAt = new Date(input.approvedAt);
   const expiresAt = new Date(input.expiresAt);
@@ -147,8 +158,8 @@ export function createCommunicationSendEnvelope(input: Readonly<{
   if (!material.to.length) throw new Error("COMMUNICATION_SEND_TO_REQUIRED");
   const materialSha256 = communicationSendMaterialHash(material);
 
-  const hasAnyBinding = Boolean(input.senderKey || input.mailboxKey || input.decisionPackageId || input.evidenceIds);
-  const hasFullBinding = Boolean(input.senderKey && input.mailboxKey && input.decisionPackageId && input.evidenceIds?.length);
+  const hasAnyBinding = Boolean(input.senderKey || input.mailboxKey || input.decisionPackageId || input.evidenceIds || input.approvalEvidenceIds);
+  const hasFullBinding = Boolean(input.senderKey && input.mailboxKey && input.decisionPackageId && input.evidenceIds?.length && input.approvalEvidenceIds?.length);
   if (hasAnyBinding && !hasFullBinding) throw new Error("COMMUNICATION_SEND_APPROVAL_BINDING_INCOMPLETE");
 
   let approvalBinding: CommunicationApprovalBinding | undefined;
@@ -162,6 +173,7 @@ export function createCommunicationSendEnvelope(input: Readonly<{
       mailboxKey: input.mailboxKey!,
       decisionPackageId: input.decisionPackageId!,
       evidenceIds: input.evidenceIds!,
+      approvalEvidenceIds: input.approvalEvidenceIds!,
     });
   }
 
@@ -188,6 +200,7 @@ export function verifyCommunicationApprovalBinding(envelope: CommunicationSendEn
     mailboxKey: binding.mailboxKey,
     decisionPackageId: binding.decisionPackageId,
     evidenceIds: binding.evidenceIds,
+    approvalEvidenceIds: binding.approvalEvidenceIds,
   });
   if (expected.bindingSha256 !== binding.bindingSha256) reasons.push("approval_binding_integrity_failed");
   if (communicationSendMaterialHash(envelope.material) !== envelope.materialSha256) reasons.push("approved_material_integrity_failed");

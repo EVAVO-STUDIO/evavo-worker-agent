@@ -9,6 +9,7 @@ import {
 } from "../src/core/businessCommunicationExecutionRequest";
 import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
 import { createCommunicationSendEnvelope } from "../src/core/businessCommunicationSendEnvelope";
+import { approvalCandidatePersistenceEvidenceRef } from "../src/core/businessStaffCommunicationApprovalCandidatePersistence";
 import type { RelationshipManagerMemoryPersistenceResult } from "../src/core/businessRelationshipManagerMemoryPersistence";
 
 const material = {
@@ -93,11 +94,11 @@ function directInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("fully authorized direct decision produces v3 Gmail execution request", () => {
+test("fully authorized direct decision produces v4 Gmail execution request", () => {
   const result = authorizeCommunicationExecutionRequest(directInput());
   assert.equal(result.gate.allowed, true);
   assert.ok(result.request);
-  assert.equal(result.request?.contract, "business_communication_execution_request_v3");
+  assert.equal(result.request?.contract, "business_communication_execution_request_v4");
   assert.equal(result.request?.authorization.decisionOrigin, "direct");
   assert.equal(result.request?.authorization.memoryCheckpoint, null);
   assert.equal(result.request?.authorization.approvalCandidate, null);
@@ -121,7 +122,10 @@ test("asserting a request throws when runtime sending is disabled", () => {
 
 function canonicalFixture(cycleId = "cycle-2") {
   const cycleDecision = makeDecision("relationship_manager_cycle", cycleId);
-  const candidateEvidenceRef = `approval-candidate:${"c".repeat(64)}`;
+  const candidateId = `approval-candidate-${cycleId}`;
+  const candidateSha256 = "d".repeat(64);
+  const recordId = `doc-${cycleId}:ver-${cycleId}`;
+  const candidateEvidenceRef = approvalCandidatePersistenceEvidenceRef({ candidateId, candidateSha256, recordId });
   const approval = createCommunicationSendEnvelope({
     envelopeId: `approval-${cycleId}`,
     approvedAt: "2026-09-04T01:05:00Z",
@@ -153,12 +157,7 @@ function canonicalFixture(cycleId = "cycle-2") {
     blockers: [],
     externalEffectPerformed: false,
   };
-  const approvalCandidate = {
-    candidateId: `approval-candidate-${cycleId}`,
-    candidateSha256: "d".repeat(64),
-    recordId: `approval-candidate-record-${cycleId}`,
-    evidenceRef: candidateEvidenceRef,
-  } as const;
+  const approvalCandidate = { candidateId, candidateSha256, recordId, evidenceRef: candidateEvidenceRef } as const;
   return { cycleDecision, approval, operatorApproval: operatorApprovalFor(approval), persistence, approvalCandidate };
 }
 
@@ -194,6 +193,22 @@ test("canonical relationship cycle requires persisted approval candidate authori
   }), /APPROVAL_CANDIDATE_REQUIRED/);
 });
 
+test("canonical relationship cycle rejects forged approval-candidate metadata even with a bound evidence token", () => {
+  const fixture = canonicalFixture();
+  assert.throws(() => authorizeCommunicationExecutionRequest({
+    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
+    material,
+    approval: fixture.approval,
+    operatorApprovalReceipt: fixture.operatorApproval,
+    decisionPackage: fixture.cycleDecision,
+    relationshipManagerMemoryPersistence: fixture.persistence,
+    approvalCandidate: { ...fixture.approvalCandidate, recordId: "doc-forged:ver-forged" },
+    review,
+    runtimeSendingEnabled: true,
+    now: new Date("2026-09-04T01:30:00Z"),
+  }), /APPROVAL_CANDIDATE_EVIDENCE_MISMATCH/);
+});
+
 test("canonical relationship cycle request carries memory, writing and persisted candidate provenance", () => {
   const fixture = canonicalFixture();
   const result = authorizeCommunicationExecutionRequest({
@@ -213,5 +228,5 @@ test("canonical relationship cycle request carries memory, writing and persisted
   assert.equal(result.request?.authorization.relationshipCycleId, "cycle-2");
   assert.deepEqual(result.request?.authorization.memoryCheckpoint?.recordIds, ["mem-1", "mem-2"]);
   assert.equal(result.request?.authorization.writingProvenance?.writingRequestId, "writing-request-cycle-2");
-  assert.equal(result.request?.authorization.approvalCandidate?.recordId, "approval-candidate-record-cycle-2");
+  assert.equal(result.request?.authorization.approvalCandidate?.recordId, "doc-cycle-2:ver-cycle-2");
 });

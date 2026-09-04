@@ -36,11 +36,14 @@ export const DESIRED_EVAVO_MAILBOXES: Readonly<Record<MailboxKey, BusinessMailbo
     outboundProvider: "gmail",
     relationshipManagerMayUse: true,
     verification: Object.freeze({
-      receiveVerifiedAt: null,
+      receiveVerifiedAt: "2026-09-04T01:39:00.000Z",
       sendAsVerifiedAt: "2026-09-04T01:38:36.000Z",
       signatureVerifiedAt: "2026-09-04T01:38:36.000Z",
       providerSettingsVerifiedAt: null,
-      evidenceRefs: Object.freeze(["gmail:sent:1a06a116dda4f657"]),
+      evidenceRefs: Object.freeze([
+        "gmail:received:1a06a0d67e753686",
+        "gmail:sent:1a06a116dda4f657",
+      ]),
     }),
   }),
   eva: Object.freeze({

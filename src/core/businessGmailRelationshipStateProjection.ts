@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { CommunicationMessage } from "./businessCommunicationIntelligence";
 import {
   ingestGmailThreadForRelationship,
   type GmailProviderMessage,
@@ -72,7 +73,7 @@ function projectObligations(input: Readonly<{
   personId?: string | null;
   organizationId?: string | null;
   projectId?: string | null;
-  messages: readonly ReturnType<typeof ingestGmailThreadForRelationship>["normalizedMessages"][number][];
+  messages: readonly CommunicationMessage[];
   analysis: ReturnType<typeof ingestGmailThreadForRelationship>["analysis"];
 }>): readonly BusinessObligation[] {
   return Object.freeze(input.analysis.obligations.map((obligation) => {

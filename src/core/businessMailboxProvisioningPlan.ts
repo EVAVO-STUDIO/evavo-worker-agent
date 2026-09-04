@@ -30,7 +30,7 @@ export type MailboxProvisioningPlan = Readonly<{
   contract: typeof BUSINESS_MAILBOX_PROVISIONING_PLAN_CONTRACT;
   address: string;
   preserveAddresses: readonly string[];
-  currentState: BusinessMailboxRecord["state"];
+  currentState: BusinessMailboxRecord["provisioningState"];
   targetState: "fully_verified";
   mayUseBeforeCompletion: false;
   steps: readonly MailboxProvisioningStep[];
@@ -80,7 +80,7 @@ export function buildMailboxProvisioningPlan(input: Readonly<{
     contract: BUSINESS_MAILBOX_PROVISIONING_PLAN_CONTRACT,
     address,
     preserveAddresses: Object.freeze(preserveAddresses),
-    currentState: input.mailbox.state,
+    currentState: input.mailbox.provisioningState,
     targetState: "fully_verified",
     mayUseBeforeCompletion: false,
     steps: Object.freeze(steps),

@@ -21,6 +21,18 @@ const positiveAssessment = {
   reasons: ["Evidence shows positive progress."],
 };
 
+const relationshipProvenance = {
+  decisionPackageId: "relationship-cycle:cycle-1",
+  decisionOrigin: "relationship_manager_cycle" as const,
+  relationshipCycleId: "cycle-1",
+  handoffId: "handoff-1",
+  writingRequestId: "writing-request-1",
+  approvalCandidateId: "approval-candidate-1",
+  approvalCandidateSha256: "d".repeat(64),
+  approvalCandidateRecordId: "approval-candidate-record-1",
+  providerMessageId: "gmail-sent-1",
+};
+
 test("durable positive outcomes become relationship memory records", () => {
   const record = communicationOutcomeToMemoryRecord(positiveAssessment);
   assert.ok(record);
@@ -29,34 +41,32 @@ test("durable positive outcomes become relationship memory records", () => {
   assert.ok(record?.entities.some((entity) => entity.kind === "relationship" && entity.id === "rel-1"));
 });
 
-test("Relationship Manager outcomes retain decision, cycle and exact Writing Studio request lineage", () => {
-  const record = communicationOutcomeToMemoryRecord(positiveAssessment, {
-    decisionPackageId: "relationship-cycle:cycle-1",
-    decisionOrigin: "relationship_manager_cycle",
-    relationshipCycleId: "cycle-1",
-    handoffId: "handoff-1",
-    writingRequestId: "writing-request-1",
-    providerMessageId: "gmail-sent-1",
-  });
+test("Relationship Manager outcomes retain decision, writing and persisted approval-candidate lineage", () => {
+  const record = communicationOutcomeToMemoryRecord(positiveAssessment, relationshipProvenance);
   assert.ok(record);
   assert.equal(record?.lineage.decisionPackageId, "relationship-cycle:cycle-1");
   assert.equal(record?.lineage.relationshipCycleId, "cycle-1");
   assert.equal(record?.lineage.handoffId, "handoff-1");
   assert.equal(record?.lineage.writingRequestId, "writing-request-1");
+  assert.equal(record?.lineage.approvalCandidateId, "approval-candidate-1");
+  assert.equal(record?.lineage.approvalCandidateSha256, "d".repeat(64));
+  assert.equal(record?.lineage.approvalCandidateRecordId, "approval-candidate-record-1");
   assert.equal(record?.lineage.providerMessageId, "gmail-sent-1");
   assert.ok(record?.tags.includes("relationship-cycle:cycle-1"));
   assert.ok(record?.tags.includes("writing-request:writing-request-1"));
+  assert.ok(record?.tags.includes("approval-candidate:approval-candidate-1"));
 });
 
 test("Relationship Manager outcome provenance cannot point at another provider message", () => {
   assert.throws(() => communicationOutcomeToMemoryRecord(positiveAssessment, {
-    decisionPackageId: "relationship-cycle:cycle-1",
-    decisionOrigin: "relationship_manager_cycle",
-    relationshipCycleId: "cycle-1",
-    handoffId: "handoff-1",
-    writingRequestId: "writing-request-1",
+    ...relationshipProvenance,
     providerMessageId: "gmail-sent-other",
   }), /PROVIDER_MESSAGE_MISMATCH/);
+});
+
+test("Relationship Manager outcome provenance requires persisted candidate lineage", () => {
+  const { approvalCandidateRecordId: _recordId, ...missingCandidateRecord } = relationshipProvenance;
+  assert.throws(() => communicationOutcomeToMemoryRecord(positiveAssessment, missingCandidateRecord), /APPROVAL_CANDIDATE_PROVENANCE_REQUIRED/);
 });
 
 test("pending outcomes are not written to durable learning memory", () => {

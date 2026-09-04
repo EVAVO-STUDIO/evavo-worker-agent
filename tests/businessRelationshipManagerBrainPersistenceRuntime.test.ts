@@ -48,7 +48,7 @@ function cycle() {
 
 function brainPort(statusForMaterial: "appended" | "rejected" = "appended"): BrainMemoryIngestionPort {
   return {
-    contract: "business_brain_memory_ingestion_port_v1",
+    contract: "business_brain_memory_ingestion_port_v2",
     write: async (request) => {
       const rejected = request.observation.material && statusForMaterial === "rejected";
       return {

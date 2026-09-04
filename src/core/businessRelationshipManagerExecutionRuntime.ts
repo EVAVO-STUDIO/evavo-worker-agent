@@ -98,6 +98,12 @@ export function authorizeRelationshipManagerCommunicationExecution(input: Readon
     operatorApprovalReceipt: input.operatorApprovalReceipt,
     decisionPackage: input.cycle.decision,
     relationshipManagerMemoryPersistence: input.memoryPersistence,
+    approvalCandidate: {
+      candidateId: input.finalization.approvalCandidateId,
+      candidateSha256: input.finalization.approvalCandidateSha256,
+      recordId: input.finalization.approvalCandidateRecordId,
+      evidenceRef: expectedCandidateEvidenceRef,
+    },
     review: input.review,
     runtimeSendingEnabled: input.runtimeSendingEnabled,
     contextChangesSinceDecision: input.contextChangesSinceDecision,

@@ -24,6 +24,10 @@ function approval() {
     expiresAt: "2026-09-04T02:00:00Z",
     approvedBy: "greg",
     material,
+    senderKey: "greg",
+    mailboxKey: "greg",
+    decisionPackageId: "decision-package-1",
+    evidenceIds: ["gmail:message-1", "roles:current-openings"],
   });
 }
 
@@ -35,7 +39,7 @@ const review = {
   suppressionActive: false,
 };
 
-test("exact approved material can pass when runtime sending is explicitly enabled", () => {
+test("exact approval-bound material can pass when runtime sending is explicitly enabled", () => {
   const result = evaluateCommunicationExecutionGate({
     mailbox: DESIRED_EVAVO_MAILBOXES.greg,
     material,
@@ -45,7 +49,29 @@ test("exact approved material can pass when runtime sending is explicitly enable
     now: new Date("2026-09-04T01:30:00Z"),
   });
   assert.equal(result.allowed, true);
+  assert.equal(result.approvalBindingValid, true);
   assert.equal(result.approvalContextValid, true);
+});
+
+test("legacy material-only approval remains inspectable but cannot execute", () => {
+  const legacy = createCommunicationSendEnvelope({
+    envelopeId: "legacy-approval",
+    approvedAt: "2026-09-04T01:00:00Z",
+    expiresAt: "2026-09-04T02:00:00Z",
+    approvedBy: "greg",
+    material,
+  });
+  const result = evaluateCommunicationExecutionGate({
+    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
+    material,
+    approval: legacy,
+    review,
+    runtimeSendingEnabled: true,
+    now: new Date("2026-09-04T01:30:00Z"),
+  });
+  assert.equal(result.allowed, false);
+  assert.equal(result.approvalBindingValid, false);
+  assert.ok(result.reasons.includes("approval_binding_missing"));
 });
 
 test("runtime sending remains a distinct hard gate", () => {
@@ -61,7 +87,7 @@ test("runtime sending remains a distinct hard gate", () => {
   assert.ok(result.reasons.includes("runtime_sending_disabled"));
 });
 
-test("unverified Eva mailbox cannot be used even with an otherwise valid approval", () => {
+test("unverified Eva mailbox cannot be used even with an otherwise structurally valid approval", () => {
   const evaMaterial = { ...material, sender: "eva@evavo.com.au" };
   const evaApproval = createCommunicationSendEnvelope({
     envelopeId: "approval-eva",
@@ -69,6 +95,10 @@ test("unverified Eva mailbox cannot be used even with an otherwise valid approva
     expiresAt: "2026-09-04T02:00:00Z",
     approvedBy: "greg",
     material: evaMaterial,
+    senderKey: "eva",
+    mailboxKey: "eva",
+    decisionPackageId: "decision-package-eva",
+    evidenceIds: ["gmail:message-1"],
   });
   const result = evaluateCommunicationExecutionGate({
     mailbox: DESIRED_EVAVO_MAILBOXES.eva,

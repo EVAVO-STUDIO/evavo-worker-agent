@@ -7,6 +7,8 @@ export type ThreadStateItem = Readonly<{
   status: "open" | "resolved" | "cancelled" | "superseded" | "acknowledged" | "uncertain";
   owner?: "evavo" | "counterparty" | "shared" | "unknown" | null;
   sourceEvidenceIds: readonly string[];
+  lastObservedAt?: string | null;
+  quotedHistory?: boolean;
 }>;
 
 export type ThreadDeltaInput = Readonly<{
@@ -25,21 +27,52 @@ export type ThreadDelta = Readonly<{
   supersededItems: readonly ThreadStateItem[];
   stillOpenItems: readonly ThreadStateItem[];
   liveResponseTargets: readonly ThreadStateItem[];
+  disappearedWithoutResolution: readonly ThreadStateItem[];
+  nextActionOwner: "evavo" | "counterparty" | "shared" | "unknown" | "none";
 }>;
 
+function validateItem(item: ThreadStateItem): ThreadStateItem {
+  if (!item.id.trim()) throw new Error("THREAD_DELTA_ITEM_ID_REQUIRED");
+  if (!item.statement.trim()) throw new Error("THREAD_DELTA_STATEMENT_REQUIRED");
+  if (!item.sourceEvidenceIds.length) throw new Error("THREAD_DELTA_EVIDENCE_REQUIRED");
+  if (item.lastObservedAt && Number.isNaN(Date.parse(item.lastObservedAt))) throw new Error("THREAD_DELTA_LAST_OBSERVED_AT_INVALID");
+  return Object.freeze({
+    ...item,
+    statement: item.statement.trim(),
+    sourceEvidenceIds: Object.freeze([...new Set(item.sourceEvidenceIds.map((value) => value.trim()).filter(Boolean))]),
+  });
+}
+
+function meaningful(item: ThreadStateItem): boolean {
+  if (item.quotedHistory) return false;
+  return item.kind === "question"
+    || item.kind === "request"
+    || item.kind === "commitment"
+    || item.kind === "issue"
+    || item.kind === "decision"
+    || item.kind === "document"
+    || item.kind === "meeting";
+}
+
 export function buildBusinessThreadDelta(input: ThreadDeltaInput): ThreadDelta {
-  const before = new Map(input.previousState.map((item) => [item.id, item] as const));
-  const after = new Map(input.latestObservedState.map((item) => [item.id, item] as const));
+  if (!input.threadId.trim()) throw new Error("THREAD_DELTA_THREAD_ID_REQUIRED");
+  const previous = input.previousState.map(validateItem);
+  const latest = input.latestObservedState.map(validateItem);
+  const before = new Map(previous.map((item) => [item.id, item] as const));
+  const after = new Map(latest.map((item) => [item.id, item] as const));
+  if (before.size !== previous.length || after.size !== latest.length) throw new Error("THREAD_DELTA_DUPLICATE_ITEM_ID");
+
   const newItems: ThreadStateItem[] = [];
   const changedItems: Array<{ before: ThreadStateItem; after: ThreadStateItem }> = [];
   const resolvedItems: ThreadStateItem[] = [];
   const cancelledItems: ThreadStateItem[] = [];
   const supersededItems: ThreadStateItem[] = [];
 
-  for (const item of input.latestObservedState) {
+  for (const item of latest) {
     const prior = before.get(item.id);
-    if (!prior) newItems.push(item);
-    else if (prior.status !== item.status || prior.statement !== item.statement || prior.owner !== item.owner) {
+    if (!prior) {
+      if (!item.quotedHistory) newItems.push(item);
+    } else if (prior.status !== item.status || prior.statement !== item.statement || prior.owner !== item.owner) {
       changedItems.push({ before: prior, after: item });
     }
     if (item.status === "resolved") resolvedItems.push(item);
@@ -47,18 +80,12 @@ export function buildBusinessThreadDelta(input: ThreadDeltaInput): ThreadDelta {
     if (item.status === "superseded") supersededItems.push(item);
   }
 
-  const stillOpenItems = input.latestObservedState.filter((item) => item.status === "open" || item.status === "uncertain");
-  const liveResponseTargets = stillOpenItems.filter((item) =>
-    item.kind === "question"
-    || item.kind === "request"
-    || item.kind === "commitment"
-    || item.kind === "issue"
-    || item.kind === "decision"
-    || item.kind === "document"
-  );
+  const disappearedWithoutResolution = previous.filter((item) => !after.has(item.id) && (item.status === "open" || item.status === "uncertain"));
+  const stillOpenItems = latest.filter((item) => !item.quotedHistory && (item.status === "open" || item.status === "uncertain"));
+  const liveResponseTargets = stillOpenItems.filter(meaningful);
 
-  // Missing old ids are intentionally not treated as resolved; disappearance is not evidence of resolution.
-  void after;
+  const ownerPriority = ["evavo", "shared", "counterparty", "unknown"] as const;
+  const nextActionOwner = ownerPriority.find((owner) => liveResponseTargets.some((item) => (item.owner ?? "unknown") === owner)) ?? "none";
 
   return Object.freeze({
     contract: BUSINESS_THREAD_DELTA_CONTRACT,
@@ -70,5 +97,7 @@ export function buildBusinessThreadDelta(input: ThreadDeltaInput): ThreadDelta {
     supersededItems: Object.freeze(supersededItems),
     stillOpenItems: Object.freeze(stillOpenItems),
     liveResponseTargets: Object.freeze(liveResponseTargets),
+    disappearedWithoutResolution: Object.freeze(disappearedWithoutResolution),
+    nextActionOwner,
   });
 }

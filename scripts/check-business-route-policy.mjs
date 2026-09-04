@@ -7,6 +7,7 @@ const root = process.cwd();
 const pathsPath = path.join(root, "src", "core", "businessRoutePaths.ts");
 const readBoundaryPath = path.join(root, "src", "core", "businessMetadataReadBoundary.ts");
 const policyPath = path.join(root, "src", "routes", "businessRoutePolicy.ts");
+const relationshipHandlerPath = path.join(root, "src", "routes", "businessRelationshipManagerAdmin.ts");
 const indexPath = path.join(root, "src", "index.ts");
 const inventoryPath = path.join(root, "src", "core", "growthBusinessRouteInventory.ts");
 const cataloguePath = path.join(root, "src", "routes", "businessAutopilotRouteCatalogue.ts");
@@ -15,6 +16,7 @@ const errors = [];
 const routePaths = fs.existsSync(pathsPath) ? fs.readFileSync(pathsPath, "utf8") : "";
 const readBoundary = fs.existsSync(readBoundaryPath) ? fs.readFileSync(readBoundaryPath, "utf8") : "";
 const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
+const relationshipHandler = fs.existsSync(relationshipHandlerPath) ? fs.readFileSync(relationshipHandlerPath, "utf8") : "";
 const index = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf8") : "";
 const inventory = fs.existsSync(inventoryPath) ? fs.readFileSync(inventoryPath, "utf8") : "";
 const catalogue = fs.existsSync(cataloguePath) ? fs.readFileSync(cataloguePath, "utf8") : "";
@@ -22,11 +24,12 @@ const catalogue = fs.existsSync(cataloguePath) ? fs.readFileSync(cataloguePath, 
 if (!routePaths) errors.push("Missing canonical Business route path registry");
 if (!readBoundary) errors.push("Missing Business read query boundary");
 if (!policy) errors.push("Missing typed Business route policy registry");
+if (!relationshipHandler) errors.push("Missing Relationship Manager Business route handler");
 if (!index) errors.push("Missing Worker dispatcher");
 if (!inventory) errors.push("Missing Worker route inventory");
 if (!catalogue) errors.push("Missing Business route catalogue");
 
-const ids = ["account-intelligence", "people", "website-audit", "business-historical", "business-fallback"];
+const ids = ["account-intelligence", "relationship-manager", "people", "website-audit", "business-historical", "business-fallback"];
 for (const id of ids) {
   const policyCount = policy.split(`id: "${id}"`).length - 1;
   const caseCount = index.split(`case "${id}":`).length - 1;
@@ -44,6 +47,8 @@ for (const token of [
   'return jsonResponse(businessReadQuery.payload, { status: businessReadQuery.status })',
   'switch (resolveBusinessRouteHandlerId(pathname))',
   'case "account-intelligence":',
+  'case "relationship-manager":',
+  'return await handleBusinessRelationshipManagerAdmin(req, env, pathname, jsonResponse)',
   'return await handleBusinessAutopilotPeopleAdmin(req, env, pathname, jsonResponse)',
   'return await handleBusinessAutopilotWebsiteAdmin(req, env, pathname, jsonResponse)',
   'case "business-historical":',
@@ -61,6 +66,7 @@ if (!(preflightPosition >= 0 && collectionParserPosition > preflightPosition && 
 
 for (const raw of [
   'pathname === "/admin/business/people"',
+  'pathname === "/admin/business/relationship-manager/communication-cycle"',
   'pathname === "/admin/business/websites"',
   'pathname === "/admin/business/pages"',
   'pathname === "/admin/business/website-audit-runs"',
@@ -90,6 +96,7 @@ for (const required of [
   'export const BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN =',
   '"/admin/business/organizations/:organizationId/account-360" as const',
   'export const BUSINESS_PEOPLE_PATH = "/admin/business/people" as const',
+  'export const BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH = "/admin/business/relationship-manager/communication-cycle" as const',
   'export const BUSINESS_WEBSITE_AUDIT_PATHS',
   'export const BUSINESS_HISTORICAL_PATHS',
   'export const BUSINESS_FALLBACK_COLLECTION_PATHS',
@@ -122,6 +129,7 @@ for (const required of [
   'mutationPosture: "historical-read-retired-write" as const',
   'historicalOnly: true',
   'retiredWritesFailClosed: true',
+  'pathname === BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH',
   'pathname === BUSINESS_PEOPLE_PATH',
   'BUSINESS_WEBSITE_AUDIT_PATHS.includes',
   'BUSINESS_HISTORICAL_PATHS.includes',
@@ -150,8 +158,11 @@ for (const required of [
 
 for (const required of [
   'BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN',
+  'BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH',
   'case "account-intelligence":',
+  'case "relationship-manager":',
   'kind: "pattern", pattern: BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN',
+  'paths: Object.freeze([BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH])',
   'const readOnly = policy.mutationPosture === "read-only"',
   'postClassification: readOnly ? "not-supported"',
   'writeMethods: Object.freeze([...policy.writeMethods])',
@@ -174,6 +185,22 @@ for (const required of [
   if (!catalogue.includes(required)) errors.push(`Business catalogue is missing Account 360 posture: ${required}`);
 }
 
+for (const required of [
+  'readBoundedJsonObject',
+  'isAdminRequestAuthorized',
+  'rawMessageBodiesExposed: false',
+  'callerSuppliedTrustedContextAccepted: false',
+  'canonicalStateMutated: false',
+  'callsExternalNetwork: false',
+  'callsAI: false',
+  'sendsEmail: false',
+  'createsMeetings: false',
+  'mutatesExternalProviders: false',
+  'externalExecutionAllowed: false',
+]) {
+  if (!relationshipHandler.includes(required)) errors.push(`Relationship Manager handler safety posture is missing: ${required}`);
+}
+
 const priorities = [...policy.matchAll(/priority:\s*(\d+)/g)].map((match) => Number(match[1]));
 if (priorities.length !== ids.length) errors.push(`Expected ${ids.length} Business priorities, found ${priorities.length}`);
 if (new Set(priorities).size !== priorities.length) errors.push("Business route priorities must be unique");
@@ -182,7 +209,7 @@ for (let i = 1; i < priorities.length; i += 1) {
 }
 
 const fallbackPosition = policy.indexOf('id: "business-fallback"');
-for (const specific of ['id: "account-intelligence"', 'id: "people"', 'id: "website-audit"', 'id: "business-historical"']) {
+for (const specific of ['id: "account-intelligence"', 'id: "relationship-manager"', 'id: "people"', 'id: "website-audit"', 'id: "business-historical"']) {
   if (policy.indexOf(specific) < 0 || policy.indexOf(specific) >= fallbackPosition) {
     errors.push(`${specific} must precede the Business fallback`);
   }
@@ -199,6 +226,9 @@ const expectedFallbackPaths = [
   "/admin/business/followups",
   "/admin/business/learning",
 ];
+const expectedSpecialPaths = [
+  "/admin/business/relationship-manager/communication-cycle",
+];
 const expectedWebsitePaths = [
   "/admin/business/websites",
   "/admin/business/pages",
@@ -210,7 +240,7 @@ const expectedHistoricalPaths = [
   "/admin/business/action-drafts",
   "/admin/business/approval-requests",
 ];
-for (const route of [...expectedFallbackPaths, ...expectedWebsitePaths, ...expectedHistoricalPaths]) {
+for (const route of [...expectedFallbackPaths, ...expectedSpecialPaths, ...expectedWebsitePaths, ...expectedHistoricalPaths]) {
   const routeCount = routePaths.split(`"${route}"`).length - 1;
   if (routeCount !== 1) errors.push(`Canonical Business path must exist exactly once (${routeCount}): ${route}`);
 }
@@ -218,9 +248,9 @@ for (const route of [...expectedFallbackPaths, ...expectedWebsitePaths, ...expec
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "typed-business-route-policy-v5-family-read-preflight",
+  contract: "typed-business-route-policy-v6-relationship-manager-preview",
   compatibility: {
-    contract: "typed-business-route-policy-v4-canonical-paths",
+    contract: "typed-business-route-policy-v5-family-read-preflight",
   },
   routeGroups: ids,
   canonicalPathRegistry: true,
@@ -232,6 +262,10 @@ console.log(JSON.stringify({
   accountIntelligenceRouteGroupExplicit: true,
   accountIntelligenceReadOnly: true,
   accountIntelligencePostSupported: false,
+  relationshipManagerRouteGroupExplicit: true,
+  relationshipManagerPreviewOnly: true,
+  relationshipManagerCanSendEmail: false,
+  relationshipManagerExternalExecutionAllowed: false,
   accountIntelligenceConfirmationRequired: false,
   accountIntelligenceInventoryExplicit: true,
   accountIntelligenceCatalogueExplicit: true,

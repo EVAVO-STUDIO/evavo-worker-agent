@@ -140,7 +140,12 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     mustVerify.push("Resolve disputed or invalidated durable memory records before relying on them externally.");
   }
 
-  if (delta.liveResponseTargets.length === 0 && activeEvavoObligations.length === 0 && input.scenario === "general") {
+  if (
+    disposition !== "escalate"
+    && delta.liveResponseTargets.length === 0
+    && activeEvavoObligations.length === 0
+    && input.scenario === "general"
+  ) {
     disposition = "do_not_reply";
     reasons.push("There is no live response target or EVAVO-owned obligation requiring communication.");
   }

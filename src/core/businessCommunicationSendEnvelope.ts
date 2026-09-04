@@ -24,12 +24,20 @@ export type CommunicationSendMaterial = Readonly<{
   attachments: readonly ApprovedAttachment[];
 }>;
 
+export type CommunicationWritingProvenanceBinding = Readonly<{
+  handoffId: string;
+  writingRequestId: string;
+  decisionOrigin: "direct" | "relationship_manager_cycle";
+  relationshipCycleId?: string;
+}>;
+
 export type CommunicationApprovalBinding = Readonly<{
   senderKey: CommunicationSenderKey;
   mailboxKey: MailboxKey;
   decisionPackageId: string;
   evidenceIds: readonly string[];
   approvalEvidenceIds: readonly string[];
+  writingProvenance?: CommunicationWritingProvenanceBinding;
   bindingSha256: string;
 }>;
 
@@ -64,6 +72,27 @@ function normaliseEvidence(values: readonly string[], field: "evidence" | "appro
   const normalized = Object.freeze([...new Set(values.map((item) => item.trim()).filter(Boolean))].sort());
   if (!normalized.length) throw new Error(`COMMUNICATION_SEND_${field.toUpperCase()}_REQUIRED`);
   return normalized;
+}
+
+function canonicalWritingProvenance(
+  value: CommunicationWritingProvenanceBinding | undefined,
+): CommunicationWritingProvenanceBinding | undefined {
+  if (!value) return undefined;
+  const handoffId = clean(value.handoffId, "writing_handoff_id", 300);
+  const writingRequestId = clean(value.writingRequestId, "writing_request_id", 300);
+  const relationshipCycleId = value.relationshipCycleId?.trim() || undefined;
+  if (value.decisionOrigin === "relationship_manager_cycle" && !relationshipCycleId) {
+    throw new Error("COMMUNICATION_SEND_WRITING_RELATIONSHIP_CYCLE_REQUIRED");
+  }
+  if (value.decisionOrigin === "direct" && relationshipCycleId) {
+    throw new Error("COMMUNICATION_SEND_WRITING_DIRECT_CYCLE_FORBIDDEN");
+  }
+  return Object.freeze({
+    handoffId,
+    writingRequestId,
+    decisionOrigin: value.decisionOrigin,
+    ...(relationshipCycleId ? { relationshipCycleId: clean(relationshipCycleId, "writing_relationship_cycle_id", 300) } : {}),
+  });
 }
 
 function canonicalMaterial(material: CommunicationSendMaterial): CommunicationSendMaterial {
@@ -113,12 +142,14 @@ function buildApprovalBinding(input: Readonly<{
   decisionPackageId: string;
   evidenceIds: readonly string[];
   approvalEvidenceIds: readonly string[];
+  writingProvenance?: CommunicationWritingProvenanceBinding;
 }>): CommunicationApprovalBinding {
   const sender = EVAVO_COMMUNICATION_SENDERS[input.senderKey];
   if (!sender) throw new Error("COMMUNICATION_SEND_SENDER_KEY_INVALID");
   const decisionPackageId = clean(input.decisionPackageId, "decision_package_id", 300);
   const evidenceIds = normaliseEvidence(input.evidenceIds, "evidence");
   const approvalEvidenceIds = normaliseEvidence(input.approvalEvidenceIds, "approval_evidence");
+  const writingProvenance = canonicalWritingProvenance(input.writingProvenance);
   const payload = JSON.stringify({
     materialSha256: input.materialSha256,
     senderKey: input.senderKey,
@@ -126,6 +157,7 @@ function buildApprovalBinding(input: Readonly<{
     decisionPackageId,
     evidenceIds,
     approvalEvidenceIds,
+    writingProvenance: writingProvenance ?? null,
   });
   return Object.freeze({
     senderKey: input.senderKey,
@@ -133,6 +165,7 @@ function buildApprovalBinding(input: Readonly<{
     decisionPackageId,
     evidenceIds,
     approvalEvidenceIds,
+    ...(writingProvenance ? { writingProvenance } : {}),
     bindingSha256: sha256(payload),
   });
 }
@@ -148,6 +181,7 @@ export function createCommunicationSendEnvelope(input: Readonly<{
   decisionPackageId?: string;
   evidenceIds?: readonly string[];
   approvalEvidenceIds?: readonly string[];
+  writingProvenance?: CommunicationWritingProvenanceBinding;
 }>): CommunicationSendEnvelope {
   const approvedAt = new Date(input.approvedAt);
   const expiresAt = new Date(input.expiresAt);
@@ -158,7 +192,7 @@ export function createCommunicationSendEnvelope(input: Readonly<{
   if (!material.to.length) throw new Error("COMMUNICATION_SEND_TO_REQUIRED");
   const materialSha256 = communicationSendMaterialHash(material);
 
-  const hasAnyBinding = Boolean(input.senderKey || input.mailboxKey || input.decisionPackageId || input.evidenceIds || input.approvalEvidenceIds);
+  const hasAnyBinding = Boolean(input.senderKey || input.mailboxKey || input.decisionPackageId || input.evidenceIds || input.approvalEvidenceIds || input.writingProvenance);
   const hasFullBinding = Boolean(input.senderKey && input.mailboxKey && input.decisionPackageId && input.evidenceIds?.length && input.approvalEvidenceIds?.length);
   if (hasAnyBinding && !hasFullBinding) throw new Error("COMMUNICATION_SEND_APPROVAL_BINDING_INCOMPLETE");
 
@@ -174,6 +208,7 @@ export function createCommunicationSendEnvelope(input: Readonly<{
       decisionPackageId: input.decisionPackageId!,
       evidenceIds: input.evidenceIds!,
       approvalEvidenceIds: input.approvalEvidenceIds!,
+      writingProvenance: input.writingProvenance,
     });
   }
 
@@ -201,6 +236,7 @@ export function verifyCommunicationApprovalBinding(envelope: CommunicationSendEn
     decisionPackageId: binding.decisionPackageId,
     evidenceIds: binding.evidenceIds,
     approvalEvidenceIds: binding.approvalEvidenceIds,
+    writingProvenance: binding.writingProvenance,
   });
   if (expected.bindingSha256 !== binding.bindingSha256) reasons.push("approval_binding_integrity_failed");
   if (communicationSendMaterialHash(envelope.material) !== envelope.materialSha256) reasons.push("approved_material_integrity_failed");

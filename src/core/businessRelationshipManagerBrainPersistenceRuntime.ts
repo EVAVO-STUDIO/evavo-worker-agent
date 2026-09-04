@@ -1,3 +1,5 @@
+import type { Env } from "../db";
+import { requireBrainMemoryIngestionPortFromEnv } from "./businessBrainMemoryIngestionEnv";
 import type { BrainMemoryIngestionPort } from "./businessBrainMemoryIngestionPort";
 import type { CanonicalRelationshipManagerCycle } from "./businessRelationshipManagerCanonicalRuntime";
 import {
@@ -61,5 +63,15 @@ export async function persistCanonicalRelationshipManagerCycleToBrain(input: Rea
     persistence,
     durable: persistence.durable,
     externalEffectPerformed: false,
+  });
+}
+
+export async function persistCanonicalRelationshipManagerCycleToConfiguredBrain(input: Readonly<{
+  canonicalCycle: CanonicalRelationshipManagerCycle;
+  env: Pick<Env, "BRAIN_BASE_URL" | "BRAIN_API_TOKEN" | "BRAIN_RELATIONSHIP_MEMORY_WRITE_TOKEN">;
+}>): Promise<RelationshipManagerBrainPersistenceRuntimeResult> {
+  return persistCanonicalRelationshipManagerCycleToBrain({
+    canonicalCycle: input.canonicalCycle,
+    brain: requireBrainMemoryIngestionPortFromEnv(input.env),
   });
 }

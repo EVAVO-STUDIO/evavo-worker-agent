@@ -8,18 +8,38 @@ import {
   prepareStaffCommunicationApprovalCandidate,
   type StaffCommunicationApprovalCandidate,
 } from "./businessStaffCommunicationApprovalCandidate";
+import {
+  BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_PERSISTENCE_CONTRACT,
+  staffApprovalCandidateHash,
+  type StaffApprovalCandidatePersistenceResult,
+} from "./businessStaffCommunicationApprovalCandidatePersistence";
 import { finalizeStaffCommunicationApproval } from "./businessStaffCommunicationApprovalFinalizer";
 import type { StaffCommunicationHandoffV2Like } from "./businessStaffCommunicationHandoffV2";
 import type { StaffDraftPackageLike } from "./businessStaffWritingOutputBinding";
 import type { StaffWritingEnvelopeV2Like } from "./businessStaffWritingProvenanceBinding";
 
-export const BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT = "business_relationship_manager_approval_runtime_v2" as const;
+export const BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT = "business_relationship_manager_approval_runtime_v3" as const;
 
 export type RelationshipManagerApprovalPreparation = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT;
   cycleId: string;
   decisionPackageId: string;
   approvalCandidate: StaffCommunicationApprovalCandidate;
+  candidatePersistence: null;
+  readyForCandidatePersistence: true;
+  readyForHumanApproval: false;
+  humanApprovalRecorded: false;
+  externalExecutionAllowed: false;
+  externalEffectPerformed: false;
+}>;
+
+export type RelationshipManagerPersistedApprovalPreparation = Readonly<{
+  contract: typeof BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT;
+  cycleId: string;
+  decisionPackageId: string;
+  approvalCandidate: StaffCommunicationApprovalCandidate;
+  candidatePersistence: StaffApprovalCandidatePersistenceResult;
+  readyForCandidatePersistence: false;
   readyForHumanApproval: true;
   humanApprovalRecorded: false;
   externalExecutionAllowed: false;
@@ -31,8 +51,11 @@ export type RelationshipManagerApprovalFinalization = Readonly<{
   cycleId: string;
   decisionPackageId: string;
   approvalCandidateId: string;
+  approvalCandidateRecordId: string;
+  approvalCandidateSha256: string;
   operatorApprovalId: string;
   approval: CommunicationSendEnvelope;
+  readyForCandidatePersistence: false;
   readyForHumanApproval: false;
   humanApprovalRecorded: true;
   externalExecutionAllowed: false;
@@ -42,8 +65,8 @@ export type RelationshipManagerApprovalFinalization = Readonly<{
 /**
  * Canonical post-writing preparation path for Relationship Manager. It binds
  * the actual communication cycle and its durable memory checkpoint to the
- * staff handoff and returned Writing Studio artifacts. The result is only a
- * candidate for human approval; it is not an approval and cannot be executed.
+ * staff handoff and returned Writing Studio artifacts. The result is not yet
+ * ready for human approval: the immutable candidate must first be persisted.
  */
 export function prepareRelationshipManagerCommunicationForApproval(input: Readonly<{
   candidateId: string;
@@ -118,6 +141,54 @@ export function prepareRelationshipManagerCommunicationForApproval(input: Readon
     cycleId: input.cycle.cycleId,
     decisionPackageId: input.cycle.decision.packageId,
     approvalCandidate,
+    candidatePersistence: null,
+    readyForCandidatePersistence: true,
+    readyForHumanApproval: false,
+    humanApprovalRecorded: false,
+    externalExecutionAllowed: false,
+    externalEffectPerformed: false,
+  });
+}
+
+/**
+ * Confirms that EVAVO Storage durably persisted the exact immutable approval
+ * candidate. Only after this step may the candidate be shown as approvable.
+ */
+export function bindRelationshipManagerApprovalCandidatePersistence(input: Readonly<{
+  preparation: RelationshipManagerApprovalPreparation;
+  persistence: StaffApprovalCandidatePersistenceResult;
+}>): RelationshipManagerPersistedApprovalPreparation {
+  const preparation = input.preparation;
+  if (preparation.contract !== BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_CONTRACT_INVALID");
+  }
+  if (!preparation.readyForCandidatePersistence || preparation.readyForHumanApproval || preparation.humanApprovalRecorded) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_STATE_INVALID");
+  }
+  const persistence = input.persistence;
+  if (persistence.contract !== BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_PERSISTENCE_CONTRACT) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_CONTRACT_INVALID");
+  }
+  if (!persistence.durable || persistence.status !== "persisted" || persistence.blocker) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_NOT_DURABLE");
+  }
+  if (persistence.candidateId !== preparation.approvalCandidate.candidateId) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_ID_MISMATCH");
+  }
+  if (persistence.candidateSha256 !== staffApprovalCandidateHash(preparation.approvalCandidate)) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_HASH_MISMATCH");
+  }
+  if (!persistence.recordId?.trim() || !persistence.approvalEvidenceRef?.trim()) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_EVIDENCE_REQUIRED");
+  }
+
+  return Object.freeze({
+    contract: BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT,
+    cycleId: preparation.cycleId,
+    decisionPackageId: preparation.decisionPackageId,
+    approvalCandidate: preparation.approvalCandidate,
+    candidatePersistence: persistence,
+    readyForCandidatePersistence: false,
     readyForHumanApproval: true,
     humanApprovalRecorded: false,
     externalExecutionAllowed: false,
@@ -126,20 +197,20 @@ export function prepareRelationshipManagerCommunicationForApproval(input: Readon
 }
 
 /**
- * Records an explicit human approval against the exact immutable preparation.
- * The result is an approval envelope, not permission to execute externally;
- * the normal communication execution gate must still pass afterwards.
+ * Records explicit human approval against the exact durably persisted
+ * preparation. The result is an approval envelope, not external execution
+ * permission; the normal communication execution gate must still pass.
  */
 export function finalizeRelationshipManagerCommunicationApproval(input: Readonly<{
   envelopeId: string;
-  preparation: RelationshipManagerApprovalPreparation;
+  preparation: RelationshipManagerPersistedApprovalPreparation;
   operatorApprovalReceipt: OperatorCommunicationApprovalReceipt;
 }>): RelationshipManagerApprovalFinalization {
   const preparation = input.preparation;
   if (preparation.contract !== BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_CONTRACT_INVALID");
   }
-  if (!preparation.readyForHumanApproval || preparation.humanApprovalRecorded || preparation.externalExecutionAllowed) {
+  if (preparation.readyForCandidatePersistence || !preparation.readyForHumanApproval || preparation.humanApprovalRecorded || preparation.externalExecutionAllowed) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_STATE_INVALID");
   }
   if (preparation.approvalCandidate.relationshipCycleId !== preparation.cycleId) {
@@ -152,6 +223,7 @@ export function finalizeRelationshipManagerCommunicationApproval(input: Readonly
   const finalized = finalizeStaffCommunicationApproval({
     envelopeId: input.envelopeId,
     candidate: preparation.approvalCandidate,
+    candidatePersistence: preparation.candidatePersistence,
     operatorApprovalReceipt: input.operatorApprovalReceipt,
   });
 
@@ -160,8 +232,11 @@ export function finalizeRelationshipManagerCommunicationApproval(input: Readonly
     cycleId: preparation.cycleId,
     decisionPackageId: preparation.decisionPackageId,
     approvalCandidateId: preparation.approvalCandidate.candidateId,
+    approvalCandidateRecordId: finalized.candidateRecordId,
+    approvalCandidateSha256: finalized.candidateSha256,
     operatorApprovalId: finalized.operatorApprovalId,
     approval: finalized.approval,
+    readyForCandidatePersistence: false,
     readyForHumanApproval: false,
     humanApprovalRecorded: true,
     externalExecutionAllowed: false,

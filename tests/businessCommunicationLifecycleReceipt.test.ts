@@ -55,6 +55,7 @@ test("represents the full verified decision to learned lifecycle", () => {
       recordedAt: "2026-09-04T02:01:00Z",
     },
   });
+  assert.equal(receipt.contract, "business_communication_lifecycle_receipt_v3");
   assert.equal(receipt.stage, "learned");
   assert.equal(receipt.executionVerified, true);
   assert.equal(receipt.communicationId, "gmail-message-sent-1");
@@ -149,10 +150,16 @@ test("blockers dominate the visible lifecycle stage", () => {
   assert.equal(receipt.stage, "blocked");
 });
 
-test("Relationship Manager lifecycle cannot verify execution without matching durable cycle provenance", () => {
+test("Relationship Manager lifecycle requires both durable cycle and matching Writing Studio provenance", () => {
   const relationshipDecision = {
     ...decision,
     origin: "relationship_manager_cycle" as const,
+    relationshipCycleId: "cycle-1",
+  };
+  const writingProvenance = {
+    handoffId: "handoff-1",
+    writingRequestId: "writing-request-1",
+    decisionOrigin: "relationship_manager_cycle" as const,
     relationshipCycleId: "cycle-1",
   };
   const missing = buildCommunicationLifecycleReceipt({
@@ -175,15 +182,49 @@ test("Relationship Manager lifecycle cannot verify execution without matching du
     relationshipId: "rel-1",
     threadId: "thread-1",
     decision: relationshipDecision,
-    approval,
+    approval: { ...approval, writingProvenance },
     execution: {
       ...execution,
       decisionOrigin: "relationship_manager_cycle",
       relationshipCycleId: "cycle-1",
+      writingProvenance,
       memoryCheckpointCycleId: "cycle-1",
       memoryCheckpointRecordIds: ["mem-cycle-1"],
     },
   });
   assert.equal(verified.executionVerified, true);
   assert.equal(verified.stage, "sent");
+  assert.equal(verified.approval?.writingProvenance?.writingRequestId, "writing-request-1");
+});
+
+test("Relationship Manager lifecycle blocks when approval and execution came from different Writing Studio requests", () => {
+  const relationshipDecision = {
+    ...decision,
+    origin: "relationship_manager_cycle" as const,
+    relationshipCycleId: "cycle-1",
+  };
+  const approvedWriting = {
+    handoffId: "handoff-1",
+    writingRequestId: "writing-request-approved",
+    decisionOrigin: "relationship_manager_cycle" as const,
+    relationshipCycleId: "cycle-1",
+  };
+  const executedWriting = { ...approvedWriting, writingRequestId: "writing-request-other" };
+  const receipt = buildCommunicationLifecycleReceipt({
+    lifecycleId: "life-cycle-writing-mismatch",
+    relationshipId: "rel-1",
+    threadId: "thread-1",
+    decision: relationshipDecision,
+    approval: { ...approval, writingProvenance: approvedWriting },
+    execution: {
+      ...execution,
+      decisionOrigin: "relationship_manager_cycle",
+      relationshipCycleId: "cycle-1",
+      writingProvenance: executedWriting,
+      memoryCheckpointCycleId: "cycle-1",
+      memoryCheckpointRecordIds: ["mem-cycle-1"],
+    },
+  });
+  assert.equal(receipt.executionVerified, false);
+  assert.equal(receipt.stage, "blocked");
 });

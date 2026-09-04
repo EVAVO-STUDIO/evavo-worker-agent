@@ -58,6 +58,8 @@ test("represents the full verified decision to learned lifecycle", () => {
   assert.equal(receipt.stage, "learned");
   assert.equal(receipt.executionVerified, true);
   assert.equal(receipt.communicationId, "gmail-message-sent-1");
+  assert.equal(receipt.decision.origin, "direct");
+  assert.equal(receipt.decision.relationshipCycleId, null);
 });
 
 test("cannot claim a send happened without an approval", () => {
@@ -145,4 +147,43 @@ test("blockers dominate the visible lifecycle stage", () => {
     blockers: ["new_material_context:thread_message:message-2"],
   });
   assert.equal(receipt.stage, "blocked");
+});
+
+test("Relationship Manager lifecycle cannot verify execution without matching durable cycle provenance", () => {
+  const relationshipDecision = {
+    ...decision,
+    origin: "relationship_manager_cycle" as const,
+    relationshipCycleId: "cycle-1",
+  };
+  const missing = buildCommunicationLifecycleReceipt({
+    lifecycleId: "life-cycle-missing",
+    relationshipId: "rel-1",
+    threadId: "thread-1",
+    decision: relationshipDecision,
+    approval,
+    execution: {
+      ...execution,
+      decisionOrigin: "relationship_manager_cycle",
+      relationshipCycleId: "cycle-1",
+    },
+  });
+  assert.equal(missing.executionVerified, false);
+  assert.equal(missing.stage, "blocked");
+
+  const verified = buildCommunicationLifecycleReceipt({
+    lifecycleId: "life-cycle-verified",
+    relationshipId: "rel-1",
+    threadId: "thread-1",
+    decision: relationshipDecision,
+    approval,
+    execution: {
+      ...execution,
+      decisionOrigin: "relationship_manager_cycle",
+      relationshipCycleId: "cycle-1",
+      memoryCheckpointCycleId: "cycle-1",
+      memoryCheckpointRecordIds: ["mem-cycle-1"],
+    },
+  });
+  assert.equal(verified.executionVerified, true);
+  assert.equal(verified.stage, "sent");
 });

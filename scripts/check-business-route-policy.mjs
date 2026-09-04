@@ -186,6 +186,28 @@ for (const required of [
 }
 
 for (const required of [
+  'const relationshipManagerPreviewDescription = "Runs one bounded, authenticated Relationship Manager communication-cycle preview',
+  'function previewRoute(',
+  'method: "POST"',
+  'safety: "read_only"',
+  'readOnly: true',
+  'requiresConfirm: false',
+  'writesTables: []',
+  'callsNetwork: false',
+  'callsAI: false',
+  'canSendEmail: false',
+  'previewRoute("business_relationship_manager_cycle_preview"',
+  '/admin/business/relationship-manager/communication-cycle',
+  'does not call AI or external providers',
+  'send email',
+  'persist memory',
+  'approve execution',
+  'mutate canonical state',
+]) {
+  if (!catalogue.includes(required)) errors.push(`Business catalogue is missing Relationship Manager preview posture: ${required}`);
+}
+
+for (const required of [
   'readBoundedJsonObject',
   'isAdminRequestAuthorized',
   'rawMessageBodiesExposed: false',
@@ -240,17 +262,17 @@ const expectedHistoricalPaths = [
   "/admin/business/action-drafts",
   "/admin/business/approval-requests",
 ];
-for (const route of [...expectedFallbackPaths, ...expectedSpecialPaths, ...expectedWebsitePaths, ...expectedHistoricalPaths]) {
-  const routeCount = routePaths.split(`"${route}"`).length - 1;
-  if (routeCount !== 1) errors.push(`Canonical Business path must exist exactly once (${routeCount}): ${route}`);
+for (const routePath of [...expectedFallbackPaths, ...expectedSpecialPaths, ...expectedWebsitePaths, ...expectedHistoricalPaths]) {
+  const routeCount = routePaths.split(`"${routePath}"`).length - 1;
+  if (routeCount !== 1) errors.push(`Canonical Business path must exist exactly once (${routeCount}): ${routePath}`);
 }
 
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "typed-business-route-policy-v6-relationship-manager-preview",
+  contract: "typed-business-route-policy-v7-relationship-manager-catalogue",
   compatibility: {
-    contract: "typed-business-route-policy-v5-family-read-preflight",
+    contract: "typed-business-route-policy-v6-relationship-manager-preview",
   },
   routeGroups: ids,
   canonicalPathRegistry: true,
@@ -264,6 +286,7 @@ console.log(JSON.stringify({
   accountIntelligencePostSupported: false,
   relationshipManagerRouteGroupExplicit: true,
   relationshipManagerPreviewOnly: true,
+  relationshipManagerCatalogueExplicit: true,
   relationshipManagerCanSendEmail: false,
   relationshipManagerExternalExecutionAllowed: false,
   accountIntelligenceConfirmationRequired: false,

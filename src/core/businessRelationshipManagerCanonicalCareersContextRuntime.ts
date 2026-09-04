@@ -18,7 +18,7 @@ import {
 import type { RelationshipSourceReadinessItem } from "./businessRelationshipSourceReadiness";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CONTEXT_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_careers_context_runtime_v2" as const;
+  "business_relationship_manager_canonical_careers_context_runtime_v3" as const;
 
 export type CanonicalRelationshipManagerCareersContextInput = Readonly<{
   cycle: CanonicalRelationshipManagerOperationsContextInput["cycle"];
@@ -41,18 +41,17 @@ export type CanonicalRelationshipManagerCareersContextResult = Readonly<{
   careersState: "verified" | "not_found" | "provider_unavailable" | "not_required";
   careersEvidenceRef: string | null;
   roleTruth: RoleOpeningTruth | null;
+  candidateRoleAuthorityDerived: boolean;
   canonical: CanonicalRelationshipManagerOperationsContextResult;
   externalEffectPerformed: false;
 }>;
 
-function withoutCareersDomain(
-  values: readonly RelationshipSourceReadinessItem[] | null | undefined,
-): readonly RelationshipSourceReadinessItem[] {
-  const input = values ?? [];
-  if (input.some((item) => item.domain === "careers")) {
+function withoutCareersDomain(values: readonly RelationshipSourceReadinessItem[] | null | undefined) {
+  const source = values ?? [];
+  if (source.some((item) => item.domain === "careers")) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CALLER_READINESS_FORBIDDEN");
   }
-  return Object.freeze([...input]);
+  return Object.freeze([...source]);
 }
 
 function availabilityFailure(error: unknown) {
@@ -64,46 +63,27 @@ function availabilityFailure(error: unknown) {
 }
 
 function readiness(snapshot: CareersRoleTruthSnapshot): RelationshipSourceReadinessItem {
-  if (snapshot.state === "verified") {
-    return Object.freeze({
-      domain: "careers",
-      state: "verified",
-      required: true,
-      observedAt: snapshot.observedAt,
-      sourceRefs: Object.freeze([snapshot.evidenceRef]),
-      detail: "Dedicated persistent careers role-state truth was queried successfully.",
-    });
-  }
-  if (snapshot.state === "not_found") {
-    return Object.freeze({
-      domain: "careers",
-      state: "not_found",
-      required: true,
-      absenceAcceptable: true,
-      observedAt: snapshot.observedAt,
-      sourceRefs: Object.freeze([snapshot.evidenceRef]),
-      detail: "Dedicated careers truth was queried successfully and returned no matching role. This supports only that no confirmed opening was found; it does not support a company-wide not-hiring claim.",
-    });
-  }
+  if (snapshot.state === "verified") return Object.freeze({
+    domain: "careers", state: "verified", required: true,
+    observedAt: snapshot.observedAt, sourceRefs: Object.freeze([snapshot.evidenceRef]),
+    detail: "Dedicated persistent careers role-state truth was queried successfully.",
+  });
+  if (snapshot.state === "not_found") return Object.freeze({
+    domain: "careers", state: "not_found", required: true, absenceAcceptable: true,
+    observedAt: snapshot.observedAt, sourceRefs: Object.freeze([snapshot.evidenceRef]),
+    detail: "Dedicated careers truth was queried successfully and returned no matching role. This supports only that no confirmed opening was found; it does not support a company-wide not-hiring claim.",
+  });
   return Object.freeze({
-    domain: "careers",
-    state: "provider_unavailable",
-    required: true,
+    domain: "careers", state: "provider_unavailable", required: true,
     detail: "Dedicated careers role-state truth is unavailable; current role-opening status is unknown.",
   });
 }
 
 function careersSummary(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpeningTruth | null): string {
-  if (snapshot.state === "not_found") {
-    return "Dedicated careers truth was checked successfully and no matching current role record was found. This does not establish that EVAVO is not hiring generally.";
-  }
-  if (snapshot.state !== "verified") {
-    return "Dedicated careers truth is unavailable; current role-opening status is unknown.";
-  }
+  if (snapshot.state === "not_found") return "Dedicated careers truth was checked successfully and no matching current role record was found. This does not establish that EVAVO is not hiring generally.";
+  if (snapshot.state !== "verified") return "Dedicated careers truth is unavailable; current role-opening status is unknown.";
   const roles = snapshot.roles.map((role) => `${role.title}: ${role.state}${role.authoritative ? " (authoritative)" : " (review required)"}`).join("; ");
-  const safety = roleTruth?.maySayRoleExists
-    ? "A specific current role-exists claim is supported."
-    : "No specific role-exists claim is currently authorised.";
+  const safety = roleTruth?.maySayRoleExists ? "A specific current role-exists claim is supported." : "No specific role-exists claim is currently authorised.";
   return `${roles}. ${safety} A company-wide not-hiring claim is not authorised.`;
 }
 
@@ -123,35 +103,23 @@ function careersEvidence(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpen
 export async function runCanonicalRelationshipManagerCycleWithCareersContext(
   input: CanonicalRelationshipManagerCareersContextInput,
 ): Promise<CanonicalRelationshipManagerCareersContextResult> {
-  if (input.careers.contract !== "business_careers_role_truth_port_v1") {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_PORT_CONTRACT_INVALID");
-  }
+  if (input.careers.contract !== "business_careers_role_truth_port_v1") throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_PORT_CONTRACT_INVALID");
   const baseReadiness = withoutCareersDomain(input.context.sourceReadiness);
-  if (input.context.evidenceItems.some((item) => item.domain === "careers")) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CALLER_EVIDENCE_FORBIDDEN");
-  }
+  if (input.context.evidenceItems.some((item) => item.domain === "careers")) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CALLER_EVIDENCE_FORBIDDEN");
   if (!input.careersRequired) {
     const canonical = await runCanonicalRelationshipManagerCycleWithOperationsContext({
       cycle: input.cycle,
       context: Object.freeze({ ...input.context, sourceReadiness: baseReadiness }),
-      brain: input.brain,
-      operations: input.operations,
-      operationsRequired: input.operationsRequired,
-      operationsIdentity: input.operationsIdentity,
+      brain: input.brain, operations: input.operations,
+      operationsRequired: input.operationsRequired, operationsIdentity: input.operationsIdentity,
     });
     return Object.freeze({
       contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CONTEXT_RUNTIME_CONTRACT,
-      careersState: "not_required",
-      careersEvidenceRef: null,
-      roleTruth: null,
-      canonical,
-      externalEffectPerformed: false,
+      careersState: "not_required", careersEvidenceRef: null, roleTruth: null,
+      candidateRoleAuthorityDerived: false, canonical, externalEffectPerformed: false,
     });
   }
-
-  if (!input.careersIdentity) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_IDENTITY_REQUIRED");
-  }
+  if (!input.careersIdentity) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_IDENTITY_REQUIRED");
 
   let snapshot: CareersRoleTruthSnapshot | null = null;
   let careersState: Exclude<CanonicalRelationshipManagerCareersContextResult["careersState"], "not_required"> = "provider_unavailable";
@@ -163,9 +131,8 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
     careersState = snapshot.state;
     careersReadiness = readiness(snapshot);
     if (snapshot.state !== "provider_unavailable") {
-      const openingEvidence = roleOpeningEvidenceFromCareersSnapshot(snapshot);
       roleTruth = resolveRoleOpeningTruth({
-        evidence: openingEvidence,
+        evidence: roleOpeningEvidenceFromCareersSnapshot(snapshot),
         targetRoleId: snapshot.targetRoleId,
       });
       evidence = careersEvidence(snapshot, roleTruth);
@@ -173,41 +140,47 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
   } catch (error) {
     if (!availabilityFailure(error)) throw error;
     careersReadiness = Object.freeze({
-      domain: "careers",
-      state: "provider_unavailable",
-      required: true,
+      domain: "careers", state: "provider_unavailable", required: true,
       detail: "Dedicated careers truth could not be queried; current role-opening status is unknown.",
     });
   }
 
+  let candidateRoleAuthorityDerived = false;
+  let cycle = input.cycle;
+  if (input.cycle.scenario === "graduate_or_candidate") {
+    if (!input.cycle.candidate) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CANDIDATE_CONTEXT_REQUIRED");
+    const explicitRoleOpen = roleTruth?.maySayRoleExists === true;
+    cycle = Object.freeze({
+      ...input.cycle,
+      candidate: Object.freeze({
+        ...input.cycle.candidate,
+        explicitRoleOpen,
+        activeRecruitmentProcess: false,
+      }),
+    });
+    candidateRoleAuthorityDerived = true;
+  }
+
   const canonical = await runCanonicalRelationshipManagerCycleWithOperationsContext({
-    cycle: input.cycle,
+    cycle,
     context: Object.freeze({
       ...input.context,
-      ...(snapshot && snapshot.state !== "provider_unavailable"
-        ? { careersSummary: careersSummary(snapshot, roleTruth) }
-        : {}),
-      evidenceItems: Object.freeze([
-        ...input.context.evidenceItems,
-        ...(evidence ? [evidence] : []),
-      ]),
+      ...(snapshot && snapshot.state !== "provider_unavailable" ? { careersSummary: careersSummary(snapshot, roleTruth) } : {}),
+      evidenceItems: Object.freeze([...input.context.evidenceItems, ...(evidence ? [evidence] : [])]),
       sourceReadiness: Object.freeze([...baseReadiness, careersReadiness]),
     }),
-    brain: input.brain,
-    operations: input.operations,
-    operationsRequired: input.operationsRequired,
-    operationsIdentity: input.operationsIdentity,
+    brain: input.brain, operations: input.operations,
+    operationsRequired: input.operationsRequired, operationsIdentity: input.operationsIdentity,
   });
-  if (careersState === "provider_unavailable" && canonical.brain.canonicalCycle.approvalGradeReady) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_READINESS_WIDENED");
+  if (careersState === "provider_unavailable" && canonical.brain.canonicalCycle.approvalGradeReady) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_READINESS_WIDENED");
+  if (roleTruth?.maySayNotHiring) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_GLOBAL_NOT_HIRING_AUTHORITY_FORBIDDEN");
+  if (snapshot && snapshot.state !== "provider_unavailable" && !canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(snapshot.evidenceRef)) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND");
   }
-  if (roleTruth?.maySayNotHiring) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_GLOBAL_NOT_HIRING_AUTHORITY_FORBIDDEN");
-  }
-  if (snapshot && snapshot.state !== "provider_unavailable") {
-    if (!canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(snapshot.evidenceRef)) {
-      throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND");
-    }
+  if (candidateRoleAuthorityDerived) {
+    const expectedOpen = roleTruth?.maySayRoleExists === true;
+    const actualOpen = canonical.brain.canonicalCycle.cycle.decision.candidateStage === "active_process";
+    if (expectedOpen !== actualOpen) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CANDIDATE_ROLE_DERIVATION_MISMATCH");
   }
 
   return Object.freeze({
@@ -215,6 +188,7 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
     careersState,
     careersEvidenceRef: snapshot?.evidenceRef ?? null,
     roleTruth,
+    candidateRoleAuthorityDerived,
     canonical,
     externalEffectPerformed: false,
   });

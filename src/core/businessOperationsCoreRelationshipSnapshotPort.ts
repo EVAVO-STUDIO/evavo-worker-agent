@@ -107,6 +107,17 @@ function requiredString(value: unknown, code: string, maximum = 2000): string {
   return clean;
 }
 
+function requiredBoolean(value: unknown, code: string): boolean {
+  if (typeof value !== "boolean") throw new Error(code);
+  return value;
+}
+
+function requiredUuid(value: unknown, code: string): string {
+  const clean = requiredString(value, code, 100).toLowerCase();
+  if (!UUID_PATTERN.test(clean)) throw new Error(code);
+  return clean;
+}
+
 function baseUrl(value: string): string {
   const clean = value.trim().replace(/\/+$/, "");
   if (!clean) throw new Error("OPERATIONS_RELATIONSHIP_READ_BASE_URL_REQUIRED");
@@ -171,7 +182,7 @@ function client(value: unknown): OperationsCoreRelationshipClientSnapshot | null
   if (value === null) return null;
   const raw = object(value, "OPERATIONS_RELATIONSHIP_READ_CLIENT_INVALID");
   return Object.freeze({
-    id: requiredString(raw.id, "OPERATIONS_RELATIONSHIP_READ_CLIENT_ID_INVALID", 100),
+    id: requiredUuid(raw.id, "OPERATIONS_RELATIONSHIP_READ_CLIENT_ID_INVALID"),
     name: requiredString(raw.name, "OPERATIONS_RELATIONSHIP_READ_CLIENT_NAME_INVALID", 300),
     status: enumValue(raw.status, ["active", "prospect"] as const, "OPERATIONS_RELATIONSHIP_READ_CLIENT_STATUS_INVALID"),
     relationshipStage: enumValue(raw.relationshipStage, ["active_delivery", "qualified", "discovery"] as const, "OPERATIONS_RELATIONSHIP_READ_CLIENT_STAGE_INVALID"),
@@ -180,7 +191,7 @@ function client(value: unknown): OperationsCoreRelationshipClientSnapshot | null
     openBriefCount: nonNegativeInteger(raw.openBriefCount, "OPERATIONS_RELATIONSHIP_READ_CLIENT_BRIEF_COUNT_INVALID", 10000),
     proposalCount: nonNegativeInteger(raw.proposalCount, "OPERATIONS_RELATIONSHIP_READ_CLIENT_PROPOSAL_COUNT_INVALID", 10000),
     readiness: enumValue(raw.readiness, ["available", "needs_review", "blocked"] as const, "OPERATIONS_RELATIONSHIP_READ_CLIENT_READINESS_INVALID"),
-    reviewRequired: raw.reviewRequired === true,
+    reviewRequired: requiredBoolean(raw.reviewRequired, "OPERATIONS_RELATIONSHIP_READ_CLIENT_REVIEW_REQUIRED_INVALID"),
     updatedAt: iso(raw.updatedAt, "OPERATIONS_RELATIONSHIP_READ_CLIENT_UPDATED_AT_INVALID"),
   });
 }
@@ -189,13 +200,19 @@ function commercial(value: unknown): OperationsCoreRelationshipCommercialSnapsho
   if (value === null) return null;
   const raw = object(value, "OPERATIONS_RELATIONSHIP_READ_COMMERCIAL_INVALID");
   const latest = raw.latestCommercialUpdatedAt === null ? null : iso(raw.latestCommercialUpdatedAt, "OPERATIONS_RELATIONSHIP_READ_COMMERCIAL_UPDATED_AT_INVALID");
+  const proposalCount = nonNegativeInteger(raw.proposalCount, "OPERATIONS_RELATIONSHIP_READ_PROPOSAL_COUNT_INVALID", 10000);
+  const acceptedProposalCount = nonNegativeInteger(raw.acceptedProposalCount, "OPERATIONS_RELATIONSHIP_READ_ACCEPTED_PROPOSAL_COUNT_INVALID", 10000);
+  const clientReadyProposalCount = nonNegativeInteger(raw.clientReadyProposalCount, "OPERATIONS_RELATIONSHIP_READ_CLIENT_READY_PROPOSAL_COUNT_INVALID", 10000);
+  if (acceptedProposalCount > proposalCount || clientReadyProposalCount > proposalCount) {
+    throw new Error("OPERATIONS_RELATIONSHIP_READ_PROPOSAL_COUNTS_INCONSISTENT");
+  }
   return Object.freeze({
     client: client(raw.client),
     leadCount: nonNegativeInteger(raw.leadCount, "OPERATIONS_RELATIONSHIP_READ_LEAD_COUNT_INVALID", 10000),
     openBriefCount: nonNegativeInteger(raw.openBriefCount, "OPERATIONS_RELATIONSHIP_READ_OPEN_BRIEF_COUNT_INVALID", 10000),
-    proposalCount: nonNegativeInteger(raw.proposalCount, "OPERATIONS_RELATIONSHIP_READ_PROPOSAL_COUNT_INVALID", 10000),
-    acceptedProposalCount: nonNegativeInteger(raw.acceptedProposalCount, "OPERATIONS_RELATIONSHIP_READ_ACCEPTED_PROPOSAL_COUNT_INVALID", 10000),
-    clientReadyProposalCount: nonNegativeInteger(raw.clientReadyProposalCount, "OPERATIONS_RELATIONSHIP_READ_CLIENT_READY_PROPOSAL_COUNT_INVALID", 10000),
+    proposalCount,
+    acceptedProposalCount,
+    clientReadyProposalCount,
     latestCommercialUpdatedAt: latest,
   });
 }
@@ -205,10 +222,14 @@ function project(value: unknown): OperationsCoreRelationshipProjectSnapshot | nu
   const raw = object(value, "OPERATIONS_RELATIONSHIP_READ_PROJECT_INVALID");
   const commercialClientId = raw.commercialClientId === null
     ? null
-    : requiredString(raw.commercialClientId, "OPERATIONS_RELATIONSHIP_READ_PROJECT_CLIENT_ID_INVALID", 100).toLowerCase();
-  if (commercialClientId && !UUID_PATTERN.test(commercialClientId)) throw new Error("OPERATIONS_RELATIONSHIP_READ_PROJECT_CLIENT_ID_INVALID");
+    : requiredUuid(raw.commercialClientId, "OPERATIONS_RELATIONSHIP_READ_PROJECT_CLIENT_ID_INVALID");
+  const openWorkItemCount = nonNegativeInteger(raw.openWorkItemCount, "OPERATIONS_RELATIONSHIP_READ_PROJECT_OPEN_ITEM_COUNT_INVALID", 100000);
+  const blockedWorkItemCount = nonNegativeInteger(raw.blockedWorkItemCount, "OPERATIONS_RELATIONSHIP_READ_PROJECT_BLOCKED_ITEM_COUNT_INVALID", 100000);
+  if (blockedWorkItemCount > openWorkItemCount) {
+    throw new Error("OPERATIONS_RELATIONSHIP_READ_PROJECT_WORK_ITEM_COUNTS_INCONSISTENT");
+  }
   return Object.freeze({
-    id: requiredString(raw.id, "OPERATIONS_RELATIONSHIP_READ_PROJECT_ID_INVALID", 100),
+    id: requiredUuid(raw.id, "OPERATIONS_RELATIONSHIP_READ_PROJECT_ID_INVALID"),
     commercialClientId,
     code: requiredString(raw.code, "OPERATIONS_RELATIONSHIP_READ_PROJECT_CODE_INVALID", 100),
     clientName: requiredString(raw.clientName, "OPERATIONS_RELATIONSHIP_READ_PROJECT_CLIENT_NAME_INVALID", 300),
@@ -217,13 +238,13 @@ function project(value: unknown): OperationsCoreRelationshipProjectSnapshot | nu
     phase: requiredString(raw.phase, "OPERATIONS_RELATIONSHIP_READ_PROJECT_PHASE_INVALID", 300),
     progressPercent: nonNegativeInteger(raw.progressPercent, "OPERATIONS_RELATIONSHIP_READ_PROJECT_PROGRESS_INVALID", 100),
     milestoneCount: nonNegativeInteger(raw.milestoneCount, "OPERATIONS_RELATIONSHIP_READ_PROJECT_MILESTONE_COUNT_INVALID", 10000),
-    openWorkItemCount: nonNegativeInteger(raw.openWorkItemCount, "OPERATIONS_RELATIONSHIP_READ_PROJECT_OPEN_ITEM_COUNT_INVALID", 100000),
-    blockedWorkItemCount: nonNegativeInteger(raw.blockedWorkItemCount, "OPERATIONS_RELATIONSHIP_READ_PROJECT_BLOCKED_ITEM_COUNT_INVALID", 100000),
+    openWorkItemCount,
+    blockedWorkItemCount,
     linkedWorkOrderCount: nonNegativeInteger(raw.linkedWorkOrderCount, "OPERATIONS_RELATIONSHIP_READ_PROJECT_WORK_ORDER_COUNT_INVALID", 10000),
     invoiceReadiness: enumValue(raw.invoiceReadiness, ["not_ready", "review_ready", "blocked"] as const, "OPERATIONS_RELATIONSHIP_READ_PROJECT_INVOICE_READINESS_INVALID"),
     readiness: enumValue(raw.readiness, ["available", "needs_review", "blocked"] as const, "OPERATIONS_RELATIONSHIP_READ_PROJECT_READINESS_INVALID"),
-    reviewRequired: raw.reviewRequired === true,
-    clientVisible: raw.clientVisible === true,
+    reviewRequired: requiredBoolean(raw.reviewRequired, "OPERATIONS_RELATIONSHIP_READ_PROJECT_REVIEW_REQUIRED_INVALID"),
+    clientVisible: requiredBoolean(raw.clientVisible, "OPERATIONS_RELATIONSHIP_READ_PROJECT_CLIENT_VISIBLE_INVALID"),
     updatedAt: iso(raw.updatedAt, "OPERATIONS_RELATIONSHIP_READ_PROJECT_UPDATED_AT_INVALID"),
   });
 }
@@ -236,14 +257,18 @@ function snapshot(value: unknown, expected: ReturnType<typeof exactRequest>): Op
     throw new Error("OPERATIONS_RELATIONSHIP_READ_IDENTITY_MISMATCH");
   }
   const observedAt = iso(raw.observedAt, "OPERATIONS_RELATIONSHIP_READ_OBSERVED_AT_INVALID");
-  if (Date.parse(observedAt) > Date.now() + 60_000) throw new Error("OPERATIONS_RELATIONSHIP_READ_OBSERVED_AT_FUTURE");
+  const observedAtMs = Date.parse(observedAt);
+  if (observedAtMs > Date.now() + 60_000) throw new Error("OPERATIONS_RELATIONSHIP_READ_OBSERVED_AT_FUTURE");
   const evidenceRef = requiredString(raw.evidenceRef, "OPERATIONS_RELATIONSHIP_READ_EVIDENCE_INVALID", 200);
   if (!EVIDENCE_PATTERN.test(evidenceRef)) throw new Error("OPERATIONS_RELATIONSHIP_READ_EVIDENCE_INVALID");
   const commercialSnapshot = commercial(raw.commercial);
   const projectSnapshot = project(raw.project);
-  if (projectSnapshot && expected.projectId && projectSnapshot.id.toLowerCase() !== expected.projectId) throw new Error("OPERATIONS_RELATIONSHIP_READ_PROJECT_ID_MISMATCH");
-  if (commercialSnapshot?.client && expected.commercialClientId && commercialSnapshot.client.id.toLowerCase() !== expected.commercialClientId) throw new Error("OPERATIONS_RELATIONSHIP_READ_CLIENT_ID_MISMATCH");
+  if (projectSnapshot && expected.projectId && projectSnapshot.id !== expected.projectId) throw new Error("OPERATIONS_RELATIONSHIP_READ_PROJECT_ID_MISMATCH");
+  if (commercialSnapshot?.client && expected.commercialClientId && commercialSnapshot.client.id !== expected.commercialClientId) throw new Error("OPERATIONS_RELATIONSHIP_READ_CLIENT_ID_MISMATCH");
   if (projectSnapshot?.commercialClientId && expected.commercialClientId && projectSnapshot.commercialClientId !== expected.commercialClientId) throw new Error("OPERATIONS_RELATIONSHIP_READ_PROJECT_CLIENT_MISMATCH");
+  if (projectSnapshot && Date.parse(projectSnapshot.updatedAt) > observedAtMs) throw new Error("OPERATIONS_RELATIONSHIP_READ_PROJECT_UPDATED_AFTER_SNAPSHOT");
+  if (commercialSnapshot?.client && Date.parse(commercialSnapshot.client.updatedAt) > observedAtMs) throw new Error("OPERATIONS_RELATIONSHIP_READ_CLIENT_UPDATED_AFTER_SNAPSHOT");
+  if (commercialSnapshot?.latestCommercialUpdatedAt && Date.parse(commercialSnapshot.latestCommercialUpdatedAt) > observedAtMs) throw new Error("OPERATIONS_RELATIONSHIP_READ_COMMERCIAL_UPDATED_AFTER_SNAPSHOT");
   const reasons = Array.isArray(raw.reasons)
     ? Object.freeze(raw.reasons.map((item) => requiredString(item, "OPERATIONS_RELATIONSHIP_READ_REASON_INVALID", 1000)))
     : (() => { throw new Error("OPERATIONS_RELATIONSHIP_READ_REASONS_INVALID"); })();

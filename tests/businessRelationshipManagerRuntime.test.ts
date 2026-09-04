@@ -53,6 +53,9 @@ test("one canonical cycle projects Gmail, assesses evidence, decides and emits d
   assert.equal(result.contract, "business_relationship_manager_runtime_v1");
   assert.equal(result.externalEffectPerformed, false);
   assert.equal(result.evidenceReadiness.status, "ready_for_approval");
+  assert.equal(result.decision.contract, "business_communication_decision_package_v4");
+  assert.equal(result.decision.origin, "relationship_manager_cycle");
+  assert.equal(result.decision.relationshipCycleId, result.cycleId);
   assert.equal(result.decision.disposition, "reply");
   assert.equal(result.decision.replayDeterministic, true);
   assert.ok(result.projection.latestObservedThreadState.length >= 1);
@@ -71,6 +74,7 @@ test("ambiguous identity blocks approval and escalates in the same canonical cyc
   };
   const result = cycle({ identity: ambiguous });
   assert.equal(result.evidenceReadiness.status, "blocked");
+  assert.equal(result.decision.origin, "relationship_manager_cycle");
   assert.equal(result.decision.disposition, "escalate");
   assert.equal(result.decision.approvalGradeReady, false);
   assert.equal(result.externalEffectPerformed, false);

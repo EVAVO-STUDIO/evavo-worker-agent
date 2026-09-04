@@ -110,9 +110,7 @@ if (/persistCanonicalRelationshipManagerCycleToBrain|requireBrainMemoryIngestion
 for (const relativePath of [
   "src/core/businessRelationshipManagerApprovalRuntime.ts",
   "src/core/businessStaffCommunicationApprovalFinalizer.ts",
-]) {
-  requireTokens(relativePath, ["approvalCandidatePersistenceEvidenceRef"]);
-}
+]) requireTokens(relativePath, ["approvalCandidatePersistenceEvidenceRef"]);
 const approvalRuntime = read("src/core/businessRelationshipManagerApprovalRuntime.ts");
 if (!approvalRuntime.includes("readyForCandidatePersistence: true") || !approvalRuntime.includes("readyForHumanApproval: false")) {
   errors.push("Prepared Relationship Manager candidates must remain non-approvable until persistence");
@@ -197,9 +195,19 @@ if (/openRoleConfirmed\s*:/.test(candidateRuntime)) {
 }
 
 requireTokens("src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts", [
-  '"business_relationship_manager_canonical_approval_runtime_v1"',
+  '"business_relationship_manager_canonical_approval_runtime_v2"',
+  '"business_relationship_manager_canonical_runtime_v2"',
   "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_NOT_READY",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_SOURCE_READINESS_NOT_READY",
   "prepareRelationshipManagerCommunicationForApproval",
+]);
+requireTokens("src/core/businessRelationshipManagerCanonicalCandidateApprovalRuntime.ts", [
+  '"business_relationship_manager_canonical_candidate_approval_runtime_v1"',
+  "candidate.approvalGradeReady",
+  'candidate.careersDecision.disposition !== "reply"',
+  "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_EVIDENCE_NOT_BOUND",
+  "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_REFERRAL_WITHOUT_ROLE_TRUTH",
+  "prepareCanonicalRelationshipManagerCommunicationForApproval",
 ]);
 
 const allowedDefinition = path.join(root, recordsPath);
@@ -214,7 +222,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v7",
+  contract: "business-approval-storage-isolation-v8",
   historicalStorageHelperRetained: true,
   directApprovalWriteRouteEnabled: false,
   governedApprovalCandidatePersistence: true,
@@ -228,6 +236,7 @@ console.log(JSON.stringify({
   commercialStateCannotAuthorizeHiring: true,
   manualRoleFlagsCannotAuthorizeHiring: true,
   canonicalCandidateRuntimeRequired: true,
+  candidatePolicyRequiredForCandidateApproval: true,
   careersEvidenceMustBindThroughDecision: true,
   externalExecutionEnabled: false,
   errors,

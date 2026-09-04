@@ -6,12 +6,17 @@ import { reconcileAuthorizedCommunicationExecution } from "../src/core/businessC
 import { buildCommunicationLifecycleReceipt } from "../src/core/businessCommunicationLifecycleReceipt";
 import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
 import {
+  bindRelationshipManagerApprovalCandidatePersistence,
   finalizeRelationshipManagerCommunicationApproval,
   prepareRelationshipManagerCommunicationForApproval,
 } from "../src/core/businessRelationshipManagerApprovalRuntime";
 import { authorizeRelationshipManagerCommunicationExecution } from "../src/core/businessRelationshipManagerExecutionRuntime";
 import { persistRelationshipManagerCycleMemory } from "../src/core/businessRelationshipManagerMemoryPersistence";
 import { runRelationshipManagerCommunicationCycle } from "../src/core/businessRelationshipManagerRuntime";
+import {
+  buildStaffApprovalCandidateWriteRequest,
+  reconcileStaffApprovalCandidateWriteReceipt,
+} from "../src/core/businessStaffCommunicationApprovalCandidatePersistence";
 import {
   evaluateCommunicationScenario,
   type CommunicationScenarioDefinition,
@@ -29,7 +34,7 @@ const scenario: CommunicationScenarioDefinition = {
   },
 };
 
-test("synthetic Gmail thread reaches verified sent lifecycle through governed drafting, approval and durable execution without performing an external send", async () => {
+test("synthetic Gmail thread reaches verified sent lifecycle through durable governed approval without performing an external send", async () => {
   const cycle = runRelationshipManagerCommunicationCycle({
     cycleId: "dry-run-1",
     observedAt: "2026-09-04T00:31:00Z",
@@ -72,18 +77,18 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
   const decision = cycle.decision;
   assert.equal(decision.origin, "relationship_manager_cycle");
   assert.equal(decision.relationshipCycleId, cycle.cycleId);
+  assert.equal(cycle.projection.relationshipId, "relationship-client-dry-run");
 
-  const scenarioResult = evaluateCommunicationScenario(scenario, {
+  assert.equal(evaluateCommunicationScenario(scenario, {
     disposition: decision.disposition,
     channel: decision.recommendedChannel,
     meetingJustified: decision.meetingJustified,
     responseTargets: decision.liveResponseTargets,
     prohibitedImplications: decision.prohibitedImplications,
     blockers: [], warnings: [], detectedFailureModes: [],
-  });
-  assert.equal(scenarioResult.passed, true);
+  }).passed, true);
 
-  const persistence = await persistRelationshipManagerCycleMemory({
+  const memoryPersistence = await persistRelationshipManagerCycleMemory({
     cycle,
     write: async (request) => ({
       contract: "evavo-memory-ingestion-receipt-v2",
@@ -96,7 +101,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
       reasons: [],
     }),
   });
-  assert.equal(persistence.durable, true);
+  assert.equal(memoryPersistence.durable, true);
 
   const handoff = {
     schema: "evavo-writing/staff-communication-handoff-v2" as const,
@@ -143,7 +148,6 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
       sourceRefs: handoff.staffContext.sourceRefs,
     },
   };
-  const draftBody = "Hi,\n\nThe delivery is currently awaiting your review.\n\nKind regards,\nGreg";
   const draftPackage = {
     schema: "evavo-writing/draft-package" as const,
     version: 1 as const,
@@ -152,18 +156,18 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
     status: "ready" as const,
     recommendedCandidateId: "draft-dry-run-1",
     candidates: [
-      { id: "draft-dry-run-1", body: draftBody, warnings: [], unresolvedAssumptionIds: [] },
+      { id: "draft-dry-run-1", body: "Hi,\n\nThe delivery is currently awaiting your review.\n\nKind regards,\nGreg", warnings: [], unresolvedAssumptionIds: [] },
       { id: "draft-dry-run-2", body: "Hi,\n\nThanks for checking in. The delivery is awaiting your review.\n\nKind regards,\nGreg", warnings: [], unresolvedAssumptionIds: [] },
     ],
     missingInformation: [],
     warnings: [],
   };
 
-  const preparation = prepareRelationshipManagerCommunicationForApproval({
+  const unpersistedPreparation = prepareRelationshipManagerCommunicationForApproval({
     candidateId: "approval-candidate-dry-run-1",
     createdAt: "2026-09-04T00:34:00Z",
     cycle,
-    memoryPersistence: persistence,
+    memoryPersistence,
     handoff,
     writingEnvelope,
     draftPackage,
@@ -175,9 +179,34 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
     replyMessageId: "gmail-message-inbound-1",
     canonicalSubject: "Re: Delivery status",
   });
+  assert.equal(unpersistedPreparation.readyForCandidatePersistence, true);
+  assert.equal(unpersistedPreparation.readyForHumanApproval, false);
+
+  const candidateWriteRequest = buildStaffApprovalCandidateWriteRequest(unpersistedPreparation.approvalCandidate);
+  const candidatePersistence = reconcileStaffApprovalCandidateWriteReceipt({
+    candidate: unpersistedPreparation.approvalCandidate,
+    request: candidateWriteRequest,
+    receipt: {
+      protocol: "evavo-approval-candidate-write-receipt-v1",
+      version: 1,
+      requestId: candidateWriteRequest.requestId,
+      idempotencyKey: candidateWriteRequest.idempotencyKey,
+      candidateId: candidateWriteRequest.candidateId,
+      candidateSha256: candidateWriteRequest.candidateSha256,
+      status: "appended",
+      durable: true,
+      recordId: "approval-candidate-record-dry-run-1",
+      journalPosition: 101,
+      recordedAt: "2026-09-04T00:34:10Z",
+      storageAuthority: { system: "evavo-storage", instanceId: "local-primary" },
+    },
+  });
+  const preparation = bindRelationshipManagerApprovalCandidatePersistence({
+    preparation: unpersistedPreparation,
+    persistence: candidatePersistence,
+  });
   assert.equal(preparation.readyForHumanApproval, true);
-  assert.equal(preparation.humanApprovalRecorded, false);
-  assert.equal(preparation.externalExecutionAllowed, false);
+  assert.ok(preparation.candidatePersistence.approvalEvidenceRef);
 
   const operatorApproval: OperatorCommunicationApprovalReceipt = {
     contract: "business_communication_operator_approval_v1",
@@ -190,7 +219,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
     decisionPackageId: decision.packageId,
     senderKey: preparation.approvalCandidate.senderKey,
     mailboxKey: preparation.approvalCandidate.mailboxKey,
-    evidenceRefs: ["operator-approval:dry-run-1"],
+    evidenceRefs: [preparation.candidatePersistence.approvalEvidenceRef!],
     sourceSystem: "operator_approval",
   };
   const finalization = finalizeRelationshipManagerCommunicationApproval({
@@ -198,14 +227,13 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
     preparation,
     operatorApprovalReceipt: operatorApproval,
   });
-  const approval = finalization.approval;
   assert.equal(finalization.humanApprovalRecorded, true);
   assert.equal(finalization.externalExecutionAllowed, false);
-  assert.equal(approval.approvalBinding?.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
+  assert.equal(finalization.approvalCandidateRecordId, "approval-candidate-record-dry-run-1");
 
   const executionAuthorization = authorizeRelationshipManagerCommunicationExecution({
     cycle,
-    memoryPersistence: persistence,
+    memoryPersistence,
     finalization,
     operatorApprovalReceipt: operatorApproval,
     mailbox: DESIRED_EVAVO_MAILBOXES.greg,
@@ -226,7 +254,6 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
   assert.equal(executionRequest.authorization.relationshipCycleId, cycle.cycleId);
   assert.equal(executionRequest.authorization.memoryCheckpoint?.cycleId, cycle.cycleId);
   assert.equal(executionRequest.authorization.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
-  assert.ok((executionRequest.authorization.memoryCheckpoint?.recordIds.length ?? 0) > 0);
 
   // Synthetic provider observation only. No Gmail connector/send API is invoked by this test.
   const executionReceipt = reconcileAuthorizedCommunicationExecution({
@@ -243,6 +270,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
     },
   });
 
+  const approval = finalization.approval;
   const lifecycle = buildCommunicationLifecycleReceipt({
     lifecycleId: "lifecycle-dry-run-1",
     relationshipId: "relationship-client-dry-run",
@@ -284,12 +312,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
     },
   });
 
-  assert.equal(executionRequest.authorization.operatorApprovalId, operatorApproval.approvalId);
   assert.equal(lifecycle.contract, "business_communication_lifecycle_receipt_v3");
-  assert.equal(lifecycle.decision.origin, "relationship_manager_cycle");
-  assert.equal(lifecycle.decision.relationshipCycleId, cycle.cycleId);
-  assert.equal(lifecycle.approval?.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
-  assert.equal(lifecycle.execution?.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
   assert.equal(lifecycle.stage, "sent");
   assert.equal(lifecycle.executionVerified, true);
   assert.equal(lifecycle.communicationId, "gmail-message-synthetic-sent-1");

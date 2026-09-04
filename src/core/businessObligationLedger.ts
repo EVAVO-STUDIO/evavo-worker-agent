@@ -29,6 +29,8 @@ export type ObligationAssessment = Readonly<{
   obligation: BusinessObligation;
   overdue: boolean;
   dueSoon: boolean;
+  dueAtEvidenceVerified: boolean;
+  stateEvidenceVerified: boolean;
   needsAttention: boolean;
   attentionReason: string | null;
 }>;
@@ -49,6 +51,7 @@ export type ObligationLedgerSnapshot = Readonly<{
   openCounterparty: readonly BusinessObligation[];
   openShared: readonly BusinessObligation[];
   uncertain: readonly BusinessObligation[];
+  evidenceGaps: readonly string[];
   nextActionOwner: ObligationOwner | "none";
 }>;
 
@@ -64,27 +67,38 @@ function evidence(ids: readonly string[], field: string): readonly string[] {
   return Object.freeze(cleaned);
 }
 
+function cleanEvidence(ids: readonly string[] | undefined): readonly string[] {
+  return Object.freeze([...new Set((ids ?? []).map((item) => item.trim()).filter(Boolean))]);
+}
+
+/**
+ * Read-compatible v1 validation. Historical v1 records may predate explicit due/state evidence fields.
+ * We preserve those records for audit/read purposes and surface evidence gaps in assessments instead of
+ * rewriting history or throwing. New state mutations remain strict in applyObligationTransition().
+ */
 function validate(obligation: BusinessObligation): BusinessObligation {
   if (!obligation.id.trim()) throw new Error("OBLIGATION_ID_REQUIRED");
   if (!obligation.statement.trim()) throw new Error("OBLIGATION_STATEMENT_REQUIRED");
   const sourceEvidenceIds = evidence(obligation.sourceEvidenceIds, "source");
   const createdAt = timestamp(obligation.createdAt, "created_at");
   const dueAt = obligation.dueAt ? timestamp(obligation.dueAt, "due_at") : null;
-  if (dueAt && !obligation.dueAtEvidenceId?.trim()) throw new Error("OBLIGATION_DUE_AT_EVIDENCE_REQUIRED");
-  if (obligation.status === "satisfied" && !obligation.satisfactionEvidenceIds.length) throw new Error("OBLIGATION_SATISFACTION_EVIDENCE_REQUIRED");
   if (obligation.status === "superseded" && !obligation.supersededById?.trim()) throw new Error("OBLIGATION_SUPERSEDED_BY_REQUIRED");
-  if (["satisfied", "superseded", "cancelled", "uncertain"].includes(obligation.status) && !(obligation.stateEvidenceIds?.length)) {
-    throw new Error("OBLIGATION_STATE_EVIDENCE_REQUIRED");
-  }
   return Object.freeze({
     ...obligation,
     statement: obligation.statement.trim(),
     createdAt,
     dueAt,
+    dueAtEvidenceId: obligation.dueAtEvidenceId?.trim() || null,
     sourceEvidenceIds,
-    satisfactionEvidenceIds: Object.freeze([...new Set(obligation.satisfactionEvidenceIds.map((item) => item.trim()).filter(Boolean))]),
-    stateEvidenceIds: Object.freeze([...(obligation.stateEvidenceIds ?? [])].map((item) => item.trim()).filter(Boolean)),
+    satisfactionEvidenceIds: cleanEvidence(obligation.satisfactionEvidenceIds),
+    stateEvidenceIds: cleanEvidence(obligation.stateEvidenceIds),
   });
+}
+
+function stateEvidenceVerified(obligation: BusinessObligation): boolean {
+  if (obligation.status === "open") return true;
+  if (obligation.status === "satisfied") return Boolean(obligation.satisfactionEvidenceIds.length && obligation.stateEvidenceIds?.length);
+  return Boolean(obligation.stateEvidenceIds?.length);
 }
 
 export function assessBusinessObligation(obligation: BusinessObligation, now = new Date()): ObligationAssessment {
@@ -94,9 +108,13 @@ export function assessBusinessObligation(obligation: BusinessObligation, now = n
   const active = checked.status === "open" || checked.status === "uncertain";
   const overdue = Boolean(active && due && due.getTime() < now.getTime());
   const dueSoon = Boolean(active && due && !overdue && due.getTime() - now.getTime() <= 48 * 60 * 60 * 1000);
+  const dueAtEvidenceVerified = !checked.dueAt || Boolean(checked.dueAtEvidenceId?.trim());
+  const stateVerified = stateEvidenceVerified(checked);
   let attentionReason: string | null = null;
 
-  if (overdue) attentionReason = checked.owner === "evavo"
+  if (!stateVerified) attentionReason = "The obligation has a historical state without explicit transition evidence; verify it before relying on that state for consequential action.";
+  else if (!dueAtEvidenceVerified && active) attentionReason = "The active obligation has a due date without direct due-date evidence; verify the date before relying on urgency.";
+  else if (overdue) attentionReason = checked.owner === "evavo"
     ? "EVAVO owns an overdue commitment."
     : "An active counterparty/shared obligation is overdue and may warrant proportionate follow-up.";
   else if (dueSoon && checked.owner === "evavo") attentionReason = "EVAVO owns a commitment due soon.";
@@ -109,6 +127,8 @@ export function assessBusinessObligation(obligation: BusinessObligation, now = n
     obligation: checked,
     overdue,
     dueSoon,
+    dueAtEvidenceVerified,
+    stateEvidenceVerified: stateVerified,
     needsAttention: Boolean(attentionReason),
     attentionReason,
   });
@@ -124,21 +144,33 @@ export function applyObligationTransition(obligation: BusinessObligation, transi
     case "observe":
       return current;
     case "satisfy":
-      if (current.status === "satisfied") return current;
+      if (current.status === "satisfied") {
+        if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
+        return current;
+      }
       if (current.status === "superseded" || current.status === "cancelled") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
       return validate({ ...current, status: "satisfied", satisfactionEvidenceIds: stateEvidenceIds, stateEvidenceIds });
     case "supersede":
       if (!transition.supersededById?.trim() || transition.supersededById === current.id) throw new Error("OBLIGATION_SUPERSEDED_BY_INVALID");
       if (current.status === "satisfied" || current.status === "cancelled") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
-      if (current.status === "superseded" && current.supersededById === transition.supersededById) return current;
+      if (current.status === "superseded" && current.supersededById === transition.supersededById) {
+        if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
+        return current;
+      }
       return validate({ ...current, status: "superseded", supersededById: transition.supersededById, stateEvidenceIds });
     case "cancel":
-      if (current.status === "cancelled") return current;
+      if (current.status === "cancelled") {
+        if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
+        return current;
+      }
       if (current.status === "satisfied" || current.status === "superseded") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
       return validate({ ...current, status: "cancelled", stateEvidenceIds });
     case "mark_uncertain":
       if (current.status === "satisfied" || current.status === "superseded" || current.status === "cancelled") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
-      if (current.status === "uncertain") return current;
+      if (current.status === "uncertain") {
+        if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
+        return current;
+      }
       return validate({ ...current, status: "uncertain", stateEvidenceIds });
   }
 }
@@ -168,12 +200,20 @@ export function openEvavoObligations(obligations: readonly BusinessObligation[])
 }
 
 export function buildObligationLedgerSnapshot(obligations: readonly BusinessObligation[], now = new Date()): ObligationLedgerSnapshot {
+  if (Number.isNaN(now.getTime())) throw new Error("OBLIGATION_NOW_INVALID");
   const checked = obligations.map(validate);
   const active = checked.filter((item) => item.status === "open" || item.status === "uncertain");
   const openEvavo = active.filter((item) => item.owner === "evavo");
   const openCounterparty = active.filter((item) => item.owner === "counterparty");
   const openShared = active.filter((item) => item.owner === "shared");
   const uncertain = checked.filter((item) => item.status === "uncertain" || item.owner === "unknown");
+  const assessments = checked.map((item) => assessBusinessObligation(item, now));
+  const evidenceGaps = assessments.flatMap((assessment) => {
+    const gaps: string[] = [];
+    if (!assessment.dueAtEvidenceVerified) gaps.push(`${assessment.obligation.id}:due_at_evidence_missing`);
+    if (!assessment.stateEvidenceVerified) gaps.push(`${assessment.obligation.id}:state_evidence_missing`);
+    return gaps;
+  });
   const urgentEvavo = openEvavo.some((item) => assessBusinessObligation(item, now).needsAttention);
   const nextActionOwner: ObligationLedgerSnapshot["nextActionOwner"] = urgentEvavo || openEvavo.length
     ? "evavo"
@@ -192,6 +232,7 @@ export function buildObligationLedgerSnapshot(obligations: readonly BusinessObli
     openCounterparty: Object.freeze(openCounterparty),
     openShared: Object.freeze(openShared),
     uncertain: Object.freeze(uncertain),
+    evidenceGaps: Object.freeze([...new Set(evidenceGaps)]),
     nextActionOwner,
   });
 }

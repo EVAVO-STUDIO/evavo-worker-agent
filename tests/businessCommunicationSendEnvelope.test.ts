@@ -31,6 +31,11 @@ function envelope() {
     decisionPackageId: "decision-package-1",
     evidenceIds: ["gmail:message-1", "worker:decision-package-1"],
     approvalEvidenceIds: ["operator-approval:approval-1"],
+    writingProvenance: {
+      handoffId: "handoff-1",
+      writingRequestId: "writing-request-1",
+      decisionOrigin: "direct",
+    },
   });
 }
 
@@ -124,4 +129,60 @@ test("recipient order and case normalize without changing the semantic approval"
   });
   const reordered = { ...material, to: ["ASHLEY@EXAMPLE.COM", "second@example.com"] };
   assert.equal(verifyCommunicationSendEnvelope(approved, reordered, new Date("2026-09-04T01:30:00Z")).ok, true);
+});
+
+test("writing provenance is cryptographically bound to the approval", () => {
+  const approved = envelope();
+  const tampered = {
+    ...approved,
+    approvalBinding: approved.approvalBinding && {
+      ...approved.approvalBinding,
+      writingProvenance: {
+        ...approved.approvalBinding.writingProvenance!,
+        writingRequestId: "writing-request-other",
+      },
+    },
+  };
+  const result = verifyCommunicationApprovalBinding(tampered);
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.includes("approval_binding_integrity_failed"));
+});
+
+test("canonical cycle writing provenance requires its cycle id and direct provenance forbids one", () => {
+  assert.throws(() => createCommunicationSendEnvelope({
+    envelopeId: "cycle-missing",
+    approvedAt: "2026-09-04T01:00:00Z",
+    expiresAt: "2026-09-04T02:00:00Z",
+    approvedBy: "greg",
+    material: base,
+    senderKey: "greg",
+    mailboxKey: "greg",
+    decisionPackageId: "decision-package-cycle",
+    evidenceIds: ["gmail:message-1"],
+    approvalEvidenceIds: ["operator-approval:cycle"],
+    writingProvenance: {
+      handoffId: "handoff-cycle",
+      writingRequestId: "writing-request-cycle",
+      decisionOrigin: "relationship_manager_cycle",
+    },
+  }), /COMMUNICATION_SEND_WRITING_RELATIONSHIP_CYCLE_REQUIRED/);
+
+  assert.throws(() => createCommunicationSendEnvelope({
+    envelopeId: "direct-cycle",
+    approvedAt: "2026-09-04T01:00:00Z",
+    expiresAt: "2026-09-04T02:00:00Z",
+    approvedBy: "greg",
+    material: base,
+    senderKey: "greg",
+    mailboxKey: "greg",
+    decisionPackageId: "decision-package-direct",
+    evidenceIds: ["gmail:message-1"],
+    approvalEvidenceIds: ["operator-approval:direct"],
+    writingProvenance: {
+      handoffId: "handoff-direct",
+      writingRequestId: "writing-request-direct",
+      decisionOrigin: "direct",
+      relationshipCycleId: "cycle-forbidden",
+    },
+  }), /COMMUNICATION_SEND_WRITING_DIRECT_CYCLE_FORBIDDEN/);
 });

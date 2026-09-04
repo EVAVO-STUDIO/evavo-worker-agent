@@ -75,11 +75,22 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
 
   if (input.request.authorization.decisionOrigin === "relationship_manager_cycle") {
     const checkpoint = input.request.authorization.memoryCheckpoint;
+    const writingProvenance = input.request.authorization.writingProvenance;
     if (!checkpoint || !input.request.authorization.relationshipCycleId) {
       throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MEMORY_CHECKPOINT_MISSING");
     }
     if (checkpoint.cycleId !== input.request.authorization.relationshipCycleId) {
       throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MEMORY_CHECKPOINT_CYCLE_MISMATCH");
+    }
+    if (!writingProvenance) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_PROVENANCE_MISSING");
+    if (writingProvenance.decisionOrigin !== "relationship_manager_cycle") {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_ORIGIN_INVALID");
+    }
+    if (writingProvenance.relationshipCycleId !== input.request.authorization.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_CYCLE_MISMATCH");
+    }
+    if (!writingProvenance.handoffId.trim() || !writingProvenance.writingRequestId.trim()) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_IDENTITY_INVALID");
     }
   }
 

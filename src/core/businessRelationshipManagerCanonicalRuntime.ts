@@ -134,10 +134,10 @@ export function runCanonicalRelationshipManagerCommunicationCycle(
   if (cycle.decision.relationshipCycleId !== cycle.cycleId) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_DECISION_CYCLE_MISMATCH");
   }
-  const approvalGradeReady = decisionContext.approvalGradeReady && cycle.decision.approvalGradeReady;
-  if (decisionContext.approvalGradeReady !== cycle.decision.approvalGradeReady) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_READINESS_DIVERGED");
+  if (cycle.decision.approvalGradeReady && !decisionContext.approvalGradeReady) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_READINESS_WIDENED");
   }
+  const approvalGradeReady = decisionContext.approvalGradeReady && cycle.decision.approvalGradeReady;
 
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_RUNTIME_CONTRACT,

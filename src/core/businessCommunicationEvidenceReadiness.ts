@@ -15,6 +15,13 @@ export type CommunicationEvidenceReadiness = Readonly<{
   evidenceIds: readonly string[];
 }>;
 
+function qualifiedEvidenceRef(source: string, ref: string): string {
+  const cleanSource = source.trim().toLowerCase();
+  const cleanRef = ref.trim();
+  if (!cleanRef) return "";
+  return cleanRef.toLowerCase().startsWith(`${cleanSource}:`) ? cleanRef : `${cleanSource}:${cleanRef}`;
+}
+
 export function assessCommunicationEvidenceReadiness(input: Readonly<{
   identity: IdentityResolution;
   artifactResolutions?: readonly ArtifactResolution[];
@@ -30,7 +37,10 @@ export function assessCommunicationEvidenceReadiness(input: Readonly<{
   const identityReady = input.identity.status === "verified" && input.identity.confidence >= (input.requireApprovalGradeIdentity === false ? 70 : 90);
   if (!identityReady) blockers.push("Recipient/person identity is not verified strongly enough for external communication.");
   if (input.identity.selected) {
-    for (const item of input.identity.selected.evidence) evidenceIds.add(`${item.source}:${item.ref}`);
+    for (const item of input.identity.selected.evidence) {
+      const ref = qualifiedEvidenceRef(item.source, item.ref);
+      if (ref) evidenceIds.add(ref);
+    }
   }
 
   const artifacts = input.artifactResolutions ?? [];
@@ -46,12 +56,15 @@ export function assessCommunicationEvidenceReadiness(input: Readonly<{
   const calendars = input.calendarCommitments ?? [];
   const calendarReady = input.calendarPromiseRequired
     ? calendars.length > 0 && calendars.every((item) => item.status === "verified_available" && item.canPromise)
-    : calendars.every((item) => item.status !== "verified_unavailable");
+    : true;
   if (input.calendarPromiseRequired && !calendarReady) blockers.push("A proposed meeting/time commitment is not verified available in the authoritative calendar.");
   for (const verification of calendars) for (const id of verification.evidenceIds) evidenceIds.add(id);
 
   if (!input.attachmentsRequired && !artifacts.length) warnings.push("No artifact verification was required for this communication.");
   if (!input.calendarPromiseRequired && !calendars.length) warnings.push("No calendar promise was required for this communication.");
+  if (!input.calendarPromiseRequired && calendars.some((item) => item.status === "verified_unavailable")) {
+    warnings.push("Calendar evidence includes an unavailable slot, but this communication does not require a calendar promise.");
+  }
 
   const status: CommunicationEvidenceReadiness["status"] = blockers.length
     ? "blocked"

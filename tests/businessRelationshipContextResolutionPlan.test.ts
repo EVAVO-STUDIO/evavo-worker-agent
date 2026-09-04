@@ -19,6 +19,16 @@ test("routes identity, thread, project, document and calendar gaps to canonical 
   assert.ok(plan.items.every((item) => item.evidenceRequired));
 });
 
+test("routes hiring and role-opening truth to careers rather than Operations Core", () => {
+  const plan = buildRelationshipContextResolutionPlan({
+    relationshipId: "rel-careers",
+    missingContext: ["Current hiring status and open role truth are not verified."],
+  });
+  assert.deepEqual(plan.orderedSources, ["careers_registry"]);
+  assert.equal(plan.items[0]?.source, "careers_registry");
+  assert.match(plan.items[0]?.purpose ?? "", /Commercial or project state must not be used/i);
+});
+
 test("routes unresolved conflicts to explicit human review", () => {
   const plan = buildRelationshipContextResolutionPlan({
     relationshipId: "rel-2",

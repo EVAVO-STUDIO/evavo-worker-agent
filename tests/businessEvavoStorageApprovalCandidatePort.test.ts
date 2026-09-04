@@ -70,6 +70,8 @@ function successFetch(observed: { input?: string; init?: RequestInit }): Approva
       candidateId: string;
       candidateSha256: string;
     };
+    const documentId = "doc_port_1";
+    const versionId = "ver_port_1";
     return {
       ok: true,
       status: 200,
@@ -86,10 +88,21 @@ function successFetch(observed: { input?: string; init?: RequestInit }): Approva
             candidateSha256: request.candidateSha256,
             status: "appended",
             durable: true,
-            recordId: "doc_port_1:ver_port_1",
+            recordId: `${documentId}:${versionId}`,
             journalPosition: "receipt_port_1",
             recordedAt: "2026-09-04T08:00:01.000Z",
             storageAuthority: { system: "evavo-storage", instanceId: "storage-authority-1" },
+            storage: {
+              model: "immutable_document_version",
+              vaultId: "internal",
+              logicalPath: `RelationshipManager/ApprovalCandidates/${request.candidateId}/${request.candidateSha256}.json`,
+              documentId,
+              versionId,
+              sha256: request.candidateSha256,
+              sizeBytes: 2048,
+              idempotentReplay: false,
+              receiptId: "receipt_port_1",
+            },
           },
         };
       },
@@ -173,6 +186,41 @@ test("does not surface remote error message payloads", async () => {
       return true;
     },
   );
+});
+
+test("rejects successful response that lacks native immutable Storage binding", async () => {
+  const port = createEvavoStorageApprovalCandidatePort({
+    baseUrl: "http://127.0.0.1:8040",
+    writeToken: "x".repeat(32),
+  }, async (_input, init) => {
+    const request = JSON.parse(String(init.body));
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          schemaVersion: 1,
+          ok: true,
+          result: {
+            protocol: "evavo-approval-candidate-write-receipt-v1",
+            version: 1,
+            requestId: request.requestId,
+            idempotencyKey: request.idempotencyKey,
+            candidateId: request.candidateId,
+            candidateSha256: request.candidateSha256,
+            status: "appended",
+            durable: true,
+            recordId: "legacy-record-only",
+            journalPosition: "legacy-receipt",
+            recordedAt: "2026-09-04T08:00:01.000Z",
+            storageAuthority: { system: "evavo-storage", instanceId: "storage-authority-1" },
+          },
+        };
+      },
+    };
+  });
+
+  await assert.rejects(() => port.persist(candidate()), /NATIVE_STORAGE_REQUIRED/);
 });
 
 test("rejects malformed successful responses", async () => {

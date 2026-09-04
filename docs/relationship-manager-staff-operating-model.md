@@ -12,6 +12,18 @@ Useful autonomy = authority + evidence + reversibility + accountability.
 
 The system should become more capable by increasing what it can reason about and safely own, not by removing controls.
 
+## Non-optional conduct baseline
+
+All staff-like relationship behaviour is subordinate to:
+
+```text
+docs/relationship-manager-staff-constitution.md
+src/core/businessRelationshipConductPolicy.ts
+src/core/businessRelationshipStaffInstincts.ts
+```
+
+The constitution is not a style profile. It is the baseline conduct floor. Learned preferences and communication profiles may refine directness, warmth, formality, follow-up pressure and other choices, but they must not override truthfulness, dignity, appropriate restraint, ownership, commercial authority or the async-first channel rule.
+
 ## Staff responsibilities
 
 The Relationship Manager should be able to:
@@ -130,6 +142,23 @@ Deferral is preferable to invented confidence.
 
 Use when a hard veto applies, including suppression or another explicit prohibition.
 
+## Staff instinct layer
+
+The deterministic staff-instinct layer resolves common relationship situations before prose generation:
+
+```text
+explicit question/request -> reply
+EVAVO mistake/delay -> repair
+outside scope/unapproved commitment -> hold boundary
+payment/follow-up due -> proportionate follow-up
+acknowledgement-only -> normally no reply
+explicit no-reply request -> no reply
+suppression -> no reply
+legal/contractual ambiguity around commitment -> escalate
+```
+
+This layer is intentionally separate from Writing Studio. It decides the relational/business behaviour; Writing Studio decides how that behaviour should be expressed naturally.
+
 ## Authority model
 
 Authority should be granted by capability and impact, not by a single global autonomy switch.
@@ -232,18 +261,22 @@ Do not build the Relationship Manager as:
 - an agent that hides uncertainty
 - an agent that automatically escalates every decision to a human
 - an agent that duplicates canonical project, email, calendar or support records
+- an agent that creates meetings as a generic next step
+- an agent that confuses politeness with agreeing to bad terms
+- an agent that responds to every message even when silence is better
 
 ## Immediate implementation sequence
 
 1. Keep `business_staff_decision_v1` as the mandatory decision envelope for new staff-like behaviour.
-2. Add a durable relationship-state projection sourced from canonical evidence.
-3. Add commitment and obligation tracking with owners and due dates.
-4. Add relationship-health evidence dimensions without collapsing them into an opaque score.
-5. Add an internal work queue that can autonomously execute approved `internal_reversible` tasks.
-6. Add outcome and calibration records for every decision.
-7. Add connector-backed context adapters with provenance and freshness.
-8. Add approval packages for external or consequential actions.
-9. Only then evaluate narrowly scoped external execution capabilities.
+2. Keep the staff constitution and staff-instinct layer ahead of drafting and execution.
+3. Add a durable relationship-state projection sourced from canonical evidence.
+4. Add commitment and obligation tracking with owners and due dates.
+5. Add relationship-health evidence dimensions without collapsing them into an opaque score.
+6. Add an internal work queue that can autonomously execute approved `internal_reversible` tasks.
+7. Add outcome and calibration records for every decision.
+8. Add connector-backed context adapters with provenance and freshness.
+9. Add approval packages for external or consequential actions.
+10. Only then evaluate narrowly scoped external execution capabilities.
 
 ## Current boundary
 

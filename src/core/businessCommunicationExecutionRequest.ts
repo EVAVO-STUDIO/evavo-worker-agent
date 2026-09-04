@@ -11,8 +11,9 @@ import type {
   CommunicationSendEnvelope,
   CommunicationSendMaterial,
 } from "./businessCommunicationSendEnvelope";
+import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT = "business_communication_execution_request_v1" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT = "business_communication_execution_request_v2" as const;
 
 export type AuthorizedCommunicationExecutionRequest = Readonly<{
   contract: typeof BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT;
@@ -33,6 +34,8 @@ export type AuthorizedCommunicationExecutionRequest = Readonly<{
     materialSha256: string;
     approvalBindingSha256: string;
     decisionPackageId: string;
+    decisionOrigin: CommunicationDecisionPackage["origin"];
+    relationshipCycleId: string | null;
     decisionEvidenceIds: readonly string[];
     approvalEvidenceIds: readonly string[];
     operatorApprovalId: string;
@@ -41,6 +44,10 @@ export type AuthorizedCommunicationExecutionRequest = Readonly<{
     approvedAt: string;
     expiresAt: string;
     mailboxKey: string;
+    memoryCheckpoint: Readonly<{
+      cycleId: string;
+      recordIds: readonly string[];
+    }> | null;
   }>;
 }>;
 
@@ -59,6 +66,7 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
   approval: CommunicationSendEnvelope;
   operatorApprovalReceipt: OperatorCommunicationApprovalReceipt;
   decisionPackage: CommunicationDecisionPackage;
+  relationshipManagerMemoryPersistence?: RelationshipManagerMemoryPersistenceResult | null;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
   contextChangesSinceDecision?: readonly ApprovalContextChange[];
@@ -69,6 +77,19 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
   const binding = input.approval.approvalBinding;
   if (!binding) throw new Error("COMMUNICATION_EXECUTION_REQUEST_BINDING_REQUIRED");
   if (!Number.isFinite(input.now.getTime())) throw new Error("COMMUNICATION_EXECUTION_REQUEST_NOW_INVALID");
+
+  let memoryCheckpoint: AuthorizedCommunicationExecutionRequest["authorization"]["memoryCheckpoint"] = null;
+  if (input.decisionPackage.origin === "relationship_manager_cycle") {
+    const persistence = input.relationshipManagerMemoryPersistence;
+    const cycleId = input.decisionPackage.relationshipCycleId;
+    if (!persistence || !cycleId || !persistence.durable || persistence.cycleId !== cycleId || persistence.blockers.length) {
+      throw new Error("COMMUNICATION_EXECUTION_REQUEST_MEMORY_CHECKPOINT_REQUIRED");
+    }
+    memoryCheckpoint = Object.freeze({
+      cycleId,
+      recordIds: Object.freeze([...persistence.recordIds]),
+    });
+  }
 
   const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT,
@@ -89,6 +110,8 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
       materialSha256: input.approval.materialSha256,
       approvalBindingSha256: binding.bindingSha256,
       decisionPackageId: binding.decisionPackageId,
+      decisionOrigin: input.decisionPackage.origin,
+      relationshipCycleId: input.decisionPackage.relationshipCycleId,
       decisionEvidenceIds: binding.evidenceIds,
       approvalEvidenceIds: binding.approvalEvidenceIds,
       operatorApprovalId: input.operatorApprovalReceipt.approvalId,
@@ -97,6 +120,7 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
       approvedAt: input.approval.approvedAt,
       expiresAt: input.approval.expiresAt,
       mailboxKey: binding.mailboxKey,
+      memoryCheckpoint,
     }),
   });
   return Object.freeze({ gate, request });

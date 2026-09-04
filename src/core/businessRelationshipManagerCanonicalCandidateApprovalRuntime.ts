@@ -3,6 +3,10 @@ import {
   type CanonicalRelationshipManagerCandidateInput,
   type CanonicalRelationshipManagerCandidateResult,
 } from "./businessRelationshipManagerCanonicalCandidateRuntime";
+import {
+  reviewCandidateDraftAgainstPolicy,
+  type CandidateDraftPolicyReview,
+} from "./businessCandidateDraftPolicyReview";
 import { assertCanonicalRelationshipManagerApprovalReadiness } from "./businessRelationshipManagerCanonicalApprovalRuntime";
 import {
   prepareRelationshipManagerCommunicationForApproval,
@@ -22,6 +26,7 @@ export type CanonicalCandidateApprovalPreparation = Readonly<{
   careersEvidenceRef: string;
   candidatePolicyEvidenceRef: string;
   roleTruthStatus: NonNullable<CanonicalRelationshipManagerCandidateResult["sources"]["cycle"]["roleTruth"]>["status"];
+  draftPolicyReview: CandidateDraftPolicyReview;
   candidatePolicyBound: true;
   preparation: RelationshipManagerApprovalPreparation;
   externalEffectPerformed: false;
@@ -56,9 +61,7 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
 ): Promise<CanonicalCandidateApprovalPreparation> {
   const candidate = await runCanonicalRelationshipManagerCandidateResponse(input.candidateRuntimeInput);
   if (!candidate.approvalGradeReady) throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_NOT_READY");
-  if (candidate.careersDecision.disposition !== "reply") {
-    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_POLICY_NOT_REPLY");
-  }
+  if (candidate.careersDecision.disposition !== "reply") throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_POLICY_NOT_REPLY");
   if (candidate.sources.cycle.careersState === "provider_unavailable") {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_UNAVAILABLE");
   }
@@ -105,14 +108,27 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     evidenceIds: supplementalEvidence,
     cycle: canonical.cycle,
   });
-  if (
-    preparation.cycleId !== canonical.cycle.cycleId
-    || preparation.decisionPackageId !== canonical.cycle.decision.packageId
-  ) {
+  if (preparation.cycleId !== canonical.cycle.cycleId || preparation.decisionPackageId !== canonical.cycle.decision.packageId) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_PREPARATION_IDENTITY_MISMATCH");
   }
   if (!preparation.approvalCandidate.evidenceIds.includes(policyEvidenceRef)) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_POLICY_EVIDENCE_NOT_BOUND");
+  }
+
+  const callerCandidate = input.candidateRuntimeInput.sourceHydration.cycle.candidate;
+  if (!callerCandidate) throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CANDIDATE_CONTEXT_REQUIRED");
+  const draftPolicyReview = reviewCandidateDraftAgainstPolicy({
+    body: preparation.approvalCandidate.material.body,
+    roleTruth,
+    careersDecision: candidate.careersDecision,
+    asksForJobOrInternship: input.candidateRuntimeInput.candidate.asksForJobOrInternship === true,
+    asksForMeeting: input.candidateRuntimeInput.candidate.asksForMeeting === true,
+    portfolioOrCvProvided: input.candidateRuntimeInput.candidate.portfolioOrCvProvided === true,
+    materialsActuallyReviewed: callerCandidate.materialsActuallyReviewed,
+    suitableFutureInterest: input.candidateRuntimeInput.candidate.suitableFutureInterest === true,
+  });
+  if (!draftPolicyReview.ready) {
+    throw new Error(`RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DRAFT_POLICY_BLOCKED:${draftPolicyReview.blockers.join(",")}`);
   }
 
   return Object.freeze({
@@ -122,6 +138,7 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     careersEvidenceRef,
     candidatePolicyEvidenceRef: policyEvidenceRef,
     roleTruthStatus: roleTruth.status,
+    draftPolicyReview,
     candidatePolicyBound: true,
     preparation,
     externalEffectPerformed: false,

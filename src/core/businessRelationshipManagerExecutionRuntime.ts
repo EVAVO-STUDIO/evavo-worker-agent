@@ -10,13 +10,17 @@ import type { CommunicationDraftReviewInput } from "./businessCommunicationPreSe
 import type { RelationshipManagerApprovalFinalization } from "./businessRelationshipManagerApprovalRuntime";
 import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 import type { RelationshipManagerCommunicationCycle } from "./businessRelationshipManagerRuntime";
+import { approvalCandidatePersistenceEvidenceRef } from "./businessStaffCommunicationApprovalCandidatePersistence";
 
-export const BUSINESS_RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CONTRACT = "business_relationship_manager_execution_runtime_v1" as const;
+export const BUSINESS_RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CONTRACT = "business_relationship_manager_execution_runtime_v2" as const;
 
 export type RelationshipManagerExecutionAuthorization = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CONTRACT;
   cycleId: string;
   decisionPackageId: string;
+  approvalCandidateId: string;
+  approvalCandidateRecordId: string;
+  approvalCandidateSha256: string;
   authorization: CommunicationExecutionAuthorizationResult;
   providerRequest: AuthorizedCommunicationExecutionRequest | null;
   externalExecutionAllowed: boolean;
@@ -63,7 +67,22 @@ export function authorizeRelationshipManagerCommunicationExecution(input: Readon
   if (!input.finalization.humanApprovalRecorded || input.finalization.externalExecutionAllowed) {
     throw new Error("RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_APPROVAL_STATE_INVALID");
   }
-  const writingProvenance = input.finalization.approval.approvalBinding?.writingProvenance;
+
+  const expectedCandidateEvidenceRef = approvalCandidatePersistenceEvidenceRef({
+    candidateId: input.finalization.approvalCandidateId,
+    candidateSha256: input.finalization.approvalCandidateSha256,
+    recordId: input.finalization.approvalCandidateRecordId,
+  });
+  const binding = input.finalization.approval.approvalBinding;
+  if (!binding) throw new Error("RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_APPROVAL_BINDING_REQUIRED");
+  if (!binding.evidenceIds.includes(expectedCandidateEvidenceRef)) {
+    throw new Error("RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CANDIDATE_EVIDENCE_NOT_BOUND");
+  }
+  if (!binding.approvalEvidenceIds.includes(expectedCandidateEvidenceRef)) {
+    throw new Error("RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_OPERATOR_CANDIDATE_EVIDENCE_NOT_BOUND");
+  }
+
+  const writingProvenance = binding.writingProvenance;
   if (!writingProvenance) throw new Error("RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_WRITING_PROVENANCE_REQUIRED");
   if (writingProvenance.decisionOrigin !== "relationship_manager_cycle") {
     throw new Error("RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_WRITING_ORIGIN_INVALID");
@@ -89,6 +108,9 @@ export function authorizeRelationshipManagerCommunicationExecution(input: Readon
     contract: BUSINESS_RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CONTRACT,
     cycleId: input.cycle.cycleId,
     decisionPackageId: input.cycle.decision.packageId,
+    approvalCandidateId: input.finalization.approvalCandidateId,
+    approvalCandidateRecordId: input.finalization.approvalCandidateRecordId,
+    approvalCandidateSha256: input.finalization.approvalCandidateSha256,
     authorization,
     providerRequest: authorization.request,
     externalExecutionAllowed: Boolean(authorization.request),

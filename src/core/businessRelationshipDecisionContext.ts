@@ -1,10 +1,12 @@
 import { buildBusinessRelationship360Context, type Relationship360Context, type Relationship360Input } from "./businessRelationship360Context";
 import { assessRelationshipContextFreshness, type ContextFreshnessAssessment } from "./businessRelationshipContextFreshness";
-import { buildRelationshipChangeDigest, type RelationshipChangeDigest, type RelationshipChangeInput } from "./businessRelationshipChangeDigest";
+import { buildRelationshipChangeDigest, type RelationshipChangeDigest } from "./businessRelationshipChangeDigest";
 import { buildRelationshipStaffBrief, type RelationshipStaffBrief } from "./businessRelationshipStaffBrief";
 import { buildRelationshipContextResolutionPlan, type RelationshipContextResolutionPlan } from "./businessRelationshipContextResolutionPlan";
 
 export const BUSINESS_RELATIONSHIP_DECISION_CONTEXT_CONTRACT = "business_relationship_decision_context_v1" as const;
+
+export type RelationshipChangeDigestInput = Parameters<typeof buildRelationshipChangeDigest>[0];
 
 export type RelationshipDecisionContext = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_DECISION_CONTEXT_CONTRACT;
@@ -22,7 +24,7 @@ export type RelationshipDecisionContext = Readonly<{
 export function buildRelationshipDecisionContext(input: Readonly<{
   objective: string;
   relationship: Relationship360Input;
-  changes?: RelationshipChangeInput | null;
+  changes?: RelationshipChangeDigestInput | null;
 }>): RelationshipDecisionContext {
   const context360 = buildBusinessRelationship360Context(input.relationship);
   const freshness = assessRelationshipContextFreshness({

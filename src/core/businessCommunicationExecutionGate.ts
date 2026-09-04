@@ -51,6 +51,21 @@ function assessBoundDecision(
   if (!Number.isFinite(decisionAt) || !Number.isFinite(approvedAt) || decisionAt > approvedAt) reasons.push("decision_timestamp_invalid_for_approval");
   if (decision.origin === "relationship_manager_cycle" && !decision.relationshipCycleId) reasons.push("decision_relationship_cycle_id_missing");
   if (decision.origin === "direct" && decision.relationshipCycleId) reasons.push("decision_direct_origin_has_cycle_id");
+
+  const writing = binding.writingProvenance;
+  if (decision.origin === "relationship_manager_cycle") {
+    if (!writing) reasons.push("decision_writing_provenance_missing");
+    else {
+      if (writing.decisionOrigin !== "relationship_manager_cycle") reasons.push("decision_writing_origin_mismatch");
+      if (writing.relationshipCycleId !== decision.relationshipCycleId) reasons.push("decision_writing_relationship_cycle_mismatch");
+      if (!writing.handoffId.trim()) reasons.push("decision_writing_handoff_id_missing");
+      if (!writing.writingRequestId.trim()) reasons.push("decision_writing_request_id_missing");
+    }
+  } else if (writing) {
+    if (writing.decisionOrigin !== "direct") reasons.push("decision_writing_origin_mismatch");
+    if (writing.relationshipCycleId) reasons.push("decision_writing_direct_origin_has_cycle_id");
+  }
+
   return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
 }
 

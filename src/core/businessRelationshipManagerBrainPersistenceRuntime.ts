@@ -29,7 +29,7 @@ export async function persistRelationshipManagerCycleToBrain(input: Readonly<{
   if (input.cycle.decision.relationshipCycleId !== input.cycle.cycleId) {
     throw new Error("RELATIONSHIP_MANAGER_BRAIN_PERSISTENCE_CYCLE_ID_MISMATCH");
   }
-  if (input.brain.contract !== "business_brain_memory_ingestion_port_v1") {
+  if (input.brain.contract !== "business_brain_memory_ingestion_port_v2") {
     throw new Error("RELATIONSHIP_MANAGER_BRAIN_PERSISTENCE_PORT_CONTRACT_INVALID");
   }
 

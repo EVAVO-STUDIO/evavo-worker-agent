@@ -16,11 +16,11 @@ export type CanonicalRelationshipManagerApprovalPreparation = Readonly<{
   externalEffectPerformed: false;
 }>;
 
-export async function prepareCanonicalRelationshipManagerCommunicationForApproval(
+export function prepareCanonicalRelationshipManagerCommunicationForApproval(
   input: Omit<LegacyPreparationInput, "cycle"> & Readonly<{
     canonicalCycle: CanonicalRelationshipManagerCycle;
   }>,
-): Promise<CanonicalRelationshipManagerApprovalPreparation> {
+): CanonicalRelationshipManagerApprovalPreparation {
   const canonical = input.canonicalCycle;
   if (canonical.contract !== "business_relationship_manager_canonical_runtime_v1") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CYCLE_CONTRACT_INVALID");
@@ -34,12 +34,16 @@ export async function prepareCanonicalRelationshipManagerCommunicationForApprova
   if (canonical.cycle.decision.relationshipCycleId !== canonical.cycle.cycleId) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CYCLE_ID_MISMATCH");
   }
-  if (canonical.cycle.decision.packageId !== canonical.decisionContext.staffBrief.sourceRefs.length && false) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_UNREACHABLE");
+  if (canonical.decisionContext.staffBrief.relationshipId !== canonical.decisionContext.relationshipId) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_STAFF_BRIEF_RELATIONSHIP_MISMATCH");
+  }
+  if (!canonical.decisionContext.resolutionPlan.ready) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_RESOLUTION_NOT_READY");
   }
 
+  const { canonicalCycle: _canonicalCycle, ...preparationInput } = input;
   const preparation = prepareRelationshipManagerCommunicationForApproval({
-    ...input,
+    ...preparationInput,
     cycle: canonical.cycle,
   });
   if (preparation.cycleId !== canonical.cycle.cycleId || preparation.decisionPackageId !== canonical.cycle.decision.packageId) {

@@ -1,3 +1,4 @@
+import { businessHmacSha256, businessSha256 } from "./businessSha256";
 import type {
   RelationshipManagerMemoryIngestionReceipt,
   RelationshipManagerMemoryIngestionRequest,
@@ -5,11 +6,12 @@ import type {
 } from "./businessRelationshipManagerMemoryPersistence";
 
 export const BUSINESS_BRAIN_MEMORY_INGESTION_PORT_CONTRACT =
-  "business_brain_memory_ingestion_port_v1" as const;
+  "business_brain_memory_ingestion_port_v2" as const;
 
 export type BrainMemoryIngestionPortConfig = Readonly<{
   baseUrl: string;
   apiToken: string;
+  scopedWriteToken: string;
   timeoutMs?: number;
 }>;
 
@@ -45,9 +47,11 @@ function baseUrl(value: string): string {
   return clean;
 }
 
-function token(value: string): string {
+function secret(value: string, field: "api_token" | "scoped_write_token"): string {
   const clean = value.trim();
-  if (new TextEncoder().encode(clean).byteLength < 32 || clean.length > 4096) throw new Error("BRAIN_MEMORY_INGESTION_API_TOKEN_INVALID");
+  if (new TextEncoder().encode(clean).byteLength < 32 || clean.length > 4096) {
+    throw new Error(`BRAIN_MEMORY_INGESTION_${field.toUpperCase()}_INVALID`);
+  }
   return clean;
 }
 
@@ -60,6 +64,23 @@ function timeout(value: number | undefined): number {
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("BRAIN_MEMORY_INGESTION_RECEIPT_INVALID");
   return value as Record<string, unknown>;
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const input = value as Record<string, unknown>;
+  return `{${Object.keys(input).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(input[key])}`).join(",")}}`;
+}
+
+export function brainMemoryIngestionProofPayload(request: RelationshipManagerMemoryIngestionRequest): string {
+  return JSON.stringify({
+    requestId: request.requestId,
+    idempotencyKey: request.idempotencyKey,
+    requestedAt: request.requestedAt,
+    cycleId: request.cycleId,
+    observationSha256: businessSha256(canonicalJson(request.observation)),
+  });
 }
 
 function receipt(value: unknown, request: RelationshipManagerMemoryIngestionRequest): RelationshipManagerMemoryIngestionReceipt {
@@ -95,13 +116,15 @@ export function createBrainMemoryIngestionPort(
   fetchFn: BrainMemoryIngestionFetch = fetch,
 ): BrainMemoryIngestionPort {
   const root = baseUrl(config.baseUrl);
-  const apiToken = token(config.apiToken);
+  const apiToken = secret(config.apiToken, "api_token");
+  const scopedWriteToken = secret(config.scopedWriteToken, "scoped_write_token");
   const timeoutMs = timeout(config.timeoutMs);
   const endpoint = `${root}/v1/tools/call`;
 
   const write: RelationshipManagerMemoryWriter = async (request) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const writerProof = businessHmacSha256(scopedWriteToken, brainMemoryIngestionProofPayload(request));
     let response: Pick<Response, "ok" | "status" | "json">;
     try {
       response = await fetchFn(endpoint, {
@@ -113,7 +136,7 @@ export function createBrainMemoryIngestionPort(
         },
         body: JSON.stringify({
           name: "brain_memory_ingest_v2",
-          input: request,
+          input: { ...request, writerProof },
           autonomy: "auto_low_risk",
         }),
         cache: "no-store",

@@ -1,4 +1,5 @@
-import type { ApprovedAttachment } from "./businessCommunicationSendEnvelope";
+import type { OperatorCommunicationApprovalReceipt } from "./businessCommunicationOperatorApproval";
+import type { CommunicationSendEnvelope, ApprovedAttachment } from "./businessCommunicationSendEnvelope";
 import type { MailboxKey } from "./businessMailboxRegistry";
 import type { CommunicationSenderKey } from "./businessCommunicationSenderIdentity";
 import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
@@ -7,11 +8,12 @@ import {
   prepareStaffCommunicationApprovalCandidate,
   type StaffCommunicationApprovalCandidate,
 } from "./businessStaffCommunicationApprovalCandidate";
+import { finalizeStaffCommunicationApproval } from "./businessStaffCommunicationApprovalFinalizer";
 import type { StaffCommunicationHandoffV2Like } from "./businessStaffCommunicationHandoffV2";
 import type { StaffDraftPackageLike } from "./businessStaffWritingOutputBinding";
 import type { StaffWritingEnvelopeV2Like } from "./businessStaffWritingProvenanceBinding";
 
-export const BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT = "business_relationship_manager_approval_runtime_v1" as const;
+export const BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT = "business_relationship_manager_approval_runtime_v2" as const;
 
 export type RelationshipManagerApprovalPreparation = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT;
@@ -20,6 +22,19 @@ export type RelationshipManagerApprovalPreparation = Readonly<{
   approvalCandidate: StaffCommunicationApprovalCandidate;
   readyForHumanApproval: true;
   humanApprovalRecorded: false;
+  externalExecutionAllowed: false;
+  externalEffectPerformed: false;
+}>;
+
+export type RelationshipManagerApprovalFinalization = Readonly<{
+  contract: typeof BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT;
+  cycleId: string;
+  decisionPackageId: string;
+  approvalCandidateId: string;
+  operatorApprovalId: string;
+  approval: CommunicationSendEnvelope;
+  readyForHumanApproval: false;
+  humanApprovalRecorded: true;
   externalExecutionAllowed: false;
   externalEffectPerformed: false;
 }>;
@@ -102,6 +117,50 @@ export function prepareRelationshipManagerCommunicationForApproval(input: Readon
     approvalCandidate,
     readyForHumanApproval: true,
     humanApprovalRecorded: false,
+    externalExecutionAllowed: false,
+    externalEffectPerformed: false,
+  });
+}
+
+/**
+ * Records an explicit human approval against the exact immutable preparation.
+ * The result is an approval envelope, not permission to execute externally;
+ * the normal communication execution gate must still pass afterwards.
+ */
+export function finalizeRelationshipManagerCommunicationApproval(input: Readonly<{
+  envelopeId: string;
+  preparation: RelationshipManagerApprovalPreparation;
+  operatorApprovalReceipt: OperatorCommunicationApprovalReceipt;
+}>): RelationshipManagerApprovalFinalization {
+  const preparation = input.preparation;
+  if (preparation.contract !== BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_CONTRACT_INVALID");
+  }
+  if (!preparation.readyForHumanApproval || preparation.humanApprovalRecorded || preparation.externalExecutionAllowed) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_STATE_INVALID");
+  }
+  if (preparation.approvalCandidate.relationshipCycleId !== preparation.cycleId) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_CYCLE_MISMATCH");
+  }
+  if (preparation.approvalCandidate.decisionPackageId !== preparation.decisionPackageId) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_PREPARATION_DECISION_MISMATCH");
+  }
+
+  const finalized = finalizeStaffCommunicationApproval({
+    envelopeId: input.envelopeId,
+    candidate: preparation.approvalCandidate,
+    operatorApprovalReceipt: input.operatorApprovalReceipt,
+  });
+
+  return Object.freeze({
+    contract: BUSINESS_RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CONTRACT,
+    cycleId: preparation.cycleId,
+    decisionPackageId: preparation.decisionPackageId,
+    approvalCandidateId: preparation.approvalCandidate.candidateId,
+    operatorApprovalId: finalized.operatorApprovalId,
+    approval: finalized.approval,
+    readyForHumanApproval: false,
+    humanApprovalRecorded: true,
     externalExecutionAllowed: false,
     externalEffectPerformed: false,
   });

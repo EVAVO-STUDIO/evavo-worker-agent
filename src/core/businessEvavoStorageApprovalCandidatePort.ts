@@ -7,11 +7,14 @@ import {
 import type { StaffCommunicationApprovalCandidate } from "./businessStaffCommunicationApprovalCandidate";
 
 export const BUSINESS_EVAVO_STORAGE_APPROVAL_CANDIDATE_PORT_CONTRACT =
-  "business_evavo_storage_approval_candidate_port_v1" as const;
+  "business_evavo_storage_approval_candidate_port_v2" as const;
+
+const MAX_APPROVAL_CANDIDATE_REQUEST_BYTES = 16 * 1024 * 1024;
 
 export type EvavoStorageApprovalCandidatePortConfig = Readonly<{
   baseUrl: string;
   writeToken: string;
+  expectedAuthorityId: string;
   timeoutMs?: number;
 }>;
 
@@ -58,6 +61,14 @@ function normaliseWriteToken(value: string): string {
   return clean;
 }
 
+function normaliseAuthorityId(value: string): string {
+  const clean = value.trim();
+  if (!clean || clean.length > 500 || /[\r\n\0]/.test(clean)) {
+    throw new Error("EVAVO_STORAGE_APPROVAL_CANDIDATE_AUTHORITY_ID_INVALID");
+  }
+  return clean;
+}
+
 function normaliseTimeout(value: number | undefined): number {
   const timeout = value ?? 10_000;
   if (!Number.isFinite(timeout) || timeout < 250 || timeout > 60_000) {
@@ -85,6 +96,7 @@ export function createEvavoStorageApprovalCandidatePort(
 ): EvavoStorageApprovalCandidatePort {
   const baseUrl = normaliseBaseUrl(config.baseUrl);
   const writeToken = normaliseWriteToken(config.writeToken);
+  const expectedAuthorityId = normaliseAuthorityId(config.expectedAuthorityId);
   const timeoutMs = normaliseTimeout(config.timeoutMs);
   const endpoint = `${baseUrl}/v1/actions/persist_approval_candidate`;
 
@@ -92,6 +104,11 @@ export function createEvavoStorageApprovalCandidatePort(
     contract: BUSINESS_EVAVO_STORAGE_APPROVAL_CANDIDATE_PORT_CONTRACT,
     async persist(candidate: StaffCommunicationApprovalCandidate): Promise<StaffApprovalCandidatePersistenceResult> {
       const request = buildStaffApprovalCandidateWriteRequest(candidate);
+      const requestBody = JSON.stringify(request);
+      if (new TextEncoder().encode(requestBody).byteLength > MAX_APPROVAL_CANDIDATE_REQUEST_BYTES) {
+        throw new Error("EVAVO_STORAGE_APPROVAL_CANDIDATE_REQUEST_TOO_LARGE");
+      }
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       let response: Pick<Response, "ok" | "status" | "json">;
@@ -103,7 +120,7 @@ export function createEvavoStorageApprovalCandidatePort(
             "Content-Type": "application/json",
             "Accept": "application/json",
           },
-          body: JSON.stringify(request),
+          body: requestBody,
           cache: "no-store",
           redirect: "error",
           signal: controller.signal,
@@ -127,10 +144,15 @@ export function createEvavoStorageApprovalCandidatePort(
         throw safeStorageError(payload, response.status);
       }
 
+      const receipt = storageReceipt(payload.result);
+      if (receipt.storageAuthority?.system !== "evavo-storage" || receipt.storageAuthority.instanceId?.trim() !== expectedAuthorityId) {
+        throw new Error("EVAVO_STORAGE_APPROVAL_CANDIDATE_AUTHORITY_MISMATCH");
+      }
+
       return reconcileStaffApprovalCandidateWriteReceipt({
         candidate,
         request,
-        receipt: storageReceipt(payload.result),
+        receipt,
       });
     },
   });

@@ -10,6 +10,7 @@ import type { CommunicationDraftReviewInput } from "./businessCommunicationPreSe
 import type {
   CommunicationSendEnvelope,
   CommunicationSendMaterial,
+  CommunicationWritingProvenanceBinding,
 } from "./businessCommunicationSendEnvelope";
 import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 
@@ -44,6 +45,7 @@ export type AuthorizedCommunicationExecutionRequest = Readonly<{
     approvedAt: string;
     expiresAt: string;
     mailboxKey: string;
+    writingProvenance?: CommunicationWritingProvenanceBinding | null;
     memoryCheckpoint: Readonly<{
       cycleId: string;
       recordIds: readonly string[];
@@ -91,6 +93,19 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
     });
   }
 
+  const writingProvenance = binding.writingProvenance
+    ? Object.freeze({ ...binding.writingProvenance })
+    : null;
+  if (input.decisionPackage.origin === "relationship_manager_cycle") {
+    if (!writingProvenance) throw new Error("COMMUNICATION_EXECUTION_REQUEST_WRITING_PROVENANCE_REQUIRED");
+    if (writingProvenance.decisionOrigin !== "relationship_manager_cycle") {
+      throw new Error("COMMUNICATION_EXECUTION_REQUEST_WRITING_ORIGIN_INVALID");
+    }
+    if (writingProvenance.relationshipCycleId !== input.decisionPackage.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_REQUEST_WRITING_CYCLE_MISMATCH");
+    }
+  }
+
   const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT,
     provider: "gmail",
@@ -120,6 +135,7 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
       approvedAt: input.approval.approvedAt,
       expiresAt: input.approval.expiresAt,
       mailboxKey: binding.mailboxKey,
+      writingProvenance,
       memoryCheckpoint,
     }),
   });

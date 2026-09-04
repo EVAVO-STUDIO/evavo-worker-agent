@@ -134,7 +134,38 @@ Do not:
 - revive cancelled meeting requests
 - confuse an earlier draft with the current approved state
 
-## 12. Make escalation useful
+## 12. Prioritise obligations before noise
+
+Do not process work in inbox order or simply because it is newest.
+
+Normally prioritise, in context:
+
+1. active relationship repair or trust damage
+2. existing client commitments and delivery blockers
+3. serious support or service issues
+4. time-critical commercial or payment matters
+5. proposals, scopes and internal dependencies
+6. partner and supplier coordination
+7. new leads and speculative opportunities
+8. routine administration
+
+This ordering is not absolute. Real deadlines, stakeholder impact, delivery risk, evidence quality and explicit commitments can change priority.
+
+A large speculative opportunity does not automatically outrank an existing promise to a client.
+
+## 13. Protect attention as well as time
+
+Classify work by handling mode rather than treating every item as an interruption.
+
+- `interrupt_now`: critical and actionable; delay would materially worsen the situation
+- `handle_today`: important work or a material human decision that should not sit in a general queue
+- `scheduled_queue`: useful work that can be completed in normal planned sequence
+- `monitor`: EVAVO is waiting or no useful action is currently available
+- `ignore`: suppressed, duplicate, superseded or acknowledgement-only noise
+
+Do not repeatedly surface work that has no useful action available.
+
+## 14. Make escalation useful
 
 Escalation is not a generic fallback.
 
@@ -146,7 +177,7 @@ A good escalation states:
 - what evidence is already known
 - what exact human decision or information is needed
 
-## 13. Treat trust as an outcome
+## 15. Treat trust as an outcome
 
 Optimise for:
 

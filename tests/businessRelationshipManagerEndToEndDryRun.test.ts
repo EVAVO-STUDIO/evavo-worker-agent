@@ -172,7 +172,14 @@ test("synthetic Gmail thread reaches verified sent lifecycle through the canonic
     lifecycleId: "lifecycle-dry-run-1",
     relationshipId: "relationship-client-dry-run",
     threadId: cycle.projection.threadId,
-    decision: { packageId: decision.packageId, decisionAt: decision.decisionAt, disposition: decision.disposition, evidenceIds: decision.evidenceIds },
+    decision: {
+      packageId: decision.packageId,
+      origin: decision.origin,
+      relationshipCycleId: decision.relationshipCycleId,
+      decisionAt: decision.decisionAt,
+      disposition: decision.disposition,
+      evidenceIds: decision.evidenceIds,
+    },
     approval: {
       envelopeId: approval.envelopeId,
       approvedAt: approval.approvedAt,
@@ -193,10 +200,16 @@ test("synthetic Gmail thread reaches verified sent lifecycle through the canonic
       materialSha256: executionReceipt.authorization.materialSha256,
       approvalBindingSha256: executionReceipt.authorization.approvalBindingSha256,
       decisionPackageId: executionReceipt.authorization.decisionPackageId,
+      decisionOrigin: executionReceipt.authorization.decisionOrigin,
+      relationshipCycleId: executionReceipt.authorization.relationshipCycleId,
+      memoryCheckpointCycleId: executionReceipt.authorization.memoryCheckpoint?.cycleId ?? null,
+      memoryCheckpointRecordIds: executionReceipt.authorization.memoryCheckpoint?.recordIds ?? [],
     },
   });
 
   assert.equal(executionRequest.authorization.operatorApprovalId, operatorApproval.approvalId);
+  assert.equal(lifecycle.decision.origin, "relationship_manager_cycle");
+  assert.equal(lifecycle.decision.relationshipCycleId, cycle.cycleId);
   assert.equal(lifecycle.stage, "sent");
   assert.equal(lifecycle.executionVerified, true);
   assert.equal(lifecycle.communicationId, "gmail-message-synthetic-sent-1");

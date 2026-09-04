@@ -1,6 +1,6 @@
 import type { CommunicationDecisionPackage } from "./businessCommunicationDecisionPackage";
 import type { MailboxKey } from "./businessMailboxRegistry";
-import type { CommunicationSenderKey } from "./businessCommunicationSenderIdentity";
+import { EVAVO_COMMUNICATION_SENDERS, type CommunicationSenderKey } from "./businessCommunicationSenderIdentity";
 import {
   communicationSendMaterialHash,
   type ApprovedAttachment,
@@ -140,6 +140,10 @@ export function prepareStaffCommunicationApprovalCandidate(input: Readonly<{
   assertDecisionAndHandoffAligned(input.decisionPackage, input.handoff);
   assertMemoryCheckpoint(input.decisionPackage, input.relationshipManagerMemoryPersistence);
   if (input.senderKey !== input.mailboxKey) throw new Error("STAFF_APPROVAL_CANDIDATE_MAILBOX_SENDER_KEY_MISMATCH");
+  const senderIdentity = EVAVO_COMMUNICATION_SENDERS[input.senderKey];
+  if (!senderIdentity || senderIdentity.address.trim().toLowerCase() !== input.sender.trim().toLowerCase()) {
+    throw new Error("STAFF_APPROVAL_CANDIDATE_SENDER_IDENTITY_MISMATCH");
+  }
 
   const boundDraft = bindStaffWritingOutputForApproval({
     handoff: input.handoff,

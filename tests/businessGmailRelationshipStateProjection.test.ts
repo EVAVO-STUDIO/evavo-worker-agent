@@ -14,16 +14,22 @@ const message = {
   attachmentNames: [],
 } as const;
 
-test("Gmail question and request project into canonical thread and obligation state", () => {
+test("Gmail question and request project into canonical thread, entity and obligation state", () => {
   const result = projectGmailThreadToCanonicalRelationshipState({
     threadId: "thread-1",
     messages: [message],
     relationshipId: "relationship-ashley",
     personId: "person-ashley",
+    organizationId: "organization-evavo-contact",
+    projectId: "project-candidate-enquiry",
     observedAt: "2026-09-04T00:31:00Z",
   });
 
-  assert.equal(result.contract, "business_gmail_relationship_state_projection_v1");
+  assert.equal(result.contract, "business_gmail_relationship_state_projection_v2");
+  assert.equal(result.relationshipId, "relationship-ashley");
+  assert.equal(result.personId, "person-ashley");
+  assert.equal(result.organizationId, "organization-evavo-contact");
+  assert.equal(result.projectId, "project-candidate-enquiry");
   assert.deepEqual(result.normalizedMessageIds, ["message-1"]);
   assert.ok(result.latestObservedThreadState.length >= 1);
   assert.ok(result.latestObservedThreadState.every((item) => item.sourceEvidenceIds.includes("gmail:message:message-1")));

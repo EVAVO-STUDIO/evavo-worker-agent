@@ -48,6 +48,8 @@ const candidate = {
 
 function receipt(status: "appended" | "idempotent_replay" = "appended") {
   const request = buildStaffApprovalCandidateWriteRequest(candidate);
+  const documentId = "doc_approval_candidate_1";
+  const versionId = "ver_approval_candidate_1";
   return {
     request,
     receipt: {
@@ -59,10 +61,21 @@ function receipt(status: "appended" | "idempotent_replay" = "appended") {
       candidateSha256: request.candidateSha256,
       status,
       durable: true,
-      recordId: "approval-candidate-record-1",
-      journalPosition: 12,
+      recordId: `${documentId}:${versionId}`,
+      journalPosition: "receipt_approval_candidate_1",
       recordedAt: "2026-09-04T01:00:01Z",
       storageAuthority: { system: "evavo-storage" as const, instanceId: "local-primary" },
+      storage: {
+        model: "immutable_document_version" as const,
+        vaultId: "internal" as const,
+        logicalPath: `RelationshipManager/ApprovalCandidates/${candidate.candidateId}/${request.candidateSha256}.json`,
+        documentId,
+        versionId,
+        sha256: request.candidateSha256,
+        sizeBytes: 1024,
+        idempotentReplay: status === "idempotent_replay",
+        receiptId: "receipt_approval_candidate_1",
+      },
     },
   };
 }
@@ -85,11 +98,11 @@ test("durable append produces exact human-approval evidence reference", () => {
   });
   assert.equal(result.durable, true);
   assert.equal(result.status, "persisted");
-  assert.equal(result.recordId, "approval-candidate-record-1");
+  assert.equal(result.recordId, "doc_approval_candidate_1:ver_approval_candidate_1");
   assert.equal(result.approvalEvidenceRef, approvalCandidatePersistenceEvidenceRef({
     candidateId: candidate.candidateId,
     candidateSha256: result.candidateSha256,
-    recordId: "approval-candidate-record-1",
+    recordId: "doc_approval_candidate_1:ver_approval_candidate_1",
   }));
 });
 
@@ -107,6 +120,49 @@ test("candidate hash mismatch fails closed", () => {
     request: current.request,
     receipt: { ...current.receipt, candidateSha256: "f".repeat(64) },
   }), /HASH_MISMATCH/);
+});
+
+test("successful receipt without native immutable Storage identity fails closed", () => {
+  const current = receipt();
+  const { storage: _storage, ...weakened } = current.receipt;
+  assert.throws(() => reconcileStaffApprovalCandidateWriteReceipt({
+    candidate,
+    request: current.request,
+    receipt: weakened,
+  }), /NATIVE_STORAGE_REQUIRED/);
+});
+
+test("record identity must equal native document and version identity", () => {
+  const current = receipt();
+  assert.throws(() => reconcileStaffApprovalCandidateWriteReceipt({
+    candidate,
+    request: current.request,
+    receipt: { ...current.receipt, recordId: "doc_other:ver_other" },
+  }), /STORAGE_RECORD_MISMATCH/);
+});
+
+test("native immutable version hash must match the exact candidate hash", () => {
+  const current = receipt();
+  assert.throws(() => reconcileStaffApprovalCandidateWriteReceipt({
+    candidate,
+    request: current.request,
+    receipt: {
+      ...current.receipt,
+      storage: { ...current.receipt.storage, sha256: "f".repeat(64) },
+    },
+  }), /STORAGE_HASH_MISMATCH/);
+});
+
+test("replay status must match the native Storage replay disposition", () => {
+  const current = receipt("idempotent_replay");
+  assert.throws(() => reconcileStaffApprovalCandidateWriteReceipt({
+    candidate,
+    request: current.request,
+    receipt: {
+      ...current.receipt,
+      storage: { ...current.receipt.storage, idempotentReplay: false },
+    },
+  }), /REPLAY_BINDING_INVALID/);
 });
 
 test("storage rejection never produces an approval evidence reference", () => {

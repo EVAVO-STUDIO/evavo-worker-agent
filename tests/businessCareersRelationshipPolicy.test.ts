@@ -13,7 +13,7 @@ test("replies kindly to a sincere graduate enquiry without inventing a role or m
     relevantRoleConfirmed: false,
     suitableFutureInterest: false,
     roleTruth: {
-      contract: "business_role_opening_truth_v1",
+      contract: "business_role_opening_truth_v2",
       status: "no_confirmed_open_role",
       maySayRoleExists: false,
       maySayNotHiring: false,
@@ -23,6 +23,7 @@ test("replies kindly to a sincere graduate enquiry without inventing a role or m
     },
   });
 
+  assert.equal(result.contract, "business_careers_relationship_policy_v3");
   assert.equal(result.disposition, "reply");
   assert.equal(result.meetingRecommended, false);
   assert.equal(result.suggestedNextStep, "review_materials");
@@ -39,18 +40,31 @@ test("uses a confirmed role when one genuinely exists", () => {
     portfolioOrCvProvided: false,
     relevantRoleConfirmed: true,
     roleTruth: {
-      contract: "business_role_opening_truth_v1",
+      contract: "business_role_opening_truth_v2",
       status: "confirmed_open",
       maySayRoleExists: true,
       maySayNotHiring: false,
       safeExternalWording: "There is a current role I can point you to.",
       evidenceIds: ["role-evidence"],
-      reasons: ["Authoritative role evidence confirms an opening."],
+      reasons: ["Authoritative dedicated careers evidence confirms an opening."],
     },
   });
 
   assert.equal(result.disposition, "reply");
   assert.equal(result.suggestedNextStep, "refer_to_role");
+});
+
+test("legacy openRoleConfirmed boolean cannot authorize a role-exists claim", () => {
+  const result = decideCareersRelationshipResponse({
+    senderIdentityVerified: true,
+    sincereIndividualEnquiry: true,
+    asksForJobOrInternship: true,
+    openRoleConfirmed: true,
+    relevantRoleConfirmed: true,
+  });
+  assert.equal(result.suggestedNextStep, "email_reply");
+  assert.ok(result.mustNotCommunicate.some((line) => /legacy caller assertions/i.test(line)));
+  assert.ok(result.mustCommunicate.some((line) => /has not been verified/i.test(line)));
 });
 
 test("conflicting role-state evidence escalates instead of choosing a convenient answer", () => {
@@ -59,13 +73,13 @@ test("conflicting role-state evidence escalates instead of choosing a convenient
     sincereIndividualEnquiry: true,
     asksForJobOrInternship: true,
     roleTruth: {
-      contract: "business_role_opening_truth_v1",
+      contract: "business_role_opening_truth_v2",
       status: "conflicting",
       maySayRoleExists: false,
       maySayNotHiring: false,
       safeExternalWording: "I don't have a confirmed current role I can accurately point you to yet.",
       evidenceIds: ["open", "closed"],
-      reasons: ["Authoritative role evidence conflicts."],
+      reasons: ["Authoritative careers role evidence conflicts."],
     },
   });
 

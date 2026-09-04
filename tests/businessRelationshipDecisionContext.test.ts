@@ -53,7 +53,7 @@ test("builds one approval-grade decision context from current relationship evide
       ],
     },
   });
-  assert.equal(result.contract, "business_relationship_decision_context_v2");
+  assert.equal(result.contract, "business_relationship_decision_context_v3");
   assert.equal(result.approvalGradeReady, true);
   assert.equal(result.staffBrief.materialChanges.length, 1);
   assert.equal(result.resolutionPlan.ready, true);
@@ -128,4 +128,57 @@ test("calendar freshness blocks when scheduling is explicitly part of the decisi
   assert.equal(result.approvalGradeReady, false);
   assert.ok(result.freshness.refreshDomains.includes("calendar"));
   assert.ok(result.staffBrief.mustVerify.some((item) => /refresh stale calendar/i.test(item)));
+});
+
+test("provider unavailable blocks approval even when narrative summaries are populated", () => {
+  const result = buildRelationshipDecisionContext({
+    objective: "Answer whether there is a current open role.",
+    relationship,
+    sourceReadiness: [
+      {
+        domain: "gmail",
+        state: "verified",
+        required: true,
+        observedAt: "2026-09-04T12:35:00+10:00",
+        sourceRefs: ["gmail:thread:thread-ashley"],
+      },
+      {
+        domain: "operations",
+        state: "provider_unavailable",
+        required: true,
+        detail: "Current hiring truth could not be queried.",
+      },
+    ],
+  });
+  assert.equal(result.sourceReadiness?.ready, false);
+  assert.equal(result.approvalGradeReady, false);
+  assert.ok(result.resolutionPlan.orderedSources.includes("operations_core"));
+  assert.ok(result.resolutionPlan.blockingIssues.some((issue) => /current truth is unknown/i.test(issue)));
+});
+
+test("evidenced not-found can be approval-ready when absence itself answers the required question", () => {
+  const result = buildRelationshipDecisionContext({
+    objective: "Answer whether there is a current open role.",
+    relationship,
+    sourceReadiness: [
+      {
+        domain: "gmail",
+        state: "verified",
+        required: true,
+        observedAt: "2026-09-04T12:35:00+10:00",
+        sourceRefs: ["gmail:thread:thread-ashley"],
+      },
+      {
+        domain: "operations",
+        state: "not_found",
+        required: true,
+        absenceAcceptable: true,
+        observedAt: "2026-09-04T12:36:00+10:00",
+        sourceRefs: ["operations:query:no-open-role:1"],
+      },
+    ],
+  });
+  assert.equal(result.sourceReadiness?.ready, true);
+  assert.equal(result.approvalGradeReady, true);
+  assert.ok(result.evidenceRefs.includes("operations:query:no-open-role:1"));
 });

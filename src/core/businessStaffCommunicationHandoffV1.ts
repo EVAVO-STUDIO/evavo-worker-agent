@@ -123,8 +123,9 @@ function clean(value: string, field: string, max = 8000): string {
 }
 
 function evidenceAuthority(item: CommunicationEvidenceItem): readonly StaffCommunicationHandoffV1Built["evidence"][number]["authoritativeFor"][number][] {
-  const mapped = item.authoritativeFor.map((authority) => AUTHORITY_MAP[authority] ?? "other");
-  return Object.freeze([...new Set(mapped.length ? mapped : ["other"])]);
+  const mapped: Array<StaffCommunicationHandoffV1Built["evidence"][number]["authoritativeFor"][number]> = item.authoritativeFor.map((authority) => AUTHORITY_MAP[authority] ?? "other");
+  type Authority = StaffCommunicationHandoffV1Built["evidence"][number]["authoritativeFor"][number];
+  return Object.freeze([...new Set<Authority>(mapped.length ? mapped : ["other"])]);
 }
 
 function targetWords(target: ReplyBrief["targetLength"]): number {

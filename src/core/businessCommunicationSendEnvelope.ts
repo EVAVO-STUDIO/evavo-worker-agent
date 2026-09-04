@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { businessSha256 } from "./businessSha256";
 
 import type { MailboxKey } from "./businessMailboxRegistry";
 import { EVAVO_COMMUNICATION_SENDERS, type CommunicationSenderKey } from "./businessCommunicationSenderIdentity";
@@ -99,7 +99,7 @@ function canonicalMaterial(material: CommunicationSendMaterial): CommunicationSe
 }
 
 function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
+  return businessSha256(value);
 }
 
 export function communicationSendMaterialHash(material: CommunicationSendMaterial): string {

@@ -281,7 +281,7 @@ export function decideBusinessStaffAction(
     alternativesConsidered: alternatives,
     redTeamChecks,
     nextAction,
-    requiresHumanApproval: disposition === "prepare_for_approval" || disposition === "escalate" || disposition === "reject",
+    requiresHumanApproval: disposition === "prepare_for_approval" || disposition === "escalate",
     mayMutateExternalState: disposition === "act_internal" ? false : false,
   };
 }

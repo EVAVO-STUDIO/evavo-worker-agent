@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { businessSha256 } from "./businessSha256";
 
 import type { CommunicationMessage } from "./businessCommunicationIntelligence";
 import {
@@ -34,7 +34,7 @@ export type GmailRelationshipStateProjection = Readonly<{
 }>;
 
 function stableId(prefix: string, parts: readonly string[]): string {
-  const hash = createHash("sha256").update(parts.join("\n"), "utf8").digest("hex").slice(0, 24);
+  const hash = businessSha256(parts.join("\n")).slice(0, 24);
   return `${prefix}_${hash}`;
 }
 

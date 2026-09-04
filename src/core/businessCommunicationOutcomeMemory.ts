@@ -52,8 +52,8 @@ export function communicationOutcomeToMemoryRecord(
     summary,
     details,
     entities: Object.freeze([
-      { kind: "relationship", id: assessment.relationshipId },
-      { kind: "message", id: assessment.communicationId },
+      { kind: "relationship" as const, id: assessment.relationshipId },
+      { kind: "message" as const, id: assessment.communicationId },
     ]),
     tags: Object.freeze(["communication", "outcome", assessment.outcome, `relationship-${assessment.relationshipEffect}`]),
     confidence,

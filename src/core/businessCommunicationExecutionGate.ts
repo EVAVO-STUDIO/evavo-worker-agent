@@ -109,8 +109,8 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
 
   const recipients = [
     ...input.material.to.map((address) => ({ address, expected: true })),
-    ...input.material.cc.map((address) => ({ address, expected: true })),
-    ...input.material.bcc.map((address) => ({ address, expected: true })),
+    ...(input.material.cc ?? []).map((address) => ({ address, expected: true })),
+    ...(input.material.bcc ?? []).map((address) => ({ address, expected: true })),
   ];
   const preSend = reviewBusinessCommunicationBeforeSend({
     ...input.review,

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { businessSha256 } from "./businessSha256";
 
 import type { CommunicationOutcomeAssessment } from "./businessCommunicationOutcome";
 import {
@@ -45,7 +45,7 @@ export type BusinessOutcomePersistenceResult = Readonly<{
 }>;
 
 function stableId(input: readonly string[]): string {
-  return createHash("sha256").update(input.join("\n")).digest("hex").slice(0, 24);
+  return businessSha256(input.join("\n")).slice(0, 24);
 }
 
 export function buildBusinessOutcomeMemoryWriteRequest(

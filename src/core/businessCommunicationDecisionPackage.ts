@@ -11,7 +11,7 @@ import {
   type BrainMemoryContextResponse,
 } from "./businessMemoryContextBridge";
 
-export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v4" as const;
+export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v3" as const;
 
 export type CommunicationScenario = "general" | "graduate_or_candidate";
 
@@ -151,7 +151,7 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
   const evidenceIds = new Set(input.evidenceIds);
   for (const id of input.evidenceReadiness?.evidenceIds ?? []) evidenceIds.add(id);
   for (const id of input.staffBrief?.sourceRefs ?? []) evidenceIds.add(id);
-  const memorySourceRefs = input.memoryContext ? memoryContextEvidenceRefs(input.memoryContext) : Object.freeze([] as string[]);
+  const memorySourceRefs: readonly string[] = input.memoryContext ? memoryContextEvidenceRefs(input.memoryContext) : Object.freeze([]);
   for (const id of memorySourceRefs) evidenceIds.add(id);
 
   const memoryRecordIds = Object.freeze([...(input.memoryContext?.records.map((record) => record.id) ?? [])]);

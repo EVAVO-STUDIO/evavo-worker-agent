@@ -125,6 +125,8 @@ export function runRelationshipManagerCommunicationCycle(
 
   const decision = buildCommunicationDecisionPackage({
     packageId: `relationship-cycle:${cycleId}`,
+    origin: "relationship_manager_cycle",
+    relationshipCycleId: cycleId,
     scenario: input.scenario,
     objective: input.objective,
     thread: {

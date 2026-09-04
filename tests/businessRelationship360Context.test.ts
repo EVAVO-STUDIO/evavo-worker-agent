@@ -37,11 +37,36 @@ function baseInput() {
 
 test("builds concise relationship context with obligations and evidence", () => {
   const result = buildBusinessRelationship360Context(baseInput());
-  assert.equal(result.contract, "business_relationship_360_context_v2");
+  assert.equal(result.contract, "business_relationship_360_context_v3");
+  assert.equal(result.careers, null);
   assert.equal(result.missingCriticalContext.length, 0);
   assert.deepEqual(result.openEvavoObligations, ["Respond to Ashley's graduate enquiry."]);
   assert.ok(result.contextSummary.includes("Ashley Wong"));
   assert.ok(result.evidenceRefs.includes("gmail:message:m1"));
+});
+
+test("keeps dedicated careers truth distinct and evidence-backed", () => {
+  const input = baseInput();
+  const result = buildBusinessRelationship360Context({
+    ...input,
+    careersSummary: "Dedicated careers truth found no confirmed current opening; this does not mean EVAVO is not hiring generally.",
+    evidenceItems: [
+      ...input.evidenceItems,
+      {
+        id: "careers-current",
+        domain: "careers" as const,
+        summary: "Dedicated careers lookup found no confirmed current opening.",
+        status: "current" as const,
+        authority: "canonical" as const,
+        observedAt: "2026-09-04T02:49:00Z",
+        sourceRefs: ["operations:careers-snapshot:abc"],
+      },
+    ],
+  });
+  assert.match(result.careers ?? "", /dedicated careers truth/i);
+  assert.ok(result.contextSummary.includes("Careers:"));
+  assert.ok(result.recommendedAttention.some((item) => /do not infer hiring status/i.test(item)));
+  assert.ok(result.evidenceRefs.includes("operations:careers-snapshot:abc"));
 });
 
 test("calls out conflicting and missing critical context", () => {
@@ -68,6 +93,26 @@ test("calls out conflicting and missing critical context", () => {
   assert.ok(result.missingCriticalContext.some((item) => /identity/i.test(item)));
   assert.ok(result.missingCriticalContext.some((item) => /project/i.test(item)));
   assert.ok(result.missingCriticalContext.some((item) => /thread/i.test(item)));
+});
+
+test("uncertain careers evidence is a critical context gap", () => {
+  const input = baseInput();
+  const result = buildBusinessRelationship360Context({
+    ...input,
+    evidenceItems: [
+      ...input.evidenceItems,
+      {
+        id: "careers-uncertain",
+        domain: "careers" as const,
+        summary: "Role state needs review.",
+        status: "uncertain" as const,
+        authority: "authoritative" as const,
+        observedAt: "2026-09-04T02:49:00Z",
+        sourceRefs: ["careers:review"],
+      },
+    ],
+  });
+  assert.ok(result.missingCriticalContext.some((item) => /Careers\/role-opening/i.test(item)));
 });
 
 test("rejects duplicate evidence identities", () => {

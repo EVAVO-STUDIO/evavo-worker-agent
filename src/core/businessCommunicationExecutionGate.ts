@@ -5,6 +5,7 @@ import {
 } from "./businessCommunicationApprovalContext";
 import { reviewBusinessCommunicationBeforeSend, type CommunicationDraftReviewInput } from "./businessCommunicationPreSendReview";
 import {
+  verifyCommunicationApprovalBinding,
   verifyCommunicationSendEnvelope,
   type CommunicationSendEnvelope,
   type CommunicationSendMaterial,
@@ -18,6 +19,7 @@ export type CommunicationExecutionGateResult = Readonly<{
   reasons: readonly string[];
   preSend: ReturnType<typeof reviewBusinessCommunicationBeforeSend>;
   approvalValid: boolean;
+  approvalBindingValid: boolean;
   approvalContextValid: boolean;
   mailboxValid: boolean;
 }>;
@@ -42,6 +44,19 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
   if (input.mailbox.address.trim().toLowerCase() !== input.material.sender.trim().toLowerCase()) {
     mailboxValid = false;
     reasons.push("sender_does_not_match_verified_mailbox");
+  }
+
+  const binding = verifyCommunicationApprovalBinding(input.approval);
+  if (!binding.ok) reasons.push(...binding.reasons);
+  if (input.approval.approvalBinding) {
+    if (input.approval.approvalBinding.mailboxKey !== input.mailbox.key) {
+      mailboxValid = false;
+      reasons.push("approval_mailbox_key_mismatch");
+    }
+    if (!input.mailbox.verification.evidenceRefs.length) {
+      mailboxValid = false;
+      reasons.push("mailbox_verification_evidence_missing");
+    }
   }
 
   const approval = verifyCommunicationSendEnvelope(input.approval, input.material, input.now ?? new Date());
@@ -72,10 +87,11 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT,
-    allowed: mailboxValid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
+    allowed: mailboxValid && binding.ok && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
     reasons: Object.freeze([...new Set(reasons)]),
     preSend,
     approvalValid: approval.ok,
+    approvalBindingValid: binding.ok,
     approvalContextValid: approvalContext.valid,
     mailboxValid,
   });

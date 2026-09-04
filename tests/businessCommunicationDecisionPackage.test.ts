@@ -4,9 +4,8 @@ import test from "node:test";
 import { buildCommunicationDecisionPackage } from "../src/core/businessCommunicationDecisionPackage";
 
 const NOW = "2026-09-04T11:39:00+10:00";
-void NOW;
 
-test("graduate enquiry stays async and does not imply a role", () => {
+test("graduate enquiry stays async and does not invent future-interest status", () => {
   const result = buildCommunicationDecisionPackage({
     packageId: "pkg-1",
     scenario: "graduate_or_candidate",
@@ -38,12 +37,14 @@ test("graduate enquiry stays async and does not imply a role", () => {
     },
     evidenceIds: ["email-ashley"],
     evidenceConfidence: 95,
+    decisionAt: NOW,
   });
 
   assert.equal(result.disposition, "reply");
   assert.equal(result.recommendedChannel, "email");
   assert.equal(result.meetingJustified, false);
-  assert.equal(result.candidateStage, "future_interest");
+  assert.equal(result.candidateStage, "new_enquiry");
+  assert.equal(result.replayDeterministic, true);
   assert.ok(result.prohibitedImplications.some((item) => item.includes("role exists")));
 });
 
@@ -74,6 +75,7 @@ test("relevant supplied materials can require review before reply", () => {
     },
     evidenceIds: ["email-1", "portfolio-metadata"],
     evidenceConfidence: 90,
+    decisionAt: NOW,
   });
 
   assert.equal(result.disposition, "review_then_reply");
@@ -96,6 +98,7 @@ test("low evidence confidence escalates instead of bluffing", () => {
     channel: { currentChannel: "email", canResolveInWriting: true },
     evidenceIds: ["email-1"],
     evidenceConfidence: 45,
+    decisionAt: NOW,
   });
 
   assert.equal(result.disposition, "escalate");
@@ -117,6 +120,7 @@ test("blocked identity or attachment evidence overrides an otherwise valid reply
     channel: { currentChannel: "email", canResolveInWriting: true },
     evidenceIds: ["email-4"],
     evidenceConfidence: 96,
+    decisionAt: NOW,
     evidenceReadiness: {
       contract: "business_communication_evidence_readiness_v1",
       status: "blocked",

@@ -67,7 +67,14 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (value === undefined || typeof value === "function" || typeof value === "symbol" || typeof value === "bigint") {
+    throw new Error("BRAIN_MEMORY_INGESTION_CANONICAL_JSON_VALUE_INVALID");
+  }
+  if (value === null || typeof value !== "object") {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new Error("BRAIN_MEMORY_INGESTION_CANONICAL_JSON_VALUE_INVALID");
+    return encoded;
+  }
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const input = value as Record<string, unknown>;
   return `{${Object.keys(input).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(input[key])}`).join(",")}}`;

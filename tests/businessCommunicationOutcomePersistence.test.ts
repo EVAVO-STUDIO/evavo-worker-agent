@@ -14,16 +14,14 @@ function positiveAssessment() {
     relationshipId: "rel-1",
     communicationId: "message-1",
     assessedAt: NOW,
-    signals: [
-      {
-        id: "reply-positive",
-        kind: "positive_response",
-        occurredAt: NOW,
-        summary: "Recipient confirmed the response resolved the issue.",
-        sourceRefs: ["gmail:reply-1"],
-        confidence: 95,
-      },
-    ],
+    signals: [{
+      id: "reply-positive",
+      kind: "positive_response",
+      occurredAt: NOW,
+      summary: "Recipient confirmed the response resolved the issue.",
+      sourceRefs: ["gmail:reply-1"],
+      confidence: 95,
+    }],
   });
 }
 
@@ -33,6 +31,9 @@ const provenance = {
   relationshipCycleId: "cycle-1",
   handoffId: "handoff-1",
   writingRequestId: "writing-request-1",
+  approvalCandidateId: "approval-candidate-1",
+  approvalCandidateSha256: "d".repeat(64),
+  approvalCandidateRecordId: "approval-candidate-record-1",
   providerMessageId: "message-1",
 };
 
@@ -45,17 +46,23 @@ test("builds a deterministic durable-memory write request for eligible outcomes"
   assert.equal(first?.record.recordedAt, new Date(NOW).toISOString());
 });
 
-test("governed outcome idempotency binds the exact approved Writing Studio request", () => {
+test("governed outcome idempotency binds writing request and persisted approval candidate", () => {
   const first = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), provenance);
   const same = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), provenance);
   const differentDraft = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), {
     ...provenance,
     writingRequestId: "writing-request-2",
   });
-  assert.ok(first && same && differentDraft);
+  const differentCandidate = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), {
+    ...provenance,
+    approvalCandidateRecordId: "approval-candidate-record-2",
+  });
+  assert.ok(first && same && differentDraft && differentCandidate);
   assert.equal(first.idempotencyKey, same.idempotencyKey);
   assert.notEqual(first.idempotencyKey, differentDraft.idempotencyKey);
+  assert.notEqual(first.idempotencyKey, differentCandidate.idempotencyKey);
   assert.equal(first.record.lineage.writingRequestId, "writing-request-1");
+  assert.equal(first.record.lineage.approvalCandidateRecordId, "approval-candidate-record-1");
 });
 
 test("pending outcomes are not written to durable learning", () => {
@@ -63,23 +70,21 @@ test("pending outcomes are not written to durable learning", () => {
     relationshipId: "rel-1",
     communicationId: "message-2",
     assessedAt: NOW,
-    signals: [
-      {
-        id: "no-reply",
-        kind: "no_response_observed",
-        occurredAt: NOW,
-        summary: "No reply observed yet.",
-        sourceRefs: ["gmail:thread-2"],
-        confidence: 90,
-      },
-    ],
+    signals: [{
+      id: "no-reply",
+      kind: "no_response_observed",
+      occurredAt: NOW,
+      summary: "No reply observed yet.",
+      sourceRefs: ["gmail:thread-2"],
+      confidence: 90,
+    }],
   });
   const request = buildBusinessOutcomeMemoryWriteRequest(pending);
   assert.equal(request, null);
   const result = reconcileBusinessOutcomeMemoryReceipt({ assessment: pending, request });
   assert.equal(result.status, "not_eligible");
   assert.equal(result.durable, false);
-  assert.equal(result.contract, "business_communication_outcome_persistence_v2");
+  assert.equal(result.contract, "business_communication_outcome_persistence_v3");
 });
 
 test("idempotent replay counts as durable persistence", () => {

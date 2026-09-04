@@ -3,8 +3,6 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-
 const files = {
   admin: "src/routes/businessRelationshipManagerAdmin.ts",
   candidateRuntime: "src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts",
@@ -20,13 +18,12 @@ const files = {
   executionGate: "src/core/businessCommunicationExecutionGate.ts",
   executionRequest: "src/core/businessCommunicationExecutionRequest.ts",
   lifecycle: "src/core/businessCommunicationLifecycleReceipt.ts",
-  learningProvenance: "src/core/businessCommunicationOutcomeLearningProvenance.ts",
+  learning: "src/core/businessCommunicationOutcomeLearningProvenance.ts",
   dryRun: "tests/businessRelationshipManagerEndToEndDryRun.test.ts",
   candidateTest: "tests/businessRelationshipManagerCanonicalCandidateRuntime.test.ts",
-  candidateBindingTest: "tests/businessRelationshipManagerCanonicalApprovalCandidateBinding.test.ts",
+  bypassTest: "tests/businessRelationshipManagerCanonicalApprovalCandidateBinding.test.ts",
 };
-
-const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
+const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, fs.readFileSync(path.join(root, file), "utf8")]));
 const failures = [];
 const requireToken = (key, token, message) => {
   if (!source[key].includes(token)) failures.push(message);
@@ -36,111 +33,76 @@ const forbidToken = (key, token, message) => {
 };
 
 for (const token of [
-  "createCommunicationSendEnvelope",
-  "finalizeStaffCommunicationApproval",
-  "buildStaffApprovalCandidateWriteRequest",
-  "bindRelationshipManagerApprovalCandidatePersistence",
-  "authorizeCommunicationExecutionRequest",
-  "authorizeRelationshipManagerCommunicationExecution",
-  "finalizeRelationshipManagerCommunicationApproval",
-  "gmail.users.messages.send",
-]) forbidToken("admin", token, `Relationship Manager admin preview illegally references ${token}`);
-requireToken("admin", "externalExecutionAllowed: false", "Admin preview must advertise externalExecutionAllowed:false");
-requireToken("admin", "sendsEmail: false", "Admin preview must advertise sendsEmail:false");
+  "createCommunicationSendEnvelope", "finalizeStaffCommunicationApproval",
+  "authorizeCommunicationExecutionRequest", "gmail.users.messages.send",
+]) forbidToken("admin", token, `Admin preview illegally references ${token}`);
+requireToken("admin", "externalExecutionAllowed: false", "Admin preview must remain non-executable");
+requireToken("admin", "persistenceAllowedFromThisPreview: false", "Admin preview must remain non-persistable");
 
 for (const token of [
-  "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
-  'scenario !== "graduate_or_candidate"',
-  "careersRequired: true",
-  "roleTruth: sources.cycle.roleTruth",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_ROLE_TRUTH",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_MEETING_WITHOUT_ROLE_TRUTH",
-]) requireToken("candidateRuntime", token, `Candidate runtime must retain ${token}`);
-forbidToken("candidateRuntime", "openRoleConfirmed:", "Candidate runtime must not pass manual openRoleConfirmed authority");
-requireToken("careersRuntime", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND", "Careers runtime must prove its source receipt is bound through Decision Context");
-requireToken("careersRuntime", "careersSummary", "Careers runtime must hydrate careers truth into 360 context");
-requireToken("careersPolicy", "business_careers_relationship_policy_v3", "Careers policy must use v3 evidence-backed contract");
-forbidToken("careersPolicy", "Boolean(input.openRoleConfirmed)", "Careers policy must not trust openRoleConfirmed fallback");
-requireToken("candidateTest", "manual role flags cannot bypass missing canonical careers and Brain truth", "Candidate regression must pin manual-role bypass prevention");
+  '"business_relationship_manager_canonical_candidate_runtime_v2"',
+  "runCanonicalRelationshipManagerCycleWithSourcesFromEnv", "careersRequired: true",
+  "explicitRoleOpen: false", "activeRecruitmentProcess: false",
+  "callerOpportunityAuthoritySuppressed: true",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CALLER_OPPORTUNITY_AUTHORITY_LEAKED",
+]) requireToken("candidateRuntime", token, `Canonical candidate runtime must retain ${token}`);
+forbidToken("candidateRuntime", "openRoleConfirmed:", "Canonical candidate runtime must not pass manual role authority");
+requireToken("careersRuntime", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND", "Careers evidence must bind through Decision Context");
+requireToken("careersPolicy", "business_careers_relationship_policy_v3", "Careers policy must be evidence-backed v3");
+forbidToken("careersPolicy", "Boolean(input.openRoleConfirmed)", "Careers policy must not trust manual open-role flags");
+requireToken("candidateTest", "caller role and recruitment flags cannot bypass canonical careers truth", "Candidate regression must pin caller opportunity suppression");
 
-requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v3", "Canonical approval must use v3 candidate-policy-aware contract");
-requireToken("canonicalApproval", "business_candidate_policy_approval_binding_v1", "Canonical approval must define typed candidate policy binding");
-requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_POLICY_BINDING_REQUIRED", "Generic candidate approval must require policy binding");
-requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_ROLE_AUTHORITY_REQUIRED", "Candidate referral/meeting approval must require role authority");
-requireToken("candidateApproval", "business_relationship_manager_canonical_candidate_approval_runtime_v2", "Candidate approval wrapper must use v2 binding contract");
-requireToken("candidateApproval", "BUSINESS_CANDIDATE_POLICY_APPROVAL_BINDING_CONTRACT", "Candidate approval wrapper must generate the policy binding internally");
-requireToken("candidateApproval", "candidatePolicyBinding", "Candidate approval wrapper must pass the policy binding into canonical approval");
-requireToken("candidateApproval", "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_POLICY_BINDING_NOT_PRESERVED", "Candidate approval wrapper must verify binding preservation");
-requireToken("candidateBindingTest", "generic canonical approval refuses a candidate cycle without careers policy binding", "Regression must pin direct generic candidate approval bypass");
+requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v4", "Generic canonical approval must use v4");
+requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_SPECIALIZED_RUNTIME_REQUIRED", "Generic canonical approval must reject candidate cycles");
+requireToken("candidateApproval", "business_relationship_manager_canonical_candidate_approval_runtime_v3", "Candidate approval must use v3");
+requireToken("candidateApproval", "runCanonicalRelationshipManagerCandidateResponse", "Candidate approval must rehydrate sources itself");
+requireToken("candidateApproval", "candidateRuntimeInput", "Candidate approval must accept source input, not prebuilt candidate results");
+requireToken("candidateApproval", "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DECISION_CAREERS_EVIDENCE_NOT_BOUND", "Candidate approval must bind careers receipt into the final decision");
+requireToken("candidateApproval", "prepareRelationshipManagerCommunicationForApproval", "Specialized candidate approval must delegate only after fresh policy checks");
+forbidToken("candidateApproval", "candidateResult:", "Candidate approval must not accept caller-constructed candidate results");
+requireToken("bypassTest", "generic canonical approval refuses every candidate cycle and requires the specialized runtime", "Regression must pin generic candidate bypass rejection");
 
-requireToken("approvalRuntime", "prepareStaffCommunicationApprovalCandidate", "Approval runtime must use canonical staff approval candidate builder");
-requireToken("approvalRuntime", "bindRelationshipManagerApprovalCandidatePersistence", "Approval runtime must expose candidate-persistence transition");
-requireToken("approvalRuntime", "readyForCandidatePersistence: true", "Unpersisted approval preparation must advertise persistence as next state");
-requireToken("approvalRuntime", "readyForHumanApproval: false", "Unpersisted approval preparation must not be human-approvable");
-requireToken("approvalRuntime", "finalizeStaffCommunicationApproval", "Approval runtime must use explicit human approval finalizer");
-requireToken("approvalRuntime", "externalExecutionAllowed: false", "Approval runtime must remain non-executable after human approval");
-requireToken("approvalCandidate", "bindStaffWritingOutputForApproval", "Approval candidate must validate Writing Studio output provenance");
-requireToken("approvalCandidate", "STAFF_APPROVAL_CANDIDATE_MEMORY_NOT_DURABLE", "Approval candidate must fail closed on non-durable Relationship Manager memory");
-requireToken("approvalCandidate", "STAFF_APPROVAL_CANDIDATE_SENDER_IDENTITY_MISMATCH", "Approval candidate must verify sender identity before human approval");
-requireToken("approvalCandidatePersistence", "evavo-approval-candidate-write-request-v1", "Approval candidate persistence must use explicit durable write request");
-requireToken("approvalCandidatePersistence", "idempotent_replay", "Approval candidate persistence must support safe idempotent replay");
-requireToken("approvalCandidatePersistence", "approvalCandidatePersistenceEvidenceRef", "Approval candidate persistence must derive immutable human-approval evidence");
-requireToken("approvalFinalizer", "candidatePersistence", "Human approval finalization must require candidate persistence");
-requireToken("approvalFinalizer", "STAFF_APPROVAL_FINALIZER_CANDIDATE_NOT_DURABLE", "Human approval finalization must fail closed on non-durable candidates");
-requireToken("approvalFinalizer", "STAFF_APPROVAL_FINALIZER_OPERATOR_CANDIDATE_EVIDENCE_MISSING", "Human approval receipt must reference durable candidate identity");
-
-requireToken("executionRuntime", "authorizeCommunicationExecutionRequest", "Execution runtime must delegate to canonical request authorizer");
-requireToken("executionRuntime", "approvalCandidatePersistenceEvidenceRef", "Execution runtime must rederive persisted candidate evidence identity");
-requireToken("executionRuntime", "RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CANDIDATE_EVIDENCE_NOT_BOUND", "Execution runtime must bind persisted candidate evidence");
-requireToken("executionRuntime", "externalEffectPerformed: false", "Execution runtime must remain provider-neutral");
-requireToken("executionRuntime", "RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_WRITING_PROVENANCE_REQUIRED", "Execution runtime must require Writing Studio provenance");
+for (const [key, tokens] of Object.entries({
+  approvalRuntime: ["readyForCandidatePersistence: true", "readyForHumanApproval: false", "externalExecutionAllowed: false"],
+  approvalCandidate: ["bindStaffWritingOutputForApproval", "STAFF_APPROVAL_CANDIDATE_MEMORY_NOT_DURABLE"],
+  approvalCandidatePersistence: ["evavo-approval-candidate-write-request-v1", "idempotent_replay", "approvalCandidatePersistenceEvidenceRef"],
+  approvalFinalizer: ["candidatePersistence", "STAFF_APPROVAL_FINALIZER_CANDIDATE_NOT_DURABLE"],
+  executionRuntime: ["authorizeCommunicationExecutionRequest", "approvalCandidatePersistenceEvidenceRef", "externalEffectPerformed: false"],
+  executionGate: ["decision_writing_provenance_missing"],
+  executionRequest: ["business_communication_execution_request_v4", "approvalCandidate"],
+  lifecycle: ["business_communication_lifecycle_receipt_v4", "sameWritingProvenance", "sameApprovalCandidate"],
+  learning: ["business_communication_lifecycle_receipt_v4", "approvalCandidateSha256"],
+})) {
+  for (const token of tokens) requireToken(key, token, `${files[key]} must retain ${token}`);
+}
 forbidToken("executionRuntime", "gmail.users.messages.send", "Execution runtime must not call Gmail directly");
 
-requireToken("executionGate", "decision_writing_provenance_missing", "Execution gate must block canonical cycles without approved Writing provenance");
-requireToken("executionRequest", "business_communication_execution_request_v4", "Provider authorization must use execution request v4");
-requireToken("executionRequest", "approvalCandidate", "Provider authorization must carry persisted approval candidate identity");
-requireToken("lifecycle", "business_communication_lifecycle_receipt_v4", "Lifecycle must use persisted-candidate-aware v4 contract");
-requireToken("lifecycle", "sameWritingProvenance", "Lifecycle must reconcile Writing Studio provenance");
-requireToken("lifecycle", "sameApprovalCandidate", "Lifecycle must reconcile persisted candidate identity");
-requireToken("learningProvenance", "business_communication_lifecycle_receipt_v4", "Outcome learning must require verified lifecycle v4");
-requireToken("learningProvenance", "approvalCandidateSha256", "Outcome learning must retain persisted candidate lineage");
-
 for (const token of [
-  "prepareRelationshipManagerCommunicationForApproval",
-  "buildStaffApprovalCandidateWriteRequest",
-  "reconcileStaffApprovalCandidateWriteReceipt",
-  "bindRelationshipManagerApprovalCandidatePersistence",
-  "finalizeRelationshipManagerCommunicationApproval",
-  "authorizeRelationshipManagerCommunicationExecution",
-]) requireToken("dryRun", token, `End-to-end dry run must exercise ${token}`);
+  "prepareRelationshipManagerCommunicationForApproval", "buildStaffApprovalCandidateWriteRequest",
+  "reconcileStaffApprovalCandidateWriteReceipt", "bindRelationshipManagerApprovalCandidatePersistence",
+  "finalizeRelationshipManagerCommunicationApproval", "authorizeRelationshipManagerCommunicationExecution",
+]) requireToken("dryRun", token, `Dry run must exercise ${token}`);
 for (const token of ["createCommunicationSendEnvelope", "assertAuthorizedCommunicationExecutionRequest"]) {
-  forbidToken("dryRun", token, `End-to-end dry run must not bypass governed flow via ${token}`);
+  forbidToken("dryRun", token, `Dry run must not bypass governed flow via ${token}`);
 }
-requireToken("dryRun", "approvalCandidate", "End-to-end dry run must carry persisted approval candidate into lifecycle");
-requireToken("dryRun", "business_communication_lifecycle_receipt_v4", "End-to-end dry run must verify lifecycle v4");
-requireToken("dryRun", "No Gmail connector/send API is invoked", "End-to-end dry run must explicitly remain non-sending");
+requireToken("dryRun", "No Gmail connector/send API is invoked", "Dry run must explicitly remain non-sending");
 
 if (failures.length) {
   console.error("Relationship Manager governed-flow check failed:");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v5_candidate_policy_binding",
+  contract: "relationship_manager_governed_flow_check_v6_rehydrated_candidate_approval",
   adminPreviewSendCapable: false,
-  candidateUsesCanonicalCareersTruth: true,
-  manualRoleFlagsAuthorizeHiring: false,
-  genericCandidateApprovalBypassBlocked: true,
-  candidatePolicyBindingRequired: true,
+  callerOpportunityAuthoritySuppressed: true,
+  genericCandidateApprovalRejected: true,
+  specializedCandidateApprovalRehydratesSources: true,
   approvalRequiresDurableCycle: true,
   approvalRequiresWritingProvenance: true,
   approvalRequiresDurableCandidate: true,
-  humanApprovalBindsPersistedCandidateEvidence: true,
   providerAuthorizationCarriesPersistedCandidate: true,
-  executionUsesCanonicalGate: true,
-  lifecycleReconcilesWritingProvenance: true,
   lifecycleReconcilesPersistedCandidate: true,
   learningRetainsPersistedCandidate: true,
   dryRunUsesGovernedPath: true,

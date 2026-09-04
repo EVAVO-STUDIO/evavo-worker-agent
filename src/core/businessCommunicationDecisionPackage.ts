@@ -1,10 +1,12 @@
 import { decideCandidateRelationship, type CandidateRelationshipInput } from "./businessCandidateRelationship";
 import type { CommunicationEvidenceReadiness } from "./businessCommunicationEvidenceReadiness";
 import { decideRelationshipCommunicationChannel, relationshipConductInstructions, type ChannelDecisionInput } from "./businessRelationshipConductPolicy";
+import type { RelationshipStaffBrief } from "./businessRelationshipStaffBrief";
+import type { RelationshipContextResolutionPlan } from "./businessRelationshipContextResolutionPlan";
 import { buildBusinessThreadDelta, type ThreadDeltaInput } from "./businessThreadDelta";
 import { assessBusinessObligation, type BusinessObligation } from "./businessObligationLedger";
 
-export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v1" as const;
+export const BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT = "business_communication_decision_package_v2" as const;
 
 export type CommunicationScenario = "general" | "graduate_or_candidate";
 
@@ -19,6 +21,8 @@ export type CommunicationDecisionPackageInput = Readonly<{
   evidenceIds: readonly string[];
   evidenceConfidence: number;
   evidenceReadiness?: CommunicationEvidenceReadiness | null;
+  staffBrief?: RelationshipStaffBrief | null;
+  contextResolutionPlan?: RelationshipContextResolutionPlan | null;
 }>;
 
 export type CommunicationDecisionPackage = Readonly<{
@@ -37,6 +41,11 @@ export type CommunicationDecisionPackage = Readonly<{
   evidenceIds: readonly string[];
   evidenceConfidence: number;
   evidenceReadinessStatus?: CommunicationEvidenceReadiness["status"];
+  approvalGradeReady: boolean;
+  nextContextSources: readonly RelationshipContextResolutionPlan["orderedSources"][number][];
+  staffPriorities: readonly string[];
+  mustVerify: readonly string[];
+  mustNotAssume: readonly string[];
   reasons: readonly string[];
 }>;
 
@@ -53,6 +62,9 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
 
   const reasons: string[] = [];
   const prohibitedImplications: string[] = [];
+  const mustVerify = [...(input.staffBrief?.mustVerify ?? [])];
+  const mustNotAssume = [...(input.staffBrief?.mustNotAssume ?? [])];
+  const staffPriorities = [...(input.staffBrief?.priorities ?? [])];
   let disposition: CommunicationDecisionPackage["disposition"] = "reply";
   let candidateStage: CommunicationDecisionPackage["candidateStage"];
 
@@ -77,6 +89,16 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     reasons.push(...input.evidenceReadiness.blockers.map((blocker) => `Evidence readiness blocker: ${blocker}`));
   }
 
+  if (input.staffBrief && !input.staffBrief.approvalGradeReady) {
+    disposition = "escalate";
+    reasons.push("The evidence-backed relationship staff brief is not approval-grade ready.");
+  }
+
+  if (input.contextResolutionPlan && !input.contextResolutionPlan.ready) {
+    disposition = "escalate";
+    reasons.push(...input.contextResolutionPlan.blockingIssues.map((issue) => `Context resolution required: ${issue}`));
+  }
+
   if (delta.liveResponseTargets.length === 0 && activeEvavoObligations.length === 0 && input.scenario === "general") {
     disposition = "do_not_reply";
     reasons.push("There is no live response target or EVAVO-owned obligation requiring communication.");
@@ -87,6 +109,14 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
 
   const evidenceIds = new Set(input.evidenceIds);
   for (const id of input.evidenceReadiness?.evidenceIds ?? []) evidenceIds.add(id);
+  for (const id of input.staffBrief?.sourceRefs ?? []) evidenceIds.add(id);
+
+  const nextContextSources = Object.freeze([...(input.contextResolutionPlan?.orderedSources ?? [])]);
+  const approvalGradeReady = input.evidenceConfidence >= 60
+    && input.evidenceReadiness?.status !== "blocked"
+    && (input.staffBrief?.approvalGradeReady ?? true)
+    && (input.contextResolutionPlan?.ready ?? true)
+    && evidenceIds.size > 0;
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_DECISION_PACKAGE_CONTRACT,
@@ -104,6 +134,11 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     evidenceIds: Object.freeze([...evidenceIds]),
     evidenceConfidence: input.evidenceConfidence,
     ...(input.evidenceReadiness ? { evidenceReadinessStatus: input.evidenceReadiness.status } : {}),
+    approvalGradeReady,
+    nextContextSources,
+    staffPriorities: Object.freeze([...new Set(staffPriorities)]),
+    mustVerify: Object.freeze([...new Set(mustVerify)]),
+    mustNotAssume: Object.freeze([...new Set(mustNotAssume)]),
     reasons: Object.freeze([...new Set(reasons)]),
   });
 }

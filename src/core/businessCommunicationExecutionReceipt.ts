@@ -1,6 +1,6 @@
 import type { AuthorizedCommunicationExecutionRequest } from "./businessCommunicationExecutionRequest";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT = "business_communication_execution_receipt_v1" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT = "business_communication_execution_receipt_v2" as const;
 
 export type GmailObservedSendResult = Readonly<{
   providerMessageId: string;
@@ -54,7 +54,7 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
   request: AuthorizedCommunicationExecutionRequest;
   observed: GmailObservedSendResult;
 }>): CommunicationExecutionReceipt {
-  if (input.request.contract !== "business_communication_execution_request_v1" || input.request.provider !== "gmail") {
+  if (input.request.contract !== "business_communication_execution_request_v2" || input.request.provider !== "gmail") {
     throw new Error("COMMUNICATION_EXECUTION_RECEIPT_REQUEST_CONTRACT_INVALID");
   }
   const sentAt = iso(input.observed.sentAt, "sent_at");
@@ -72,6 +72,16 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
   if (!sourceEvidenceRefs.length) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_EVIDENCE_REQUIRED");
   const providerMessageId = text(input.observed.providerMessageId, "provider_message_id", 500);
   if (!sourceEvidenceRefs.some((ref) => ref.includes(providerMessageId))) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MESSAGE_EVIDENCE_MISSING");
+
+  if (input.request.authorization.decisionOrigin === "relationship_manager_cycle") {
+    const checkpoint = input.request.authorization.memoryCheckpoint;
+    if (!checkpoint || !input.request.authorization.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MEMORY_CHECKPOINT_MISSING");
+    }
+    if (checkpoint.cycleId !== input.request.authorization.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MEMORY_CHECKPOINT_CYCLE_MISMATCH");
+    }
+  }
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT,

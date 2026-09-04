@@ -5,7 +5,7 @@ import type { AuthorizedCommunicationExecutionRequest } from "../src/core/busine
 import { reconcileAuthorizedCommunicationExecution } from "../src/core/businessCommunicationExecutionReceipt";
 
 const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
-  contract: "business_communication_execution_request_v1",
+  contract: "business_communication_execution_request_v2",
   provider: "gmail",
   requestId: "gmail-send:approval-1:abcdef",
   authorizedAt: "2026-09-04T01:30:00.000Z",
@@ -23,6 +23,8 @@ const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     materialSha256: "a".repeat(64),
     approvalBindingSha256: "b".repeat(64),
     decisionPackageId: "decision-1",
+    decisionOrigin: "direct",
+    relationshipCycleId: null,
     decisionEvidenceIds: Object.freeze(["gmail:message:gmail-message-1"]),
     approvalEvidenceIds: Object.freeze(["operator-approval:approval-1"]),
     operatorApprovalId: "operator-approval-1",
@@ -31,6 +33,7 @@ const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     approvedAt: "2026-09-04T01:05:00.000Z",
     expiresAt: "2026-09-04T02:05:00.000Z",
     mailboxKey: "greg",
+    memoryCheckpoint: null,
   }),
 });
 
@@ -55,6 +58,7 @@ test("observed Gmail send reconciles to the exact authorized request", () => {
   assert.equal(receipt.authorization.materialSha256, request.authorization.materialSha256);
   assert.equal(receipt.authorization.approvalBindingSha256, request.authorization.approvalBindingSha256);
   assert.equal(receipt.authorization.operatorApprovalId, "operator-approval-1");
+  assert.equal(receipt.authorization.decisionOrigin, "direct");
 });
 
 test("wrong thread fails closed", () => {
@@ -71,4 +75,25 @@ test("send observed at or after approval expiry fails closed", () => {
 
 test("provider message ID must be backed by returned source evidence", () => {
   assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sourceEvidenceRefs: ["gmail:message:other"] }) }), /COMMUNICATION_EXECUTION_RECEIPT_MESSAGE_EVIDENCE_MISSING/);
+});
+
+test("relationship cycle execution receipt requires the same durable memory checkpoint", () => {
+  const cycleRequest: AuthorizedCommunicationExecutionRequest = {
+    ...request,
+    authorization: {
+      ...request.authorization,
+      decisionOrigin: "relationship_manager_cycle",
+      relationshipCycleId: "cycle-1",
+      memoryCheckpoint: { cycleId: "cycle-1", recordIds: ["mem-1"] },
+    },
+  };
+  assert.doesNotThrow(() => reconcileAuthorizedCommunicationExecution({ request: cycleRequest, observed: observed() }));
+  const broken: AuthorizedCommunicationExecutionRequest = {
+    ...cycleRequest,
+    authorization: {
+      ...cycleRequest.authorization,
+      memoryCheckpoint: { cycleId: "other-cycle", recordIds: ["mem-1"] },
+    },
+  };
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request: broken, observed: observed() }), /MEMORY_CHECKPOINT_CYCLE_MISMATCH/);
 });

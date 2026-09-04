@@ -69,6 +69,9 @@ if (/writeRoute\(\s*["']business_approval_request_save["']/.test(catalogue)) {
 for (const token of [
   '"evavo-approval-candidate-write-request-v1"',
   'actorId: "evavo-worker-agent"',
+  'model: "immutable_document_version"',
+  'vaultId: "internal"',
+  "assertNativeStorageBinding",
   "approvalCandidatePersistenceEvidenceRef",
   "reconcileStaffApprovalCandidateWriteReceipt",
 ]) {
@@ -76,9 +79,12 @@ for (const token of [
 }
 
 for (const token of [
-  '"business_evavo_storage_approval_candidate_port_v1"',
+  '"business_evavo_storage_approval_candidate_port_v2"',
   '"/v1/actions/persist_approval_candidate"',
   '"Authorization": `Bearer ${writeToken}`',
+  "expectedAuthorityId",
+  "AUTHORITY_MISMATCH",
+  "MAX_APPROVAL_CANDIDATE_REQUEST_BYTES",
   'redirect: "error"',
   'cache: "no-store"',
   "reconcileStaffApprovalCandidateWriteReceipt",
@@ -109,13 +115,16 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v2",
+  contract: "business-approval-storage-isolation-v3",
   historicalStorageHelperRetained: true,
   runtimeImportsAllowed: false,
   directApprovalWriteRouteEnabled: false,
   retiredRouteExpectedStatus: 410,
   governedApprovalCandidatePersistence: true,
+  nativeImmutableStorageVersionRequired: true,
   concreteEvavoStoragePortRequired: true,
+  expectedStorageAuthorityRequired: true,
+  boundedCandidateWriteRequired: true,
   persistedCandidateEvidenceRederived: true,
   externalExecutionEnabled: false,
   errors,

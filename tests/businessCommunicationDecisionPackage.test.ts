@@ -4,6 +4,7 @@ import test from "node:test";
 import { buildCommunicationDecisionPackage } from "../src/core/businessCommunicationDecisionPackage";
 
 const NOW = "2026-09-04T11:39:00+10:00";
+void NOW;
 
 test("graduate enquiry stays async and does not imply a role", () => {
   const result = buildCommunicationDecisionPackage({
@@ -98,4 +99,37 @@ test("low evidence confidence escalates instead of bluffing", () => {
   });
 
   assert.equal(result.disposition, "escalate");
+});
+
+test("blocked identity or attachment evidence overrides an otherwise valid reply decision", () => {
+  const result = buildCommunicationDecisionPackage({
+    packageId: "pkg-4",
+    scenario: "general",
+    objective: "Send the requested current document.",
+    thread: {
+      threadId: "thread-4",
+      previousState: [],
+      latestObservedState: [
+        { id: "doc1", kind: "document", statement: "Please send the current contractor forecast.", status: "open", owner: "evavo", sourceEvidenceIds: ["email-4"] },
+      ],
+    },
+    obligations: [],
+    channel: { currentChannel: "email", canResolveInWriting: true },
+    evidenceIds: ["email-4"],
+    evidenceConfidence: 96,
+    evidenceReadiness: {
+      contract: "business_communication_evidence_readiness_v1",
+      status: "blocked",
+      identityReady: true,
+      artifactsReady: false,
+      calendarReady: true,
+      blockers: ["A required attachment/document is not resolved to one verified current artifact."],
+      warnings: [],
+      evidenceIds: ["gmail:email-4"],
+    },
+  });
+
+  assert.equal(result.disposition, "escalate");
+  assert.equal(result.evidenceReadinessStatus, "blocked");
+  assert.ok(result.reasons.some((item) => /attachment/i.test(item)));
 });

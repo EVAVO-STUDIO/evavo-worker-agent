@@ -52,22 +52,36 @@ export type StaffApprovalCandidatePersistenceResult = Readonly<{
   blocker: string | null;
 }>;
 
-function stableCandidatePayload(candidate: StaffCommunicationApprovalCandidate): string {
-  return JSON.stringify(candidate);
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => canonicalValue(item));
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      const child = source[key];
+      if (child !== undefined) result[key] = canonicalValue(child);
+    }
+    return result;
+  }
+  return value;
+}
+
+export function canonicalApprovalCandidateJson(value: unknown): string {
+  return JSON.stringify(canonicalValue(value));
 }
 
 export function staffApprovalCandidateHash(candidate: StaffCommunicationApprovalCandidate): string {
   if (candidate.contract !== BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_CONTRACT) {
     throw new Error("STAFF_APPROVAL_CANDIDATE_PERSISTENCE_CONTRACT_INVALID");
   }
-  return businessSha256(stableCandidatePayload(candidate));
+  return businessSha256(canonicalApprovalCandidateJson(candidate));
 }
 
 export function buildStaffApprovalCandidateWriteRequest(
   candidate: StaffCommunicationApprovalCandidate,
 ): StaffApprovalCandidateWriteRequest {
   const candidateSha256 = staffApprovalCandidateHash(candidate);
-  const idempotencyKey = `staff-approval-candidate:${businessSha256(JSON.stringify({ candidateId: candidate.candidateId, candidateSha256 }))}`;
+  const idempotencyKey = `staff-approval-candidate:${businessSha256(canonicalApprovalCandidateJson({ candidateId: candidate.candidateId, candidateSha256 }))}`;
   const requestId = `approval-candidate-write:${businessSha256(idempotencyKey).slice(0, 32)}`;
   return Object.freeze({
     protocol: "evavo-approval-candidate-write-request-v1",
@@ -98,7 +112,7 @@ export function approvalCandidatePersistenceEvidenceRef(input: Readonly<{
   if (!candidateId || !recordId || !/^[a-f0-9]{64}$/.test(candidateSha256)) {
     throw new Error("STAFF_APPROVAL_CANDIDATE_PERSISTENCE_EVIDENCE_INVALID");
   }
-  const identitySha256 = businessSha256(JSON.stringify({ candidateId, candidateSha256, recordId }));
+  const identitySha256 = businessSha256(canonicalApprovalCandidateJson({ candidateId, candidateSha256, recordId }));
   return `approval-candidate:${identitySha256}`;
 }
 

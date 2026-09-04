@@ -1,57 +1,42 @@
 import type { BrainMemoryIngestionPort } from "./businessBrainMemoryIngestionPort";
 import type { CanonicalRelationshipManagerCycle } from "./businessRelationshipManagerCanonicalRuntime";
 import {
-  persistRelationshipManagerCycleMemory,
-  type RelationshipManagerMemoryPersistenceResult,
-} from "./businessRelationshipManagerMemoryPersistence";
+  persistCanonicalRelationshipManagerCycleToBrain,
+  type RelationshipManagerBrainPersistenceRuntimeResult,
+} from "./businessRelationshipManagerBrainPersistenceRuntime";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_MEMORY_PERSISTENCE_CONTRACT =
-  "business_relationship_manager_canonical_memory_persistence_v1" as const;
+  "business_relationship_manager_canonical_memory_persistence_v2" as const;
 
 export type CanonicalRelationshipManagerMemoryPersistence = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_MEMORY_PERSISTENCE_CONTRACT;
   canonicalCycleId: string;
-  persistence: RelationshipManagerMemoryPersistenceResult;
+  persistence: RelationshipManagerBrainPersistenceRuntimeResult["persistence"];
   durable: true;
   externalEffectPerformed: false;
 }>;
 
+/**
+ * Compatibility facade for callers that imported the older canonical-memory
+ * helper. The actual authority lives in businessRelationshipManagerBrainPersistenceRuntime.
+ * This path cannot bypass canonical context readiness, the v2 scoped Brain port,
+ * or per-material-observation durability checks.
+ */
 export async function persistCanonicalRelationshipManagerCycleMemory(input: Readonly<{
   canonicalCycle: CanonicalRelationshipManagerCycle;
   brain: BrainMemoryIngestionPort;
 }>): Promise<CanonicalRelationshipManagerMemoryPersistence> {
-  if (input.canonicalCycle.contract !== "business_relationship_manager_canonical_runtime_v1") {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_CYCLE_CONTRACT_INVALID");
+  const result = await persistCanonicalRelationshipManagerCycleToBrain(input);
+  if (!result.durable || result.persistence.blockers.length) {
+    throw new Error(`RELATIONSHIP_MANAGER_CANONICAL_MEMORY_NOT_DURABLE:${result.persistence.blockers.join(",")}`);
   }
-  if (input.brain.contract !== "business_brain_memory_ingestion_port_v1") {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_PORT_CONTRACT_INVALID");
-  }
-  const cycle = input.canonicalCycle.cycle;
-  if (cycle.decision.relationshipCycleId !== cycle.cycleId) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_DECISION_CYCLE_MISMATCH");
-  }
-  if (input.canonicalCycle.decisionContext.relationshipId !== cycle.projection.relationshipId) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RELATIONSHIP_MISMATCH");
-  }
-
-  const persistence = await persistRelationshipManagerCycleMemory({
-    cycle,
-    write: input.brain.write,
-  });
-  if (persistence.cycleId !== cycle.cycleId) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RESULT_CYCLE_MISMATCH");
-  }
-  if (!persistence.durable || persistence.blockers.length) {
-    throw new Error(`RELATIONSHIP_MANAGER_CANONICAL_MEMORY_NOT_DURABLE:${persistence.blockers.join(",")}`);
-  }
-  if (persistence.materialObservations > 0 && persistence.recordIds.length === 0) {
+  if (result.persistence.materialObservations > 0 && result.persistence.recordIds.length === 0) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RECORDS_REQUIRED");
   }
-
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_MEMORY_PERSISTENCE_CONTRACT,
-    canonicalCycleId: cycle.cycleId,
-    persistence,
+    canonicalCycleId: result.cycleId,
+    persistence: result.persistence,
     durable: true,
     externalEffectPerformed: false,
   });

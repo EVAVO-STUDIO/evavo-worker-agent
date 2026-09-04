@@ -8,9 +8,11 @@ import {
   prepareRelationshipManagerCommunicationForApproval,
 } from "../src/core/businessRelationshipManagerApprovalRuntime";
 import {
+  approvalCandidatePersistenceEvidenceRef,
   buildStaffApprovalCandidateWriteRequest,
   reconcileStaffApprovalCandidateWriteReceipt,
 } from "../src/core/businessStaffCommunicationApprovalCandidatePersistence";
+import { finalizeStaffCommunicationApproval } from "../src/core/businessStaffCommunicationApprovalFinalizer";
 import { runRelationshipManagerCommunicationCycle } from "../src/core/businessRelationshipManagerRuntime";
 
 function cycle() {
@@ -162,9 +164,9 @@ function prepare(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function persist(preparation = prepare()) {
+function persistenceFor(preparation = prepare()) {
   const request = buildStaffApprovalCandidateWriteRequest(preparation.approvalCandidate);
-  const persistence = reconcileStaffApprovalCandidateWriteReceipt({
+  return reconcileStaffApprovalCandidateWriteReceipt({
     candidate: preparation.approvalCandidate,
     request,
     receipt: {
@@ -182,7 +184,13 @@ function persist(preparation = prepare()) {
       storageAuthority: { system: "evavo-storage", instanceId: "local-primary" },
     },
   });
-  return bindRelationshipManagerApprovalCandidatePersistence({ preparation, persistence });
+}
+
+function persist(preparation = prepare()) {
+  return bindRelationshipManagerApprovalCandidatePersistence({
+    preparation,
+    persistence: persistenceFor(preparation),
+  });
 }
 
 function operatorApproval(persisted = persist()): OperatorCommunicationApprovalReceipt {
@@ -220,6 +228,51 @@ test("durable candidate persistence unlocks human approval but not execution", (
   assert.equal(result.candidatePersistence.durable, true);
   assert.ok(result.candidatePersistence.approvalEvidenceRef);
   assert.equal(result.externalExecutionAllowed, false);
+});
+
+test("persistence bind rejects a forged candidate evidence reference", () => {
+  const preparation = prepare();
+  const persistence = persistenceFor(preparation);
+  const forged = { ...persistence, approvalEvidenceRef: `approval-candidate:${"0".repeat(64)}` };
+  assert.throws(() => bindRelationshipManagerApprovalCandidatePersistence({
+    preparation,
+    persistence: forged,
+  }), /CANDIDATE_PERSISTENCE_EVIDENCE_MISMATCH/);
+});
+
+test("finalizer independently rejects forged persisted candidate evidence", () => {
+  const preparation = prepare();
+  const persistence = persistenceFor(preparation);
+  const forgedEvidenceRef = `approval-candidate:${"f".repeat(64)}`;
+  const forgedPersistence = { ...persistence, approvalEvidenceRef: forgedEvidenceRef };
+  const receipt: OperatorCommunicationApprovalReceipt = {
+    contract: "business_communication_operator_approval_v1",
+    approvalId: "operator-approval-forged-1",
+    authority: "human_operator",
+    approverId: "greg",
+    approvedAt: "2026-09-04T01:04:00Z",
+    expiresAt: "2026-09-04T02:04:00Z",
+    materialSha256: preparation.approvalCandidate.materialSha256,
+    decisionPackageId: preparation.decisionPackageId,
+    senderKey: preparation.approvalCandidate.senderKey,
+    mailboxKey: preparation.approvalCandidate.mailboxKey,
+    evidenceRefs: [forgedEvidenceRef],
+    sourceSystem: "operator_approval",
+  };
+  assert.notEqual(
+    forgedEvidenceRef,
+    approvalCandidatePersistenceEvidenceRef({
+      candidateId: preparation.approvalCandidate.candidateId,
+      candidateSha256: persistence.candidateSha256,
+      recordId: persistence.recordId!,
+    }),
+  );
+  assert.throws(() => finalizeStaffCommunicationApproval({
+    envelopeId: "send-envelope-forged-1",
+    candidate: preparation.approvalCandidate,
+    candidatePersistence: forgedPersistence,
+    operatorApprovalReceipt: receipt,
+  }), /PERSISTED_CANDIDATE_EVIDENCE_MISMATCH/);
 });
 
 test("human approval finalization remains non-executing and binds durable candidate identity", () => {

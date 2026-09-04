@@ -70,13 +70,13 @@ function canonicalCycle(options: Readonly<{ operationsUnavailable?: boolean }> =
       ],
       ...(options.operationsUnavailable ? {
         sourceReadiness: [{
-          source: "operations",
-          state: "provider_unavailable",
+          domain: "operations" as const,
+          state: "provider_unavailable" as const,
           required: true,
           absenceAcceptable: false,
-          checkedAt: "2026-09-04T12:00:30Z",
-          evidenceRefs: ["operations:availability:failed"],
-          summary: "Operations Core could not be queried.",
+          observedAt: "2026-09-04T12:00:30Z",
+          sourceRefs: ["operations:availability:failed"],
+          detail: "Operations Core could not be queried.",
         }],
       } : {}),
     },

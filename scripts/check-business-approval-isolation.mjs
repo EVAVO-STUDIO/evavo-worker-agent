@@ -184,6 +184,7 @@ requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.t
 ]);
 const candidateRuntime = requireTokens("src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts", [
   '"business_relationship_manager_canonical_candidate_runtime_v1"',
+  'scenario !== "graduate_or_candidate"',
   "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
   "careersRequired: true",
   "roleTruth: sources.cycle.roleTruth",
@@ -195,19 +196,28 @@ if (/openRoleConfirmed\s*:/.test(candidateRuntime)) {
 }
 
 requireTokens("src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts", [
-  '"business_relationship_manager_canonical_approval_runtime_v2"',
+  '"business_relationship_manager_canonical_approval_runtime_v3"',
+  '"business_candidate_policy_approval_binding_v1"',
   '"business_relationship_manager_canonical_runtime_v2"',
-  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_NOT_READY",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_POLICY_BINDING_REQUIRED",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_CAREERS_EVIDENCE_NOT_BOUND",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_ROLE_AUTHORITY_REQUIRED",
   "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_SOURCE_READINESS_NOT_READY",
   "prepareRelationshipManagerCommunicationForApproval",
 ]);
 requireTokens("src/core/businessRelationshipManagerCanonicalCandidateApprovalRuntime.ts", [
-  '"business_relationship_manager_canonical_candidate_approval_runtime_v1"',
+  '"business_relationship_manager_canonical_candidate_approval_runtime_v2"',
   "candidate.approvalGradeReady",
   'candidate.careersDecision.disposition !== "reply"',
+  "candidatePolicyBinding",
+  "BUSINESS_CANDIDATE_POLICY_APPROVAL_BINDING_CONTRACT",
   "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_EVIDENCE_NOT_BOUND",
   "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_REFERRAL_WITHOUT_ROLE_TRUTH",
   "prepareCanonicalRelationshipManagerCommunicationForApproval",
+]);
+requireTokens("tests/businessRelationshipManagerCanonicalApprovalCandidateBinding.test.ts", [
+  "generic canonical approval refuses a candidate cycle without careers policy binding",
+  "CANONICAL_APPROVAL_CANDIDATE_POLICY_BINDING_REQUIRED",
 ]);
 
 const allowedDefinition = path.join(root, recordsPath);
@@ -222,7 +232,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v8",
+  contract: "business-approval-storage-isolation-v9",
   historicalStorageHelperRetained: true,
   directApprovalWriteRouteEnabled: false,
   governedApprovalCandidatePersistence: true,
@@ -236,7 +246,8 @@ console.log(JSON.stringify({
   commercialStateCannotAuthorizeHiring: true,
   manualRoleFlagsCannotAuthorizeHiring: true,
   canonicalCandidateRuntimeRequired: true,
-  candidatePolicyRequiredForCandidateApproval: true,
+  candidatePolicyBindingRequiredForCandidateApproval: true,
+  directGenericCandidateApprovalBypassBlocked: true,
   careersEvidenceMustBindThroughDecision: true,
   externalExecutionEnabled: false,
   errors,

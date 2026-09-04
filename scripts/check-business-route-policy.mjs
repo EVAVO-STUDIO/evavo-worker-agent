@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const root = process.cwd();
 const read = (...parts) => {
@@ -141,10 +142,20 @@ for (const routePath of canonicalPaths) {
   if (count !== 1) errors.push(`Canonical Business path must exist exactly once (${count}): ${routePath}`);
 }
 
+const governedFlow = spawnSync(process.execPath, [path.join(root, "scripts", "check-relationship-manager-governed-flow.mjs")], {
+  cwd: root,
+  encoding: "utf8",
+  windowsHide: true,
+});
+if (governedFlow.status !== 0) {
+  const details = (governedFlow.stderr || governedFlow.stdout || "unknown failure").trim().slice(0, 2000);
+  errors.push(`Relationship Manager governed-flow gate failed: ${details}`);
+}
+
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "typed-business-route-policy-v8-internal-preview",
+  contract: "typed-business-route-policy-v9-governed-relationship-manager",
   routeGroups: ids,
   relationshipManager: {
     routeGroupExplicit: true,
@@ -158,6 +169,7 @@ console.log(JSON.stringify({
     externalExecutionAllowed: false,
     catalogueExplicit: true,
     strictInputParser: true,
+    governedFlowGate: governedFlow.status === 0,
   },
   externalExecutionEnabled: false,
   errors,

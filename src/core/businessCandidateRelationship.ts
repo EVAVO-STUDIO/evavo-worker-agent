@@ -1,4 +1,4 @@
-export const BUSINESS_CANDIDATE_RELATIONSHIP_CONTRACT = "business_candidate_relationship_v1" as const;
+export const BUSINESS_CANDIDATE_RELATIONSHIP_CONTRACT = "business_candidate_relationship_v2" as const;
 
 export type CandidateRelationshipStage =
   | "new_enquiry"
@@ -50,7 +50,7 @@ export function decideCandidateRelationship(input: CandidateRelationshipInput): 
       maySayMaterialsReviewed: false,
       maySuggestRoleExists: false,
       mayPromiseFutureContact: false,
-      reasons: Object.freeze(["Suppression is active; do not create further contact." ]),
+      reasons: Object.freeze(["Suppression is active; do not create further contact."]),
       prohibitedImplications: Object.freeze(prohibitedImplications),
     });
   }
@@ -71,7 +71,7 @@ export function decideCandidateRelationship(input: CandidateRelationshipInput): 
   }
 
   if (input.materialsSupplied && (input.clearFitEvidence || input.relevantSkillsEvidence)) {
-    reasons.push("The supplied material has enough relevance to justify deliberate review rather than an automatic close.");
+    reasons.push("The supplied material has enough evidence-backed relevance to justify deliberate review rather than an automatic close.");
     return Object.freeze({
       contract: BUSINESS_CANDIDATE_RELATIONSHIP_CONTRACT,
       stage: "review_warranted",
@@ -85,13 +85,28 @@ export function decideCandidateRelationship(input: CandidateRelationshipInput): 
     });
   }
 
-  if (input.futureRelevanceEvidence || input.personalizedEffort) {
-    reasons.push("The interaction has enough genuine relationship value to retain as future interest without implying an opportunity exists.");
+  if (input.futureRelevanceEvidence) {
+    reasons.push("There is specific evidence that retaining this relationship may be useful in future, without implying a current opportunity exists.");
     return Object.freeze({
       contract: BUSINESS_CANDIDATE_RELATIONSHIP_CONTRACT,
       stage: "future_interest",
       shouldReply: true,
       shouldRetainRelationship: true,
+      maySayMaterialsReviewed: input.materialsActuallyReviewed,
+      maySuggestRoleExists: false,
+      mayPromiseFutureContact: false,
+      reasons: Object.freeze(reasons),
+      prohibitedImplications: Object.freeze(prohibitedImplications),
+    });
+  }
+
+  if (input.personalizedEffort) {
+    reasons.push("The enquiry appears sincere and personalised, so a normal human reply is appropriate; personalisation alone is not evidence for retaining an active candidate relationship.");
+    return Object.freeze({
+      contract: BUSINESS_CANDIDATE_RELATIONSHIP_CONTRACT,
+      stage: "new_enquiry",
+      shouldReply: true,
+      shouldRetainRelationship: false,
       maySayMaterialsReviewed: input.materialsActuallyReviewed,
       maySuggestRoleExists: false,
       mayPromiseFutureContact: false,

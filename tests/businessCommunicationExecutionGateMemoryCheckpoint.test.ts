@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DESIRED_EVAVO_MAILBOXES } from "../src/core/businessMailboxRegistry";
+import { buildCommunicationDecisionPackage } from "../src/core/businessCommunicationDecisionPackage";
 import { evaluateCommunicationExecutionGate } from "../src/core/businessCommunicationExecutionGate";
 import { createCommunicationSendEnvelope } from "../src/core/businessCommunicationSendEnvelope";
 import { persistRelationshipManagerCycleMemory } from "../src/core/businessRelationshipManagerMemoryPersistence";
@@ -118,19 +119,23 @@ function review() {
   };
 }
 
-test("canonical Relationship Manager decision cannot execute without its durable memory checkpoint", () => {
-  const current = cycle();
-  const envelope = approval(current.decision.packageId, current.decision.evidenceIds);
-  const result = evaluateCommunicationExecutionGate({
+function evaluate(decisionPackage: ReturnType<typeof cycle>["decision"], persistence?: Awaited<ReturnType<typeof durableCheckpoint>>) {
+  const envelope = approval(decisionPackage.packageId, decisionPackage.evidenceIds);
+  return evaluateCommunicationExecutionGate({
     mailbox: DESIRED_EVAVO_MAILBOXES.greg,
     material,
     approval: envelope,
     operatorApprovalReceipt: operatorApproval(envelope),
-    decisionPackage: current.decision,
+    decisionPackage,
+    ...(persistence ? { relationshipManagerMemoryPersistence: persistence } : {}),
     review: review(),
     runtimeSendingEnabled: true,
     now: new Date("2026-09-04T01:20:00Z"),
   });
+}
+
+test("canonical Relationship Manager decision cannot execute without its durable memory checkpoint", () => {
+  const result = evaluate(cycle().decision);
   assert.equal(result.allowed, false);
   assert.equal(result.memoryCheckpointValid, false);
   assert.ok(result.reasons.includes("relationship_manager_memory_checkpoint_missing"));
@@ -139,18 +144,9 @@ test("canonical Relationship Manager decision cannot execute without its durable
 test("matching durable cycle checkpoint unlocks only the memory portion of the execution gate", async () => {
   const current = cycle();
   const persistence = await durableCheckpoint();
-  const envelope = approval(current.decision.packageId, current.decision.evidenceIds);
-  const result = evaluateCommunicationExecutionGate({
-    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
-    material,
-    approval: envelope,
-    operatorApprovalReceipt: operatorApproval(envelope),
-    decisionPackage: current.decision,
-    relationshipManagerMemoryPersistence: persistence,
-    review: review(),
-    runtimeSendingEnabled: true,
-    now: new Date("2026-09-04T01:20:00Z"),
-  });
+  const result = evaluate(current.decision, persistence);
+  assert.equal(current.decision.origin, "relationship_manager_cycle");
+  assert.equal(current.decision.relationshipCycleId, current.cycleId);
   assert.equal(persistence.durable, true);
   assert.equal(result.memoryCheckpointValid, true);
   assert.equal(result.allowed, true);
@@ -159,18 +155,7 @@ test("matching durable cycle checkpoint unlocks only the memory portion of the e
 test("wrong cycle checkpoint fails closed", async () => {
   const current = cycle();
   const persistence = { ...(await durableCheckpoint()), cycleId: "different-cycle" };
-  const envelope = approval(current.decision.packageId, current.decision.evidenceIds);
-  const result = evaluateCommunicationExecutionGate({
-    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
-    material,
-    approval: envelope,
-    operatorApprovalReceipt: operatorApproval(envelope),
-    decisionPackage: current.decision,
-    relationshipManagerMemoryPersistence: persistence,
-    review: review(),
-    runtimeSendingEnabled: true,
-    now: new Date("2026-09-04T01:20:00Z"),
-  });
+  const result = evaluate(current.decision, persistence);
   assert.equal(result.allowed, false);
   assert.ok(result.reasons.includes("relationship_manager_memory_checkpoint_cycle_mismatch"));
 });
@@ -179,19 +164,30 @@ test("checkpoint with blockers cannot authorize execution", async () => {
   const current = cycle();
   const durable = await durableCheckpoint();
   const persistence = { ...durable, durable: false, blockers: ["memory write rejected"] };
-  const envelope = approval(current.decision.packageId, current.decision.evidenceIds);
-  const result = evaluateCommunicationExecutionGate({
-    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
-    material,
-    approval: envelope,
-    operatorApprovalReceipt: operatorApproval(envelope),
-    decisionPackage: current.decision,
-    relationshipManagerMemoryPersistence: persistence,
-    review: review(),
-    runtimeSendingEnabled: true,
-    now: new Date("2026-09-04T01:20:00Z"),
-  });
+  const result = evaluate(current.decision, persistence);
   assert.equal(result.allowed, false);
   assert.ok(result.reasons.includes("relationship_manager_memory_checkpoint_not_durable"));
   assert.ok(result.reasons.includes("relationship_manager_memory_checkpoint_has_blockers"));
+});
+
+test("a relationship-cycle-looking package id does not gain canonical-cycle trust by naming convention", () => {
+  const direct = buildCommunicationDecisionPackage({
+    packageId: "relationship-cycle:forged-name",
+    scenario: "general",
+    objective: "Answer current status.",
+    thread: {
+      threadId: "thread-cycle-1",
+      previousState: [],
+      latestObservedState: [{ id: "q1", kind: "question", statement: "What is the current status?", status: "open", owner: "evavo", sourceEvidenceIds: ["gmail:m1"] }],
+    },
+    obligations: [],
+    channel: { currentChannel: "email", canResolveInWriting: true },
+    evidenceIds: ["gmail:m1"],
+    evidenceConfidence: 96,
+    decisionAt: "2026-09-04T01:01:00Z",
+  });
+  assert.equal(direct.origin, "direct");
+  assert.equal(direct.relationshipCycleId, null);
+  const result = evaluate(direct as ReturnType<typeof cycle>["decision"]);
+  assert.equal(result.memoryCheckpointValid, true);
 });

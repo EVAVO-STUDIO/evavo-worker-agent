@@ -74,7 +74,7 @@ function input(brain: BrainMemoryContextPort) {
   };
 }
 
-function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of"): BrainMemoryContextPort {
+function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of" | "integrity_error"): BrainMemoryContextPort {
   return {
     contract: "business_brain_memory_context_port_v1",
     async read(request) {
@@ -82,6 +82,7 @@ function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of"): BrainM
       assert.ok(request.entityRefs.some((entity) => entity.kind === "relationship" && entity.id === "relationship-brain-context-1"));
       assert.equal(request.asOf, DECISION_AT);
       if (mode === "unavailable") throw new Error("BRAIN_MEMORY_CONTEXT_READ_UNAVAILABLE");
+      if (mode === "integrity_error") throw new Error("BRAIN_MEMORY_CONTEXT_UNSOURCED_RECORD");
       const records = mode === "records" ? [{
         id: "mem2_previous_decision",
         kind: "decision",
@@ -166,5 +167,12 @@ test("Brain response must be bound to the exact deterministic decision asOf", as
   await assert.rejects(
     () => runCanonicalRelationshipManagerCycleWithBrainContext(input(port("wrong_as_of"))),
     /BRAIN_AS_OF_MISMATCH/,
+  );
+});
+
+test("Brain integrity failures remain fatal instead of being mislabeled provider unavailable", async () => {
+  await assert.rejects(
+    () => runCanonicalRelationshipManagerCycleWithBrainContext(input(port("integrity_error"))),
+    /BRAIN_MEMORY_CONTEXT_UNSOURCED_RECORD/,
   );
 });

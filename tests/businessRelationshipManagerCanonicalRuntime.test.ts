@@ -90,7 +90,7 @@ function input() {
 
 test("canonical cycle binds v3 decision context before an approval-grade decision", () => {
   const result = runCanonicalRelationshipManagerCommunicationCycle(input());
-  assert.equal(result.contract, "business_relationship_manager_canonical_runtime_v1");
+  assert.equal(result.contract, "business_relationship_manager_canonical_runtime_v2");
   assert.equal(result.externalEffectPerformed, false);
   assert.equal(result.decisionContext.contract, "business_relationship_decision_context_v3");
   assert.equal(result.decisionContext.approvalGradeReady, true);

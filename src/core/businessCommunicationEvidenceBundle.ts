@@ -1,4 +1,4 @@
-export const BUSINESS_COMMUNICATION_EVIDENCE_BUNDLE_CONTRACT = "business_communication_evidence_bundle_v1" as const;
+export const BUSINESS_COMMUNICATION_EVIDENCE_BUNDLE_CONTRACT = "business_communication_evidence_bundle_v2" as const;
 
 export type CommunicationEvidenceSource =
   | "gmail"
@@ -19,6 +19,9 @@ export type CommunicationEvidenceItem = Readonly<{
   confidence: number;
   authoritativeFor: readonly string[];
   staleAfterDays?: number | null;
+  approvedForWriting?: boolean;
+  conflicting?: boolean;
+  classification?: "public" | "internal" | "confidential" | "restricted";
 }>;
 
 export type CommunicationEvidenceBundle = Readonly<{
@@ -37,6 +40,11 @@ export type CommunicationEvidenceBundle = Readonly<{
     commercial: boolean;
     support: boolean;
     documents: boolean;
+  }>;
+  writingEvidence: Readonly<{
+    approvedNonConflictingCount: number;
+    conflictingCount: number;
+    unapprovedCount: number;
   }>;
   missingCriticalContext: readonly string[];
 }>;
@@ -57,8 +65,8 @@ export function buildBusinessCommunicationEvidenceBundle(input: Readonly<{
 
   const has = (predicate: (item: CommunicationEvidenceItem) => boolean) => items.some(predicate);
   const coverage = {
-    thread: has((item) => item.source === "gmail" && item.authoritativeFor.includes("thread")),
-    identity: has((item) => item.authoritativeFor.includes("identity")),
+    thread: has((item) => item.source === "gmail" && (item.authoritativeFor.includes("thread") || item.authoritativeFor.includes("thread_content"))),
+    identity: has((item) => item.authoritativeFor.includes("identity") || item.authoritativeFor.includes("recipient_identity")),
     calendar: has((item) => item.source === "calendar"),
     project: has((item) => item.source === "operations_core" && item.authoritativeFor.includes("project_state")),
     commercial: has((item) => item.source === "operations_core" && item.authoritativeFor.includes("commercial_state")),
@@ -70,6 +78,10 @@ export function buildBusinessCommunicationEvidenceBundle(input: Readonly<{
   if (!coverage.thread) missingCriticalContext.push("Canonical thread evidence is missing.");
   if (!coverage.identity) missingCriticalContext.push("Canonical participant identity evidence is missing.");
 
+  const approvedNonConflictingCount = items.filter((item) => item.approvedForWriting === true && item.conflicting !== true).length;
+  const conflictingCount = items.filter((item) => item.conflicting === true).length;
+  const unapprovedCount = items.filter((item) => item.approvedForWriting !== true).length;
+
   return {
     contract: BUSINESS_COMMUNICATION_EVIDENCE_BUNDLE_CONTRACT,
     relationshipId: input.relationshipId ?? null,
@@ -79,6 +91,7 @@ export function buildBusinessCommunicationEvidenceBundle(input: Readonly<{
     assembledAt: input.assembledAt ?? new Date().toISOString(),
     items,
     coverage,
+    writingEvidence: { approvedNonConflictingCount, conflictingCount, unapprovedCount },
     missingCriticalContext,
   };
 }
@@ -88,4 +101,10 @@ export function communicationEvidenceForClaim(
   authority: string,
 ): readonly CommunicationEvidenceItem[] {
   return bundle.items.filter((item) => item.authoritativeFor.includes(authority));
+}
+
+export function approvedCommunicationWritingEvidence(
+  bundle: CommunicationEvidenceBundle,
+): readonly CommunicationEvidenceItem[] {
+  return Object.freeze(bundle.items.filter((item) => item.approvedForWriting === true && item.conflicting !== true));
 }

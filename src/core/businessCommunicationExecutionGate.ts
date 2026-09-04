@@ -3,6 +3,7 @@ import {
   assessCommunicationApprovalContext,
   type ApprovalContextChange,
 } from "./businessCommunicationApprovalContext";
+import type { CommunicationDecisionPackage } from "./businessCommunicationDecisionPackage";
 import { reviewBusinessCommunicationBeforeSend, type CommunicationDraftReviewInput } from "./businessCommunicationPreSendReview";
 import {
   verifyCommunicationApprovalBinding,
@@ -21,13 +22,34 @@ export type CommunicationExecutionGateResult = Readonly<{
   approvalValid: boolean;
   approvalBindingValid: boolean;
   approvalContextValid: boolean;
+  decisionValid: boolean;
   mailboxValid: boolean;
 }>;
+
+function assessBoundDecision(
+  approval: CommunicationSendEnvelope,
+  decision: CommunicationDecisionPackage | null | undefined,
+): Readonly<{ valid: boolean; reasons: readonly string[] }> {
+  const reasons: string[] = [];
+  const binding = approval.approvalBinding;
+  if (!decision) return Object.freeze({ valid: false, reasons: Object.freeze(["decision_package_missing"]) });
+  if (!binding) return Object.freeze({ valid: false, reasons: Object.freeze(["decision_approval_binding_missing"]) });
+  if (binding.decisionPackageId !== decision.packageId) reasons.push("decision_package_id_mismatch");
+  if (!decision.approvalGradeReady) reasons.push("decision_not_approval_grade_ready");
+  if (decision.disposition !== "reply") reasons.push("decision_disposition_not_executable");
+  const boundEvidence = new Set(binding.evidenceIds);
+  if (decision.evidenceIds.some((id) => !boundEvidence.has(id))) reasons.push("decision_evidence_not_fully_bound");
+  const decisionAt = Date.parse(decision.decisionAt);
+  const approvedAt = Date.parse(approval.approvedAt);
+  if (!Number.isFinite(decisionAt) || !Number.isFinite(approvedAt) || decisionAt > approvedAt) reasons.push("decision_timestamp_invalid_for_approval");
+  return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
+}
 
 export function evaluateCommunicationExecutionGate(input: Readonly<{
   mailbox: BusinessMailboxRecord;
   material: CommunicationSendMaterial;
   approval: CommunicationSendEnvelope;
+  decisionPackage?: CommunicationDecisionPackage | null;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
   contextChangesSinceDecision?: readonly ApprovalContextChange[];
@@ -59,6 +81,9 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
     }
   }
 
+  const decision = assessBoundDecision(input.approval, input.decisionPackage);
+  if (!decision.valid) reasons.push(...decision.reasons);
+
   const approval = verifyCommunicationSendEnvelope(input.approval, input.material, input.now ?? new Date());
   if (!approval.ok) reasons.push(...approval.reasons);
 
@@ -87,12 +112,13 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT,
-    allowed: mailboxValid && binding.ok && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
+    allowed: mailboxValid && binding.ok && decision.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
     reasons: Object.freeze([...new Set(reasons)]),
     preSend,
     approvalValid: approval.ok,
     approvalBindingValid: binding.ok,
     approvalContextValid: approvalContext.valid,
+    decisionValid: decision.valid,
     mailboxValid,
   });
 }

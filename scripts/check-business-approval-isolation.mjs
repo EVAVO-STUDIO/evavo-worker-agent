@@ -29,6 +29,8 @@ const routePath = "src/routes/businessAutopilotAdmin.ts";
 const cataloguePath = "src/routes/businessAutopilotRouteCatalogue.ts";
 const candidatePersistencePath = "src/core/businessStaffCommunicationApprovalCandidatePersistence.ts";
 const storagePortPath = "src/core/businessEvavoStorageApprovalCandidatePort.ts";
+const brainPortPath = "src/core/businessBrainMemoryIngestionPort.ts";
+const canonicalMemoryPath = "src/core/businessRelationshipManagerCanonicalMemoryPersistence.ts";
 const approvalRuntimePath = "src/core/businessRelationshipManagerApprovalRuntime.ts";
 const approvalFinalizerPath = "src/core/businessStaffCommunicationApprovalFinalizer.ts";
 const canonicalRuntimePath = "src/core/businessRelationshipManagerCanonicalRuntime.ts";
@@ -41,6 +43,8 @@ const route = read(routePath);
 const catalogue = read(cataloguePath);
 const candidatePersistence = read(candidatePersistencePath);
 const storagePort = read(storagePortPath);
+const brainPort = read(brainPortPath);
+const canonicalMemory = read(canonicalMemoryPath);
 const approvalRuntime = read(approvalRuntimePath);
 const approvalFinalizer = read(approvalFinalizerPath);
 const canonicalRuntime = read(canonicalRuntimePath);
@@ -100,6 +104,30 @@ for (const token of [
   if (!storagePort.includes(token)) errors.push(`${storagePortPath} must retain concrete EVAVO Storage persistence token: ${token}`);
 }
 
+for (const token of [
+  '"business_brain_memory_ingestion_port_v1"',
+  '"/v1/tools/call"',
+  'name: "brain_memory_ingest_v2"',
+  'autonomy: "auto_low_risk"',
+  '"Authorization": `Bearer ${apiToken}`',
+  'redirect: "error"',
+  'cache: "no-store"',
+  "BRAIN_MEMORY_INGESTION_UNEXPECTED_APPROVAL_REQUIRED",
+]) {
+  if (!brainPort.includes(token)) errors.push(`${brainPortPath} must retain concrete authenticated Brain memory persistence token: ${token}`);
+}
+
+for (const token of [
+  '"business_relationship_manager_canonical_memory_persistence_v1"',
+  '"business_relationship_manager_canonical_runtime_v1"',
+  '"business_brain_memory_ingestion_port_v1"',
+  "persistRelationshipManagerCycleMemory",
+  "RELATIONSHIP_MANAGER_CANONICAL_MEMORY_NOT_DURABLE",
+  "RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RECORDS_REQUIRED",
+]) {
+  if (!canonicalMemory.includes(token)) errors.push(`${canonicalMemoryPath} must retain canonical Brain checkpoint token: ${token}`);
+}
+
 for (const [relativePath, source, token] of [
   [approvalRuntimePath, approvalRuntime, "approvalCandidatePersistenceEvidenceRef"],
   [approvalFinalizerPath, approvalFinalizer, "approvalCandidatePersistenceEvidenceRef"],
@@ -124,14 +152,8 @@ for (const token of [
   '"business_relationship_manager_canonical_approval_runtime_v1"',
   "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_NOT_READY",
   "prepareRelationshipManagerCommunicationForApproval",
-  "readyForHumanApproval",
 ]) {
-  if (!canonicalApproval.includes(token) && token !== "readyForHumanApproval") {
-    errors.push(`${canonicalApprovalPath} must retain canonical approval token: ${token}`);
-  }
-}
-if (!canonicalApproval.includes("prepareRelationshipManagerCommunicationForApproval")) {
-  errors.push(`${canonicalApprovalPath} must delegate only after canonical readiness validation`);
+  if (!canonicalApproval.includes(token)) errors.push(`${canonicalApprovalPath} must retain canonical approval token: ${token}`);
 }
 
 for (const token of [
@@ -163,7 +185,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v4",
+  contract: "business-approval-storage-isolation-v5",
   historicalStorageHelperRetained: true,
   runtimeImportsAllowed: false,
   directApprovalWriteRouteEnabled: false,
@@ -174,6 +196,8 @@ console.log(JSON.stringify({
   expectedStorageAuthorityRequired: true,
   boundedCandidateWriteRequired: true,
   persistedCandidateEvidenceRederived: true,
+  concreteBrainMemoryPortRequired: true,
+  canonicalBrainCheckpointRequiredByPreferredPath: true,
   canonicalDecisionContextRequiredByPreferredPath: true,
   sourceReadinessDistinguishesUnknownFromNotFound: true,
   canonicalApprovalPreparationRequiredByPreferredPath: true,

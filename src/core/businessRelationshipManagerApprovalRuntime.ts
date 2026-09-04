@@ -10,6 +10,7 @@ import {
 } from "./businessStaffCommunicationApprovalCandidate";
 import {
   BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_PERSISTENCE_CONTRACT,
+  approvalCandidatePersistenceEvidenceRef,
   staffApprovalCandidateHash,
   type StaffApprovalCandidatePersistenceResult,
 } from "./businessStaffCommunicationApprovalCandidatePersistence";
@@ -175,11 +176,22 @@ export function bindRelationshipManagerApprovalCandidatePersistence(input: Reado
   if (persistence.candidateId !== preparation.approvalCandidate.candidateId) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_ID_MISMATCH");
   }
-  if (persistence.candidateSha256 !== staffApprovalCandidateHash(preparation.approvalCandidate)) {
+  const candidateSha256 = staffApprovalCandidateHash(preparation.approvalCandidate);
+  if (persistence.candidateSha256 !== candidateSha256) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_HASH_MISMATCH");
   }
-  if (!persistence.recordId?.trim() || !persistence.approvalEvidenceRef?.trim()) {
+  const recordId = persistence.recordId?.trim() ?? "";
+  const evidenceRef = persistence.approvalEvidenceRef?.trim() ?? "";
+  if (!recordId || !evidenceRef) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_EVIDENCE_REQUIRED");
+  }
+  const expectedEvidenceRef = approvalCandidatePersistenceEvidenceRef({
+    candidateId: preparation.approvalCandidate.candidateId,
+    candidateSha256,
+    recordId,
+  });
+  if (evidenceRef !== expectedEvidenceRef) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_CANDIDATE_PERSISTENCE_EVIDENCE_MISMATCH");
   }
 
   return Object.freeze({

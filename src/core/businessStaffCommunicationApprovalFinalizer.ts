@@ -12,6 +12,7 @@ import {
 } from "./businessStaffCommunicationApprovalCandidate";
 import {
   BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_PERSISTENCE_CONTRACT,
+  approvalCandidatePersistenceEvidenceRef,
   staffApprovalCandidateHash,
   type StaffApprovalCandidatePersistenceResult,
 } from "./businessStaffCommunicationApprovalCandidatePersistence";
@@ -60,9 +61,17 @@ export function finalizeStaffCommunicationApproval(input: Readonly<{
   const candidateRecordId = persistence.recordId?.trim() ?? "";
   const candidateEvidenceRef = persistence.approvalEvidenceRef?.trim() ?? "";
   if (!candidateRecordId || !candidateEvidenceRef) throw new Error("STAFF_APPROVAL_FINALIZER_PERSISTED_CANDIDATE_EVIDENCE_REQUIRED");
+  const expectedCandidateEvidenceRef = approvalCandidatePersistenceEvidenceRef({
+    candidateId: candidate.candidateId,
+    candidateSha256,
+    recordId: candidateRecordId,
+  });
+  if (candidateEvidenceRef !== expectedCandidateEvidenceRef) {
+    throw new Error("STAFF_APPROVAL_FINALIZER_PERSISTED_CANDIDATE_EVIDENCE_MISMATCH");
+  }
 
   const receipt = validateOperatorCommunicationApprovalReceipt(input.operatorApprovalReceipt);
-  if (!receipt.evidenceRefs.includes(candidateEvidenceRef)) {
+  if (!receipt.evidenceRefs.includes(expectedCandidateEvidenceRef)) {
     throw new Error("STAFF_APPROVAL_FINALIZER_OPERATOR_CANDIDATE_EVIDENCE_MISSING");
   }
   if (receipt.materialSha256 !== candidate.materialSha256) throw new Error("STAFF_APPROVAL_FINALIZER_MATERIAL_MISMATCH");
@@ -80,7 +89,7 @@ export function finalizeStaffCommunicationApproval(input: Readonly<{
     senderKey: candidate.senderKey,
     mailboxKey: candidate.mailboxKey,
     decisionPackageId: candidate.decisionPackageId,
-    evidenceIds: [...candidate.evidenceIds, candidateEvidenceRef],
+    evidenceIds: [...candidate.evidenceIds, expectedCandidateEvidenceRef],
     approvalEvidenceIds: receipt.evidenceRefs,
     writingProvenance: candidate.writingProvenance,
   });

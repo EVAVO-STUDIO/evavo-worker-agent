@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { decideCandidateRelationship } from "../src/core/businessCandidateRelationship";
 
-test("does not imply a role exists for an unsolicited graduate enquiry", () => {
+test("personalised unsolicited graduate enquiry remains a new enquiry rather than invented future interest", () => {
   const decision = decideCandidateRelationship({
     relationshipId: "rel-1",
     explicitRoleOpen: false,
@@ -16,11 +16,29 @@ test("does not imply a role exists for an unsolicited graduate enquiry", () => {
     clearFitEvidence: false,
   });
 
-  assert.equal(decision.stage, "future_interest");
+  assert.equal(decision.stage, "new_enquiry");
   assert.equal(decision.shouldReply, true);
+  assert.equal(decision.shouldRetainRelationship, false);
   assert.equal(decision.maySuggestRoleExists, false);
   assert.equal(decision.maySayMaterialsReviewed, false);
   assert.equal(decision.mayPromiseFutureContact, false);
+});
+
+test("future interest requires specific future relevance evidence", () => {
+  const decision = decideCandidateRelationship({
+    relationshipId: "rel-future",
+    explicitRoleOpen: false,
+    activeRecruitmentProcess: false,
+    materialsSupplied: false,
+    materialsActuallyReviewed: false,
+    relevantSkillsEvidence: false,
+    futureRelevanceEvidence: true,
+    personalizedEffort: true,
+    clearFitEvidence: false,
+  });
+
+  assert.equal(decision.stage, "future_interest");
+  assert.equal(decision.shouldRetainRelationship, true);
 });
 
 test("moves a genuinely relevant supplied portfolio into review warranted", () => {

@@ -15,8 +15,9 @@ import {
   type CommunicationSendEnvelope,
   type CommunicationSendMaterial,
 } from "./businessCommunicationSendEnvelope";
+import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT = "business_communication_execution_gate_v2" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT = "business_communication_execution_gate_v3" as const;
 
 export type CommunicationExecutionGateResult = Readonly<{
   contract: typeof BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT;
@@ -28,6 +29,7 @@ export type CommunicationExecutionGateResult = Readonly<{
   operatorApprovalValid: boolean;
   approvalContextValid: boolean;
   decisionValid: boolean;
+  memoryCheckpointValid: boolean;
   mailboxValid: boolean;
 }>;
 
@@ -50,12 +52,32 @@ function assessBoundDecision(
   return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
 }
 
+function assessRelationshipManagerMemoryCheckpoint(
+  decision: CommunicationDecisionPackage | null | undefined,
+  persistence: RelationshipManagerMemoryPersistenceResult | null | undefined,
+): Readonly<{ valid: boolean; reasons: readonly string[] }> {
+  if (!decision?.packageId.startsWith("relationship-cycle:")) {
+    return Object.freeze({ valid: true, reasons: Object.freeze([]) });
+  }
+  const expectedCycleId = decision.packageId.slice("relationship-cycle:".length);
+  const reasons: string[] = [];
+  if (!persistence) reasons.push("relationship_manager_memory_checkpoint_missing");
+  else {
+    if (persistence.contract !== "business_relationship_manager_memory_persistence_v1") reasons.push("relationship_manager_memory_checkpoint_contract_invalid");
+    if (persistence.cycleId !== expectedCycleId) reasons.push("relationship_manager_memory_checkpoint_cycle_mismatch");
+    if (!persistence.durable) reasons.push("relationship_manager_memory_checkpoint_not_durable");
+    if (persistence.blockers.length) reasons.push("relationship_manager_memory_checkpoint_has_blockers");
+  }
+  return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
+}
+
 export function evaluateCommunicationExecutionGate(input: Readonly<{
   mailbox: BusinessMailboxRecord;
   material: CommunicationSendMaterial;
   approval: CommunicationSendEnvelope;
   operatorApprovalReceipt?: OperatorCommunicationApprovalReceipt | null;
   decisionPackage?: CommunicationDecisionPackage | null;
+  relationshipManagerMemoryPersistence?: RelationshipManagerMemoryPersistenceResult | null;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
   contextChangesSinceDecision?: readonly ApprovalContextChange[];
@@ -98,6 +120,9 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
   const decision = assessBoundDecision(input.approval, input.decisionPackage);
   if (!decision.valid) reasons.push(...decision.reasons);
 
+  const memoryCheckpoint = assessRelationshipManagerMemoryCheckpoint(input.decisionPackage, input.relationshipManagerMemoryPersistence);
+  if (!memoryCheckpoint.valid) reasons.push(...memoryCheckpoint.reasons);
+
   const approval = verifyCommunicationSendEnvelope(input.approval, input.material, now);
   if (!approval.ok) reasons.push(...approval.reasons);
 
@@ -126,7 +151,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT,
-    allowed: mailboxValid && binding.ok && operatorApproval.valid && decision.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
+    allowed: mailboxValid && binding.ok && operatorApproval.valid && decision.valid && memoryCheckpoint.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
     reasons: Object.freeze([...new Set(reasons)]),
     preSend,
     approvalValid: approval.ok,
@@ -134,6 +159,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
     operatorApprovalValid: operatorApproval.valid,
     approvalContextValid: approvalContext.valid,
     decisionValid: decision.valid,
+    memoryCheckpointValid: memoryCheckpoint.valid,
     mailboxValid,
   });
 }

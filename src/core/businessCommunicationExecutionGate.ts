@@ -4,6 +4,10 @@ import {
   type ApprovalContextChange,
 } from "./businessCommunicationApprovalContext";
 import type { CommunicationDecisionPackage } from "./businessCommunicationDecisionPackage";
+import {
+  verifyOperatorApprovalAgainstSendEnvelope,
+  type OperatorCommunicationApprovalReceipt,
+} from "./businessCommunicationOperatorApproval";
 import { reviewBusinessCommunicationBeforeSend, type CommunicationDraftReviewInput } from "./businessCommunicationPreSendReview";
 import {
   verifyCommunicationApprovalBinding,
@@ -21,6 +25,7 @@ export type CommunicationExecutionGateResult = Readonly<{
   preSend: ReturnType<typeof reviewBusinessCommunicationBeforeSend>;
   approvalValid: boolean;
   approvalBindingValid: boolean;
+  operatorApprovalValid: boolean;
   approvalContextValid: boolean;
   decisionValid: boolean;
   mailboxValid: boolean;
@@ -49,6 +54,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
   mailbox: BusinessMailboxRecord;
   material: CommunicationSendMaterial;
   approval: CommunicationSendEnvelope;
+  operatorApprovalReceipt?: OperatorCommunicationApprovalReceipt | null;
   decisionPackage?: CommunicationDecisionPackage | null;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
@@ -56,6 +62,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
   now?: Date;
 }>): CommunicationExecutionGateResult {
   const reasons: string[] = [];
+  const now = input.now ?? new Date();
   let mailboxValid = true;
   try {
     assertMailboxUsable(input.mailbox);
@@ -81,10 +88,17 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
     }
   }
 
+  const operatorApproval = verifyOperatorApprovalAgainstSendEnvelope({
+    receipt: input.operatorApprovalReceipt,
+    envelope: input.approval,
+    now,
+  });
+  if (!operatorApproval.valid) reasons.push(...operatorApproval.reasons);
+
   const decision = assessBoundDecision(input.approval, input.decisionPackage);
   if (!decision.valid) reasons.push(...decision.reasons);
 
-  const approval = verifyCommunicationSendEnvelope(input.approval, input.material, input.now ?? new Date());
+  const approval = verifyCommunicationSendEnvelope(input.approval, input.material, now);
   if (!approval.ok) reasons.push(...approval.reasons);
 
   const approvalContext = assessCommunicationApprovalContext({
@@ -112,11 +126,12 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT,
-    allowed: mailboxValid && binding.ok && decision.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
+    allowed: mailboxValid && binding.ok && operatorApproval.valid && decision.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
     reasons: Object.freeze([...new Set(reasons)]),
     preSend,
     approvalValid: approval.ok,
     approvalBindingValid: binding.ok,
+    operatorApprovalValid: operatorApproval.valid,
     approvalContextValid: approvalContext.valid,
     decisionValid: decision.valid,
     mailboxValid,

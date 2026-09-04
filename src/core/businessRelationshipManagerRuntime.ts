@@ -1,5 +1,7 @@
 import type { ArtifactResolution } from "./businessArtifactResolver";
 import type { CalendarCommitmentVerification } from "./businessCalendarCommitmentVerifier";
+import type { CandidateRelationshipInput } from "./businessCandidateRelationship";
+import { communicationDecisionToMemoryCandidate } from "./businessCommunicationDecisionMemory";
 import {
   buildCommunicationDecisionPackage,
   type CommunicationDecisionPackage,
@@ -9,7 +11,6 @@ import {
   assessCommunicationEvidenceReadiness,
   type CommunicationEvidenceReadiness,
 } from "./businessCommunicationEvidenceReadiness";
-import type { CandidateRelationshipInput } from "./businessCandidateRelationship";
 import type { ChannelDecisionInput } from "./businessRelationshipConductPolicy";
 import type { RelationshipStaffBrief } from "./businessRelationshipStaffBrief";
 import type { RelationshipContextResolutionPlan } from "./businessRelationshipContextResolutionPlan";
@@ -23,9 +24,9 @@ import {
   type GmailRelationshipStateProjection,
 } from "./businessGmailRelationshipStateProjection";
 import {
-  gmailProjectionToMemoryIngestionObservations,
-  communicationDecisionToMemoryIngestionObservation,
-  type BrainMemoryIngestionObservation,
+  gmailRelationshipProjectionToMemoryObservations,
+  communicationDecisionCandidateToMemoryObservation,
+  type BusinessMemoryIngestionObservation,
 } from "./businessMemoryIngestionObservation";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_RUNTIME_CONTRACT = "business_relationship_manager_runtime_v1" as const;
@@ -69,7 +70,7 @@ export type RelationshipManagerCommunicationCycle = Readonly<{
   projection: GmailRelationshipStateProjection;
   evidenceReadiness: CommunicationEvidenceReadiness;
   decision: CommunicationDecisionPackage;
-  memoryObservations: readonly BrainMemoryIngestionObservation[];
+  memoryObservations: readonly BusinessMemoryIngestionObservation[];
   externalEffectPerformed: false;
 }>;
 
@@ -143,15 +144,17 @@ export function runRelationshipManagerCommunicationCycle(
     decisionAt,
   });
 
-  const gmailObservations = gmailProjectionToMemoryIngestionObservations(projection);
-  const decisionObservation = communicationDecisionToMemoryIngestionObservation({
+  const gmailObservations = gmailRelationshipProjectionToMemoryObservations(projection);
+  const decisionCandidate = communicationDecisionToMemoryCandidate({
     decision,
+    decidedAt: decision.decisionAt,
     relationshipId: input.gmail.relationshipId,
     personId: input.gmail.personId,
     organizationId: input.gmail.organizationId,
     projectId: input.gmail.projectId,
     threadId: projection.threadId,
   });
+  const decisionObservation = communicationDecisionCandidateToMemoryObservation(decisionCandidate);
 
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_MANAGER_RUNTIME_CONTRACT,

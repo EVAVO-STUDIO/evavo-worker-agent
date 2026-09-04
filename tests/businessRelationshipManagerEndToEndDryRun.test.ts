@@ -225,6 +225,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
   assert.equal(executionAuthorization.externalEffectPerformed, false);
   assert.equal(executionRequest.authorization.relationshipCycleId, cycle.cycleId);
   assert.equal(executionRequest.authorization.memoryCheckpoint?.cycleId, cycle.cycleId);
+  assert.equal(executionRequest.authorization.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
   assert.ok((executionRequest.authorization.memoryCheckpoint?.recordIds.length ?? 0) > 0);
 
   // Synthetic provider observation only. No Gmail connector/send API is invoked by this test.
@@ -261,6 +262,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
       approvalBindingSha256: approval.approvalBinding!.bindingSha256,
       decisionPackageId: approval.approvalBinding!.decisionPackageId,
       approvalEvidenceIds: approval.approvalBinding!.approvalEvidenceIds,
+      writingProvenance: approval.approvalBinding!.writingProvenance,
     },
     execution: {
       provider: executionReceipt.provider,
@@ -276,14 +278,18 @@ test("synthetic Gmail thread reaches verified sent lifecycle through governed dr
       decisionPackageId: executionReceipt.authorization.decisionPackageId,
       decisionOrigin: executionReceipt.authorization.decisionOrigin,
       relationshipCycleId: executionReceipt.authorization.relationshipCycleId,
+      writingProvenance: executionReceipt.authorization.writingProvenance ?? undefined,
       memoryCheckpointCycleId: executionReceipt.authorization.memoryCheckpoint?.cycleId ?? null,
       memoryCheckpointRecordIds: executionReceipt.authorization.memoryCheckpoint?.recordIds ?? [],
     },
   });
 
   assert.equal(executionRequest.authorization.operatorApprovalId, operatorApproval.approvalId);
+  assert.equal(lifecycle.contract, "business_communication_lifecycle_receipt_v3");
   assert.equal(lifecycle.decision.origin, "relationship_manager_cycle");
   assert.equal(lifecycle.decision.relationshipCycleId, cycle.cycleId);
+  assert.equal(lifecycle.approval?.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
+  assert.equal(lifecycle.execution?.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
   assert.equal(lifecycle.stage, "sent");
   assert.equal(lifecycle.executionVerified, true);
   assert.equal(lifecycle.communicationId, "gmail-message-synthetic-sent-1");

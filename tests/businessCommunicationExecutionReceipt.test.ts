@@ -5,7 +5,7 @@ import type { AuthorizedCommunicationExecutionRequest } from "../src/core/busine
 import { reconcileAuthorizedCommunicationExecution } from "../src/core/businessCommunicationExecutionReceipt";
 
 const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
-  contract: "business_communication_execution_request_v2",
+  contract: "business_communication_execution_request_v3",
   provider: "gmail",
   requestId: "gmail-send:approval-1:abcdef",
   authorizedAt: "2026-09-04T01:30:00.000Z",
@@ -33,6 +33,8 @@ const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     approvedAt: "2026-09-04T01:05:00.000Z",
     expiresAt: "2026-09-04T02:05:00.000Z",
     mailboxKey: "greg",
+    writingProvenance: null,
+    approvalCandidate: null,
     memoryCheckpoint: null,
   }),
 });
@@ -53,6 +55,7 @@ function observed(overrides: Record<string, unknown> = {}) {
 
 test("observed Gmail send reconciles to the exact authorized request", () => {
   const receipt = reconcileAuthorizedCommunicationExecution({ request, observed: observed() });
+  assert.equal(receipt.contract, "business_communication_execution_receipt_v3");
   assert.equal(receipt.providerMessageId, "gmail-message-sent-2");
   assert.equal(receipt.providerThreadId, request.threadId);
   assert.equal(receipt.authorization.materialSha256, request.authorization.materialSha256);
@@ -62,38 +65,59 @@ test("observed Gmail send reconciles to the exact authorized request", () => {
 });
 
 test("wrong thread fails closed", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ providerThreadId: "gmail-thread-other" }) }), /COMMUNICATION_EXECUTION_RECEIPT_THREAD_MISMATCH/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ providerThreadId: "gmail-thread-other" }) }), /THREAD_MISMATCH/);
 });
 
 test("recipient drift in provider result fails closed", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ to: ["other@example.com"] }) }), /COMMUNICATION_EXECUTION_RECEIPT_TO_MISMATCH/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ to: ["other@example.com"] }) }), /TO_MISMATCH/);
 });
 
 test("send observed at or after approval expiry fails closed", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sentAt: request.authorization.expiresAt }) }), /COMMUNICATION_EXECUTION_RECEIPT_AFTER_APPROVAL_EXPIRY/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sentAt: request.authorization.expiresAt }) }), /AFTER_APPROVAL_EXPIRY/);
 });
 
 test("provider message ID must be backed by returned source evidence", () => {
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sourceEvidenceRefs: ["gmail:message:other"] }) }), /COMMUNICATION_EXECUTION_RECEIPT_MESSAGE_EVIDENCE_MISSING/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request, observed: observed({ sourceEvidenceRefs: ["gmail:message:other"] }) }), /MESSAGE_EVIDENCE_MISSING/);
 });
 
-test("relationship cycle execution receipt requires the same durable memory checkpoint", () => {
+test("relationship cycle receipt requires durable memory, writing provenance and persisted approval candidate", () => {
+  const candidateEvidenceRef = `approval-candidate:${"c".repeat(64)}`;
   const cycleRequest: AuthorizedCommunicationExecutionRequest = {
     ...request,
     authorization: {
       ...request.authorization,
       decisionOrigin: "relationship_manager_cycle",
       relationshipCycleId: "cycle-1",
+      approvalEvidenceIds: [candidateEvidenceRef],
+      writingProvenance: {
+        handoffId: "handoff-1",
+        writingRequestId: "writing-request-1",
+        decisionOrigin: "relationship_manager_cycle",
+        relationshipCycleId: "cycle-1",
+      },
+      approvalCandidate: {
+        candidateId: "approval-candidate-1",
+        candidateSha256: "d".repeat(64),
+        recordId: "approval-candidate-record-1",
+        evidenceRef: candidateEvidenceRef,
+      },
       memoryCheckpoint: { cycleId: "cycle-1", recordIds: ["mem-1"] },
     },
   };
   assert.doesNotThrow(() => reconcileAuthorizedCommunicationExecution({ request: cycleRequest, observed: observed() }));
-  const broken: AuthorizedCommunicationExecutionRequest = {
+
+  const wrongMemory: AuthorizedCommunicationExecutionRequest = {
     ...cycleRequest,
     authorization: {
       ...cycleRequest.authorization,
       memoryCheckpoint: { cycleId: "other-cycle", recordIds: ["mem-1"] },
     },
   };
-  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request: broken, observed: observed() }), /MEMORY_CHECKPOINT_CYCLE_MISMATCH/);
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request: wrongMemory, observed: observed() }), /MEMORY_CHECKPOINT_CYCLE_MISMATCH/);
+
+  const missingCandidate: AuthorizedCommunicationExecutionRequest = {
+    ...cycleRequest,
+    authorization: { ...cycleRequest.authorization, approvalCandidate: null },
+  };
+  assert.throws(() => reconcileAuthorizedCommunicationExecution({ request: missingCandidate, observed: observed() }), /APPROVAL_CANDIDATE_MISSING/);
 });

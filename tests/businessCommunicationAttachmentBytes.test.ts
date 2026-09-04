@@ -11,7 +11,7 @@ const HELLO_SHA256 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e7304336293
 const bytes = new TextEncoder().encode("hello");
 
 const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
-  contract: "business_communication_execution_request_v1",
+  contract: "business_communication_execution_request_v2",
   provider: "gmail",
   requestId: "gmail-send:approval-1:abcdef",
   authorizedAt: "2026-09-04T01:30:00.000Z",
@@ -34,14 +34,17 @@ const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     materialSha256: "a".repeat(64),
     approvalBindingSha256: "b".repeat(64),
     decisionPackageId: "decision-1",
+    decisionOrigin: "direct",
+    relationshipCycleId: null,
     decisionEvidenceIds: Object.freeze(["gmail:message:gmail-message-1"]),
     approvalEvidenceIds: Object.freeze(["operator-approval:approval-1"]),
     operatorApprovalId: "operator-approval-1",
-    operatorApprovalSource: "operator",
+    operatorApprovalSource: "operator_approval",
     approvedBy: "greg",
     approvedAt: "2026-09-04T01:20:00.000Z",
     expiresAt: "2026-09-04T02:20:00.000Z",
     mailboxKey: "greg",
+    memoryCheckpoint: null,
   }),
 });
 
@@ -83,6 +86,7 @@ test("provider-ready request can only be materialized inside the approval window
   });
   assert.equal(ready.provider, "gmail");
   assert.equal(ready.attachments[0]?.sha256, HELLO_SHA256);
+  assert.equal(ready.authorization.decisionOrigin, "direct");
   assert.throws(() => materializeProviderReadyCommunicationRequest({
     request,
     actualAttachments: actual,

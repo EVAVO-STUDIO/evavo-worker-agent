@@ -1,4 +1,4 @@
-export const BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT = "business_communication_lifecycle_receipt_v3" as const;
+export const BUSINESS_COMMUNICATION_LIFECYCLE_RECEIPT_CONTRACT = "business_communication_lifecycle_receipt_v4" as const;
 
 export type CommunicationLifecycleStage =
   | "decided"
@@ -13,6 +13,13 @@ type LifecycleWritingProvenance = Readonly<{
   writingRequestId: string;
   decisionOrigin: "direct" | "relationship_manager_cycle";
   relationshipCycleId?: string;
+}>;
+
+type LifecycleApprovalCandidate = Readonly<{
+  candidateId: string;
+  candidateSha256: string;
+  recordId: string;
+  evidenceRef: string;
 }>;
 
 export type CommunicationLifecycleReceipt = Readonly<{
@@ -39,6 +46,7 @@ export type CommunicationLifecycleReceipt = Readonly<{
     decisionPackageId?: string;
     approvalEvidenceIds?: readonly string[];
     writingProvenance?: LifecycleWritingProvenance;
+    approvalCandidate?: LifecycleApprovalCandidate;
   }> | null;
   execution: Readonly<{
     provider: string;
@@ -55,6 +63,7 @@ export type CommunicationLifecycleReceipt = Readonly<{
     decisionOrigin?: "direct" | "relationship_manager_cycle";
     relationshipCycleId?: string | null;
     writingProvenance?: LifecycleWritingProvenance;
+    approvalCandidate?: LifecycleApprovalCandidate;
     memoryCheckpointCycleId?: string | null;
     memoryCheckpointRecordIds?: readonly string[];
   }> | null;
@@ -109,12 +118,38 @@ function writingProvenance(value: LifecycleWritingProvenance | undefined, prefix
   });
 }
 
+function approvalCandidate(value: LifecycleApprovalCandidate | undefined, prefix: string): LifecycleApprovalCandidate | undefined {
+  if (!value) return undefined;
+  const candidateSha256 = text(value.candidateSha256, `${prefix}_approval_candidate_hash`).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(candidateSha256)) {
+    throw new Error(`COMMUNICATION_LIFECYCLE_${prefix.toUpperCase()}_APPROVAL_CANDIDATE_HASH_INVALID`);
+  }
+  const evidenceRef = text(value.evidenceRef, `${prefix}_approval_candidate_evidence_ref`);
+  if (!/^approval-candidate:[a-f0-9]{64}$/.test(evidenceRef)) {
+    throw new Error(`COMMUNICATION_LIFECYCLE_${prefix.toUpperCase()}_APPROVAL_CANDIDATE_EVIDENCE_INVALID`);
+  }
+  return Object.freeze({
+    candidateId: text(value.candidateId, `${prefix}_approval_candidate_id`),
+    candidateSha256,
+    recordId: text(value.recordId, `${prefix}_approval_candidate_record_id`),
+    evidenceRef,
+  });
+}
+
 function sameWritingProvenance(left: LifecycleWritingProvenance | undefined, right: LifecycleWritingProvenance | undefined): boolean {
   if (!left || !right) return false;
   return left.handoffId === right.handoffId
     && left.writingRequestId === right.writingRequestId
     && left.decisionOrigin === right.decisionOrigin
     && (left.relationshipCycleId ?? null) === (right.relationshipCycleId ?? null);
+}
+
+function sameApprovalCandidate(left: LifecycleApprovalCandidate | undefined, right: LifecycleApprovalCandidate | undefined): boolean {
+  if (!left || !right) return false;
+  return left.candidateId === right.candidateId
+    && left.candidateSha256 === right.candidateSha256
+    && left.recordId === right.recordId
+    && left.evidenceRef === right.evidenceRef;
 }
 
 export function buildCommunicationLifecycleReceipt(input: Readonly<{
@@ -156,9 +191,13 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     ...(optionalText(input.approval.decisionPackageId, "approval_decision_package_id") ? { decisionPackageId: optionalText(input.approval.decisionPackageId, "approval_decision_package_id") } : {}),
     ...(input.approval.approvalEvidenceIds ? { approvalEvidenceIds: uniqueEvidence(input.approval.approvalEvidenceIds) } : {}),
     ...(input.approval.writingProvenance ? { writingProvenance: writingProvenance(input.approval.writingProvenance, "approval") } : {}),
+    ...(input.approval.approvalCandidate ? { approvalCandidate: approvalCandidate(input.approval.approvalCandidate, "approval") } : {}),
   }) : null;
   if (approval && approval.approvedAt < decisionAt) throw new Error("COMMUNICATION_LIFECYCLE_APPROVAL_BEFORE_DECISION");
   if (approval?.decisionPackageId && approval.decisionPackageId !== input.decision.packageId) throw new Error("COMMUNICATION_LIFECYCLE_APPROVAL_DECISION_MISMATCH");
+  if (approval?.approvalCandidate && !approval.approvalEvidenceIds?.includes(approval.approvalCandidate.evidenceRef)) {
+    throw new Error("COMMUNICATION_LIFECYCLE_APPROVAL_CANDIDATE_EVIDENCE_NOT_BOUND");
+  }
 
   const execution = input.execution ? Object.freeze({
     provider: text(input.execution.provider, "execution_provider"),
@@ -175,6 +214,7 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     ...(input.execution.decisionOrigin ? { decisionOrigin: input.execution.decisionOrigin } : {}),
     ...(input.execution.relationshipCycleId !== undefined ? { relationshipCycleId: input.execution.relationshipCycleId } : {}),
     ...(input.execution.writingProvenance ? { writingProvenance: writingProvenance(input.execution.writingProvenance, "execution") } : {}),
+    ...(input.execution.approvalCandidate ? { approvalCandidate: approvalCandidate(input.execution.approvalCandidate, "execution") } : {}),
     ...(input.execution.memoryCheckpointCycleId !== undefined ? { memoryCheckpointCycleId: input.execution.memoryCheckpointCycleId } : {}),
     ...(input.execution.memoryCheckpointRecordIds ? { memoryCheckpointRecordIds: uniqueEvidence(input.execution.memoryCheckpointRecordIds) } : {}),
   }) : null;
@@ -223,7 +263,20 @@ export function buildCommunicationLifecycleReceipt(input: Readonly<{
     }
   }
 
-  const executionVerified = commonExecutionVerified && provenanceVerified && writingVerified;
+  let approvalCandidateVerified = false;
+  if (commonExecutionVerified && approval && execution) {
+    if (decisionOrigin === "relationship_manager_cycle") {
+      approvalCandidateVerified = sameApprovalCandidate(approval.approvalCandidate, execution.approvalCandidate)
+        && Boolean(approval.approvalCandidate?.evidenceRef)
+        && Boolean(execution.approvalCandidate?.evidenceRef);
+    } else if (!approval.approvalCandidate && !execution.approvalCandidate) {
+      approvalCandidateVerified = true;
+    } else {
+      approvalCandidateVerified = sameApprovalCandidate(approval.approvalCandidate, execution.approvalCandidate);
+    }
+  }
+
+  const executionVerified = commonExecutionVerified && provenanceVerified && writingVerified && approvalCandidateVerified;
   if (execution && !executionVerified) blockers.push("execution_not_reconciled_to_authorized_request");
   if (executionVerified && execution!.providerThreadId !== text(input.threadId, "thread_id")) blockers.push("execution_thread_mismatch");
 

@@ -15,6 +15,10 @@ import {
 import { finalizeStaffCommunicationApproval } from "../src/core/businessStaffCommunicationApprovalFinalizer";
 import { runRelationshipManagerCommunicationCycle } from "../src/core/businessRelationshipManagerRuntime";
 
+const candidateDocumentId = "doc_approval_candidate_1";
+const candidateVersionId = "ver_approval_candidate_1";
+const candidateRecordId = `${candidateDocumentId}:${candidateVersionId}`;
+
 function cycle() {
   return runRelationshipManagerCommunicationCycle({
     cycleId: "cycle-prepare-1",
@@ -178,10 +182,21 @@ function persistenceFor(preparation = prepare()) {
       candidateSha256: request.candidateSha256,
       status: "appended",
       durable: true,
-      recordId: "approval-candidate-record-1",
-      journalPosition: 42,
+      recordId: candidateRecordId,
+      journalPosition: "receipt_approval_candidate_1",
       recordedAt: "2026-09-04T01:03:10Z",
       storageAuthority: { system: "evavo-storage", instanceId: "local-primary" },
+      storage: {
+        model: "immutable_document_version",
+        vaultId: "internal",
+        logicalPath: `RelationshipManager/ApprovalCandidates/${request.candidateId}/${request.candidateSha256}.json`,
+        documentId: candidateDocumentId,
+        versionId: candidateVersionId,
+        sha256: request.candidateSha256,
+        sizeBytes: 2048,
+        idempotentReplay: false,
+        receiptId: "receipt_approval_candidate_1",
+      },
     },
   });
 }
@@ -284,7 +299,7 @@ test("human approval finalization remains non-executing and binds durable candid
   });
   assert.equal(finalized.humanApprovalRecorded, true);
   assert.equal(finalized.externalExecutionAllowed, false);
-  assert.equal(finalized.approvalCandidateRecordId, "approval-candidate-record-1");
+  assert.equal(finalized.approvalCandidateRecordId, candidateRecordId);
   assert.equal(finalized.approvalCandidateSha256, persisted.candidatePersistence.candidateSha256);
   assert.ok(finalized.approval.approvalBinding?.approvalEvidenceIds.includes(persisted.candidatePersistence.approvalEvidenceRef!));
 });

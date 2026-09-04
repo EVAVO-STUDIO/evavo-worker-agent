@@ -24,7 +24,7 @@ test("non approval-grade staff context blocks an otherwise plausible reply", () 
   const result = buildCommunicationDecisionPackage({
     ...base,
     staffBrief: {
-      contract: "business_relationship_staff_brief_v2",
+      contract: "business_relationship_staff_brief_v3",
       relationshipId: "rel-1",
       objective: "Reply safely.",
       situation: "Proposal requested.",
@@ -36,6 +36,7 @@ test("non approval-grade staff context blocks an otherwise plausible reply", () 
       obligationsToRespect: [],
       priorDecisionsToRespect: [],
       relationshipRisks: ["Document state incomplete."],
+      staleDomains: [],
       sourceRefs: ["gmail:m1"],
       approvalGradeReady: false,
     },

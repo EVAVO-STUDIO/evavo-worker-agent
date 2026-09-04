@@ -13,7 +13,9 @@ const files = {
   approvalFinalizer: "src/core/businessStaffCommunicationApprovalFinalizer.ts",
   executionRuntime: "src/core/businessRelationshipManagerExecutionRuntime.ts",
   executionGate: "src/core/businessCommunicationExecutionGate.ts",
+  executionRequest: "src/core/businessCommunicationExecutionRequest.ts",
   lifecycle: "src/core/businessCommunicationLifecycleReceipt.ts",
+  learningProvenance: "src/core/businessCommunicationOutcomeLearningProvenance.ts",
   dryRun: "tests/businessRelationshipManagerEndToEndDryRun.test.ts",
 };
 
@@ -26,8 +28,6 @@ const forbidToken = (key, token, message) => {
   if (source[key].includes(token)) failures.push(message);
 };
 
-// The HTTP preview route must remain reasoning-only. It must never acquire
-// approval, persistence, execution or provider-send primitives directly.
 for (const token of [
   "createCommunicationSendEnvelope",
   "finalizeStaffCommunicationApproval",
@@ -43,9 +43,6 @@ for (const token of [
 requireToken("admin", "externalExecutionAllowed: false", "Relationship Manager admin preview must advertise externalExecutionAllowed:false");
 requireToken("admin", "sendsEmail: false", "Relationship Manager admin preview must advertise sendsEmail:false");
 
-// Canonical approval preparation must bind the actual cycle, durable memory and
-// Writing Studio output, then persist the immutable candidate before any human
-// approval can be recorded.
 requireToken("approvalRuntime", "prepareStaffCommunicationApprovalCandidate", "Approval runtime must use the canonical staff approval candidate builder");
 requireToken("approvalRuntime", "bindRelationshipManagerApprovalCandidatePersistence", "Approval runtime must expose the candidate-persistence transition");
 requireToken("approvalRuntime", "readyForCandidatePersistence: true", "Unpersisted approval preparation must advertise persistence as the next state");
@@ -62,21 +59,22 @@ requireToken("approvalFinalizer", "candidatePersistence", "Human approval finali
 requireToken("approvalFinalizer", "STAFF_APPROVAL_FINALIZER_CANDIDATE_NOT_DURABLE", "Human approval finalization must fail closed on non-durable candidates");
 requireToken("approvalFinalizer", "STAFF_APPROVAL_FINALIZER_OPERATOR_CANDIDATE_EVIDENCE_MISSING", "Human approval receipt must reference the durable candidate identity");
 
-// Provider authorization must be available only through the Relationship
-// Manager execution runtime, which delegates to the canonical communication
-// execution gate/request builder and itself performs no external effect.
 requireToken("executionRuntime", "authorizeCommunicationExecutionRequest", "Relationship Manager execution runtime must delegate to the canonical execution request authorizer");
+requireToken("executionRuntime", "approvalCandidatePersistenceEvidenceRef", "Execution runtime must re-derive the persisted candidate evidence identity");
+requireToken("executionRuntime", "RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_CANDIDATE_EVIDENCE_NOT_BOUND", "Execution runtime must require persisted candidate evidence in the approval binding");
 requireToken("executionRuntime", "externalEffectPerformed: false", "Relationship Manager execution runtime must remain provider-neutral");
 requireToken("executionRuntime", "RELATIONSHIP_MANAGER_EXECUTION_RUNTIME_WRITING_PROVENANCE_REQUIRED", "Execution runtime must require Writing Studio provenance");
 forbidToken("executionRuntime", "gmail.users.messages.send", "Relationship Manager execution runtime must not call Gmail send directly");
 
 requireToken("executionGate", "decision_writing_provenance_missing", "Execution gate must block canonical cycles without approved Writing Studio provenance");
-requireToken("lifecycle", "business_communication_lifecycle_receipt_v3", "Lifecycle must use the Writing Studio provenance-aware v3 contract");
+requireToken("executionRequest", "business_communication_execution_request_v3", "Provider authorization must use execution request v3");
+requireToken("executionRequest", "approvalCandidate", "Provider authorization must carry persisted approval candidate identity");
+requireToken("lifecycle", "business_communication_lifecycle_receipt_v4", "Lifecycle must use persisted-candidate-aware v4 contract");
 requireToken("lifecycle", "sameWritingProvenance", "Lifecycle must reconcile approval and execution Writing Studio provenance");
+requireToken("lifecycle", "sameApprovalCandidate", "Lifecycle must reconcile approval and execution persisted candidate identity");
+requireToken("learningProvenance", "business_communication_lifecycle_receipt_v4", "Outcome learning must require a verified lifecycle v4");
+requireToken("learningProvenance", "approvalCandidateSha256", "Outcome learning must retain persisted approval candidate lineage");
 
-// The principal dry run is the architectural canary. It must exercise the
-// governed path, including candidate persistence, and may not fall back to
-// manually created approvals/requests.
 for (const token of [
   "prepareRelationshipManagerCommunicationForApproval",
   "buildStaffApprovalCandidateWriteRequest",
@@ -90,6 +88,8 @@ for (const token of [
 for (const token of ["createCommunicationSendEnvelope", "assertAuthorizedCommunicationExecutionRequest"]) {
   forbidToken("dryRun", token, `End-to-end dry run must not bypass governed flow via ${token}`);
 }
+requireToken("dryRun", "approvalCandidate", "End-to-end dry run must carry persisted approval candidate into lifecycle");
+requireToken("dryRun", "business_communication_lifecycle_receipt_v4", "End-to-end dry run must verify lifecycle v4");
 requireToken("dryRun", "No Gmail connector/send API is invoked", "End-to-end dry run must explicitly remain non-sending");
 
 if (failures.length) {
@@ -100,13 +100,16 @@ if (failures.length) {
 
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v2_durable_approval_candidate",
+  contract: "relationship_manager_governed_flow_check_v3_persisted_candidate_lineage",
   adminPreviewSendCapable: false,
   approvalRequiresDurableCycle: true,
   approvalRequiresWritingProvenance: true,
   approvalRequiresDurableCandidate: true,
   humanApprovalBindsPersistedCandidateEvidence: true,
+  providerAuthorizationCarriesPersistedCandidate: true,
   executionUsesCanonicalGate: true,
   lifecycleReconcilesWritingProvenance: true,
+  lifecycleReconcilesPersistedCandidate: true,
+  learningRetainsPersistedCandidate: true,
   dryRunUsesGovernedPath: true,
 }, null, 2));

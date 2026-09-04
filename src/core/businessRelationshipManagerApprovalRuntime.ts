@@ -84,6 +84,9 @@ export function prepareRelationshipManagerCommunicationForApproval(input: Readon
   if (input.handoff.staffContext.relationshipCycleId !== input.cycle.cycleId) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_HANDOFF_CYCLE_MISMATCH");
   }
+  if (input.cycle.projection.relationshipId && input.handoff.staffContext.relationshipId !== input.cycle.projection.relationshipId) {
+    throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_RELATIONSHIP_MISMATCH");
+  }
   if (input.threadId.trim() !== input.cycle.projection.threadId) {
     throw new Error("RELATIONSHIP_MANAGER_APPROVAL_RUNTIME_THREAD_MISMATCH");
   }

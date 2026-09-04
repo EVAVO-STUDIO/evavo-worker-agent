@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { buildCommunicationDecisionPackage } from "../src/core/businessCommunicationDecisionPackage";
+
+const NOW = "2026-09-04T11:39:00+10:00";
+
+test("graduate enquiry stays async and does not imply a role", () => {
+  const result = buildCommunicationDecisionPackage({
+    packageId: "pkg-1",
+    scenario: "graduate_or_candidate",
+    objective: "Respond respectfully to a graduate enquiry.",
+    thread: {
+      threadId: "thread-ashley",
+      previousState: [],
+      latestObservedState: [
+        { id: "req-1", kind: "request", statement: "Consider my application and portfolio.", status: "open", owner: "evavo", sourceEvidenceIds: ["email-ashley"] },
+      ],
+    },
+    obligations: [],
+    channel: {
+      currentChannel: "email",
+      canResolveInWriting: true,
+      explicitMeetingRequest: false,
+      needsRealTimeBackAndForth: false,
+    },
+    candidate: {
+      relationshipId: "rel-ashley",
+      explicitRoleOpen: false,
+      activeRecruitmentProcess: false,
+      materialsSupplied: true,
+      materialsActuallyReviewed: false,
+      relevantSkillsEvidence: false,
+      futureRelevanceEvidence: false,
+      personalizedEffort: true,
+      clearFitEvidence: false,
+    },
+    evidenceIds: ["email-ashley"],
+    evidenceConfidence: 95,
+  });
+
+  assert.equal(result.disposition, "reply");
+  assert.equal(result.recommendedChannel, "email");
+  assert.equal(result.meetingJustified, false);
+  assert.equal(result.candidateStage, "future_interest");
+  assert.ok(result.prohibitedImplications.some((item) => item.includes("role exists")));
+});
+
+test("relevant supplied materials can require review before reply", () => {
+  const result = buildCommunicationDecisionPackage({
+    packageId: "pkg-2",
+    scenario: "graduate_or_candidate",
+    objective: "Handle a potentially relevant candidate enquiry.",
+    thread: {
+      threadId: "thread-2",
+      previousState: [],
+      latestObservedState: [
+        { id: "req-1", kind: "request", statement: "Please consider my portfolio.", status: "open", owner: "evavo", sourceEvidenceIds: ["email-1"] },
+      ],
+    },
+    obligations: [],
+    channel: { currentChannel: "email", canResolveInWriting: true },
+    candidate: {
+      relationshipId: "rel-2",
+      explicitRoleOpen: false,
+      activeRecruitmentProcess: false,
+      materialsSupplied: true,
+      materialsActuallyReviewed: false,
+      relevantSkillsEvidence: true,
+      futureRelevanceEvidence: true,
+      personalizedEffort: true,
+      clearFitEvidence: false,
+    },
+    evidenceIds: ["email-1", "portfolio-metadata"],
+    evidenceConfidence: 90,
+  });
+
+  assert.equal(result.disposition, "review_then_reply");
+  assert.equal(result.candidateStage, "review_warranted");
+});
+
+test("low evidence confidence escalates instead of bluffing", () => {
+  const result = buildCommunicationDecisionPackage({
+    packageId: "pkg-3",
+    scenario: "general",
+    objective: "Answer safely.",
+    thread: {
+      threadId: "thread-3",
+      previousState: [],
+      latestObservedState: [
+        { id: "q1", kind: "question", statement: "Can you confirm the rate?", status: "open", owner: "evavo", sourceEvidenceIds: ["email-1"] },
+      ],
+    },
+    obligations: [],
+    channel: { currentChannel: "email", canResolveInWriting: true },
+    evidenceIds: ["email-1"],
+    evidenceConfidence: 45,
+  });
+
+  assert.equal(result.disposition, "escalate");
+});

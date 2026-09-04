@@ -1,6 +1,6 @@
 import type { Relationship360EvidenceItem } from "./businessRelationship360Context";
 
-export const BUSINESS_RELATIONSHIP_CONTEXT_FRESHNESS_CONTRACT = "business_relationship_context_freshness_v2" as const;
+export const BUSINESS_RELATIONSHIP_CONTEXT_FRESHNESS_CONTRACT = "business_relationship_context_freshness_v3" as const;
 
 export type ContextFreshnessDomain = Relationship360EvidenceItem["domain"];
 
@@ -36,6 +36,7 @@ export const DEFAULT_CONTEXT_FRESHNESS_RULES: readonly ContextFreshnessRule[] = 
   { domain: "identity", maximumAgeMinutes: 30 * 24 * 60, staleBlocksApproval: true },
   { domain: "gmail", maximumAgeMinutes: 60, staleBlocksApproval: true },
   { domain: "operations", maximumAgeMinutes: 6 * 60, staleBlocksApproval: true },
+  { domain: "careers", maximumAgeMinutes: 60, staleBlocksApproval: true },
   { domain: "support", maximumAgeMinutes: 60, staleBlocksApproval: true },
   { domain: "document", maximumAgeMinutes: 6 * 60, staleBlocksApproval: true },
   { domain: "calendar", maximumAgeMinutes: 15, staleBlocksApproval: true },

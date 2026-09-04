@@ -103,6 +103,19 @@ test("merge rejects an older state snapshot when both carry transition chronolog
   assert.throws(() => mergeBusinessObligations([newer], [older]), /STATE_REGRESSION/);
 });
 
+test("merge rejects a state change that drops established transition chronology", () => {
+  const evidenced = obligation({
+    status: "uncertain",
+    stateEvidenceIds: ["gmail:m3"],
+    lastTransitionAt: "2026-09-04T03:00:00Z",
+  });
+  const legacyShapedChange = obligation({
+    status: "open",
+    lastTransitionAt: null,
+  });
+  assert.throws(() => mergeBusinessObligations([evidenced], [legacyShapedChange]), /STATE_CHRONOLOGY_MISSING/);
+});
+
 test("snapshot resolves EVAVO as next action owner when EVAVO owes work", () => {
   const snapshot = buildObligationLedgerSnapshot([
     obligation(),

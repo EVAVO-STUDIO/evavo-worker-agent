@@ -1,6 +1,6 @@
 import type { CommunicationOutcomeAssessment } from "./businessCommunicationOutcome";
 
-export const BUSINESS_COMMUNICATION_OUTCOME_MEMORY_CONTRACT = "business_communication_outcome_memory_v2" as const;
+export const BUSINESS_COMMUNICATION_OUTCOME_MEMORY_CONTRACT = "business_communication_outcome_memory_v3" as const;
 
 export type CommunicationOutcomeLearningProvenance = Readonly<{
   decisionPackageId: string;
@@ -8,6 +8,9 @@ export type CommunicationOutcomeLearningProvenance = Readonly<{
   relationshipCycleId?: string | null;
   handoffId?: string | null;
   writingRequestId?: string | null;
+  approvalCandidateId?: string | null;
+  approvalCandidateSha256?: string | null;
+  approvalCandidateRecordId?: string | null;
   providerMessageId?: string | null;
 }>;
 
@@ -33,6 +36,9 @@ export type CommunicationOutcomeMemoryRecord = Readonly<{
     relationshipCycleId?: string;
     handoffId?: string;
     writingRequestId?: string;
+    approvalCandidateId?: string;
+    approvalCandidateSha256?: string;
+    approvalCandidateRecordId?: string;
     providerMessageId?: string;
   }>;
   canonicalOwner: "evavo-worker-agent";
@@ -58,10 +64,19 @@ function validateProvenance(
   const relationshipCycleId = optional(value.relationshipCycleId);
   const handoffId = optional(value.handoffId);
   const writingRequestId = optional(value.writingRequestId);
+  const approvalCandidateId = optional(value.approvalCandidateId);
+  const approvalCandidateSha256 = optional(value.approvalCandidateSha256)?.toLowerCase();
+  const approvalCandidateRecordId = optional(value.approvalCandidateRecordId);
   const providerMessageId = optional(value.providerMessageId);
+  if (approvalCandidateSha256 && !/^[a-f0-9]{64}$/.test(approvalCandidateSha256)) {
+    throw new Error("COMMUNICATION_OUTCOME_MEMORY_APPROVAL_CANDIDATE_HASH_INVALID");
+  }
   if (value.decisionOrigin === "relationship_manager_cycle") {
     if (!relationshipCycleId) throw new Error("COMMUNICATION_OUTCOME_MEMORY_RELATIONSHIP_CYCLE_REQUIRED");
     if (!handoffId || !writingRequestId) throw new Error("COMMUNICATION_OUTCOME_MEMORY_WRITING_PROVENANCE_REQUIRED");
+    if (!approvalCandidateId || !approvalCandidateSha256 || !approvalCandidateRecordId) {
+      throw new Error("COMMUNICATION_OUTCOME_MEMORY_APPROVAL_CANDIDATE_PROVENANCE_REQUIRED");
+    }
   } else if (relationshipCycleId) {
     throw new Error("COMMUNICATION_OUTCOME_MEMORY_DIRECT_CYCLE_FORBIDDEN");
   }
@@ -71,6 +86,9 @@ function validateProvenance(
     ...(relationshipCycleId ? { relationshipCycleId } : {}),
     ...(handoffId ? { handoffId } : {}),
     ...(writingRequestId ? { writingRequestId } : {}),
+    ...(approvalCandidateId ? { approvalCandidateId } : {}),
+    ...(approvalCandidateSha256 ? { approvalCandidateSha256 } : {}),
+    ...(approvalCandidateRecordId ? { approvalCandidateRecordId } : {}),
     ...(providerMessageId ? { providerMessageId } : {}),
   });
 }
@@ -92,6 +110,7 @@ export function communicationOutcomeToMemoryRecord(
     ...(validatedProvenance ? [`Decision package: ${validatedProvenance.decisionPackageId}`] : []),
     ...(validatedProvenance?.relationshipCycleId ? [`Relationship cycle: ${validatedProvenance.relationshipCycleId}`] : []),
     ...(validatedProvenance?.writingRequestId ? [`Writing request: ${validatedProvenance.writingRequestId}`] : []),
+    ...(validatedProvenance?.approvalCandidateRecordId ? [`Approval candidate record: ${validatedProvenance.approvalCandidateRecordId}`] : []),
     ...(assessment.obligationsSatisfied.length ? [`Satisfied obligations: ${assessment.obligationsSatisfied.join(", ")}`] : []),
     ...(assessment.newObligations.length ? [`New obligations: ${assessment.newObligations.join(", ")}`] : []),
     ...assessment.reasons,
@@ -108,6 +127,7 @@ export function communicationOutcomeToMemoryRecord(
     tags.push(`decision-package:${validatedProvenance.decisionPackageId}`);
     if (validatedProvenance.relationshipCycleId) tags.push(`relationship-cycle:${validatedProvenance.relationshipCycleId}`);
     if (validatedProvenance.writingRequestId) tags.push(`writing-request:${validatedProvenance.writingRequestId}`);
+    if (validatedProvenance.approvalCandidateId) tags.push(`approval-candidate:${validatedProvenance.approvalCandidateId}`);
   }
   return Object.freeze({
     kind: "outcome",
@@ -135,6 +155,9 @@ export function communicationOutcomeToMemoryRecord(
         ...(validatedProvenance.relationshipCycleId ? { relationshipCycleId: validatedProvenance.relationshipCycleId } : {}),
         ...(validatedProvenance.handoffId ? { handoffId: validatedProvenance.handoffId } : {}),
         ...(validatedProvenance.writingRequestId ? { writingRequestId: validatedProvenance.writingRequestId } : {}),
+        ...(validatedProvenance.approvalCandidateId ? { approvalCandidateId: validatedProvenance.approvalCandidateId } : {}),
+        ...(validatedProvenance.approvalCandidateSha256 ? { approvalCandidateSha256: validatedProvenance.approvalCandidateSha256 } : {}),
+        ...(validatedProvenance.approvalCandidateRecordId ? { approvalCandidateRecordId: validatedProvenance.approvalCandidateRecordId } : {}),
         ...(validatedProvenance.providerMessageId ? { providerMessageId: validatedProvenance.providerMessageId } : {}),
       } : {}),
     }),

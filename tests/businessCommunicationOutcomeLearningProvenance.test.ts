@@ -11,6 +11,13 @@ const writingProvenance = {
   relationshipCycleId: "cycle-1",
 };
 
+const approvalCandidate = {
+  candidateId: "approval-candidate-1",
+  candidateSha256: "d".repeat(64),
+  recordId: "approval-candidate-record-1",
+  evidenceRef: `approval-candidate:${"c".repeat(64)}`,
+};
+
 function verifiedLifecycle() {
   return buildCommunicationLifecycleReceipt({
     lifecycleId: "life-1",
@@ -30,8 +37,9 @@ function verifiedLifecycle() {
       materialSha256: "a".repeat(64),
       approvalBindingSha256: "b".repeat(64),
       decisionPackageId: "relationship-cycle:cycle-1",
-      approvalEvidenceIds: ["operator-approval:1"],
+      approvalEvidenceIds: [approvalCandidate.evidenceRef],
       writingProvenance,
+      approvalCandidate,
     },
     execution: {
       provider: "gmail",
@@ -48,18 +56,23 @@ function verifiedLifecycle() {
       decisionOrigin: "relationship_manager_cycle",
       relationshipCycleId: "cycle-1",
       writingProvenance,
+      approvalCandidate,
       memoryCheckpointCycleId: "cycle-1",
       memoryCheckpointRecordIds: ["memory:1"],
     },
   });
 }
 
-test("derives exact decision and Writing Studio lineage only from verified execution", () => {
+test("derives decision, Writing Studio and persisted approval-candidate lineage only from verified execution", () => {
   const result = deriveCommunicationOutcomeLearningProvenance(verifiedLifecycle());
+  assert.equal(result.contract, "business_communication_outcome_learning_provenance_v2");
   assert.equal(result.provenance.decisionPackageId, "relationship-cycle:cycle-1");
   assert.equal(result.provenance.relationshipCycleId, "cycle-1");
   assert.equal(result.provenance.handoffId, "handoff-1");
   assert.equal(result.provenance.writingRequestId, "writing-request-1");
+  assert.equal(result.provenance.approvalCandidateId, "approval-candidate-1");
+  assert.equal(result.provenance.approvalCandidateSha256, "d".repeat(64));
+  assert.equal(result.provenance.approvalCandidateRecordId, "approval-candidate-record-1");
   assert.equal(result.provenance.providerMessageId, "gmail-sent-1");
 });
 

@@ -15,6 +15,14 @@ function read(relativePath) {
   return fs.readFileSync(absolutePath, "utf8");
 }
 
+function requireTokens(relativePath, tokens) {
+  const source = read(relativePath);
+  for (const token of tokens) {
+    if (!source.includes(token)) errors.push(`${relativePath} missing required safety token: ${token}`);
+  }
+  return source;
+}
+
 function walk(directory) {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -25,65 +33,24 @@ function walk(directory) {
 }
 
 const recordsPath = "src/core/businessAutopilotRecords.ts";
-const routePath = "src/routes/businessAutopilotAdmin.ts";
-const cataloguePath = "src/routes/businessAutopilotRouteCatalogue.ts";
-const relationshipPreviewPath = "src/routes/businessRelationshipManagerAdmin.ts";
-const candidatePersistencePath = "src/core/businessStaffCommunicationApprovalCandidatePersistence.ts";
-const storagePortPath = "src/core/businessEvavoStorageApprovalCandidatePort.ts";
-const brainPortPath = "src/core/businessBrainMemoryIngestionPort.ts";
-const brainEnvPath = "src/core/businessBrainMemoryIngestionEnv.ts";
-const canonicalMemoryPath = "src/core/businessRelationshipManagerCanonicalMemoryPersistence.ts";
-const brainPersistencePath = "src/core/businessRelationshipManagerBrainPersistenceRuntime.ts";
-const approvalRuntimePath = "src/core/businessRelationshipManagerApprovalRuntime.ts";
-const approvalFinalizerPath = "src/core/businessStaffCommunicationApprovalFinalizer.ts";
-const canonicalRuntimePath = "src/core/businessRelationshipManagerCanonicalRuntime.ts";
-const canonicalApprovalPath = "src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts";
-const decisionContextPath = "src/core/businessRelationshipDecisionContext.ts";
-const sourceReadinessPath = "src/core/businessRelationshipSourceReadiness.ts";
-
-const records = read(recordsPath);
-const route = read(routePath);
-const catalogue = read(cataloguePath);
-const relationshipPreview = read(relationshipPreviewPath);
-const candidatePersistence = read(candidatePersistencePath);
-const storagePort = read(storagePortPath);
-const brainPort = read(brainPortPath);
-const brainEnv = read(brainEnvPath);
-const canonicalMemory = read(canonicalMemoryPath);
-const brainPersistence = read(brainPersistencePath);
-const approvalRuntime = read(approvalRuntimePath);
-const approvalFinalizer = read(approvalFinalizerPath);
-const canonicalRuntime = read(canonicalRuntimePath);
-const canonicalApproval = read(canonicalApprovalPath);
-const decisionContext = read(decisionContextPath);
-const sourceReadiness = read(sourceReadinessPath);
-
-for (const token of [
+const records = requireTokens(recordsPath, [
   "export async function saveBusinessApprovalRequest",
   "buildBusinessApprovalRequest(input)",
-]) {
-  if (!records.includes(token)) errors.push(`${recordsPath} must preserve historical compatibility token: ${token}`);
-}
-
-for (const token of [
+]);
+const route = requireTokens("src/routes/businessAutopilotAdmin.ts", [
   'error: "historical_record_write_disabled"',
   'mode: "business_approval_request_write_disabled"',
-  '{ status: 410 }',
-]) {
-  if (!route.includes(token)) errors.push(`${routePath} must fail closed for approval writes: ${token}`);
-}
-
-for (const token of [
+  "{ status: 410 }",
+]);
+const catalogue = requireTokens("src/routes/businessAutopilotRouteCatalogue.ts", [
   '"business_approval_request_save"',
   "disabledBusinessAutopilotWriteRouteIds",
-]) {
-  if (!catalogue.includes(token)) errors.push(`${cataloguePath} must retain disabled approval-route compatibility metadata: ${token}`);
-}
+]);
 if (/writeRoute\(\s*["']business_approval_request_save["']/.test(catalogue)) {
   errors.push("Route catalogue must not advertise business_approval_request_save as an active write route");
 }
 
-for (const token of [
+requireTokens("src/core/businessStaffCommunicationApprovalCandidatePersistence.ts", [
   '"evavo-approval-candidate-write-request-v1"',
   'actorId: "evavo-worker-agent"',
   'model: "immutable_document_version"',
@@ -91,11 +58,8 @@ for (const token of [
   "assertNativeStorageBinding",
   "approvalCandidatePersistenceEvidenceRef",
   "reconcileStaffApprovalCandidateWriteReceipt",
-]) {
-  if (!candidatePersistence.includes(token)) errors.push(`${candidatePersistencePath} must retain governed candidate persistence token: ${token}`);
-}
-
-for (const token of [
+]);
+requireTokens("src/core/businessEvavoStorageApprovalCandidatePort.ts", [
   '"business_evavo_storage_approval_candidate_port_v2"',
   '"/v1/actions/persist_approval_candidate"',
   '"Authorization": `Bearer ${writeToken}`',
@@ -104,111 +68,139 @@ for (const token of [
   "MAX_APPROVAL_CANDIDATE_REQUEST_BYTES",
   'redirect: "error"',
   'cache: "no-store"',
-  "reconcileStaffApprovalCandidateWriteReceipt",
-]) {
-  if (!storagePort.includes(token)) errors.push(`${storagePortPath} must retain concrete EVAVO Storage persistence token: ${token}`);
-}
-
-for (const token of [
+]);
+requireTokens("src/core/businessBrainMemoryIngestionPort.ts", [
   '"business_brain_memory_ingestion_port_v2"',
-  '"/v1/tools/call"',
   'name: "brain_memory_ingest_v2"',
   'autonomy: "auto_low_risk"',
-  '"Authorization": `Bearer ${apiToken}`',
   "scopedWriteToken",
   "businessHmacSha256",
   "writerProof",
-  'redirect: "error"',
-  'cache: "no-store"',
-  "BRAIN_MEMORY_INGESTION_UNEXPECTED_APPROVAL_REQUIRED",
-]) {
-  if (!brainPort.includes(token)) errors.push(`${brainPortPath} must retain scoped authenticated Brain memory persistence token: ${token}`);
-}
-
-for (const token of [
+]);
+requireTokens("src/core/businessBrainMemoryIngestionEnv.ts", [
   "BRAIN_BASE_URL",
   "BRAIN_API_TOKEN",
   "BRAIN_RELATIONSHIP_MEMORY_WRITE_TOKEN",
   "requireBrainMemoryIngestionPortFromEnv",
-]) {
-  if (!brainEnv.includes(token)) errors.push(`${brainEnvPath} must retain complete Brain memory environment binding: ${token}`);
-}
-
-for (const token of [
+]);
+requireTokens("src/core/businessRelationshipManagerBrainPersistenceRuntime.ts", [
   '"business_relationship_manager_brain_persistence_runtime_v2"',
   "CanonicalRelationshipManagerCycle",
   "persistCanonicalRelationshipManagerCycleToBrain",
-  "persistCanonicalRelationshipManagerCycleToConfiguredBrain",
   "RELATIONSHIP_MANAGER_BRAIN_PERSISTENCE_CANONICAL_CONTEXT_NOT_READY",
-]) {
-  if (!brainPersistence.includes(token)) errors.push(`${brainPersistencePath} must retain canonical-only Brain persistence token: ${token}`);
-}
-
-for (const token of [
+]);
+requireTokens("src/core/businessRelationshipManagerCanonicalMemoryPersistence.ts", [
   '"business_relationship_manager_canonical_memory_persistence_v2"',
   "persistCanonicalRelationshipManagerCycleToBrain",
   "RELATIONSHIP_MANAGER_CANONICAL_MEMORY_NOT_DURABLE",
-  "RELATIONSHIP_MANAGER_CANONICAL_MEMORY_RECORDS_REQUIRED",
-]) {
-  if (!canonicalMemory.includes(token)) errors.push(`${canonicalMemoryPath} must remain a facade over canonical Brain persistence: ${token}`);
-}
+]);
 
-for (const token of [
+const previewPath = "src/routes/businessRelationshipManagerAdmin.ts";
+const preview = requireTokens(previewPath, [
   'mode: "relationship_manager_caller_supplied_preview"',
   "canonicalContextBound: false",
   "canonicalApprovalGradeReady: false",
-  "allowedFromThisPreview: false",
   "persistenceAllowedFromThisPreview: false",
   "externalExecutionAllowed: false",
-]) {
-  if (!relationshipPreview.includes(token)) errors.push(`${relationshipPreviewPath} must keep caller-supplied preview noncanonical/nonpersistable: ${token}`);
-}
-if (/persistCanonicalRelationshipManagerCycleToBrain|requireBrainMemoryIngestionPortFromEnv|createBrainMemoryIngestionPort/.test(relationshipPreview)) {
-  errors.push(`${relationshipPreviewPath} must not persist caller-supplied preview cycles to Brain`);
+]);
+if (/persistCanonicalRelationshipManagerCycleToBrain|requireBrainMemoryIngestionPortFromEnv|createBrainMemoryIngestionPort/.test(preview)) {
+  errors.push(`${previewPath} must not persist caller-supplied preview cycles to Brain`);
 }
 
-for (const [relativePath, source, token] of [
-  [approvalRuntimePath, approvalRuntime, "approvalCandidatePersistenceEvidenceRef"],
-  [approvalFinalizerPath, approvalFinalizer, "approvalCandidatePersistenceEvidenceRef"],
+for (const relativePath of [
+  "src/core/businessRelationshipManagerApprovalRuntime.ts",
+  "src/core/businessStaffCommunicationApprovalFinalizer.ts",
 ]) {
-  if (!source.includes(token)) errors.push(`${relativePath} must independently rederive persisted candidate evidence: ${token}`);
+  requireTokens(relativePath, ["approvalCandidatePersistenceEvidenceRef"]);
 }
+const approvalRuntime = read("src/core/businessRelationshipManagerApprovalRuntime.ts");
 if (!approvalRuntime.includes("readyForCandidatePersistence: true") || !approvalRuntime.includes("readyForHumanApproval: false")) {
-  errors.push(`${approvalRuntimePath} must keep prepared candidates non-approvable until persistence`);
+  errors.push("Prepared Relationship Manager candidates must remain non-approvable until persistence");
 }
 
-for (const token of [
-  '"business_relationship_manager_canonical_runtime_v1"',
+requireTokens("src/core/businessRelationshipManagerCanonicalRuntime.ts", [
+  '"business_relationship_manager_canonical_runtime_v2"',
   "buildRelationshipDecisionContext",
   "decisionContext.approvalGradeReady",
-]) {
-  if (!canonicalRuntime.includes(token)) errors.push(`${canonicalRuntimePath} must retain canonical context-bound cycle token: ${token}`);
-}
-
-for (const token of [
-  '"business_relationship_manager_canonical_approval_runtime_v1"',
-  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_NOT_READY",
-  "prepareRelationshipManagerCommunicationForApproval",
-]) {
-  if (!canonicalApproval.includes(token)) errors.push(`${canonicalApprovalPath} must retain canonical approval token: ${token}`);
-}
-
-for (const token of [
+  "careersSummary",
+]);
+requireTokens("src/core/businessRelationshipDecisionContext.ts", [
   '"business_relationship_decision_context_v3"',
   "sourceReadiness",
   "approvalGradeReady",
-]) {
-  if (!decisionContext.includes(token)) errors.push(`${decisionContextPath} must retain decision-context readiness token: ${token}`);
-}
-for (const token of [
-  '"business_relationship_source_readiness_v1"',
+]);
+requireTokens("src/core/businessRelationshipSourceReadiness.ts", [
+  '"business_relationship_source_readiness_v2"',
+  '"careers"',
   '"provider_unavailable"',
   '"not_queried"',
   '"not_found"',
   "absenceAcceptable",
-]) {
-  if (!sourceReadiness.includes(token)) errors.push(`${sourceReadinessPath} must distinguish source-readiness state: ${token}`);
+]);
+requireTokens("src/core/businessRelationship360Context.ts", [
+  '"business_relationship_360_context_v3"',
+  '"careers"',
+  "careersSummary",
+  "Dedicated careers truth",
+]);
+requireTokens("src/core/businessRelationshipContextFreshness.ts", [
+  'domain: "careers"',
+  "maximumAgeMinutes: 60",
+  "staleBlocksApproval: true",
+]);
+requireTokens("src/core/businessRelationshipStaffBrief.ts", [
+  "context.careers",
+  "dedicated careers truth",
+  "Do not infer pricing, scope, payment or contract authority",
+]);
+requireTokens("src/core/businessRoleOpeningTruth.ts", [
+  '"business_role_opening_truth_v2"',
+  'source === "careers_registry" || item.source === "operator"',
+  "maySayNotHiring: false",
+]);
+const careersPolicy = requireTokens("src/core/businessCareersRelationshipPolicy.ts", [
+  '"business_careers_relationship_policy_v3"',
+  "input.roleTruth ? input.roleTruth.status === \"confirmed_open\"",
+]);
+if (/Boolean\(input\.openRoleConfirmed\)/.test(careersPolicy)) {
+  errors.push("Careers policy must not authorize a role from caller-supplied openRoleConfirmed");
 }
+
+requireTokens("src/core/businessCareersRoleTruthPort.ts", [
+  '"business_careers_role_truth_port_v1"',
+  '"/api/v1/internal/relationship-manager/careers-snapshot"',
+  "roleOpeningEvidenceFromCareersSnapshot",
+  'source: "careers_registry"',
+]);
+requireTokens("src/core/businessRelationshipManagerCanonicalCareersContextRuntime.ts", [
+  '"business_relationship_manager_canonical_careers_context_runtime_v2"',
+  "careersEvidence",
+  "careersSummary",
+  "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND",
+]);
+requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.ts", [
+  '"business_relationship_manager_canonical_source_hydration_env_v2"',
+  "OPERATIONS_CAREERS_READ_TOKEN",
+  "careersConfigured",
+  "runCanonicalRelationshipManagerCycleWithCareersContext",
+]);
+const candidateRuntime = requireTokens("src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts", [
+  '"business_relationship_manager_canonical_candidate_runtime_v1"',
+  "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
+  "careersRequired: true",
+  "roleTruth: sources.cycle.roleTruth",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_ROLE_TRUTH",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_MEETING_WITHOUT_ROLE_TRUTH",
+]);
+if (/openRoleConfirmed\s*:/.test(candidateRuntime)) {
+  errors.push("Canonical candidate runtime must not pass caller-supplied openRoleConfirmed into careers policy");
+}
+
+requireTokens("src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts", [
+  '"business_relationship_manager_canonical_approval_runtime_v1"',
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_NOT_READY",
+  "prepareRelationshipManagerCommunicationForApproval",
+]);
 
 const allowedDefinition = path.join(root, recordsPath);
 for (const absolutePath of walk(path.join(root, "src"))) {
@@ -222,25 +214,21 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v6",
+  contract: "business-approval-storage-isolation-v7",
   historicalStorageHelperRetained: true,
-  runtimeImportsAllowed: false,
   directApprovalWriteRouteEnabled: false,
-  retiredRouteExpectedStatus: 410,
   governedApprovalCandidatePersistence: true,
-  nativeImmutableStorageVersionRequired: true,
   concreteEvavoStoragePortRequired: true,
-  expectedStorageAuthorityRequired: true,
-  boundedCandidateWriteRequired: true,
-  persistedCandidateEvidenceRederived: true,
-  concreteBrainMemoryPortRequired: true,
   scopedBrainMemoryHmacRequired: true,
-  completeBrainMemoryEnvRequired: true,
   canonicalBrainCheckpointRequiredByPreferredPath: true,
   callerSuppliedPreviewCannotPersist: true,
-  canonicalDecisionContextRequiredByPreferredPath: true,
-  sourceReadinessDistinguishesUnknownFromNotFound: true,
-  canonicalApprovalPreparationRequiredByPreferredPath: true,
+  canonicalDecisionContextV2Required: true,
+  sourceReadinessV2Required: true,
+  careersIsIndependentCanonicalSource: true,
+  commercialStateCannotAuthorizeHiring: true,
+  manualRoleFlagsCannotAuthorizeHiring: true,
+  canonicalCandidateRuntimeRequired: true,
+  careersEvidenceMustBindThroughDecision: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

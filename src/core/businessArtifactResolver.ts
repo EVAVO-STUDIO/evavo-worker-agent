@@ -1,4 +1,4 @@
-export const BUSINESS_ARTIFACT_RESOLVER_CONTRACT = "business_artifact_resolver_v1" as const;
+export const BUSINESS_ARTIFACT_RESOLVER_CONTRACT = "business_artifact_resolver_v2" as const;
 
 export type ArtifactCandidate = Readonly<{
   artifactId: string;
@@ -24,11 +24,44 @@ function clean(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function required(value: string, field: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error(`ARTIFACT_${field.toUpperCase()}_REQUIRED`);
+  return trimmed;
+}
+
+function sourceEvidence(values: readonly string[]): readonly string[] {
+  return Object.freeze([...new Set(values.map((value) => value.trim()).filter(Boolean))]);
+}
+
 function normalizeSha256(value: string): string {
   const trimmed = value.trim().toLowerCase();
   const unprefixed = trimmed.startsWith("sha256:") ? trimmed.slice("sha256:".length) : trimmed;
   if (!/^[a-f0-9]{64}$/.test(unprefixed)) throw new Error("ARTIFACT_CONTENT_HASH_INVALID");
   return unprefixed;
+}
+
+function normalizeCandidate(candidate: ArtifactCandidate): ArtifactCandidate {
+  const artifactId = required(candidate.artifactId, "artifact_id");
+  const filename = required(candidate.filename, "filename");
+  const purpose = required(candidate.purpose, "purpose");
+  const evidence = sourceEvidence(candidate.sourceEvidenceIds);
+  let createdAt = candidate.createdAt?.trim() || null;
+  if (createdAt) {
+    const parsed = new Date(createdAt);
+    if (Number.isNaN(parsed.getTime())) throw new Error("ARTIFACT_CREATED_AT_INVALID");
+    createdAt = parsed.toISOString();
+  }
+  return Object.freeze({
+    ...candidate,
+    artifactId,
+    filename,
+    purpose,
+    version: candidate.version?.trim() || null,
+    contentHash: candidate.contentHash?.trim() || null,
+    createdAt,
+    sourceEvidenceIds: evidence,
+  });
 }
 
 export function resolveBusinessArtifact(input: Readonly<{
@@ -40,12 +73,20 @@ export function resolveBusinessArtifact(input: Readonly<{
 }>): ArtifactResolution {
   const purpose = clean(input.requestedPurpose);
   if (!purpose) throw new Error("ARTIFACT_PURPOSE_REQUIRED");
+  const expectedArtifactId = input.expectedArtifactId?.trim() || null;
+  const requestedFilename = input.requestedFilename?.trim() || null;
+  const candidates = input.candidates.map(normalizeCandidate);
+  const ids = new Set<string>();
+  for (const candidate of candidates) {
+    if (ids.has(candidate.artifactId)) throw new Error(`ARTIFACT_DUPLICATE_ID:${candidate.artifactId}`);
+    ids.add(candidate.artifactId);
+  }
 
-  const eligible = input.candidates.filter((candidate) => {
+  const eligible = candidates.filter((candidate) => {
     if (!candidate.sourceEvidenceIds.length) return false;
     if ((input.requireCurrent ?? true) && !candidate.current) return false;
-    if (input.expectedArtifactId && candidate.artifactId !== input.expectedArtifactId) return false;
-    if (input.requestedFilename && clean(candidate.filename) !== clean(input.requestedFilename)) return false;
+    if (expectedArtifactId && candidate.artifactId !== expectedArtifactId) return false;
+    if (requestedFilename && clean(candidate.filename) !== clean(requestedFilename)) return false;
     return clean(candidate.purpose) === purpose;
   });
 
@@ -68,7 +109,7 @@ export function resolveBusinessArtifact(input: Readonly<{
     });
   }
 
-  const staleMatches = input.candidates.filter((candidate) => clean(candidate.purpose) === purpose && candidate.sourceEvidenceIds.length && !candidate.current);
+  const staleMatches = candidates.filter((candidate) => clean(candidate.purpose) === purpose && candidate.sourceEvidenceIds.length && !candidate.current);
   const reasons = staleMatches.length
     ? ["Only non-current artifact versions match the requested purpose; do not attach a stale version without explicit selection."]
     : ["No evidence-backed artifact matches the requested purpose and constraints."];
@@ -84,8 +125,9 @@ export function resolveBusinessArtifact(input: Readonly<{
 export function assertArtifactReadyForSend(resolution: ArtifactResolution): ArtifactCandidate {
   if (resolution.status !== "verified" || !resolution.selected) throw new Error("ARTIFACT_NOT_VERIFIED_FOR_SEND");
   if (!resolution.selected.current) throw new Error("ARTIFACT_NOT_CURRENT");
-  if (!resolution.selected.sourceEvidenceIds.length) throw new Error("ARTIFACT_SOURCE_EVIDENCE_REQUIRED");
+  const evidence = sourceEvidence(resolution.selected.sourceEvidenceIds);
+  if (!evidence.length) throw new Error("ARTIFACT_SOURCE_EVIDENCE_REQUIRED");
   if (!resolution.selected.contentHash) throw new Error("ARTIFACT_CONTENT_HASH_REQUIRED");
   const contentHash = normalizeSha256(resolution.selected.contentHash);
-  return Object.freeze({ ...resolution.selected, contentHash });
+  return Object.freeze({ ...resolution.selected, sourceEvidenceIds: evidence, contentHash });
 }

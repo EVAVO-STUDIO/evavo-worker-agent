@@ -1,5 +1,4 @@
-export function businessSha256(value: string): string {
-  const bytes = new TextEncoder().encode(value);
+function sha256Bytes(bytes: Uint8Array): string {
   const bitLength = bytes.length * 8;
   const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
   const data = new Uint8Array(paddedLength);
@@ -57,4 +56,12 @@ export function businessSha256(value: string): string {
   }
 
   return Array.from(h, (part) => part.toString(16).padStart(8, "0")).join("");
+}
+
+export function businessSha256(value: string): string {
+  return sha256Bytes(new TextEncoder().encode(value));
+}
+
+export function businessSha256Bytes(value: Uint8Array): string {
+  return sha256Bytes(value);
 }

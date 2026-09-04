@@ -1,10 +1,14 @@
 import { buildBusinessRelationship360Context, type Relationship360Context, type Relationship360Input } from "./businessRelationship360Context";
-import { assessRelationshipContextFreshness, type ContextFreshnessAssessment } from "./businessRelationshipContextFreshness";
+import {
+  assessRelationshipContextFreshness,
+  type ContextFreshnessAssessment,
+  type ContextFreshnessDomain,
+} from "./businessRelationshipContextFreshness";
 import { buildRelationshipChangeDigest, type RelationshipChangeDigest } from "./businessRelationshipChangeDigest";
 import { buildRelationshipStaffBrief, type RelationshipStaffBrief } from "./businessRelationshipStaffBrief";
 import { buildRelationshipContextResolutionPlan, type RelationshipContextResolutionPlan } from "./businessRelationshipContextResolutionPlan";
 
-export const BUSINESS_RELATIONSHIP_DECISION_CONTEXT_CONTRACT = "business_relationship_decision_context_v1" as const;
+export const BUSINESS_RELATIONSHIP_DECISION_CONTEXT_CONTRACT = "business_relationship_decision_context_v2" as const;
 
 export type RelationshipChangeDigestInput = Parameters<typeof buildRelationshipChangeDigest>[0];
 
@@ -21,15 +25,27 @@ export type RelationshipDecisionContext = Readonly<{
   evidenceRefs: readonly string[];
 }>;
 
+function defaultRequiredFreshnessDomains(input: Relationship360Input): readonly ContextFreshnessDomain[] {
+  const domains = new Set<ContextFreshnessDomain>();
+  for (const item of input.evidenceItems) {
+    if (item.status !== "current") continue;
+    if (item.domain === "calendar") continue;
+    domains.add(item.domain);
+  }
+  return Object.freeze([...domains]);
+}
+
 export function buildRelationshipDecisionContext(input: Readonly<{
   objective: string;
   relationship: Relationship360Input;
   changes?: RelationshipChangeDigestInput | null;
+  requiredFreshnessDomains?: readonly ContextFreshnessDomain[];
 }>): RelationshipDecisionContext {
   const context360 = buildBusinessRelationship360Context(input.relationship);
   const freshness = assessRelationshipContextFreshness({
     now: input.relationship.now,
     evidence: input.relationship.evidenceItems,
+    requiredDomains: input.requiredFreshnessDomains ?? defaultRequiredFreshnessDomains(input.relationship),
   });
   const changes = input.changes ? buildRelationshipChangeDigest(input.changes) : null;
   const staffBrief = buildRelationshipStaffBrief({

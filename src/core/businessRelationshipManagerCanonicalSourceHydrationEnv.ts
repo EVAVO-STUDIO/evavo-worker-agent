@@ -53,6 +53,21 @@ function pair(valueA: string | undefined, valueB: string | undefined, code: stri
   return Object.freeze({ configured: Boolean(a && b), a, b });
 }
 
+function sharedBaseSource(
+  baseUrlValue: string | undefined,
+  tokenValue: string | undefined,
+  tokenWithoutBaseCode: string,
+) {
+  const baseUrl = baseUrlValue?.trim() ?? "";
+  const readToken = tokenValue?.trim() ?? "";
+  if (readToken && !baseUrl) throw new Error(tokenWithoutBaseCode);
+  return Object.freeze({
+    configured: Boolean(baseUrl && readToken),
+    baseUrl,
+    readToken,
+  });
+}
+
 function unavailableBrainPort(): BrainMemoryContextPort {
   return Object.freeze({
     contract: "business_brain_memory_context_port_v1" as const,
@@ -95,7 +110,7 @@ function brainPort(env: RelationshipManagerCanonicalSourceEnv) {
 }
 
 function operationsPort(env: RelationshipManagerCanonicalSourceEnv) {
-  const config = pair(
+  const config = sharedBaseSource(
     env.OPERATIONS_CORE_BASE_URL,
     env.OPERATIONS_RELATIONSHIP_READ_TOKEN,
     "RELATIONSHIP_MANAGER_CANONICAL_OPERATIONS_READ_ENV_INCOMPLETE",
@@ -103,21 +118,21 @@ function operationsPort(env: RelationshipManagerCanonicalSourceEnv) {
   return Object.freeze({
     configured: config.configured,
     port: config.configured
-      ? createOperationsCoreRelationshipSnapshotPort({ baseUrl: config.a, readToken: config.b })
+      ? createOperationsCoreRelationshipSnapshotPort({ baseUrl: config.baseUrl, readToken: config.readToken })
       : unavailableOperationsPort(),
   });
 }
 
 function careersPort(env: RelationshipManagerCanonicalSourceEnv) {
-  const baseUrl = env.OPERATIONS_CORE_BASE_URL?.trim() ?? "";
-  const readToken = env.OPERATIONS_CAREERS_READ_TOKEN?.trim() ?? "";
-  if (Boolean(baseUrl) !== Boolean(readToken)) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_READ_ENV_INCOMPLETE");
-  }
+  const config = sharedBaseSource(
+    env.OPERATIONS_CORE_BASE_URL,
+    env.OPERATIONS_CAREERS_READ_TOKEN,
+    "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_READ_ENV_INCOMPLETE",
+  );
   return Object.freeze({
-    configured: Boolean(baseUrl && readToken),
-    port: baseUrl && readToken
-      ? createCareersRoleTruthPort({ baseUrl, readToken })
+    configured: config.configured,
+    port: config.configured
+      ? createCareersRoleTruthPort({ baseUrl: config.baseUrl, readToken: config.readToken })
       : unavailableCareersPort(),
   });
 }

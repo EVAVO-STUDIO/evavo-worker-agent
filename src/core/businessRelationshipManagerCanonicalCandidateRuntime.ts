@@ -9,7 +9,7 @@ import {
 } from "./businessRelationshipManagerCanonicalSourceHydrationEnv";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_runtime_v1" as const;
+  "business_relationship_manager_canonical_candidate_runtime_v2" as const;
 
 export type CanonicalCandidatePolicyInput = Readonly<{
   sincereIndividualEnquiry: boolean;
@@ -34,6 +34,7 @@ export type CanonicalRelationshipManagerCandidateResult = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT;
   sources: CanonicalRelationshipManagerSourceHydrationEnvResult;
   careersDecision: CareersRelationshipDecision;
+  callerOpportunityAuthoritySuppressed: true;
   approvalGradeReady: boolean;
   externalEffectPerformed: false;
 }>;
@@ -47,12 +48,31 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
   if (!input.sourceHydration.careersIdentity) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CAREERS_IDENTITY_REQUIRED");
   }
+  const callerCandidate = input.sourceHydration.cycle.candidate;
+  if (!callerCandidate) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CONTEXT_REQUIRED");
+  }
 
-  const sources = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
+  const sourceHydration = Object.freeze({
     ...input.sourceHydration,
+    cycle: Object.freeze({
+      ...input.sourceHydration.cycle,
+      candidate: Object.freeze({
+        ...callerCandidate,
+        explicitRoleOpen: false,
+        activeRecruitmentProcess: false,
+      }),
+    }),
+  });
+  const sources = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
+    ...sourceHydration,
     careersRequired: true,
   });
   const canonical = sources.cycle.canonical.brain.canonicalCycle;
+  if (canonical.cycle.decision.candidateStage === "active_process") {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CALLER_OPPORTUNITY_AUTHORITY_LEAKED");
+  }
+
   const careersDecision = decideCareersRelationshipResponse({
     senderIdentityVerified:
       input.sourceHydration.cycle.identity.status === "verified"
@@ -94,6 +114,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
         ]),
         suggestedNextStep: "request_missing_context",
       }),
+      callerOpportunityAuthoritySuppressed: true,
       approvalGradeReady: false,
       externalEffectPerformed: false,
     });
@@ -103,6 +124,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT,
     sources,
     careersDecision,
+    callerOpportunityAuthoritySuppressed: true,
     approvalGradeReady: canonical.approvalGradeReady && careersDecision.disposition === "reply",
     externalEffectPerformed: false,
   });

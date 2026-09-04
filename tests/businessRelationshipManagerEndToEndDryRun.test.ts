@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DESIRED_EVAVO_MAILBOXES } from "../src/core/businessMailboxRegistry";
-import { buildCommunicationDecisionPackage } from "../src/core/businessCommunicationDecisionPackage";
 import { assertAuthorizedCommunicationExecutionRequest } from "../src/core/businessCommunicationExecutionRequest";
 import { reconcileAuthorizedCommunicationExecution } from "../src/core/businessCommunicationExecutionReceipt";
 import { buildCommunicationLifecycleReceipt } from "../src/core/businessCommunicationLifecycleReceipt";
 import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
 import { createCommunicationSendEnvelope } from "../src/core/businessCommunicationSendEnvelope";
-import { projectGmailThreadToCanonicalRelationshipState } from "../src/core/businessGmailRelationshipStateProjection";
+import { persistRelationshipManagerCycleMemory } from "../src/core/businessRelationshipManagerMemoryPersistence";
+import { runRelationshipManagerCommunicationCycle } from "../src/core/businessRelationshipManagerRuntime";
 import {
   evaluateCommunicationScenario,
   type CommunicationScenarioDefinition,
@@ -26,35 +26,49 @@ const scenario: CommunicationScenarioDefinition = {
   },
 };
 
-test("synthetic Gmail thread reaches verified sent lifecycle without performing an external send", () => {
-  const gmail = projectGmailThreadToCanonicalRelationshipState({
-    threadId: "gmail-thread-dry-run",
-    messages: [{
-      id: "gmail-message-inbound-1",
-      threadId: "gmail-thread-dry-run",
-      sentAt: "2026-09-04T00:30:00Z",
-      from: { name: "Client", address: "client@example.com" },
-      to: [{ name: "Greg", address: "greg@evavo.com.au" }],
-      subject: "Delivery status",
-      body: "Could you please confirm the current delivery status?",
-    }],
-    relationshipId: "relationship-client-dry-run",
-    personId: "person-client-dry-run",
-    projectId: "project-dry-run",
+test("synthetic Gmail thread reaches verified sent lifecycle through the canonical durable cycle without performing an external send", async () => {
+  const cycle = runRelationshipManagerCommunicationCycle({
+    cycleId: "dry-run-1",
     observedAt: "2026-09-04T00:31:00Z",
-  });
-
-  const decision = buildCommunicationDecisionPackage({
-    packageId: "decision-dry-run-1",
+    decisionAt: "2026-09-04T00:32:00Z",
     scenario: "general",
     objective: "Answer the client's current delivery-status question using verified project evidence.",
-    thread: { threadId: gmail.threadId, previousState: [], latestObservedState: gmail.latestObservedThreadState },
-    obligations: gmail.obligations,
+    gmail: {
+      threadId: "gmail-thread-dry-run",
+      relationshipId: "relationship-client-dry-run",
+      personId: "person-client-dry-run",
+      projectId: "project-dry-run",
+      messages: [{
+        id: "gmail-message-inbound-1",
+        threadId: "gmail-thread-dry-run",
+        sentAt: "2026-09-04T00:30:00Z",
+        from: { name: "Client", address: "client@example.com" },
+        to: [{ name: "Greg", address: "greg@evavo.com.au" }],
+        subject: "Delivery status",
+        body: "Could you please confirm the current delivery status?",
+      }],
+    },
+    identity: {
+      contract: "business_relationship_identity_resolver_v1",
+      status: "verified",
+      selected: {
+        personId: "person-client-dry-run",
+        name: "Client",
+        addresses: ["client@example.com"],
+        evidence: [{ source: "gmail", ref: "gmail:message:gmail-message-inbound-1", confidence: 100 }],
+      },
+      confidence: 100,
+      exactAddressMatch: true,
+      reasons: ["Exact Gmail address match."],
+      competingPersonIds: [],
+    },
     channel: { currentChannel: "email", canResolveInWriting: true },
-    evidenceIds: [...gmail.sourceEvidenceIds, "operations:project-dry-run:status"],
     evidenceConfidence: 96,
-    decisionAt: "2026-09-04T00:32:00Z",
+    additionalEvidenceIds: ["operations:project-dry-run:status"],
   });
+  const decision = cycle.decision;
+  assert.equal(decision.origin, "relationship_manager_cycle");
+  assert.equal(decision.relationshipCycleId, cycle.cycleId);
 
   const scenarioResult = evaluateCommunicationScenario(scenario, {
     disposition: decision.disposition,
@@ -66,10 +80,25 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
   });
   assert.equal(scenarioResult.passed, true);
 
+  const persistence = await persistRelationshipManagerCycleMemory({
+    cycle,
+    write: async (request) => ({
+      contract: "evavo-memory-ingestion-receipt-v2",
+      requestId: request.requestId,
+      idempotencyKey: request.idempotencyKey,
+      sourceRef: request.observation.sourceRef,
+      status: "appended",
+      durable: true,
+      recordId: `memory:${request.requestId}`,
+      reasons: [],
+    }),
+  });
+  assert.equal(persistence.durable, true);
+
   const material = {
     sender: "greg@evavo.com.au",
     to: ["client@example.com"], cc: [], bcc: [],
-    threadId: gmail.threadId,
+    threadId: cycle.projection.threadId,
     replyMessageId: "gmail-message-inbound-1",
     subject: "Re: Delivery status",
     body: "Hi,\n\nThe delivery is currently awaiting your review.\n\nKind regards,\nGreg",
@@ -109,6 +138,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     approval,
     operatorApprovalReceipt: operatorApproval,
     decisionPackage: decision,
+    relationshipManagerMemoryPersistence: persistence,
     review: {
       expectedRecipientAddresses: ["client@example.com"],
       prohibitedClaims: [],
@@ -119,13 +149,16 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
     runtimeSendingEnabled: true,
     now: new Date("2026-09-04T00:36:00Z"),
   });
+  assert.equal(executionRequest.authorization.relationshipCycleId, cycle.cycleId);
+  assert.equal(executionRequest.authorization.memoryCheckpoint?.cycleId, cycle.cycleId);
+  assert.ok((executionRequest.authorization.memoryCheckpoint?.recordIds.length ?? 0) > 0);
 
   // Synthetic provider observation only. No Gmail connector/send API is invoked by this test.
   const executionReceipt = reconcileAuthorizedCommunicationExecution({
     request: executionRequest,
     observed: {
       providerMessageId: "gmail-message-synthetic-sent-1",
-      providerThreadId: gmail.threadId,
+      providerThreadId: cycle.projection.threadId,
       sentAt: "2026-09-04T00:36:01Z",
       sender: executionRequest.sender,
       to: executionRequest.to,
@@ -138,7 +171,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle without performing 
   const lifecycle = buildCommunicationLifecycleReceipt({
     lifecycleId: "lifecycle-dry-run-1",
     relationshipId: "relationship-client-dry-run",
-    threadId: gmail.threadId,
+    threadId: cycle.projection.threadId,
     decision: { packageId: decision.packageId, decisionAt: decision.decisionAt, disposition: decision.disposition, evidenceIds: decision.evidenceIds },
     approval: {
       envelopeId: approval.envelopeId,

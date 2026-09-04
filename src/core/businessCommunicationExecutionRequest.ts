@@ -14,7 +14,14 @@ import type {
 } from "./businessCommunicationSendEnvelope";
 import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT = "business_communication_execution_request_v2" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT = "business_communication_execution_request_v3" as const;
+
+export type CommunicationApprovalCandidateAuthorization = Readonly<{
+  candidateId: string;
+  candidateSha256: string;
+  recordId: string;
+  evidenceRef: string;
+}>;
 
 export type AuthorizedCommunicationExecutionRequest = Readonly<{
   contract: typeof BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT;
@@ -46,6 +53,7 @@ export type AuthorizedCommunicationExecutionRequest = Readonly<{
     expiresAt: string;
     mailboxKey: string;
     writingProvenance?: CommunicationWritingProvenanceBinding | null;
+    approvalCandidate: CommunicationApprovalCandidateAuthorization | null;
     memoryCheckpoint: Readonly<{
       cycleId: string;
       recordIds: readonly string[];
@@ -62,6 +70,25 @@ function requestId(envelope: CommunicationSendEnvelope): string {
   return `gmail-send:${envelope.envelopeId}:${envelope.materialSha256.slice(0, 24)}`;
 }
 
+function normalizeApprovalCandidate(
+  candidate: CommunicationApprovalCandidateAuthorization | null | undefined,
+  approval: CommunicationSendEnvelope,
+): CommunicationApprovalCandidateAuthorization | null {
+  if (!candidate) return null;
+  const candidateId = candidate.candidateId.trim();
+  const candidateSha256 = candidate.candidateSha256.trim().toLowerCase();
+  const recordId = candidate.recordId.trim();
+  const evidenceRef = candidate.evidenceRef.trim();
+  if (!candidateId || !recordId || !evidenceRef || !/^[a-f0-9]{64}$/.test(candidateSha256)) {
+    throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_INVALID");
+  }
+  const binding = approval.approvalBinding;
+  if (!binding) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_BINDING_REQUIRED");
+  if (!binding.evidenceIds.includes(evidenceRef)) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_EVIDENCE_NOT_BOUND");
+  if (!binding.approvalEvidenceIds.includes(evidenceRef)) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_OPERATOR_EVIDENCE_NOT_BOUND");
+  return Object.freeze({ candidateId, candidateSha256, recordId, evidenceRef });
+}
+
 export function authorizeCommunicationExecutionRequest(input: Readonly<{
   mailbox: BusinessMailboxRecord;
   material: CommunicationSendMaterial;
@@ -69,6 +96,7 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
   operatorApprovalReceipt: OperatorCommunicationApprovalReceipt;
   decisionPackage: CommunicationDecisionPackage;
   relationshipManagerMemoryPersistence?: RelationshipManagerMemoryPersistenceResult | null;
+  approvalCandidate?: CommunicationApprovalCandidateAuthorization | null;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
   contextChangesSinceDecision?: readonly ApprovalContextChange[];
@@ -106,6 +134,11 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
     }
   }
 
+  const approvalCandidate = normalizeApprovalCandidate(input.approvalCandidate, input.approval);
+  if (input.decisionPackage.origin === "relationship_manager_cycle" && !approvalCandidate) {
+    throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_REQUIRED");
+  }
+
   const request: AuthorizedCommunicationExecutionRequest = Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT,
     provider: "gmail",
@@ -136,6 +169,7 @@ export function authorizeCommunicationExecutionRequest(input: Readonly<{
       expiresAt: input.approval.expiresAt,
       mailboxKey: binding.mailboxKey,
       writingProvenance,
+      approvalCandidate,
       memoryCheckpoint,
     }),
   });

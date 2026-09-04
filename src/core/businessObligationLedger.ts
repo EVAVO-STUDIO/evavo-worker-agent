@@ -22,6 +22,7 @@ export type BusinessObligation = Readonly<{
   satisfactionEvidenceIds: readonly string[];
   supersededById?: string | null;
   stateEvidenceIds?: readonly string[];
+  lastTransitionAt?: string | null;
 }>;
 
 export type ObligationAssessment = Readonly<{
@@ -72,9 +73,9 @@ function cleanEvidence(ids: readonly string[] | undefined): readonly string[] {
 }
 
 /**
- * Read-compatible v1 validation. Historical v1 records may predate explicit due/state evidence fields.
- * We preserve those records for audit/read purposes and surface evidence gaps in assessments instead of
- * rewriting history or throwing. New state mutations remain strict in applyObligationTransition().
+ * Read-compatible v1 validation. Historical v1 records may predate explicit due/state evidence fields
+ * and transition timestamps. We preserve those records for audit/read purposes and surface evidence gaps
+ * instead of rewriting history. New state mutations remain strict in applyObligationTransition().
  */
 function validate(obligation: BusinessObligation): BusinessObligation {
   if (!obligation.id.trim()) throw new Error("OBLIGATION_ID_REQUIRED");
@@ -82,6 +83,10 @@ function validate(obligation: BusinessObligation): BusinessObligation {
   const sourceEvidenceIds = evidence(obligation.sourceEvidenceIds, "source");
   const createdAt = timestamp(obligation.createdAt, "created_at");
   const dueAt = obligation.dueAt ? timestamp(obligation.dueAt, "due_at") : null;
+  const lastTransitionAt = obligation.lastTransitionAt ? timestamp(obligation.lastTransitionAt, "last_transition_at") : null;
+  if (lastTransitionAt && Date.parse(lastTransitionAt) < Date.parse(createdAt)) {
+    throw new Error("OBLIGATION_LAST_TRANSITION_BEFORE_CREATED");
+  }
   if (obligation.status === "superseded" && !obligation.supersededById?.trim()) throw new Error("OBLIGATION_SUPERSEDED_BY_REQUIRED");
   return Object.freeze({
     ...obligation,
@@ -92,6 +97,7 @@ function validate(obligation: BusinessObligation): BusinessObligation {
     sourceEvidenceIds,
     satisfactionEvidenceIds: cleanEvidence(obligation.satisfactionEvidenceIds),
     stateEvidenceIds: cleanEvidence(obligation.stateEvidenceIds),
+    lastTransitionAt,
   });
 }
 
@@ -138,7 +144,11 @@ export function applyObligationTransition(obligation: BusinessObligation, transi
   const current = validate(obligation);
   if (transition.obligationId !== current.id) throw new Error("OBLIGATION_TRANSITION_ID_MISMATCH");
   const stateEvidenceIds = evidence(transition.evidenceIds, "transition");
-  timestamp(transition.occurredAt, "transition_at");
+  const occurredAt = timestamp(transition.occurredAt, "transition_at");
+  if (Date.parse(occurredAt) < Date.parse(current.createdAt)) throw new Error("OBLIGATION_TRANSITION_BEFORE_CREATED");
+  if (current.lastTransitionAt && Date.parse(occurredAt) < Date.parse(current.lastTransitionAt)) {
+    throw new Error("OBLIGATION_TRANSITION_OUT_OF_ORDER");
+  }
 
   switch (transition.kind) {
     case "observe":
@@ -149,7 +159,7 @@ export function applyObligationTransition(obligation: BusinessObligation, transi
         return current;
       }
       if (current.status === "superseded" || current.status === "cancelled") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
-      return validate({ ...current, status: "satisfied", satisfactionEvidenceIds: stateEvidenceIds, stateEvidenceIds });
+      return validate({ ...current, status: "satisfied", satisfactionEvidenceIds: stateEvidenceIds, stateEvidenceIds, lastTransitionAt: occurredAt });
     case "supersede":
       if (!transition.supersededById?.trim() || transition.supersededById === current.id) throw new Error("OBLIGATION_SUPERSEDED_BY_INVALID");
       if (current.status === "satisfied" || current.status === "cancelled") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
@@ -157,21 +167,21 @@ export function applyObligationTransition(obligation: BusinessObligation, transi
         if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
         return current;
       }
-      return validate({ ...current, status: "superseded", supersededById: transition.supersededById, stateEvidenceIds });
+      return validate({ ...current, status: "superseded", supersededById: transition.supersededById.trim(), stateEvidenceIds, lastTransitionAt: occurredAt });
     case "cancel":
       if (current.status === "cancelled") {
         if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
         return current;
       }
       if (current.status === "satisfied" || current.status === "superseded") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
-      return validate({ ...current, status: "cancelled", stateEvidenceIds });
+      return validate({ ...current, status: "cancelled", stateEvidenceIds, lastTransitionAt: occurredAt });
     case "mark_uncertain":
       if (current.status === "satisfied" || current.status === "superseded" || current.status === "cancelled") throw new Error("OBLIGATION_TERMINAL_TRANSITION_INVALID");
       if (current.status === "uncertain") {
         if (!stateEvidenceVerified(current)) throw new Error("OBLIGATION_EXISTING_STATE_EVIDENCE_MISSING");
         return current;
       }
-      return validate({ ...current, status: "uncertain", stateEvidenceIds });
+      return validate({ ...current, status: "uncertain", stateEvidenceIds, lastTransitionAt: occurredAt });
   }
 }
 
@@ -187,10 +197,13 @@ export function mergeBusinessObligations(existing: readonly BusinessObligation[]
     }
     const sameIdentity = prior.owner === checked.owner && prior.statement === checked.statement && prior.createdAt === checked.createdAt;
     if (!sameIdentity) throw new Error(`OBLIGATION_ID_CONFLICT:${checked.id}`);
+    if (prior.lastTransitionAt && checked.lastTransitionAt && checked.lastTransitionAt < prior.lastTransitionAt) {
+      throw new Error(`OBLIGATION_STATE_REGRESSION:${checked.id}`);
+    }
     const priorEvidence = new Set(prior.sourceEvidenceIds);
     const addsEvidence = checked.sourceEvidenceIds.some((id) => !priorEvidence.has(id));
     if (addsEvidence) byId.set(checked.id, validate({ ...checked, sourceEvidenceIds: [...prior.sourceEvidenceIds, ...checked.sourceEvidenceIds] }));
-    else if (prior.status !== checked.status) byId.set(checked.id, checked);
+    else if (prior.status !== checked.status || prior.lastTransitionAt !== checked.lastTransitionAt) byId.set(checked.id, checked);
   }
   return Object.freeze([...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)));
 }

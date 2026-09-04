@@ -183,6 +183,9 @@ test("synthetic Gmail thread reaches verified sent lifecycle through durable gov
   assert.equal(unpersistedPreparation.readyForHumanApproval, false);
 
   const candidateWriteRequest = buildStaffApprovalCandidateWriteRequest(unpersistedPreparation.approvalCandidate);
+  const candidateDocumentId = "doc_approval_candidate_dry_run_1";
+  const candidateVersionId = "ver_approval_candidate_dry_run_1";
+  const candidateRecordId = `${candidateDocumentId}:${candidateVersionId}`;
   const candidatePersistence = reconcileStaffApprovalCandidateWriteReceipt({
     candidate: unpersistedPreparation.approvalCandidate,
     request: candidateWriteRequest,
@@ -195,10 +198,21 @@ test("synthetic Gmail thread reaches verified sent lifecycle through durable gov
       candidateSha256: candidateWriteRequest.candidateSha256,
       status: "appended",
       durable: true,
-      recordId: "approval-candidate-record-dry-run-1",
-      journalPosition: 101,
+      recordId: candidateRecordId,
+      journalPosition: "receipt_approval_candidate_dry_run_1",
       recordedAt: "2026-09-04T00:34:10Z",
       storageAuthority: { system: "evavo-storage", instanceId: "local-primary" },
+      storage: {
+        model: "immutable_document_version",
+        vaultId: "internal",
+        logicalPath: `RelationshipManager/ApprovalCandidates/${candidateWriteRequest.candidateId}/${candidateWriteRequest.candidateSha256}.json`,
+        documentId: candidateDocumentId,
+        versionId: candidateVersionId,
+        sha256: candidateWriteRequest.candidateSha256,
+        sizeBytes: 4096,
+        idempotentReplay: false,
+        receiptId: "receipt_approval_candidate_dry_run_1",
+      },
     },
   });
   const preparation = bindRelationshipManagerApprovalCandidatePersistence({
@@ -229,7 +243,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through durable gov
   });
   assert.equal(finalization.humanApprovalRecorded, true);
   assert.equal(finalization.externalExecutionAllowed, false);
-  assert.equal(finalization.approvalCandidateRecordId, "approval-candidate-record-dry-run-1");
+  assert.equal(finalization.approvalCandidateRecordId, candidateRecordId);
 
   const executionAuthorization = authorizeRelationshipManagerCommunicationExecution({
     cycle,

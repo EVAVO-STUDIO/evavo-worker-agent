@@ -31,6 +31,10 @@ const candidatePersistencePath = "src/core/businessStaffCommunicationApprovalCan
 const storagePortPath = "src/core/businessEvavoStorageApprovalCandidatePort.ts";
 const approvalRuntimePath = "src/core/businessRelationshipManagerApprovalRuntime.ts";
 const approvalFinalizerPath = "src/core/businessStaffCommunicationApprovalFinalizer.ts";
+const canonicalRuntimePath = "src/core/businessRelationshipManagerCanonicalRuntime.ts";
+const canonicalApprovalPath = "src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts";
+const decisionContextPath = "src/core/businessRelationshipDecisionContext.ts";
+const sourceReadinessPath = "src/core/businessRelationshipSourceReadiness.ts";
 
 const records = read(recordsPath);
 const route = read(routePath);
@@ -39,6 +43,10 @@ const candidatePersistence = read(candidatePersistencePath);
 const storagePort = read(storagePortPath);
 const approvalRuntime = read(approvalRuntimePath);
 const approvalFinalizer = read(approvalFinalizerPath);
+const canonicalRuntime = read(canonicalRuntimePath);
+const canonicalApproval = read(canonicalApprovalPath);
+const decisionContext = read(decisionContextPath);
+const sourceReadiness = read(sourceReadinessPath);
 
 for (const token of [
   "export async function saveBusinessApprovalRequest",
@@ -103,6 +111,46 @@ if (!approvalRuntime.includes("readyForCandidatePersistence: true") || !approval
   errors.push(`${approvalRuntimePath} must keep prepared candidates non-approvable until persistence`);
 }
 
+for (const token of [
+  '"business_relationship_manager_canonical_runtime_v1"',
+  "buildRelationshipDecisionContext",
+  "decisionContext.approvalGradeReady",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_READINESS_WIDENED",
+]) {
+  if (!canonicalRuntime.includes(token)) errors.push(`${canonicalRuntimePath} must retain canonical context-bound cycle token: ${token}`);
+}
+
+for (const token of [
+  '"business_relationship_manager_canonical_approval_runtime_v1"',
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_NOT_READY",
+  "prepareRelationshipManagerCommunicationForApproval",
+  "readyForHumanApproval",
+]) {
+  if (!canonicalApproval.includes(token) && token !== "readyForHumanApproval") {
+    errors.push(`${canonicalApprovalPath} must retain canonical approval token: ${token}`);
+  }
+}
+if (!canonicalApproval.includes("prepareRelationshipManagerCommunicationForApproval")) {
+  errors.push(`${canonicalApprovalPath} must delegate only after canonical readiness validation`);
+}
+
+for (const token of [
+  '"business_relationship_decision_context_v3"',
+  "sourceReadiness",
+  "approvalGradeReady",
+]) {
+  if (!decisionContext.includes(token)) errors.push(`${decisionContextPath} must retain decision-context readiness token: ${token}`);
+}
+for (const token of [
+  '"business_relationship_source_readiness_v1"',
+  '"provider_unavailable"',
+  '"not_queried"',
+  '"not_found"',
+  "absenceAcceptable",
+]) {
+  if (!sourceReadiness.includes(token)) errors.push(`${sourceReadinessPath} must distinguish source-readiness state: ${token}`);
+}
+
 const allowedDefinition = path.join(root, recordsPath);
 for (const absolutePath of walk(path.join(root, "src"))) {
   if (absolutePath === allowedDefinition) continue;
@@ -115,7 +163,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v3",
+  contract: "business-approval-storage-isolation-v4",
   historicalStorageHelperRetained: true,
   runtimeImportsAllowed: false,
   directApprovalWriteRouteEnabled: false,
@@ -126,6 +174,9 @@ console.log(JSON.stringify({
   expectedStorageAuthorityRequired: true,
   boundedCandidateWriteRequired: true,
   persistedCandidateEvidenceRederived: true,
+  canonicalDecisionContextRequiredByPreferredPath: true,
+  sourceReadinessDistinguishesUnknownFromNotFound: true,
+  canonicalApprovalPreparationRequiredByPreferredPath: true,
   externalExecutionEnabled: false,
   errors,
 }, null, 2));

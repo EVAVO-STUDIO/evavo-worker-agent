@@ -45,12 +45,16 @@ function sourceHydration() {
       },
       channel: { currentChannel: "email" as const, canResolveInWriting: true },
       candidate: {
-        identityVerified: true,
-        genuineEnquiry: true,
-        asksForOpportunity: true,
-        portfolioOrCvProvided: false,
+        relationshipId: "candidate-relationship-1",
+        personId: "candidate-person-1",
+        explicitRoleOpen: true,
+        activeRecruitmentProcess: true,
+        materialsSupplied: false,
         materialsActuallyReviewed: false,
-        evidenceIds: ["gmail:message:candidate-message-1"],
+        relevantSkillsEvidence: false,
+        futureRelevanceEvidence: false,
+        personalizedEffort: true,
+        clearFitEvidence: false,
       },
       evidenceConfidence: 98,
     },
@@ -81,7 +85,7 @@ function sourceHydration() {
   };
 }
 
-test("manual role flags cannot bypass missing canonical careers and Brain truth", async () => {
+test("caller role and recruitment flags cannot bypass canonical careers truth", async () => {
   const result = await runCanonicalRelationshipManagerCandidateResponse({
     sourceHydration: sourceHydration(),
     candidate: {
@@ -92,7 +96,9 @@ test("manual role flags cannot bypass missing canonical careers and Brain truth"
     },
   });
 
-  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v1");
+  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v2");
+  assert.equal(result.callerOpportunityAuthoritySuppressed, true);
+  assert.notEqual(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.sources.cycle.careersState, "provider_unavailable");
   assert.equal(result.sources.cycle.roleTruth, null);
   assert.equal(result.careersDecision.disposition, "defer");

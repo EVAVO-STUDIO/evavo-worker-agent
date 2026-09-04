@@ -1,0 +1,83 @@
+export const BUSINESS_ARTIFACT_RESOLVER_CONTRACT = "business_artifact_resolver_v1" as const;
+
+export type ArtifactCandidate = Readonly<{
+  artifactId: string;
+  filename: string;
+  purpose: string;
+  canonicalOwner: "docs_suite" | "operations_core" | "gmail" | "drive" | "operator" | "other";
+  version?: string | null;
+  contentHash?: string | null;
+  current: boolean;
+  createdAt?: string | null;
+  sourceEvidenceIds: readonly string[];
+}>;
+
+export type ArtifactResolution = Readonly<{
+  contract: typeof BUSINESS_ARTIFACT_RESOLVER_CONTRACT;
+  status: "verified" | "ambiguous" | "unresolved";
+  selected?: ArtifactCandidate;
+  reasons: readonly string[];
+  competingArtifactIds: readonly string[];
+}>;
+
+function clean(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function resolveBusinessArtifact(input: Readonly<{
+  requestedPurpose: string;
+  requestedFilename?: string | null;
+  expectedArtifactId?: string | null;
+  requireCurrent?: boolean;
+  candidates: readonly ArtifactCandidate[];
+}>): ArtifactResolution {
+  const purpose = clean(input.requestedPurpose);
+  if (!purpose) throw new Error("ARTIFACT_PURPOSE_REQUIRED");
+
+  const eligible = input.candidates.filter((candidate) => {
+    if (!candidate.sourceEvidenceIds.length) return false;
+    if ((input.requireCurrent ?? true) && !candidate.current) return false;
+    if (input.expectedArtifactId && candidate.artifactId !== input.expectedArtifactId) return false;
+    if (input.requestedFilename && clean(candidate.filename) !== clean(input.requestedFilename)) return false;
+    return clean(candidate.purpose) === purpose;
+  });
+
+  if (eligible.length === 1) {
+    return Object.freeze({
+      contract: BUSINESS_ARTIFACT_RESOLVER_CONTRACT,
+      status: "verified",
+      selected: eligible[0],
+      reasons: Object.freeze(["Exactly one evidence-backed current artifact matches the requested purpose and constraints."]),
+      competingArtifactIds: Object.freeze([]),
+    });
+  }
+
+  if (eligible.length > 1) {
+    return Object.freeze({
+      contract: BUSINESS_ARTIFACT_RESOLVER_CONTRACT,
+      status: "ambiguous",
+      reasons: Object.freeze(["Multiple current artifacts match the requested purpose; exact artifact identity or version must be resolved before attachment."]),
+      competingArtifactIds: Object.freeze(eligible.map((candidate) => candidate.artifactId)),
+    });
+  }
+
+  const staleMatches = input.candidates.filter((candidate) => clean(candidate.purpose) === purpose && candidate.sourceEvidenceIds.length && !candidate.current);
+  const reasons = staleMatches.length
+    ? ["Only non-current artifact versions match the requested purpose; do not attach a stale version without explicit selection."]
+    : ["No evidence-backed artifact matches the requested purpose and constraints."];
+
+  return Object.freeze({
+    contract: BUSINESS_ARTIFACT_RESOLVER_CONTRACT,
+    status: "unresolved",
+    reasons: Object.freeze(reasons),
+    competingArtifactIds: Object.freeze(staleMatches.map((candidate) => candidate.artifactId)),
+  });
+}
+
+export function assertArtifactReadyForSend(resolution: ArtifactResolution): ArtifactCandidate {
+  if (resolution.status !== "verified" || !resolution.selected) throw new Error("ARTIFACT_NOT_VERIFIED_FOR_SEND");
+  if (!resolution.selected.current) throw new Error("ARTIFACT_NOT_CURRENT");
+  if (!resolution.selected.sourceEvidenceIds.length) throw new Error("ARTIFACT_SOURCE_EVIDENCE_REQUIRED");
+  if (!resolution.selected.contentHash) throw new Error("ARTIFACT_CONTENT_HASH_REQUIRED");
+  return resolution.selected;
+}

@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DESIRED_EVAVO_MAILBOXES } from "../src/core/businessMailboxRegistry";
-import { assertAuthorizedCommunicationExecutionRequest } from "../src/core/businessCommunicationExecutionRequest";
 import { reconcileAuthorizedCommunicationExecution } from "../src/core/businessCommunicationExecutionReceipt";
 import { buildCommunicationLifecycleReceipt } from "../src/core/businessCommunicationLifecycleReceipt";
 import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
-import { createCommunicationSendEnvelope } from "../src/core/businessCommunicationSendEnvelope";
+import {
+  finalizeRelationshipManagerCommunicationApproval,
+  prepareRelationshipManagerCommunicationForApproval,
+} from "../src/core/businessRelationshipManagerApprovalRuntime";
+import { authorizeRelationshipManagerCommunicationExecution } from "../src/core/businessRelationshipManagerExecutionRuntime";
 import { persistRelationshipManagerCycleMemory } from "../src/core/businessRelationshipManagerMemoryPersistence";
 import { runRelationshipManagerCommunicationCycle } from "../src/core/businessRelationshipManagerRuntime";
 import {
@@ -26,7 +29,7 @@ const scenario: CommunicationScenarioDefinition = {
   },
 };
 
-test("synthetic Gmail thread reaches verified sent lifecycle through the canonical durable cycle without performing an external send", async () => {
+test("synthetic Gmail thread reaches verified sent lifecycle through governed drafting, approval and durable execution without performing an external send", async () => {
   const cycle = runRelationshipManagerCommunicationCycle({
     cycleId: "dry-run-1",
     observedAt: "2026-09-04T00:31:00Z",
@@ -95,50 +98,117 @@ test("synthetic Gmail thread reaches verified sent lifecycle through the canonic
   });
   assert.equal(persistence.durable, true);
 
-  const material = {
-    sender: "greg@evavo.com.au",
-    to: ["client@example.com"], cc: [], bcc: [],
-    threadId: cycle.projection.threadId,
-    replyMessageId: "gmail-message-inbound-1",
-    subject: "Re: Delivery status",
-    body: "Hi,\n\nThe delivery is currently awaiting your review.\n\nKind regards,\nGreg",
-    attachments: [],
-  } as const;
+  const handoff = {
+    schema: "evavo-writing/staff-communication-handoff-v2" as const,
+    version: 2 as const,
+    protocol: "evavo-staff-communication-handoff-v2" as const,
+    handoff: {
+      schema: "evavo-writing/staff-communication-handoff" as const,
+      version: 1 as const,
+      protocol: "evavo-staff-communication-handoff-v1" as const,
+      relationshipId: "relationship-client-dry-run",
+      handoffId: "handoff-dry-run-1",
+    },
+    staffContext: {
+      relationshipId: "relationship-client-dry-run",
+      generatedAt: "2026-09-04T00:33:00Z",
+      decisionPackageId: decision.packageId,
+      decisionOrigin: decision.origin,
+      relationshipCycleId: cycle.cycleId,
+      approvalGradeReady: true as const,
+      blockingVerificationOutstanding: false as const,
+      whatChanged: "The client asked for current delivery status.",
+      materialChanges: ["New client delivery-status question."],
+      priorities: ["Answer the current delivery-status question directly."],
+      mustVerify: [],
+      mustNotAssume: ["Do not invent delivery progress."],
+      obligationsToRespect: [],
+      priorDecisionsToRespect: ["Keep resolvable status matters asynchronous."],
+      relationshipRisks: ["Do not overstate project progress."],
+      staleDomains: [],
+      nextContextSources: [],
+      sourceRefs: [...decision.evidenceIds],
+    },
+  };
+  const writingEnvelope = {
+    contract: "evavo-writing/staff-communication-writing-envelope-v2" as const,
+    writingRequest: { requestId: "writing-request-dry-run-1" },
+    provenance: {
+      relationshipId: handoff.staffContext.relationshipId,
+      handoffId: handoff.handoff.handoffId,
+      decisionPackageId: decision.packageId,
+      decisionOrigin: decision.origin,
+      relationshipCycleId: cycle.cycleId,
+      staffContextGeneratedAt: handoff.staffContext.generatedAt,
+      sourceRefs: handoff.staffContext.sourceRefs,
+    },
+  };
+  const draftBody = "Hi,\n\nThe delivery is currently awaiting your review.\n\nKind regards,\nGreg";
+  const draftPackage = {
+    schema: "evavo-writing/draft-package" as const,
+    version: 1 as const,
+    requestId: writingEnvelope.writingRequest.requestId,
+    packageId: "writing-package-dry-run-1",
+    status: "ready" as const,
+    recommendedCandidateId: "draft-dry-run-1",
+    candidates: [
+      { id: "draft-dry-run-1", body: draftBody, warnings: [], unresolvedAssumptionIds: [] },
+      { id: "draft-dry-run-2", body: "Hi,\n\nThanks for checking in. The delivery is awaiting your review.\n\nKind regards,\nGreg", warnings: [], unresolvedAssumptionIds: [] },
+    ],
+    missingInformation: [],
+    warnings: [],
+  };
 
-  const approval = createCommunicationSendEnvelope({
-    envelopeId: "approval-dry-run-1",
-    approvedAt: "2026-09-04T00:35:00Z",
-    expiresAt: "2026-09-04T01:35:00Z",
-    approvedBy: "operator-dry-run",
-    material,
+  const preparation = prepareRelationshipManagerCommunicationForApproval({
+    candidateId: "approval-candidate-dry-run-1",
+    createdAt: "2026-09-04T00:34:00Z",
+    cycle,
+    memoryPersistence: persistence,
+    handoff,
+    writingEnvelope,
+    draftPackage,
     senderKey: "greg",
     mailboxKey: "greg",
-    decisionPackageId: decision.packageId,
-    evidenceIds: decision.evidenceIds,
-    approvalEvidenceIds: ["operator-approval:dry-run-1"],
+    sender: "greg@evavo.com.au",
+    to: ["client@example.com"],
+    threadId: cycle.projection.threadId,
+    replyMessageId: "gmail-message-inbound-1",
+    canonicalSubject: "Re: Delivery status",
   });
+  assert.equal(preparation.readyForHumanApproval, true);
+  assert.equal(preparation.humanApprovalRecorded, false);
+  assert.equal(preparation.externalExecutionAllowed, false);
+
   const operatorApproval: OperatorCommunicationApprovalReceipt = {
     contract: "business_communication_operator_approval_v1",
     approvalId: "operator-approval-dry-run-1",
     authority: "human_operator",
     approverId: "operator-dry-run",
-    approvedAt: approval.approvedAt,
-    expiresAt: approval.expiresAt,
-    materialSha256: approval.materialSha256,
+    approvedAt: "2026-09-04T00:35:00Z",
+    expiresAt: "2026-09-04T01:35:00Z",
+    materialSha256: preparation.approvalCandidate.materialSha256,
     decisionPackageId: decision.packageId,
-    senderKey: "greg",
-    mailboxKey: "greg",
+    senderKey: preparation.approvalCandidate.senderKey,
+    mailboxKey: preparation.approvalCandidate.mailboxKey,
     evidenceRefs: ["operator-approval:dry-run-1"],
     sourceSystem: "operator_approval",
   };
-
-  const executionRequest = assertAuthorizedCommunicationExecutionRequest({
-    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
-    material,
-    approval,
+  const finalization = finalizeRelationshipManagerCommunicationApproval({
+    envelopeId: "approval-dry-run-1",
+    preparation,
     operatorApprovalReceipt: operatorApproval,
-    decisionPackage: decision,
-    relationshipManagerMemoryPersistence: persistence,
+  });
+  const approval = finalization.approval;
+  assert.equal(finalization.humanApprovalRecorded, true);
+  assert.equal(finalization.externalExecutionAllowed, false);
+  assert.equal(approval.approvalBinding?.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
+
+  const executionAuthorization = authorizeRelationshipManagerCommunicationExecution({
+    cycle,
+    memoryPersistence: persistence,
+    finalization,
+    operatorApprovalReceipt: operatorApproval,
+    mailbox: DESIRED_EVAVO_MAILBOXES.greg,
     review: {
       expectedRecipientAddresses: ["client@example.com"],
       prohibitedClaims: [],
@@ -149,6 +219,10 @@ test("synthetic Gmail thread reaches verified sent lifecycle through the canonic
     runtimeSendingEnabled: true,
     now: new Date("2026-09-04T00:36:00Z"),
   });
+  const executionRequest = executionAuthorization.providerRequest;
+  assert.ok(executionRequest);
+  assert.equal(executionAuthorization.externalExecutionAllowed, true);
+  assert.equal(executionAuthorization.externalEffectPerformed, false);
   assert.equal(executionRequest.authorization.relationshipCycleId, cycle.cycleId);
   assert.equal(executionRequest.authorization.memoryCheckpoint?.cycleId, cycle.cycleId);
   assert.ok((executionRequest.authorization.memoryCheckpoint?.recordIds.length ?? 0) > 0);

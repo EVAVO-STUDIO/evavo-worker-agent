@@ -1,8 +1,11 @@
 import type { CommunicationDecisionPackage } from "./businessCommunicationDecisionPackage";
+import type { MailboxKey } from "./businessMailboxRegistry";
+import type { CommunicationSenderKey } from "./businessCommunicationSenderIdentity";
 import {
   communicationSendMaterialHash,
   type ApprovedAttachment,
   type CommunicationSendMaterial,
+  type CommunicationWritingProvenanceBinding,
 } from "./businessCommunicationSendEnvelope";
 import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 import type { StaffCommunicationHandoffV2Like } from "./businessStaffCommunicationHandoffV2";
@@ -13,7 +16,7 @@ import {
 } from "./businessStaffWritingOutputBinding";
 import type { StaffWritingEnvelopeV2Like } from "./businessStaffWritingProvenanceBinding";
 
-export const BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_CONTRACT = "business_staff_communication_approval_candidate_v1" as const;
+export const BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_CONTRACT = "business_staff_communication_approval_candidate_v2" as const;
 
 export type StaffCommunicationApprovalCandidate = Readonly<{
   contract: typeof BUSINESS_STAFF_COMMUNICATION_APPROVAL_CANDIDATE_CONTRACT;
@@ -27,6 +30,9 @@ export type StaffCommunicationApprovalCandidate = Readonly<{
   writingRequestId: string;
   writingPackageId: string;
   writingCandidateId: string;
+  senderKey: CommunicationSenderKey;
+  mailboxKey: MailboxKey;
+  writingProvenance: CommunicationWritingProvenanceBinding;
   material: CommunicationSendMaterial;
   materialSha256: string;
   evidenceIds: readonly string[];
@@ -119,6 +125,8 @@ export function prepareStaffCommunicationApprovalCandidate(input: Readonly<{
   writingEnvelope: StaffWritingEnvelopeV2Like | unknown;
   draftPackage: StaffDraftPackageLike | unknown;
   writingCandidateId?: string | null;
+  senderKey: CommunicationSenderKey;
+  mailboxKey: MailboxKey;
   sender: string;
   to: readonly string[];
   cc?: readonly string[];
@@ -131,6 +139,7 @@ export function prepareStaffCommunicationApprovalCandidate(input: Readonly<{
 }>): StaffCommunicationApprovalCandidate {
   assertDecisionAndHandoffAligned(input.decisionPackage, input.handoff);
   assertMemoryCheckpoint(input.decisionPackage, input.relationshipManagerMemoryPersistence);
+  if (input.senderKey !== input.mailboxKey) throw new Error("STAFF_APPROVAL_CANDIDATE_MAILBOX_SENDER_KEY_MISMATCH");
 
   const boundDraft = bindStaffWritingOutputForApproval({
     handoff: input.handoff,
@@ -171,6 +180,9 @@ export function prepareStaffCommunicationApprovalCandidate(input: Readonly<{
     writingRequestId: boundDraft.writingRequestId,
     writingPackageId: boundDraft.writingPackageId,
     writingCandidateId: boundDraft.candidateId,
+    senderKey: input.senderKey,
+    mailboxKey: input.mailboxKey,
+    writingProvenance: boundDraft.writingProvenance,
     material,
     materialSha256,
     evidenceIds,

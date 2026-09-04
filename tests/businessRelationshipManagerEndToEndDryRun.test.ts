@@ -254,6 +254,8 @@ test("synthetic Gmail thread reaches verified sent lifecycle through durable gov
   assert.equal(executionRequest.authorization.relationshipCycleId, cycle.cycleId);
   assert.equal(executionRequest.authorization.memoryCheckpoint?.cycleId, cycle.cycleId);
   assert.equal(executionRequest.authorization.writingProvenance?.writingRequestId, writingEnvelope.writingRequest.requestId);
+  assert.equal(executionRequest.authorization.approvalCandidate?.recordId, finalization.approvalCandidateRecordId);
+  assert.equal(executionRequest.authorization.approvalCandidate?.candidateSha256, finalization.approvalCandidateSha256);
 
   // Synthetic provider observation only. No Gmail connector/send API is invoked by this test.
   const executionReceipt = reconcileAuthorizedCommunicationExecution({
@@ -291,6 +293,7 @@ test("synthetic Gmail thread reaches verified sent lifecycle through durable gov
       decisionPackageId: approval.approvalBinding!.decisionPackageId,
       approvalEvidenceIds: approval.approvalBinding!.approvalEvidenceIds,
       writingProvenance: approval.approvalBinding!.writingProvenance,
+      approvalCandidate: executionRequest.authorization.approvalCandidate ?? undefined,
     },
     execution: {
       provider: executionReceipt.provider,
@@ -307,14 +310,17 @@ test("synthetic Gmail thread reaches verified sent lifecycle through durable gov
       decisionOrigin: executionReceipt.authorization.decisionOrigin,
       relationshipCycleId: executionReceipt.authorization.relationshipCycleId,
       writingProvenance: executionReceipt.authorization.writingProvenance ?? undefined,
+      approvalCandidate: executionReceipt.authorization.approvalCandidate ?? undefined,
       memoryCheckpointCycleId: executionReceipt.authorization.memoryCheckpoint?.cycleId ?? null,
       memoryCheckpointRecordIds: executionReceipt.authorization.memoryCheckpoint?.recordIds ?? [],
     },
   });
 
-  assert.equal(lifecycle.contract, "business_communication_lifecycle_receipt_v3");
+  assert.equal(lifecycle.contract, "business_communication_lifecycle_receipt_v4");
   assert.equal(lifecycle.stage, "sent");
   assert.equal(lifecycle.executionVerified, true);
+  assert.equal(lifecycle.approval?.approvalCandidate?.recordId, finalization.approvalCandidateRecordId);
+  assert.equal(lifecycle.execution?.approvalCandidate?.candidateSha256, finalization.approvalCandidateSha256);
   assert.equal(lifecycle.communicationId, "gmail-message-synthetic-sent-1");
   assert.equal(lifecycle.blockers.length, 0);
 });

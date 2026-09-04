@@ -28,6 +28,7 @@ function approval() {
     mailboxKey: "greg",
     decisionPackageId: "decision-package-1",
     evidenceIds: ["gmail:message-1", "roles:current-openings"],
+    approvalEvidenceIds: ["operator-approval:approval-1"],
   });
 }
 
@@ -99,6 +100,7 @@ test("unverified Eva mailbox cannot be used even with an otherwise structurally 
     mailboxKey: "eva",
     decisionPackageId: "decision-package-eva",
     evidenceIds: ["gmail:message-1"],
+    approvalEvidenceIds: ["operator-approval:approval-eva"],
   });
   const result = evaluateCommunicationExecutionGate({
     mailbox: DESIRED_EVAVO_MAILBOXES.eva,

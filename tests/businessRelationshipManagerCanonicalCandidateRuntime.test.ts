@@ -13,7 +13,7 @@ function sourceHydration() {
       cycleId: "candidate-cycle-1",
       observedAt: "2026-09-05T00:00:30.000Z",
       decisionAt: "2026-09-05T00:01:00.000Z",
-      scenario: "candidate" as const,
+      scenario: "graduate_or_candidate" as const,
       objective: "Respond accurately to a graduate enquiry.",
       gmail: {
         threadId: "candidate-thread-1",
@@ -44,6 +44,14 @@ function sourceHydration() {
         competingPersonIds: [],
       },
       channel: { currentChannel: "email" as const, canResolveInWriting: true },
+      candidate: {
+        identityVerified: true,
+        genuineEnquiry: true,
+        asksForOpportunity: true,
+        portfolioOrCvProvided: false,
+        materialsActuallyReviewed: false,
+        evidenceIds: ["gmail:message:candidate-message-1"],
+      },
       evidenceConfidence: 98,
     },
     context: {
@@ -94,7 +102,7 @@ test("manual role flags cannot bypass missing canonical careers and Brain truth"
   assert.equal(result.externalEffectPerformed, false);
 });
 
-test("candidate runtime requires the candidate scenario", async () => {
+test("candidate runtime requires the graduate_or_candidate scenario", async () => {
   const source = sourceHydration();
   await assert.rejects(
     () => runCanonicalRelationshipManagerCandidateResponse({

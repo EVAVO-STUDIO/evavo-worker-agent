@@ -5,6 +5,7 @@ import {
 import {
   BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN,
   BUSINESS_HISTORICAL_PATHS,
+  BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH,
   BUSINESS_ROUTE_POLICIES,
   BUSINESS_WEBSITE_AUDIT_PATHS,
   type BusinessRouteHandlerId,
@@ -127,6 +128,8 @@ function businessOwnership(handlerId: BusinessRouteHandlerId): GrowthWorkerRoute
   switch (handlerId) {
     case "account-intelligence":
       return Object.freeze({ kind: "pattern", pattern: BUSINESS_ACCOUNT_INTELLIGENCE_PATTERN });
+    case "relationship-manager":
+      return Object.freeze({ kind: "exact", paths: Object.freeze([BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH]) });
     case "people":
       return Object.freeze({ kind: "exact", paths: Object.freeze(["/admin/business/people"]) });
     case "website-audit":

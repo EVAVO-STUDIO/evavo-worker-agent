@@ -27,6 +27,15 @@ function positiveAssessment() {
   });
 }
 
+const provenance = {
+  decisionPackageId: "relationship-cycle:cycle-1",
+  decisionOrigin: "relationship_manager_cycle" as const,
+  relationshipCycleId: "cycle-1",
+  handoffId: "handoff-1",
+  writingRequestId: "writing-request-1",
+  providerMessageId: "message-1",
+};
+
 test("builds a deterministic durable-memory write request for eligible outcomes", () => {
   const first = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment());
   const second = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment());
@@ -34,6 +43,19 @@ test("builds a deterministic durable-memory write request for eligible outcomes"
   assert.equal(first?.idempotencyKey, second?.idempotencyKey);
   assert.equal(first?.requestId, second?.requestId);
   assert.equal(first?.record.recordedAt, new Date(NOW).toISOString());
+});
+
+test("governed outcome idempotency binds the exact approved Writing Studio request", () => {
+  const first = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), provenance);
+  const same = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), provenance);
+  const differentDraft = buildBusinessOutcomeMemoryWriteRequest(positiveAssessment(), {
+    ...provenance,
+    writingRequestId: "writing-request-2",
+  });
+  assert.ok(first && same && differentDraft);
+  assert.equal(first.idempotencyKey, same.idempotencyKey);
+  assert.notEqual(first.idempotencyKey, differentDraft.idempotencyKey);
+  assert.equal(first.record.lineage.writingRequestId, "writing-request-1");
 });
 
 test("pending outcomes are not written to durable learning", () => {
@@ -57,11 +79,12 @@ test("pending outcomes are not written to durable learning", () => {
   const result = reconcileBusinessOutcomeMemoryReceipt({ assessment: pending, request });
   assert.equal(result.status, "not_eligible");
   assert.equal(result.durable, false);
+  assert.equal(result.contract, "business_communication_outcome_persistence_v2");
 });
 
 test("idempotent replay counts as durable persistence", () => {
   const assessment = positiveAssessment();
-  const request = buildBusinessOutcomeMemoryWriteRequest(assessment);
+  const request = buildBusinessOutcomeMemoryWriteRequest(assessment, provenance);
   assert.ok(request);
   const result = reconcileBusinessOutcomeMemoryReceipt({
     assessment,

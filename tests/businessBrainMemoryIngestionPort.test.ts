@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  brainMemoryIngestionProofPayload,
   createBrainMemoryIngestionPort,
   type BrainMemoryIngestionFetch,
 } from "../src/core/businessBrainMemoryIngestionPort";
+import { businessHmacSha256 } from "../src/core/businessSha256";
 import type { RelationshipManagerMemoryIngestionRequest } from "../src/core/businessRelationshipManagerMemoryPersistence";
+
+const API_TOKEN = "b".repeat(32);
+const WRITE_TOKEN = "w".repeat(32);
 
 function request(): RelationshipManagerMemoryIngestionRequest {
   return {
@@ -36,13 +41,21 @@ function request(): RelationshipManagerMemoryIngestionRequest {
   };
 }
 
+function config() {
+  return {
+    baseUrl: "http://127.0.0.1:8789",
+    apiToken: API_TOKEN,
+    scopedWriteToken: WRITE_TOKEN,
+  } as const;
+}
+
 function successFetch(observed: { url?: string; init?: RequestInit }, status: "appended" | "idempotent_replay" = "appended"): BrainMemoryIngestionFetch {
   return async (url, init) => {
     observed.url = url;
     observed.init = init;
     const body = JSON.parse(String(init.body)) as {
       name: string;
-      input: RelationshipManagerMemoryIngestionRequest;
+      input: RelationshipManagerMemoryIngestionRequest & { writerProof: string };
       autonomy: string;
     };
     return {
@@ -70,26 +83,26 @@ function successFetch(observed: { url?: string; init?: RequestInit }, status: "a
   };
 }
 
-test("writes exact Relationship Manager ingestion request through authenticated Brain tool call", async () => {
+test("writes exact Relationship Manager request with scoped HMAC proof", async () => {
   const observed: { url?: string; init?: RequestInit } = {};
-  const port = createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789/",
-    apiToken: "b".repeat(32),
-    timeoutMs: 1000,
-  }, successFetch(observed));
+  const port = createBrainMemoryIngestionPort({ ...config(), baseUrl: "http://127.0.0.1:8789/", timeoutMs: 1000 }, successFetch(observed));
 
   const input = request();
   const result = await port.write(input);
+  assert.equal(port.contract, "business_brain_memory_ingestion_port_v2");
   assert.equal(observed.url, "http://127.0.0.1:8789/v1/tools/call");
   assert.equal(observed.init?.method, "POST");
-  assert.equal((observed.init?.headers as Record<string, string>).Authorization, `Bearer ${"b".repeat(32)}`);
+  assert.equal((observed.init?.headers as Record<string, string>).Authorization, `Bearer ${API_TOKEN}`);
   assert.equal(observed.init?.cache, "no-store");
   assert.equal(observed.init?.redirect, "error");
 
   const body = JSON.parse(String(observed.init?.body));
   assert.equal(body.name, "brain_memory_ingest_v2");
   assert.equal(body.autonomy, "auto_low_risk");
-  assert.deepEqual(body.input, input);
+  assert.equal(body.input.writerProof, businessHmacSha256(WRITE_TOKEN, brainMemoryIngestionProofPayload(input)));
+  assert.match(body.input.writerProof, /^[a-f0-9]{64}$/);
+  const { writerProof: _proof, ...unsignedInput } = body.input;
+  assert.deepEqual(unsignedInput, input);
 
   assert.equal(result.status, "appended");
   assert.equal(result.durable, true);
@@ -97,34 +110,26 @@ test("writes exact Relationship Manager ingestion request through authenticated 
 });
 
 test("idempotent replay remains a durable accepted receipt", async () => {
-  const port = createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789",
-    apiToken: "b".repeat(32),
-  }, successFetch({}, "idempotent_replay"));
+  const port = createBrainMemoryIngestionPort(config(), successFetch({}, "idempotent_replay"));
   const result = await port.write(request());
   assert.equal(result.status, "idempotent_replay");
   assert.equal(result.durable, true);
   assert.ok(result.recordId);
 });
 
-test("weak token is rejected before any Brain call", () => {
+test("weak general or scoped tokens are rejected before any Brain call", () => {
   let calls = 0;
   const fetchFn: BrainMemoryIngestionFetch = async () => {
     calls += 1;
     throw new Error("should not execute");
   };
-  assert.throws(() => createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789",
-    apiToken: "weak",
-  }, fetchFn), /API_TOKEN_INVALID/);
+  assert.throws(() => createBrainMemoryIngestionPort({ ...config(), apiToken: "weak" }, fetchFn), /API_TOKEN_INVALID/);
+  assert.throws(() => createBrainMemoryIngestionPort({ ...config(), scopedWriteToken: "weak" }, fetchFn), /SCOPED_WRITE_TOKEN_INVALID/);
   assert.equal(calls, 0);
 });
 
 test("remote errors do not leak Brain error payload details", async () => {
-  const port = createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789",
-    apiToken: "b".repeat(32),
-  }, async () => ({
+  const port = createBrainMemoryIngestionPort(config(), async () => ({
     ok: false,
     status: 403,
     async json() {
@@ -144,10 +149,7 @@ test("remote errors do not leak Brain error payload details", async () => {
 });
 
 test("unexpected Brain approval requirement fails closed", async () => {
-  const port = createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789",
-    apiToken: "b".repeat(32),
-  }, async () => ({
+  const port = createBrainMemoryIngestionPort(config(), async () => ({
     ok: true,
     status: 200,
     async json() {
@@ -163,10 +165,7 @@ test("unexpected Brain approval requirement fails closed", async () => {
 
 test("receipt identity drift or missing durable record ID is rejected", async () => {
   const input = request();
-  const wrongIdentity = createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789",
-    apiToken: "b".repeat(32),
-  }, async () => ({
+  const wrongIdentity = createBrainMemoryIngestionPort(config(), async () => ({
     ok: true,
     status: 200,
     async json() {
@@ -188,10 +187,7 @@ test("receipt identity drift or missing durable record ID is rejected", async ()
   }));
   await assert.rejects(() => wrongIdentity.write(input), /RECEIPT_IDENTITY_MISMATCH/);
 
-  const missingRecord = createBrainMemoryIngestionPort({
-    baseUrl: "http://127.0.0.1:8789",
-    apiToken: "b".repeat(32),
-  }, async () => ({
+  const missingRecord = createBrainMemoryIngestionPort(config(), async () => ({
     ok: true,
     status: 200,
     async json() {

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { buildBusinessCommunicationLearningEvent } from "../src/core/businessCommunicationLearning";
 
-test("captures structured learning from operator edits", () => {
+test("captures relationship decision feedback without owning writing-style learning", () => {
   const event = buildBusinessCommunicationLearningEvent({
     id: "learn-1",
     threadId: "thread-1",
@@ -21,4 +21,7 @@ test("captures structured learning from operator edits", () => {
   assert.equal(event.originalOpening, "Hello Naomi,");
   assert.equal(event.finalOpening, "Hi Naomi,");
   assert.ok(event.finalLength < event.originalLength);
+  assert.equal(event.authoritativeFor, "relationship_decision_feedback");
+  assert.equal(event.writingStyleLearningOwner, "evavo-writing-studio");
+  assert.equal(event.mayMutateVoiceProfile, false);
 });

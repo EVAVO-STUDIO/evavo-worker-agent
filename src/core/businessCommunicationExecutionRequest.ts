@@ -12,9 +12,10 @@ import type {
   CommunicationSendMaterial,
   CommunicationWritingProvenanceBinding,
 } from "./businessCommunicationSendEnvelope";
+import { approvalCandidatePersistenceEvidenceRef } from "./businessStaffCommunicationApprovalCandidatePersistence";
 import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT = "business_communication_execution_request_v3" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_REQUEST_CONTRACT = "business_communication_execution_request_v4" as const;
 
 export type CommunicationApprovalCandidateAuthorization = Readonly<{
   candidateId: string;
@@ -82,11 +83,15 @@ function normalizeApprovalCandidate(
   if (!candidateId || !recordId || !evidenceRef || !/^[a-f0-9]{64}$/.test(candidateSha256)) {
     throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_INVALID");
   }
+  const expectedEvidenceRef = approvalCandidatePersistenceEvidenceRef({ candidateId, candidateSha256, recordId });
+  if (evidenceRef !== expectedEvidenceRef) {
+    throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_EVIDENCE_MISMATCH");
+  }
   const binding = approval.approvalBinding;
   if (!binding) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_BINDING_REQUIRED");
-  if (!binding.evidenceIds.includes(evidenceRef)) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_EVIDENCE_NOT_BOUND");
-  if (!binding.approvalEvidenceIds.includes(evidenceRef)) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_OPERATOR_EVIDENCE_NOT_BOUND");
-  return Object.freeze({ candidateId, candidateSha256, recordId, evidenceRef });
+  if (!binding.evidenceIds.includes(expectedEvidenceRef)) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_EVIDENCE_NOT_BOUND");
+  if (!binding.approvalEvidenceIds.includes(expectedEvidenceRef)) throw new Error("COMMUNICATION_EXECUTION_REQUEST_APPROVAL_CANDIDATE_OPERATOR_EVIDENCE_NOT_BOUND");
+  return Object.freeze({ candidateId, candidateSha256, recordId, evidenceRef: expectedEvidenceRef });
 }
 
 export function authorizeCommunicationExecutionRequest(input: Readonly<{

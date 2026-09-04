@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { prepareRelationshipManagerCommunicationForApproval } from "../src/core/businessRelationshipManagerApprovalRuntime";
+import type { OperatorCommunicationApprovalReceipt } from "../src/core/businessCommunicationOperatorApproval";
+import {
+  bindRelationshipManagerApprovalCandidatePersistence,
+  finalizeRelationshipManagerCommunicationApproval,
+  prepareRelationshipManagerCommunicationForApproval,
+} from "../src/core/businessRelationshipManagerApprovalRuntime";
+import {
+  buildStaffApprovalCandidateWriteRequest,
+  reconcileStaffApprovalCandidateWriteReceipt,
+} from "../src/core/businessStaffCommunicationApprovalCandidatePersistence";
 import { runRelationshipManagerCommunicationCycle } from "../src/core/businessRelationshipManagerRuntime";
 
 function cycle() {
@@ -45,7 +54,7 @@ function cycle() {
   });
 }
 
-function persistence() {
+function memoryPersistence() {
   return {
     contract: "business_relationship_manager_memory_persistence_v1" as const,
     cycleId: "cycle-prepare-1",
@@ -138,7 +147,7 @@ function prepare(overrides: Record<string, unknown> = {}) {
     candidateId: "approval-candidate-prepare-1",
     createdAt: "2026-09-04T01:03:00Z",
     cycle: cycle(),
-    memoryPersistence: persistence(),
+    memoryPersistence: memoryPersistence(),
     handoff: handoff(),
     writingEnvelope: writingEnvelope(),
     draftPackage: draftPackage(),
@@ -153,14 +162,88 @@ function prepare(overrides: Record<string, unknown> = {}) {
   });
 }
 
-test("canonical approval preparation stops before human approval and external execution", () => {
+function persist(preparation = prepare()) {
+  const request = buildStaffApprovalCandidateWriteRequest(preparation.approvalCandidate);
+  const persistence = reconcileStaffApprovalCandidateWriteReceipt({
+    candidate: preparation.approvalCandidate,
+    request,
+    receipt: {
+      protocol: "evavo-approval-candidate-write-receipt-v1",
+      version: 1,
+      requestId: request.requestId,
+      idempotencyKey: request.idempotencyKey,
+      candidateId: request.candidateId,
+      candidateSha256: request.candidateSha256,
+      status: "appended",
+      durable: true,
+      recordId: "approval-candidate-record-1",
+      journalPosition: 42,
+      recordedAt: "2026-09-04T01:03:10Z",
+      storageAuthority: { system: "evavo-storage", instanceId: "local-primary" },
+    },
+  });
+  return bindRelationshipManagerApprovalCandidatePersistence({ preparation, persistence });
+}
+
+function operatorApproval(persisted = persist()): OperatorCommunicationApprovalReceipt {
+  return {
+    contract: "business_communication_operator_approval_v1",
+    approvalId: "operator-approval-prepare-1",
+    authority: "human_operator",
+    approverId: "greg",
+    approvedAt: "2026-09-04T01:04:00Z",
+    expiresAt: "2026-09-04T02:04:00Z",
+    materialSha256: persisted.approvalCandidate.materialSha256,
+    decisionPackageId: persisted.decisionPackageId,
+    senderKey: persisted.approvalCandidate.senderKey,
+    mailboxKey: persisted.approvalCandidate.mailboxKey,
+    evidenceRefs: [persisted.candidatePersistence.approvalEvidenceRef!],
+    sourceSystem: "operator_approval",
+  };
+}
+
+test("prepared candidate is not human-approvable until durably persisted", () => {
   const result = prepare();
-  assert.equal(result.readyForHumanApproval, true);
+  assert.equal(result.readyForCandidatePersistence, true);
+  assert.equal(result.readyForHumanApproval, false);
   assert.equal(result.humanApprovalRecorded, false);
   assert.equal(result.externalExecutionAllowed, false);
   assert.equal(result.externalEffectPerformed, false);
-  assert.equal(result.cycleId, "cycle-prepare-1");
-  assert.equal(result.approvalCandidate.relationshipCycleId, "cycle-prepare-1");
+  assert.equal(result.candidatePersistence, null);
+});
+
+test("durable candidate persistence unlocks human approval but not execution", () => {
+  const result = persist();
+  assert.equal(result.readyForCandidatePersistence, false);
+  assert.equal(result.readyForHumanApproval, true);
+  assert.equal(result.humanApprovalRecorded, false);
+  assert.equal(result.candidatePersistence.durable, true);
+  assert.ok(result.candidatePersistence.approvalEvidenceRef);
+  assert.equal(result.externalExecutionAllowed, false);
+});
+
+test("human approval finalization remains non-executing and binds durable candidate identity", () => {
+  const persisted = persist();
+  const finalized = finalizeRelationshipManagerCommunicationApproval({
+    envelopeId: "send-envelope-prepare-1",
+    preparation: persisted,
+    operatorApprovalReceipt: operatorApproval(persisted),
+  });
+  assert.equal(finalized.humanApprovalRecorded, true);
+  assert.equal(finalized.externalExecutionAllowed, false);
+  assert.equal(finalized.approvalCandidateRecordId, "approval-candidate-record-1");
+  assert.equal(finalized.approvalCandidateSha256, persisted.candidatePersistence.candidateSha256);
+  assert.ok(finalized.approval.approvalBinding?.approvalEvidenceIds.includes(persisted.candidatePersistence.approvalEvidenceRef!));
+});
+
+test("human approval without the durable candidate evidence reference fails closed", () => {
+  const persisted = persist();
+  const receipt = { ...operatorApproval(persisted), evidenceRefs: ["operator-approval:other"] };
+  assert.throws(() => finalizeRelationshipManagerCommunicationApproval({
+    envelopeId: "send-envelope-prepare-1",
+    preparation: persisted,
+    operatorApprovalReceipt: receipt,
+  }), /OPERATOR_CANDIDATE_EVIDENCE_MISSING/);
 });
 
 test("approval preparation rejects a routing thread that does not match the canonical cycle", () => {
@@ -168,7 +251,7 @@ test("approval preparation rejects a routing thread that does not match the cano
 });
 
 test("approval preparation rejects durable memory from a different relationship cycle", () => {
-  assert.throws(() => prepare({ memoryPersistence: { ...persistence(), cycleId: "cycle-other" } }), /MEMORY_CYCLE_MISMATCH/);
+  assert.throws(() => prepare({ memoryPersistence: { ...memoryPersistence(), cycleId: "cycle-other" } }), /MEMORY_CYCLE_MISMATCH/);
 });
 
 test("approval preparation rejects a handoff that belongs to another relationship", () => {

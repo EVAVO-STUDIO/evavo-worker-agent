@@ -1,34 +1,39 @@
-import type { CanonicalRelationshipManagerCandidateResult } from "./businessRelationshipManagerCanonicalCandidateRuntime";
 import {
-  BUSINESS_CANDIDATE_POLICY_APPROVAL_BINDING_CONTRACT,
-  prepareCanonicalRelationshipManagerCommunicationForApproval,
-  type CandidatePolicyApprovalBinding,
-  type CanonicalRelationshipManagerApprovalPreparation,
-} from "./businessRelationshipManagerCanonicalApprovalRuntime";
+  runCanonicalRelationshipManagerCandidateResponse,
+  type CanonicalRelationshipManagerCandidateInput,
+  type CanonicalRelationshipManagerCandidateResult,
+} from "./businessRelationshipManagerCanonicalCandidateRuntime";
+import { assertCanonicalRelationshipManagerApprovalReadiness } from "./businessRelationshipManagerCanonicalApprovalRuntime";
+import {
+  prepareRelationshipManagerCommunicationForApproval,
+  type RelationshipManagerApprovalPreparation,
+} from "./businessRelationshipManagerApprovalRuntime";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_APPROVAL_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_approval_runtime_v2" as const;
+  "business_relationship_manager_canonical_candidate_approval_runtime_v3" as const;
 
-type CanonicalApprovalInput = Parameters<typeof prepareCanonicalRelationshipManagerCommunicationForApproval>[0];
+type ApprovalInput = Parameters<typeof prepareRelationshipManagerCommunicationForApproval>[0];
 
 export type CanonicalCandidateApprovalPreparation = Readonly<{
   contract: typeof BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_APPROVAL_RUNTIME_CONTRACT;
   candidateRuntimeContract: CanonicalRelationshipManagerCandidateResult["contract"];
   careersDisposition: CanonicalRelationshipManagerCandidateResult["careersDecision"]["disposition"];
-  candidatePolicyBinding: CandidatePolicyApprovalBinding;
-  preparation: CanonicalRelationshipManagerApprovalPreparation;
+  careersEvidenceRef: string;
+  roleTruthStatus: NonNullable<CanonicalRelationshipManagerCandidateResult["sources"]["cycle"]["roleTruth"]>["status"];
+  candidatePolicyBound: true;
+  preparation: RelationshipManagerApprovalPreparation;
   externalEffectPerformed: false;
 }>;
 
-export function prepareCanonicalCandidateCommunicationForApproval(
-  input: Omit<CanonicalApprovalInput, "canonicalCycle" | "candidatePolicyBinding"> & Readonly<{
-    candidateResult: CanonicalRelationshipManagerCandidateResult;
-  }>,
-): CanonicalCandidateApprovalPreparation {
-  const candidate = input.candidateResult;
-  if (candidate.contract !== "business_relationship_manager_canonical_candidate_runtime_v1") {
-    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_RUNTIME_CONTRACT_INVALID");
-  }
+export type CanonicalCandidateApprovalInput = Readonly<{
+  candidateRuntimeInput: CanonicalRelationshipManagerCandidateInput;
+  approval: Omit<ApprovalInput, "cycle">;
+}>;
+
+export async function prepareCanonicalCandidateCommunicationForApproval(
+  input: CanonicalCandidateApprovalInput,
+): Promise<CanonicalCandidateApprovalPreparation> {
+  const candidate = await runCanonicalRelationshipManagerCandidateResponse(input.candidateRuntimeInput);
   if (!candidate.approvalGradeReady) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_NOT_READY");
   }
@@ -38,6 +43,7 @@ export function prepareCanonicalCandidateCommunicationForApproval(
   if (candidate.sources.cycle.careersState === "provider_unavailable") {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_UNAVAILABLE");
   }
+
   const careersEvidenceRef = candidate.sources.cycle.careersEvidenceRef?.trim() ?? "";
   if (!careersEvidenceRef) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_EVIDENCE_REQUIRED");
@@ -46,9 +52,11 @@ export function prepareCanonicalCandidateCommunicationForApproval(
   if (!roleTruth) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_ROLE_TRUTH_REQUIRED");
   }
-  const canonical = candidate.sources.cycle.canonical.brain.canonicalCycle;
-  if (!canonical.decisionContext.evidenceRefs.includes(careersEvidenceRef)) {
-    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_EVIDENCE_NOT_BOUND");
+  if (roleTruth.status === "conflicting") {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_ROLE_TRUTH_CONFLICTING");
+  }
+  if (roleTruth.maySayNotHiring) {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_GLOBAL_NOT_HIRING_FORBIDDEN");
   }
   if (candidate.careersDecision.suggestedNextStep === "refer_to_role" && !roleTruth.maySayRoleExists) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_REFERRAL_WITHOUT_ROLE_TRUTH");
@@ -56,35 +64,37 @@ export function prepareCanonicalCandidateCommunicationForApproval(
   if (candidate.careersDecision.meetingRecommended && !roleTruth.maySayRoleExists) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_MEETING_WITHOUT_ROLE_TRUTH");
   }
-  if (roleTruth.maySayNotHiring) {
-    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_GLOBAL_NOT_HIRING_FORBIDDEN");
+
+  const canonical = candidate.sources.cycle.canonical.brain.canonicalCycle;
+  assertCanonicalRelationshipManagerApprovalReadiness(canonical);
+  if (canonical.cycle.decision.scenario !== "graduate_or_candidate") {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_SCENARIO_MISMATCH");
+  }
+  if (!canonical.decisionContext.evidenceRefs.includes(careersEvidenceRef)) {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_EVIDENCE_NOT_BOUND");
+  }
+  if (!canonical.cycle.decision.evidenceIds.includes(careersEvidenceRef)) {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DECISION_CAREERS_EVIDENCE_NOT_BOUND");
   }
 
-  const candidatePolicyBinding: CandidatePolicyApprovalBinding = Object.freeze({
-    contract: BUSINESS_CANDIDATE_POLICY_APPROVAL_BINDING_CONTRACT,
-    careersEvidenceRef,
-    careersDisposition: "reply",
-    roleTruthStatus: roleTruth.status,
-    maySayRoleExists: roleTruth.maySayRoleExists,
-    meetingRecommended: candidate.careersDecision.meetingRecommended,
-    suggestedNextStep: candidate.careersDecision.suggestedNextStep,
+  const preparation = prepareRelationshipManagerCommunicationForApproval({
+    ...input.approval,
+    cycle: canonical.cycle,
   });
-
-  const { candidateResult: _candidateResult, ...approvalInput } = input;
-  const preparation = prepareCanonicalRelationshipManagerCommunicationForApproval({
-    ...approvalInput,
-    canonicalCycle: canonical,
-    candidatePolicyBinding,
-  });
-  if (preparation.canonicalCycleId !== canonical.cycle.cycleId || !preparation.candidatePolicyBound) {
-    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_POLICY_BINDING_NOT_PRESERVED");
+  if (
+    preparation.cycleId !== canonical.cycle.cycleId
+    || preparation.decisionPackageId !== canonical.cycle.decision.packageId
+  ) {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_PREPARATION_IDENTITY_MISMATCH");
   }
 
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_APPROVAL_RUNTIME_CONTRACT,
     candidateRuntimeContract: candidate.contract,
     careersDisposition: candidate.careersDecision.disposition,
-    candidatePolicyBinding,
+    careersEvidenceRef,
+    roleTruthStatus: roleTruth.status,
+    candidatePolicyBound: true,
     preparation,
     externalEffectPerformed: false,
   });

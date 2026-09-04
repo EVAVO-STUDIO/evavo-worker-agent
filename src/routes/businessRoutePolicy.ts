@@ -2,6 +2,7 @@ import {
   BUSINESS_HISTORICAL_PATHS,
   isBusinessRoutePath,
   BUSINESS_PEOPLE_PATH,
+  BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH,
   BUSINESS_WEBSITE_AUDIT_PATHS,
 } from "../core/businessRoutePaths";
 
@@ -12,11 +13,12 @@ export {
   isBusinessRoutePath,
   BUSINESS_PEOPLE_PATH,
   BUSINESS_READ_QUERY_GUARDED_PATHS,
+  BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH,
   BUSINESS_ROUTE_PREFIX,
   BUSINESS_WEBSITE_AUDIT_PATHS,
 } from "../core/businessRoutePaths";
 
-export type BusinessRouteHandlerId = "account-intelligence" | "people" | "website-audit" | "business-historical" | "business-fallback";
+export type BusinessRouteHandlerId = "account-intelligence" | "relationship-manager" | "people" | "website-audit" | "business-historical" | "business-fallback";
 
 export type BusinessMutationPosture = "read-only" | "mixed-internal" | "historical-read-retired-write";
 
@@ -71,6 +73,15 @@ const policies: readonly BusinessRoutePolicy[] = Object.freeze([
     retiredWritesFailClosed: false,
     ...readOnlySafety,
     matches: (pathname: string) => accountIntelligencePath.test(pathname),
+  }),
+  Object.freeze({
+    id: "relationship-manager",
+    priority: 15,
+    mutationPosture: "mixed-internal" as const,
+    historicalOnly: false,
+    retiredWritesFailClosed: false,
+    ...internalWriteSafety,
+    matches: (pathname: string) => pathname === BUSINESS_RELATIONSHIP_MANAGER_CYCLE_PATH,
   }),
   Object.freeze({
     id: "people",

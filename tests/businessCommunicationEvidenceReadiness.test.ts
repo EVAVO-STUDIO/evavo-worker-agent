@@ -27,7 +27,7 @@ const artifact = {
     purpose: "candidate cv",
     canonicalOwner: "gmail" as const,
     current: true,
-    contentHash: "sha256:abc",
+    contentHash: "a".repeat(64),
     sourceEvidenceIds: ["gmail:attachment:m1:cv.pdf"],
   },
   reasons: ["one match"],
@@ -35,7 +35,7 @@ const artifact = {
 };
 
 const calendar = {
-  contract: "business_calendar_commitment_verifier_v1" as const,
+  contract: "business_calendar_commitment_verifier_v2" as const,
   status: "verified_available" as const,
   canPromise: true,
   reasons: ["available"],
@@ -45,6 +45,8 @@ const calendar = {
 test("verified identity with no optional attachment or calendar requirement is approval ready", () => {
   const result = assessCommunicationEvidenceReadiness({ identity });
   assert.equal(result.status, "ready_for_approval");
+  assert.ok(result.evidenceIds.includes("gmail:message:m1"));
+  assert.ok(!result.evidenceIds.includes("gmail:gmail:message:m1"));
 });
 
 test("required attachment ambiguity blocks communication", () => {
@@ -61,6 +63,17 @@ test("calendar promise requires exact verified availability", () => {
   const result = assessCommunicationEvidenceReadiness({ identity, calendarPromiseRequired: true, calendarCommitments: [{ ...calendar, status: "unverified", canPromise: false }] });
   assert.equal(result.status, "blocked");
   assert.equal(result.calendarReady, false);
+});
+
+test("unavailable calendar evidence does not block a communication with no time promise", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity,
+    calendarPromiseRequired: false,
+    calendarCommitments: [{ ...calendar, status: "verified_unavailable", canPromise: false }],
+  });
+  assert.equal(result.status, "ready_for_approval");
+  assert.equal(result.calendarReady, true);
+  assert.ok(result.warnings.some((warning) => /unavailable slot/i.test(warning)));
 });
 
 test("all required evidence produces one approval-ready package", () => {

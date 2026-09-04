@@ -37,6 +37,13 @@ function required(value: string | null | undefined, code: string): string {
   return clean;
 }
 
+function availabilityFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message === "BRAIN_MEMORY_CONTEXT_READ_TIMEOUT"
+    || error.message === "BRAIN_MEMORY_CONTEXT_READ_UNAVAILABLE"
+    || /^BRAIN_MEMORY_CONTEXT_READ_FAILED:\d{3}$/.test(error.message);
+}
+
 function withoutMemoryDomain(
   values: readonly RelationshipSourceReadinessItem[] | null | undefined,
 ): readonly RelationshipSourceReadinessItem[] {
@@ -124,7 +131,7 @@ export async function runCanonicalRelationshipManagerCycleWithBrainContext(
     memorySourceReadiness = successfulMemoryReadiness(read);
     memoryEvidence = memoryEvidenceItem(read);
   } catch (error) {
-    if (error instanceof Error && error.message === "RELATIONSHIP_MANAGER_CANONICAL_BRAIN_AS_OF_MISMATCH") throw error;
+    if (!availabilityFailure(error)) throw error;
     memorySourceReadiness = Object.freeze({
       domain: "memory",
       state: "provider_unavailable",

@@ -9,7 +9,7 @@ import {
 } from "./businessRelationshipManagerCanonicalSourceHydrationEnv";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_runtime_v5" as const;
+  "business_relationship_manager_canonical_candidate_runtime_v6" as const;
 
 export type CanonicalCandidatePolicyInput = Readonly<{
   sincereIndividualEnquiry: boolean;
@@ -39,6 +39,24 @@ export type CanonicalRelationshipManagerCandidateResult = Readonly<{
   externalEffectPerformed: false;
 }>;
 
+function withoutUnverifiedReferral(
+  decision: CareersRelationshipDecision,
+  roleOpen: boolean,
+  verifiedPath: boolean,
+): CareersRelationshipDecision {
+  if (decision.suggestedNextStep !== "refer_to_role" || verifiedPath) return decision;
+  if (!roleOpen) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_ROLE_TRUTH");
+  return Object.freeze({
+    ...decision,
+    meetingRecommended: false,
+    mustCommunicate: Object.freeze([
+      ...decision.mustCommunicate,
+      "The role is confirmed open, but no unique application or referral path is currently verified; do not invent or guess one.",
+    ]),
+    suggestedNextStep: "email_reply",
+  });
+}
+
 export async function runCanonicalRelationshipManagerCandidateResponse(
   input: CanonicalRelationshipManagerCandidateInput,
 ): Promise<CanonicalRelationshipManagerCandidateResult> {
@@ -49,12 +67,8 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CAREERS_IDENTITY_REQUIRED");
   }
   const callerCandidate = input.sourceHydration.cycle.candidate;
-  if (!callerCandidate) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CONTEXT_REQUIRED");
-  }
+  if (!callerCandidate) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CONTEXT_REQUIRED");
 
-  // Opportunity authority never comes from caller flags. Careers hydration may
-  // re-derive explicitRoleOpen from the dedicated authoritative careers model.
   const sourceHydration = Object.freeze({
     ...input.sourceHydration,
     cycle: Object.freeze({
@@ -89,7 +103,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY");
   }
 
-  const careersDecision = decideCareersRelationshipResponse({
+  const policyDecision = decideCareersRelationshipResponse({
     senderIdentityVerified:
       input.sourceHydration.cycle.identity.status === "verified"
       && Boolean(input.sourceHydration.cycle.identity.selected?.personId),
@@ -106,6 +120,11 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     suppressionActive: input.candidate.suppressionActive,
     legalOrEmploymentUncertainty: input.candidate.legalOrEmploymentUncertainty,
   });
+  const careersDecision = withoutUnverifiedReferral(
+    policyDecision,
+    expectedActiveProcess,
+    referralPathDerivedFromCareers,
+  );
 
   if (sources.cycle.careersState === "provider_unavailable" && careersDecision.suggestedNextStep === "refer_to_role") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_WIDENED");

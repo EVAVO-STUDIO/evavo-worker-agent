@@ -85,6 +85,21 @@ function nullableString(value: unknown, code: string, max = 2000): string | null
   return string(value, code, max);
 }
 
+function nullableHttpUrl(value: unknown, code: string): string | null {
+  if (value === null) return null;
+  const clean = string(value, code, 2000);
+  let parsed: URL;
+  try {
+    parsed = new URL(clean);
+  } catch {
+    throw new Error(code);
+  }
+  if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.username || parsed.password) {
+    throw new Error(code);
+  }
+  return parsed.toString();
+}
+
 function bool(value: unknown, code: string) {
   if (typeof value !== "boolean") throw new Error(code);
   return value;
@@ -160,7 +175,7 @@ function role(value: unknown, observedAtMs: number): CareersRoleTruthRecord {
     locationLabel: nullableString(raw.locationLabel, "CAREERS_ROLE_TRUTH_LOCATION_INVALID", 240),
     locationMode: raw.locationMode === null ? null : enumValue(raw.locationMode, ["remote", "hybrid", "onsite", "flexible"] as const, "CAREERS_ROLE_TRUTH_LOCATION_MODE_INVALID"),
     summary: string(raw.summary, "CAREERS_ROLE_TRUTH_SUMMARY_INVALID", 2000),
-    applicationUrl: nullableString(raw.applicationUrl, "CAREERS_ROLE_TRUTH_APPLICATION_URL_INVALID", 2000),
+    applicationUrl: nullableHttpUrl(raw.applicationUrl, "CAREERS_ROLE_TRUTH_APPLICATION_URL_INVALID"),
     openedAt: nullableIso(raw.openedAt, "CAREERS_ROLE_TRUTH_OPENED_AT_INVALID"),
     closesAt: nullableIso(raw.closesAt, "CAREERS_ROLE_TRUTH_CLOSES_AT_INVALID"),
     roleOwnerLabel: string(raw.roleOwnerLabel, "CAREERS_ROLE_TRUTH_OWNER_INVALID", 240),

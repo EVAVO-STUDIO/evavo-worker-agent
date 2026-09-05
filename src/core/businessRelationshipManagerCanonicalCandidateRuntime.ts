@@ -9,7 +9,7 @@ import {
 } from "./businessRelationshipManagerCanonicalSourceHydrationEnv";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_runtime_v2" as const;
+  "business_relationship_manager_canonical_candidate_runtime_v3" as const;
 
 export type CanonicalCandidatePolicyInput = Readonly<{
   sincereIndividualEnquiry: boolean;
@@ -17,7 +17,6 @@ export type CanonicalCandidatePolicyInput = Readonly<{
   asksForAdvice?: boolean;
   asksForMeeting?: boolean;
   portfolioOrCvProvided?: boolean;
-  relevantRoleConfirmed?: boolean;
   suitableFutureInterest?: boolean;
   referralPathKnown?: boolean;
   specificUsefulAdviceAvailable?: boolean;
@@ -53,6 +52,8 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CONTEXT_REQUIRED");
   }
 
+  // Caller-provided opportunity flags are never authority. The careers hydration
+  // layer may re-derive explicitRoleOpen from the dedicated careers registry.
   const sourceHydration = Object.freeze({
     ...input.sourceHydration,
     cycle: Object.freeze({
@@ -69,8 +70,12 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     careersRequired: true,
   });
   const canonical = sources.cycle.canonical.brain.canonicalCycle;
-  if (canonical.cycle.decision.candidateStage === "active_process") {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CALLER_OPPORTUNITY_AUTHORITY_LEAKED");
+  const roleTruth = sources.cycle.roleTruth;
+  if (canonical.cycle.decision.candidateStage === "active_process" && !roleTruth?.maySayRoleExists) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPPORTUNITY_AUTHORITY_NOT_BACKED_BY_CAREERS");
+  }
+  if (roleTruth?.maySayRoleExists && canonical.cycle.decision.candidateStage !== "active_process") {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPEN_ROLE_NOT_PROPAGATED");
   }
 
   const careersDecision = decideCareersRelationshipResponse({
@@ -82,8 +87,8 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     asksForAdvice: input.candidate.asksForAdvice,
     asksForMeeting: input.candidate.asksForMeeting,
     portfolioOrCvProvided: input.candidate.portfolioOrCvProvided,
-    relevantRoleConfirmed: input.candidate.relevantRoleConfirmed,
-    roleTruth: sources.cycle.roleTruth,
+    relevantRoleConfirmed: Boolean(roleTruth?.maySayRoleExists),
+    roleTruth,
     suitableFutureInterest: input.candidate.suitableFutureInterest,
     referralPathKnown: input.candidate.referralPathKnown,
     specificUsefulAdviceAvailable: input.candidate.specificUsefulAdviceAvailable,
@@ -94,10 +99,10 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
   if (sources.cycle.careersState === "provider_unavailable" && careersDecision.suggestedNextStep === "refer_to_role") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_WIDENED");
   }
-  if (careersDecision.meetingRecommended && !sources.cycle.roleTruth?.maySayRoleExists) {
+  if (careersDecision.meetingRecommended && !roleTruth?.maySayRoleExists) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_MEETING_WITHOUT_ROLE_TRUTH");
   }
-  if (careersDecision.suggestedNextStep === "refer_to_role" && !sources.cycle.roleTruth?.maySayRoleExists) {
+  if (careersDecision.suggestedNextStep === "refer_to_role" && !roleTruth?.maySayRoleExists) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_ROLE_TRUTH");
   }
   if (careersDecision.disposition === "reply" && !canonical.approvalGradeReady) {

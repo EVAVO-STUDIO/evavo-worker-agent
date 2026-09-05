@@ -100,7 +100,6 @@ function runtimeInput() {
       asksForJobOrInternship: true,
       asksForMeeting: true,
       portfolioOrCvProvided: false,
-      relevantRoleConfirmed: true,
     },
   };
 }
@@ -153,13 +152,14 @@ function mockFetch(calls: string[]) {
   };
 }
 
-test("no confirmed opening can reach only persistence-ready candidate approval after source rehydration", async () => {
+test("no confirmed opening can reach only persistence-ready candidate approval after fresh source rehydration", async () => {
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = mockFetch(calls) as typeof fetch;
   try {
     const input = runtimeInput();
     const first = await runCanonicalRelationshipManagerCandidateResponse(input);
+    assert.equal(first.contract, "business_relationship_manager_canonical_candidate_runtime_v3");
     assert.equal(first.approvalGradeReady, true);
     assert.equal(first.careersDecision.disposition, "reply");
     assert.equal(first.careersDecision.meetingRecommended, false);
@@ -243,9 +243,14 @@ test("no confirmed opening can reach only persistence-ready candidate approval a
     });
 
     assert.equal(result.contract, "business_relationship_manager_canonical_candidate_approval_runtime_v3");
-    assert.equal(result.candidateRuntimeContract, "business_relationship_manager_canonical_candidate_runtime_v2");
+    assert.equal(result.candidateRuntimeContract, "business_relationship_manager_canonical_candidate_runtime_v3");
     assert.equal(result.candidatePolicyBound, true);
     assert.equal(result.roleTruthStatus, "no_confirmed_open_role");
+    assert.match(result.candidatePolicyEvidenceRef, /^candidate-policy:[a-f0-9]{64}$/);
+    assert.ok(result.preparation.approvalCandidate.evidenceIds.includes(result.candidatePolicyEvidenceRef));
+    assert.equal(result.draftPolicyReview.contract, "business_candidate_draft_policy_review_v1");
+    assert.equal(result.draftPolicyReview.ready, true);
+    assert.deepEqual(result.draftPolicyReview.blockers, []);
     assert.equal(result.preparation.readyForCandidatePersistence, true);
     assert.equal(result.preparation.readyForHumanApproval, false);
     assert.equal(result.preparation.humanApprovalRecorded, false);

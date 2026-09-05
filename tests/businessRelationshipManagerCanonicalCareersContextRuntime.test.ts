@@ -192,10 +192,11 @@ function base(careersPort: CareersRoleTruthPort) {
 
 test("verified open careers record derives active_process and binds its receipt", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("open")));
-  assert.equal(result.contract, "business_relationship_manager_canonical_careers_context_runtime_v3");
+  assert.equal(result.contract, "business_relationship_manager_canonical_careers_context_runtime_v4");
   assert.equal(result.careersState, "verified");
   assert.equal(result.roleTruth?.status, "confirmed_open");
   assert.equal(result.roleTruth?.maySayRoleExists, true);
+  assert.equal(result.applicationUrl, null);
   assert.equal(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, true);
@@ -208,6 +209,7 @@ test("closed role never derives active_process or a global not-hiring claim", as
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("closed")));
   assert.equal(result.roleTruth?.status, "confirmed_not_open");
   assert.equal(result.roleTruth?.maySayNotHiring, false);
+  assert.equal(result.applicationUrl, null);
   assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.match(result.roleTruth?.safeExternalWording ?? "", /isn't currently open/i);
@@ -218,6 +220,7 @@ test("successful no-role lookup remains approval-safe evidence of no confirmed o
   assert.equal(result.careersState, "not_found");
   assert.equal(result.roleTruth?.status, "no_confirmed_open_role");
   assert.equal(result.roleTruth?.maySayNotHiring, false);
+  assert.equal(result.applicationUrl, null);
   assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, true);
@@ -229,6 +232,7 @@ test("careers provider outage blocks approval instead of inferring hiring status
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("transport_error")));
   assert.equal(result.careersState, "provider_unavailable");
   assert.equal(result.roleTruth, null);
+  assert.equal(result.applicationUrl, null);
   assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, false);

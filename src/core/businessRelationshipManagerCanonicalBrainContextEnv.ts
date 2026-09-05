@@ -7,7 +7,7 @@ import {
 } from "./businessRelationshipManagerCanonicalBrainContextRuntime";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_BRAIN_CONTEXT_ENV_CONTRACT =
-  "business_relationship_manager_canonical_brain_context_env_v1" as const;
+  "business_relationship_manager_canonical_brain_context_env_v2" as const;
 
 function configuredPort(env: Pick<Env, "BRAIN_BASE_URL" | "BRAIN_API_TOKEN">): BrainMemoryContextPort {
   const baseUrl = env.BRAIN_BASE_URL?.trim() ?? "";
@@ -17,7 +17,7 @@ function configuredPort(env: Pick<Env, "BRAIN_BASE_URL" | "BRAIN_API_TOKEN">): B
   }
   if (!baseUrl && !apiToken) {
     return Object.freeze({
-      contract: "business_brain_memory_context_port_v1" as const,
+      contract: "business_brain_memory_context_port_v2" as const,
       async read() {
         throw new Error("BRAIN_MEMORY_CONTEXT_READ_UNAVAILABLE");
       },

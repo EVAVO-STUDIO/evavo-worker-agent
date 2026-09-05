@@ -30,11 +30,6 @@ const walk = (directory) => fs.existsSync(directory)
 
 const recordsPath = "src/core/businessAutopilotRecords.ts";
 requireTokens(recordsPath, ["export async function saveBusinessApprovalRequest", "buildBusinessApprovalRequest(input)"]);
-const route = requireTokens("src/routes/businessAutopilotAdmin.ts", [
-  'error: "historical_record_write_disabled"',
-  'mode: "business_approval_request_write_disabled"',
-  "{ status: 410 }",
-]);
 const catalogue = requireTokens("src/routes/businessAutopilotRouteCatalogue.ts", [
   '"business_approval_request_save"',
   "disabledBusinessAutopilotWriteRouteIds",
@@ -42,6 +37,11 @@ const catalogue = requireTokens("src/routes/businessAutopilotRouteCatalogue.ts",
 if (/writeRoute\(\s*["']business_approval_request_save["']/.test(catalogue)) {
   errors.push("Route catalogue must not advertise business_approval_request_save as active");
 }
+requireTokens("src/routes/businessAutopilotAdmin.ts", [
+  'error: "historical_record_write_disabled"',
+  'mode: "business_approval_request_write_disabled"',
+  "{ status: 410 }",
+]);
 
 requireTokens("src/core/businessStaffCommunicationApprovalCandidatePersistence.ts", [
   '"evavo-approval-candidate-write-request-v1"', 'actorId: "evavo-worker-agent"',
@@ -103,8 +103,10 @@ requireTokens("src/core/businessCareersRoleTruthPort.ts", [
   'source: "careers_registry"',
 ]);
 requireTokens("src/core/businessRelationshipManagerCanonicalCareersContextRuntime.ts", [
-  '"business_relationship_manager_canonical_careers_context_runtime_v2"',
+  '"business_relationship_manager_canonical_careers_context_runtime_v3"',
   "careersEvidence", "careersSummary", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND",
+  "explicitRoleOpen: roleTruth?.maySayRoleExists === true",
+  "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_ROLE_STAGE_MISMATCH",
 ]);
 requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.ts", [
   '"business_relationship_manager_canonical_source_hydration_env_v2"',
@@ -112,15 +114,16 @@ requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.t
 ]);
 
 const candidateRuntime = requireTokens("src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts", [
-  '"business_relationship_manager_canonical_candidate_runtime_v2"',
+  '"business_relationship_manager_canonical_candidate_runtime_v3"',
   'scenario !== "graduate_or_candidate"', "careersRequired: true",
   "explicitRoleOpen: false", "activeRecruitmentProcess: false",
   "callerOpportunityAuthoritySuppressed: true",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CALLER_OPPORTUNITY_AUTHORITY_LEAKED",
-  "roleTruth: sources.cycle.roleTruth",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPPORTUNITY_AUTHORITY_NOT_BACKED_BY_CAREERS",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPEN_ROLE_NOT_PROPAGATED",
+  "relevantRoleConfirmed: Boolean(roleTruth?.maySayRoleExists)",
 ]);
-if (/openRoleConfirmed\s*:/.test(candidateRuntime)) {
-  errors.push("Canonical candidate runtime must not pass openRoleConfirmed to policy");
+if (/openRoleConfirmed\s*:/.test(candidateRuntime) || /input\.candidate\.relevantRoleConfirmed/.test(candidateRuntime)) {
+  errors.push("Canonical candidate runtime must derive role relevance from careers truth, never caller opportunity flags");
 }
 
 requireTokens("src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts", [
@@ -133,8 +136,8 @@ const candidateApproval = requireTokens("src/core/businessRelationshipManagerCan
   '"business_relationship_manager_canonical_candidate_approval_runtime_v3"',
   "runCanonicalRelationshipManagerCandidateResponse",
   "candidateRuntimeInput", "assertCanonicalRelationshipManagerApprovalReadiness",
-  "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_CAREERS_EVIDENCE_NOT_BOUND",
-  "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DECISION_CAREERS_EVIDENCE_NOT_BOUND",
+  "candidatePolicyEvidenceRef", "reviewCandidateDraftAgainstPolicy",
+  "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DRAFT_POLICY_BLOCKED",
   "prepareRelationshipManagerCommunicationForApproval",
 ]);
 if (/candidateResult\s*:/.test(candidateApproval)) {
@@ -145,7 +148,7 @@ requireTokens("tests/businessRelationshipManagerCanonicalApprovalCandidateBindin
   "CANDIDATE_SPECIALIZED_RUNTIME_REQUIRED",
 ]);
 requireTokens("tests/businessRelationshipManagerCanonicalCandidateRuntime.test.ts", [
-  "caller role and recruitment flags cannot bypass canonical careers truth",
+  "caller role and recruitment flags cannot bypass unavailable canonical careers truth",
   "callerOpportunityAuthoritySuppressed",
 ]);
 
@@ -169,13 +172,14 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v10",
+  contract: "business-approval-storage-isolation-v11",
   callerSuppliedPreviewCannotPersist: true,
   canonicalCareersTruthRequired: true,
   callerOpportunityAuthoritySuppressed: true,
+  openRolePropagatesOnlyFromCareersTruth: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,
-  candidateResultInjectionAllowed: false,
+  candidateDraftPolicyReviewRequired: true,
   approvalCandidatePersistenceRequired: true,
   externalExecutionEnabled: false,
   errors,

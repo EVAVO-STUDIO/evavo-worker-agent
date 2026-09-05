@@ -11,7 +11,7 @@ const REF = `operations:document-snapshot:${"d".repeat(64)}`;
 
 function documents(mode: "current" | "not_found" | "superseded" | "unavailable"): DocumentRelationshipSnapshotPort {
   return {
-    contract: "business_document_relationship_snapshot_port_v1",
+    contract: "business_document_relationship_snapshot_port_v2",
     async read() {
       if (mode === "unavailable") throw new Error("DOCUMENT_RELATIONSHIP_READ_UNAVAILABLE");
       if (mode === "not_found") return {
@@ -173,6 +173,7 @@ function run(port: DocumentRelationshipSnapshotPort, required = true) {
 
 test("current exact document/version metadata binds into canonical context", async () => {
   const result = await run(documents("current"));
+  assert.equal(result.contract, "business_relationship_manager_canonical_document_context_runtime_v2");
   assert.equal(result.documentState, "verified");
   assert.equal(result.documentEvidenceRef, REF);
   const cycle = result.support.canonical.cycle.canonical.brain.canonicalCycle;
@@ -196,7 +197,7 @@ test("superseded document is not accepted as current", async () => {
 test("document provider is not called when document truth is irrelevant", async () => {
   let calls = 0;
   const port: DocumentRelationshipSnapshotPort = {
-    contract: "business_document_relationship_snapshot_port_v1",
+    contract: "business_document_relationship_snapshot_port_v2",
     async read() { calls += 1; throw new Error("must not run"); },
   };
   const result = await run(port, false);

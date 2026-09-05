@@ -171,9 +171,10 @@ test("verified careers opening derives active_process, role referral and applica
   };
 
   const result = await runCanonicalRelationshipManagerCandidateResponse(input());
-  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v4");
+  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v5");
   assert.equal(result.sources.cycle.contract, "business_relationship_manager_canonical_careers_context_runtime_v4");
   assert.equal(result.sources.cycle.candidateRoleAuthorityDerived, true);
+  assert.equal(result.careersRoleAuthorityDerived, true);
   assert.equal(result.sources.cycle.roleTruth?.maySayRoleExists, true);
   assert.equal(result.sources.cycle.applicationUrl, APPLICATION_URL);
   assert.equal(result.referralPathDerivedFromCareers, true);

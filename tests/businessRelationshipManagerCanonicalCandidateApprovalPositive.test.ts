@@ -107,6 +107,7 @@ function runtimeInput() {
 
 function mockFetch(calls: string[]) {
   let brainReads = 0;
+  let careersReads = 0;
   return async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     calls.push(url);
@@ -130,6 +131,7 @@ function mockFetch(calls: string[]) {
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
     if (url === "http://operations.local/api/v1/internal/relationship-manager/careers-snapshot") {
+      careersReads += 1;
       return new Response(JSON.stringify({
         ok: true,
         data: {
@@ -138,7 +140,7 @@ function mockFetch(calls: string[]) {
           workspaceId: "evavo",
           targetRoleId: null,
           targetRoleKey: "graduate-designer",
-          observedAt: "2026-09-05T00:00:50.000Z",
+          observedAt: careersReads === 1 ? "2026-09-05T00:00:50.000Z" : "2026-09-05T00:00:58.000Z",
           evidenceRef: CAREERS_REF,
           roles: [],
           reasons: ["Dedicated careers truth was queried successfully and returned no matching role record."],
@@ -156,7 +158,7 @@ function mockFetch(calls: string[]) {
   };
 }
 
-test("no confirmed opening can reach only persistence-ready candidate approval after fresh source rehydration", async () => {
+test("unchanged source state survives fresh Brain and Careers re-observation before persistence-ready approval", async () => {
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = mockFetch(calls) as typeof fetch;

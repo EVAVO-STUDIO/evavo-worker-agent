@@ -70,12 +70,12 @@ export async function runCanonicalRelationshipManagerCycleWithFullSourcesFromEnv
     supportContext: {
       sourceHydration: { ...input.sourceHydration, env: input.env },
       supportRequired: input.supportRequired,
-      supportIdentity: input.supportIdentity,
+      ...(input.supportIdentity !== undefined ? { supportIdentity: input.supportIdentity } : {}),
     },
     support: support.port,
     documents: documents.port,
     documentRequired: input.documentRequired,
-    documentIdentity: input.documentIdentity,
+    ...(input.documentIdentity !== undefined ? { documentIdentity: input.documentIdentity } : {}),
   });
   if (input.supportRequired && !support.configured && result.support.supportState !== "provider_unavailable") {
     throw new Error("RELATIONSHIP_MANAGER_FULL_SOURCE_SUPPORT_READINESS_WIDENED");

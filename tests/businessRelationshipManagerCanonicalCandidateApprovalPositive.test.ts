@@ -242,9 +242,10 @@ test("no confirmed opening can reach only persistence-ready candidate approval a
       },
     });
 
-    assert.equal(result.contract, "business_relationship_manager_canonical_candidate_approval_runtime_v3");
+    assert.equal(result.contract, "business_relationship_manager_canonical_candidate_approval_runtime_v4");
     assert.equal(result.candidateRuntimeContract, "business_relationship_manager_canonical_candidate_runtime_v3");
     assert.equal(result.candidatePolicyBound, true);
+    assert.equal(result.freshDraftContextBound, true);
     assert.equal(result.roleTruthStatus, "no_confirmed_open_role");
     assert.match(result.candidatePolicyEvidenceRef, /^candidate-policy:[a-f0-9]{64}$/);
     assert.ok(result.preparation.approvalCandidate.evidenceIds.includes(result.candidatePolicyEvidenceRef));

@@ -1,9 +1,18 @@
 export const BUSINESS_DOCUMENT_RELATIONSHIP_SNAPSHOT_PORT_CONTRACT =
-  "business_document_relationship_snapshot_port_v1" as const;
+  "business_document_relationship_snapshot_port_v2" as const;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const EVIDENCE_PATTERN = /^operations:document-snapshot:[a-f0-9]{64}$/;
+const PURPOSES = ["proposal", "estimate", "scope_of_work", "work_order", "invoice", "brief", "reverse_brief", "nda", "sla", "contract", "handoff", "status_update", "support_report", "change_request", "grant_application", "case_study_note"] as const;
+const SOURCE_TYPES = ["lead", "brief", "proposal", "scope", "work_order", "invoice", "order", "support_ticket"] as const;
+const OUTPUT_FORMATS = ["html", "pdf", "docx", "google_doc"] as const;
+const REVIEW_STATES = ["draft", "internal_review", "approved", "superseded", "archived"] as const;
+
+type DocumentPurpose = typeof PURPOSES[number];
+type DocumentSourceEntityType = typeof SOURCE_TYPES[number];
+type DocumentOutputFormat = typeof OUTPUT_FORMATS[number];
+type DocumentReviewState = typeof REVIEW_STATES[number];
 
 export type DocumentRelationshipSnapshotRequest = Readonly<{ workspaceId: string; documentId: string }>;
 export type DocumentRelationshipSnapshot = Readonly<{
@@ -16,26 +25,26 @@ export type DocumentRelationshipSnapshot = Readonly<{
   document: null | Readonly<{
     id: string;
     title: string;
-    purpose: string;
-    reviewState: "draft" | "internal_review" | "approved" | "superseded" | "archived";
+    purpose: DocumentPurpose;
+    reviewState: DocumentReviewState;
     clientName: string;
-    sourceEntityType: string;
+    sourceEntityType: DocumentSourceEntityType;
     sourceEntityId: string;
     commercialClientId: string | null;
     deliveryProjectId: string | null;
     versionCount: number;
     currentVersionNumber: number;
     payloadReady: boolean;
-    outputFormats: readonly string[];
+    outputFormats: readonly DocumentOutputFormat[];
     updatedAt: string;
   }>;
   currentVersion: null | Readonly<{
     id: string;
     versionNumber: number;
-    reviewState: "draft" | "internal_review" | "approved" | "superseded" | "archived";
+    reviewState: DocumentReviewState;
     changeSummary: string;
     sourceEvidenceCount: number;
-    outputFormats: readonly string[];
+    outputFormats: readonly DocumentOutputFormat[];
     payloadReady: boolean;
     createdAt: string;
   }>;
@@ -64,6 +73,10 @@ function text(value: unknown, code: string, max = 2000) {
   if (!clean || clean.length > max) throw new Error(code);
   return clean;
 }
+function bool(value: unknown, code: string): boolean {
+  if (typeof value !== "boolean") throw new Error(code);
+  return value;
+}
 function iso(value: unknown, code: string) {
   const clean = text(value, code, 100);
   if (!Number.isFinite(Date.parse(clean))) throw new Error(code);
@@ -77,12 +90,19 @@ function enumValue<T extends string>(value: unknown, values: readonly T[], code:
   if (typeof value !== "string" || !(values as readonly string[]).includes(value)) throw new Error(code);
   return value as T;
 }
-function stringArray(value: unknown, code: string, max = 10): readonly string[] {
-  if (!Array.isArray(value) || value.length > max) throw new Error(code);
-  return Object.freeze(value.map((item) => text(item, code, 100)));
+function enumArray<T extends string>(value: unknown, values: readonly T[], code: string, max: number): readonly T[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > max) throw new Error(code);
+  const parsed = value.map((item) => enumValue(item, values, code));
+  if (new Set(parsed).size !== parsed.length) throw new Error(`${code}_DUPLICATE`);
+  return Object.freeze(parsed);
 }
 function nullableUuid(value: unknown, code: string): string | null {
   if (value === null) return null;
+  const clean = text(value, code, 100).toLowerCase();
+  if (!UUID_PATTERN.test(clean)) throw new Error(code);
+  return clean;
+}
+function uuid(value: unknown, code: string): string {
   const clean = text(value, code, 100).toLowerCase();
   if (!UUID_PATTERN.test(clean)) throw new Error(code);
   return clean;
@@ -108,6 +128,7 @@ function snapshot(value: unknown, expected: ReturnType<typeof exactRequest>): Do
     throw new Error("DOCUMENT_RELATIONSHIP_EFFECT_COUNTER_INVALID");
   }
   if (raw.providerReads !== 0 && raw.providerReads !== 2) throw new Error("DOCUMENT_RELATIONSHIP_PROVIDER_READS_INVALID");
+  if ((state === "verified" || state === "not_found") && raw.providerReads !== 2) throw new Error("DOCUMENT_RELATIONSHIP_SUCCESS_READ_COUNT_INVALID");
   if (!Array.isArray(raw.reasons) || raw.reasons.length < 1) throw new Error("DOCUMENT_RELATIONSHIP_REASONS_INVALID");
   const reasons = Object.freeze(raw.reasons.map((item) => text(item, "DOCUMENT_RELATIONSHIP_REASON_INVALID", 1000)));
 
@@ -134,28 +155,27 @@ function snapshot(value: unknown, expected: ReturnType<typeof exactRequest>): Do
   }
 
   const record = object(raw.document, "DOCUMENT_RELATIONSHIP_DOCUMENT_REQUIRED");
-  const id = text(record.id, "DOCUMENT_RELATIONSHIP_DOCUMENT_ID_INVALID", 100).toLowerCase();
-  if (id !== expected.documentId || !UUID_PATTERN.test(id)) throw new Error("DOCUMENT_RELATIONSHIP_DOCUMENT_ID_MISMATCH");
+  const id = uuid(record.id, "DOCUMENT_RELATIONSHIP_DOCUMENT_ID_INVALID");
+  if (id !== expected.documentId) throw new Error("DOCUMENT_RELATIONSHIP_DOCUMENT_ID_MISMATCH");
   const versionCount = nonNegative(record.versionCount, "DOCUMENT_RELATIONSHIP_VERSION_COUNT_INVALID", 10000);
   const currentVersionNumber = nonNegative(record.currentVersionNumber, "DOCUMENT_RELATIONSHIP_CURRENT_VERSION_INVALID", 10000);
   if (currentVersionNumber > versionCount) throw new Error("DOCUMENT_RELATIONSHIP_VERSION_COUNT_MISMATCH");
   const updatedAt = iso(record.updatedAt, "DOCUMENT_RELATIONSHIP_DOCUMENT_UPDATED_AT_INVALID");
   if (Date.parse(updatedAt) > Date.parse(observedAt)) throw new Error("DOCUMENT_RELATIONSHIP_DOCUMENT_UPDATED_AFTER_SNAPSHOT");
-  const reviewState = enumValue(record.reviewState, ["draft", "internal_review", "approved", "superseded", "archived"] as const, "DOCUMENT_RELATIONSHIP_REVIEW_STATE_INVALID");
   const document = Object.freeze({
     id,
     title: text(record.title, "DOCUMENT_RELATIONSHIP_TITLE_INVALID", 300),
-    purpose: text(record.purpose, "DOCUMENT_RELATIONSHIP_PURPOSE_INVALID", 100),
-    reviewState,
+    purpose: enumValue(record.purpose, PURPOSES, "DOCUMENT_RELATIONSHIP_PURPOSE_INVALID"),
+    reviewState: enumValue(record.reviewState, REVIEW_STATES, "DOCUMENT_RELATIONSHIP_REVIEW_STATE_INVALID"),
     clientName: text(record.clientName, "DOCUMENT_RELATIONSHIP_CLIENT_NAME_INVALID", 300),
-    sourceEntityType: text(record.sourceEntityType, "DOCUMENT_RELATIONSHIP_SOURCE_TYPE_INVALID", 100),
+    sourceEntityType: enumValue(record.sourceEntityType, SOURCE_TYPES, "DOCUMENT_RELATIONSHIP_SOURCE_TYPE_INVALID"),
     sourceEntityId: text(record.sourceEntityId, "DOCUMENT_RELATIONSHIP_SOURCE_ID_INVALID", 300),
     commercialClientId: nullableUuid(record.commercialClientId, "DOCUMENT_RELATIONSHIP_CLIENT_ID_INVALID"),
     deliveryProjectId: nullableUuid(record.deliveryProjectId, "DOCUMENT_RELATIONSHIP_PROJECT_ID_INVALID"),
     versionCount,
     currentVersionNumber,
-    payloadReady: record.payloadReady === true,
-    outputFormats: stringArray(record.outputFormats, "DOCUMENT_RELATIONSHIP_OUTPUT_FORMAT_INVALID", 4),
+    payloadReady: bool(record.payloadReady, "DOCUMENT_RELATIONSHIP_PAYLOAD_READY_INVALID"),
+    outputFormats: enumArray(record.outputFormats, OUTPUT_FORMATS, "DOCUMENT_RELATIONSHIP_OUTPUT_FORMAT_INVALID", 4),
     updatedAt,
   });
 
@@ -165,13 +185,13 @@ function snapshot(value: unknown, expected: ReturnType<typeof exactRequest>): Do
     const versionNumber = nonNegative(v.versionNumber, "DOCUMENT_RELATIONSHIP_VERSION_NUMBER_INVALID", 10000);
     if (versionNumber !== currentVersionNumber || versionNumber < 1) throw new Error("DOCUMENT_RELATIONSHIP_CURRENT_VERSION_MISMATCH");
     currentVersion = Object.freeze({
-      id: text(v.id, "DOCUMENT_RELATIONSHIP_VERSION_ID_INVALID", 100),
+      id: uuid(v.id, "DOCUMENT_RELATIONSHIP_VERSION_ID_INVALID"),
       versionNumber,
-      reviewState: enumValue(v.reviewState, ["draft", "internal_review", "approved", "superseded", "archived"] as const, "DOCUMENT_RELATIONSHIP_VERSION_REVIEW_INVALID"),
+      reviewState: enumValue(v.reviewState, REVIEW_STATES, "DOCUMENT_RELATIONSHIP_VERSION_REVIEW_INVALID"),
       changeSummary: text(v.changeSummary, "DOCUMENT_RELATIONSHIP_CHANGE_SUMMARY_INVALID", 2000),
       sourceEvidenceCount: nonNegative(v.sourceEvidenceCount, "DOCUMENT_RELATIONSHIP_SOURCE_EVIDENCE_COUNT_INVALID", 1000),
-      outputFormats: stringArray(v.outputFormats, "DOCUMENT_RELATIONSHIP_VERSION_OUTPUT_INVALID", 4),
-      payloadReady: v.payloadReady === true,
+      outputFormats: enumArray(v.outputFormats, OUTPUT_FORMATS, "DOCUMENT_RELATIONSHIP_VERSION_OUTPUT_INVALID", 4),
+      payloadReady: bool(v.payloadReady, "DOCUMENT_RELATIONSHIP_VERSION_PAYLOAD_READY_INVALID"),
       createdAt: iso(v.createdAt, "DOCUMENT_RELATIONSHIP_VERSION_CREATED_AT_INVALID"),
     });
     if (Date.parse(currentVersion.createdAt) > Date.parse(observedAt)) throw new Error("DOCUMENT_RELATIONSHIP_VERSION_AFTER_SNAPSHOT");

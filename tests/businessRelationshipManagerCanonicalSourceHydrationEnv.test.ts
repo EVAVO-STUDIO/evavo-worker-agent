@@ -38,11 +38,7 @@ function base(operationsRequired = true, careersRequired = false) {
           from: { name: careersRequired ? "Candidate" : "Client", address: "person@example.com" },
           to: [{ name: "Greg", address: "greg@evavo.com.au" }],
           subject: careersRequired ? "Graduate role" : "Status",
-          body: careersRequired
-            ? "Is the graduate role open?"
-            : operationsRequired
-              ? "Where is the delivery up to?"
-              : "Thanks, noted.",
+          body: careersRequired ? "Is the graduate role open?" : operationsRequired ? "Where is the delivery up to?" : "Thanks, noted.",
         }],
       },
       identity: {
@@ -105,7 +101,7 @@ function base(operationsRequired = true, careersRequired = false) {
 
 test("missing Brain and required Operations config remain explicit provider_unavailable sources", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({ env: {}, ...base(true, false) });
-  assert.equal(result.contract, "business_relationship_manager_canonical_source_hydration_env_v2");
+  assert.equal(result.contract, "business_relationship_manager_canonical_source_hydration_env_v3");
   assert.equal(result.brainConfigured, false);
   assert.equal(result.operationsConfigured, false);
   assert.equal(result.careersConfigured, false);
@@ -136,43 +132,26 @@ test("Operations and careers configuration are not required when their truth is 
 });
 
 test("partial Brain read configuration fails before any canonical decision", async () => {
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-      env: { BRAIN_BASE_URL: "http://127.0.0.1:4317" },
-      ...base(false, false),
-    }),
-    /BRAIN_READ_ENV_INCOMPLETE/,
-  );
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-      env: { BRAIN_API_TOKEN: "b".repeat(32) },
-      ...base(false, false),
-    }),
-    /BRAIN_READ_ENV_INCOMPLETE/,
-  );
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
+    env: { BRAIN_BASE_URL: "http://127.0.0.1:4317" }, ...base(false, false),
+  }), /BRAIN_READ_ENV_INCOMPLETE/);
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
+    env: { BRAIN_API_TOKEN: "b".repeat(32) }, ...base(false, false),
+  }), /BRAIN_READ_ENV_INCOMPLETE/);
 });
 
-test("source token without the shared Operations base URL is deployment misconfiguration", async () => {
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-      env: { OPERATIONS_RELATIONSHIP_READ_TOKEN: "o".repeat(32) },
-      ...base(true, false),
-    }),
-    /OPERATIONS_READ_ENV_INCOMPLETE/,
-  );
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-      env: { OPERATIONS_CAREERS_READ_TOKEN: "c".repeat(32) },
-      ...base(false, true),
-    }),
-    /CAREERS_READ_ENV_INCOMPLETE/,
-  );
+test("source token without shared Operations base URL is deployment misconfiguration", async () => {
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
+    env: { OPERATIONS_RELATIONSHIP_READ_TOKEN: "o".repeat(32) }, ...base(true, false),
+  }), /OPERATIONS_READ_ENV_INCOMPLETE/);
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
+    env: { OPERATIONS_CAREERS_READ_TOKEN: "c".repeat(32) }, ...base(false, true),
+  }), /CAREERS_READ_ENV_INCOMPLETE/);
 });
 
 test("shared Operations base URL alone does not force unused source credentials", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
-    env: { OPERATIONS_CORE_BASE_URL: "http://127.0.0.1:3000" },
-    ...base(false, false),
+    env: { OPERATIONS_CORE_BASE_URL: "http://127.0.0.1:3000" }, ...base(false, false),
   });
   assert.equal(result.operationsConfigured, false);
   assert.equal(result.careersConfigured, false);

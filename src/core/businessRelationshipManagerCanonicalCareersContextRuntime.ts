@@ -18,7 +18,7 @@ import {
 import type { RelationshipSourceReadinessItem } from "./businessRelationshipSourceReadiness";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CONTEXT_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_careers_context_runtime_v3" as const;
+  "business_relationship_manager_canonical_careers_context_runtime_v4" as const;
 
 export type CanonicalRelationshipManagerCareersContextInput = Readonly<{
   cycle: CanonicalRelationshipManagerOperationsContextInput["cycle"];
@@ -41,6 +41,7 @@ export type CanonicalRelationshipManagerCareersContextResult = Readonly<{
   careersState: "verified" | "not_found" | "provider_unavailable" | "not_required";
   careersEvidenceRef: string | null;
   roleTruth: RoleOpeningTruth | null;
+  applicationUrl: string | null;
   candidateRoleAuthorityDerived: boolean;
   canonical: CanonicalRelationshipManagerOperationsContextResult;
   externalEffectPerformed: false;
@@ -79,20 +80,28 @@ function readiness(snapshot: CareersRoleTruthSnapshot): RelationshipSourceReadin
   });
 }
 
-function careersSummary(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpeningTruth | null): string {
+function verifiedApplicationUrl(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpeningTruth | null): string | null {
+  if (snapshot.state !== "verified" || roleTruth?.maySayRoleExists !== true) return null;
+  const matches = snapshot.roles.filter((role) => role.authoritative && role.state === "open" && Boolean(role.applicationUrl));
+  if (matches.length !== 1) return null;
+  return matches[0]!.applicationUrl;
+}
+
+function careersSummary(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpeningTruth | null, applicationUrl: string | null): string {
   if (snapshot.state === "not_found") return "Dedicated careers truth was checked successfully and no matching current role record was found. This does not establish that EVAVO is not hiring generally.";
   if (snapshot.state !== "verified") return "Dedicated careers truth is unavailable; current role-opening status is unknown.";
   const roles = snapshot.roles.map((role) => `${role.title}: ${role.state}${role.authoritative ? " (authoritative)" : " (review required)"}`).join("; ");
   const safety = roleTruth?.maySayRoleExists ? "A specific current role-exists claim is supported." : "No specific role-exists claim is currently authorised.";
-  return `${roles}. ${safety} A company-wide not-hiring claim is not authorised.`;
+  const path = applicationUrl ? ` Verified application path: ${applicationUrl}` : " No unique verified application path is available.";
+  return `${roles}. ${safety}${path} A company-wide not-hiring claim is not authorised.`;
 }
 
-function careersEvidence(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpeningTruth | null): Relationship360EvidenceItem | null {
+function careersEvidence(snapshot: CareersRoleTruthSnapshot, roleTruth: RoleOpeningTruth | null, applicationUrl: string | null): Relationship360EvidenceItem | null {
   if (snapshot.state === "provider_unavailable") return null;
   return Object.freeze({
     id: `careers-snapshot-${snapshot.evidenceRef.slice(-24)}`,
     domain: "careers",
-    summary: careersSummary(snapshot, roleTruth),
+    summary: careersSummary(snapshot, roleTruth, applicationUrl),
     status: "current",
     authority: "canonical",
     observedAt: snapshot.observedAt,
@@ -116,7 +125,7 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
     return Object.freeze({
       contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CONTEXT_RUNTIME_CONTRACT,
       careersState: "not_required", careersEvidenceRef: null, roleTruth: null,
-      candidateRoleAuthorityDerived: false, canonical, externalEffectPerformed: false,
+      applicationUrl: null, candidateRoleAuthorityDerived: false, canonical, externalEffectPerformed: false,
     });
   }
   if (!input.careersIdentity) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_IDENTITY_REQUIRED");
@@ -125,6 +134,7 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
   let careersState: Exclude<CanonicalRelationshipManagerCareersContextResult["careersState"], "not_required"> = "provider_unavailable";
   let careersReadiness: RelationshipSourceReadinessItem;
   let roleTruth: RoleOpeningTruth | null = null;
+  let applicationUrl: string | null = null;
   let evidence: Relationship360EvidenceItem | null = null;
   try {
     snapshot = await input.careers.read(input.careersIdentity);
@@ -135,7 +145,8 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
         evidence: roleOpeningEvidenceFromCareersSnapshot(snapshot),
         targetRoleId: snapshot.targetRoleId,
       });
-      evidence = careersEvidence(snapshot, roleTruth);
+      applicationUrl = verifiedApplicationUrl(snapshot, roleTruth);
+      evidence = careersEvidence(snapshot, roleTruth, applicationUrl);
     }
   } catch (error) {
     if (!availabilityFailure(error)) throw error;
@@ -165,7 +176,7 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
     cycle,
     context: Object.freeze({
       ...input.context,
-      ...(snapshot && snapshot.state !== "provider_unavailable" ? { careersSummary: careersSummary(snapshot, roleTruth) } : {}),
+      ...(snapshot && snapshot.state !== "provider_unavailable" ? { careersSummary: careersSummary(snapshot, roleTruth, applicationUrl) } : {}),
       evidenceItems: Object.freeze([...input.context.evidenceItems, ...(evidence ? [evidence] : [])]),
       sourceReadiness: Object.freeze([...baseReadiness, careersReadiness]),
     }),
@@ -182,12 +193,16 @@ export async function runCanonicalRelationshipManagerCycleWithCareersContext(
     const actualOpen = canonical.brain.canonicalCycle.cycle.decision.candidateStage === "active_process";
     if (expectedOpen !== actualOpen) throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CANDIDATE_ROLE_DERIVATION_MISMATCH");
   }
+  if (applicationUrl && roleTruth?.maySayRoleExists !== true) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CAREERS_APPLICATION_PATH_WITHOUT_ROLE_AUTHORITY");
+  }
 
   return Object.freeze({
     contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CONTEXT_RUNTIME_CONTRACT,
     careersState,
     careersEvidenceRef: snapshot?.evidenceRef ?? null,
     roleTruth,
+    applicationUrl,
     candidateRoleAuthorityDerived,
     canonical,
     externalEffectPerformed: false,

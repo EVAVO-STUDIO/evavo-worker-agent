@@ -8,13 +8,15 @@ import { runCanonicalRelationshipManagerCycleWithOperationsContext } from "../sr
 const CLIENT_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 const OBSERVED_AT = "2026-09-04T12:00:45.000Z";
+const BRAIN_STATE_REF = `brain:memory-context-state:${"a".repeat(64)}`;
+const BRAIN_QUERY_REF = `brain:memory-context-query:${"b".repeat(64)}`;
 
 function brain(): BrainMemoryContextPort {
   return {
-    contract: "business_brain_memory_context_port_v1",
+    contract: "business_brain_memory_context_port_v2",
     async read(request) {
       return {
-        contract: "business_brain_memory_context_port_v1",
+        contract: "business_brain_memory_context_port_v2",
         context: {
           protocol: "evavo-memory-fabric-v2",
           generatedAt: "2026-09-04T12:00:50.000Z",
@@ -23,7 +25,8 @@ function brain(): BrainMemoryContextPort {
           records: [],
           omittedRecordCount: 0,
         },
-        queryEvidenceRef: `brain:memory-context-query:${"a".repeat(64)}`,
+        stateEvidenceRef: BRAIN_STATE_REF,
+        queryEvidenceRef: BRAIN_QUERY_REF,
         restrictedRecordsExcluded: 0,
       };
     },
@@ -46,7 +49,7 @@ function operations(mode: "verified" | "not_found" | "provider_unavailable" | "t
         commercialClientId: CLIENT_ID,
         projectId: PROJECT_ID,
         observedAt: OBSERVED_AT,
-        evidenceRef: `operations:relationship-snapshot:${"b".repeat(64)}`,
+        evidenceRef: `operations:relationship-snapshot:${"c".repeat(64)}`,
         commercial: verified ? {
           client: {
             id: CLIENT_ID,
@@ -181,6 +184,8 @@ test("verified Operations Core project/commercial truth hydrates the canonical d
   assert.match(result.brain.canonicalCycle.decisionContext.context360.project ?? "", /70% progress/i);
   assert.match(result.brain.canonicalCycle.decisionContext.context360.commercial ?? "", /1 proposal/i);
   assert.ok(result.brain.canonicalCycle.decisionContext.evidenceRefs.includes(result.operationsEvidenceRef!));
+  assert.ok(result.brain.canonicalCycle.decisionContext.evidenceRefs.includes(BRAIN_STATE_REF));
+  assert.ok(!result.brain.canonicalCycle.decisionContext.evidenceRefs.includes(BRAIN_QUERY_REF));
 });
 
 test("exact Operations not_found remains unresolved when operational truth is required", async () => {
@@ -204,10 +209,7 @@ test("Operations provider is not queried when operational truth is explicitly no
   let reads = 0;
   const noRead: OperationsCoreRelationshipSnapshotPort = {
     contract: "business_operations_core_relationship_snapshot_port_v1",
-    async read() {
-      reads += 1;
-      throw new Error("should not execute");
-    },
+    async read() { reads += 1; throw new Error("should not execute"); },
   };
   const result = await runCanonicalRelationshipManagerCycleWithOperationsContext(base(noRead, false));
   assert.equal(reads, 0);
@@ -217,20 +219,14 @@ test("Operations provider is not queried when operational truth is explicitly no
 
 test("caller cannot pre-assert Operations source readiness on the hydrated path", async () => {
   const current = base(operations("verified"));
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithOperationsContext({
-      ...current,
-      context: {
-        ...current.context,
-        sourceReadiness: [{
-          domain: "operations",
-          state: "verified",
-          required: true,
-          observedAt: OBSERVED_AT,
-          sourceRefs: ["forged:operations"],
-        }],
-      },
-    }),
-    /CALLER_READINESS_FORBIDDEN/,
-  );
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithOperationsContext({
+    ...current,
+    context: {
+      ...current.context,
+      sourceReadiness: [{
+        domain: "operations", state: "verified", required: true,
+        observedAt: OBSERVED_AT, sourceRefs: ["forged:operations"],
+      }],
+    },
+  }), /CALLER_READINESS_FORBIDDEN/);
 });

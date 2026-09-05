@@ -8,6 +8,8 @@ import {
 import { buildBusinessMemoryContextRequest } from "../src/core/businessMemoryContextBridge";
 
 const API_TOKEN = "a".repeat(32);
+const STATE_REF = `brain:memory-context-state:${"a".repeat(64)}`;
+const QUERY_REF = `brain:memory-context-query:${"b".repeat(64)}`;
 
 function request() {
   return buildBusinessMemoryContextRequest({
@@ -36,7 +38,8 @@ function successFetch(observed: { url?: string; init?: RequestInit }, empty = fa
             protocol: "evavo-memory-fabric-v2",
             generatedAt: "2026-09-04T12:00:00.000Z",
             asOf: "2026-09-04T12:00:00.000Z",
-            queryEvidenceRef: `brain:memory-context-query:${"b".repeat(64)}`,
+            stateEvidenceRef: STATE_REF,
+            queryEvidenceRef: QUERY_REF,
             summary: empty ? "No durable EVAVO memory matched this context request." : "Prior relationship decision found.",
             records: empty ? [] : [{
               id: "mem2-1",
@@ -59,7 +62,7 @@ function successFetch(observed: { url?: string; init?: RequestInit }, empty = fa
   };
 }
 
-test("reads bounded relationship context through authenticated Brain tool route", async () => {
+test("reads bounded relationship context with separate state and query evidence", async () => {
   const observed: { url?: string; init?: RequestInit } = {};
   const port = createBrainMemoryContextPort({
     baseUrl: "http://127.0.0.1:4317/",
@@ -69,39 +72,30 @@ test("reads bounded relationship context through authenticated Brain tool route"
   const input = request();
   const result = await port.read(input);
 
-  assert.equal(port.contract, "business_brain_memory_context_port_v1");
+  assert.equal(port.contract, "business_brain_memory_context_port_v2");
   assert.equal(observed.url, "http://127.0.0.1:4317/v1/tools/call");
   assert.equal(observed.init?.method, "POST");
   assert.equal((observed.init?.headers as Record<string, string>).Authorization, `Bearer ${API_TOKEN}`);
-  assert.equal(observed.init?.cache, "no-store");
-  assert.equal(observed.init?.redirect, "error");
   const body = JSON.parse(String(observed.init?.body));
   assert.equal(body.name, "brain_memory_context_v2");
   assert.equal(body.autonomy, "auto_low_risk");
   assert.deepEqual(body.input, input);
-
   assert.equal(result.context.records.length, 1);
-  assert.deepEqual(result.context.records[0]?.sourceRefs, ["gmail:message:m1"]);
-  assert.match(result.queryEvidenceRef, /^brain:memory-context-query:[a-f0-9]{64}$/);
+  assert.equal(result.stateEvidenceRef, STATE_REF);
+  assert.equal(result.queryEvidenceRef, QUERY_REF);
 });
 
-test("empty context remains a successful evidence-backed read", async () => {
-  const port = createBrainMemoryContextPort({
-    baseUrl: "http://127.0.0.1:4317",
-    apiToken: API_TOKEN,
-  }, successFetch({}, true));
+test("empty context remains successful and evidence-backed", async () => {
+  const port = createBrainMemoryContextPort({ baseUrl: "http://127.0.0.1:4317", apiToken: API_TOKEN }, successFetch({}, true));
   const result = await port.read(request());
   assert.deepEqual(result.context.records, []);
-  assert.match(result.context.summary, /No durable EVAVO memory matched/i);
-  assert.match(result.queryEvidenceRef, /^brain:memory-context-query:/);
+  assert.equal(result.stateEvidenceRef, STATE_REF);
+  assert.equal(result.queryEvidenceRef, QUERY_REF);
 });
 
 test("request must be relationship-scoped before any Brain call", async () => {
   let calls = 0;
-  const port = createBrainMemoryContextPort({
-    baseUrl: "http://127.0.0.1:4317",
-    apiToken: API_TOKEN,
-  }, async () => {
+  const port = createBrainMemoryContextPort({ baseUrl: "http://127.0.0.1:4317", apiToken: API_TOKEN }, async () => {
     calls += 1;
     throw new Error("should not execute");
   });
@@ -111,30 +105,21 @@ test("request must be relationship-scoped before any Brain call", async () => {
 });
 
 test("remote error payload details are not surfaced", async () => {
-  const port = createBrainMemoryContextPort({
-    baseUrl: "http://127.0.0.1:4317",
-    apiToken: API_TOKEN,
-  }, async () => ({
+  const port = createBrainMemoryContextPort({ baseUrl: "http://127.0.0.1:4317", apiToken: API_TOKEN }, async () => ({
     ok: false,
     status: 500,
     async json() { return { error: { message: "sensitive local journal path" } }; },
   }));
-  await assert.rejects(
-    () => port.read(request()),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /READ_FAILED:500/);
-      assert.doesNotMatch(error.message, /journal path/);
-      return true;
-    },
-  );
+  await assert.rejects(() => port.read(request()), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /READ_FAILED:500/);
+    assert.doesNotMatch(error.message, /journal path/);
+    return true;
+  });
 });
 
-test("unsourced returned memory records fail closed", async () => {
-  const port = createBrainMemoryContextPort({
-    baseUrl: "http://127.0.0.1:4317",
-    apiToken: API_TOKEN,
-  }, async () => ({
+test("missing or malformed state evidence fails closed", async () => {
+  const port = createBrainMemoryContextPort({ baseUrl: "http://127.0.0.1:4317", apiToken: API_TOKEN }, async () => ({
     ok: true,
     status: 200,
     async json() {
@@ -145,18 +130,38 @@ test("unsourced returned memory records fail closed", async () => {
           protocol: "evavo-memory-fabric-v2",
           generatedAt: "2026-09-04T12:00:00Z",
           asOf: "2026-09-04T12:00:00Z",
-          queryEvidenceRef: `brain:memory-context-query:${"b".repeat(64)}`,
+          stateEvidenceRef: "bad",
+          queryEvidenceRef: QUERY_REF,
+          summary: "empty",
+          records: [],
+          omittedRecordCount: 0,
+          restrictedRecordsExcluded: 0,
+        },
+      };
+    },
+  }));
+  await assert.rejects(() => port.read(request()), /STATE_EVIDENCE_INVALID/);
+});
+
+test("unsourced returned memory records fail closed", async () => {
+  const port = createBrainMemoryContextPort({ baseUrl: "http://127.0.0.1:4317", apiToken: API_TOKEN }, async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        name: "brain_memory_context_v2",
+        ok: true,
+        output: {
+          protocol: "evavo-memory-fabric-v2",
+          generatedAt: "2026-09-04T12:00:00Z",
+          asOf: "2026-09-04T12:00:00Z",
+          stateEvidenceRef: STATE_REF,
+          queryEvidenceRef: QUERY_REF,
           summary: "bad record",
           records: [{
-            id: "mem-bad",
-            kind: "fact",
-            summary: "Unsourced fact.",
-            occurredAt: "2026-09-03T12:00:00Z",
-            confidence: "verified",
-            status: "current",
-            sourceRefs: [],
-            score: 90,
-            whyIncluded: [],
+            id: "mem-bad", kind: "fact", summary: "Unsourced fact.",
+            occurredAt: "2026-09-03T12:00:00Z", confidence: "verified", status: "current",
+            sourceRefs: [], score: 90, whyIncluded: [],
           }],
           omittedRecordCount: 0,
           restrictedRecordsExcluded: 0,

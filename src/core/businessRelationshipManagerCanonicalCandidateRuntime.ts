@@ -9,7 +9,7 @@ import {
 } from "./businessRelationshipManagerCanonicalSourceHydrationEnv";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_runtime_v3" as const;
+  "business_relationship_manager_canonical_candidate_runtime_v4" as const;
 
 export type CanonicalCandidatePolicyInput = Readonly<{
   sincereIndividualEnquiry: boolean;
@@ -18,7 +18,6 @@ export type CanonicalCandidatePolicyInput = Readonly<{
   asksForMeeting?: boolean;
   portfolioOrCvProvided?: boolean;
   suitableFutureInterest?: boolean;
-  referralPathKnown?: boolean;
   specificUsefulAdviceAvailable?: boolean;
   suppressionActive?: boolean;
   legalOrEmploymentUncertainty?: boolean;
@@ -34,6 +33,7 @@ export type CanonicalRelationshipManagerCandidateResult = Readonly<{
   sources: CanonicalRelationshipManagerSourceHydrationEnvResult;
   careersDecision: CareersRelationshipDecision;
   callerOpportunityAuthoritySuppressed: true;
+  referralPathDerivedFromCareers: boolean;
   approvalGradeReady: boolean;
   externalEffectPerformed: false;
 }>;
@@ -78,6 +78,11 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPEN_ROLE_NOT_PROPAGATED");
   }
 
+  const referralPathDerivedFromCareers = Boolean(sources.cycle.applicationUrl);
+  if (referralPathDerivedFromCareers && !roleTruth?.maySayRoleExists) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY");
+  }
+
   const careersDecision = decideCareersRelationshipResponse({
     senderIdentityVerified:
       input.sourceHydration.cycle.identity.status === "verified"
@@ -90,7 +95,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     relevantRoleConfirmed: Boolean(roleTruth?.maySayRoleExists),
     roleTruth,
     suitableFutureInterest: input.candidate.suitableFutureInterest,
-    referralPathKnown: input.candidate.referralPathKnown,
+    referralPathKnown: referralPathDerivedFromCareers,
     specificUsefulAdviceAvailable: input.candidate.specificUsefulAdviceAvailable,
     suppressionActive: input.candidate.suppressionActive,
     legalOrEmploymentUncertainty: input.candidate.legalOrEmploymentUncertainty,
@@ -120,6 +125,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
         suggestedNextStep: "request_missing_context",
       }),
       callerOpportunityAuthoritySuppressed: true,
+      referralPathDerivedFromCareers,
       approvalGradeReady: false,
       externalEffectPerformed: false,
     });
@@ -130,6 +136,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     sources,
     careersDecision,
     callerOpportunityAuthoritySuppressed: true,
+    referralPathDerivedFromCareers,
     approvalGradeReady: canonical.approvalGradeReady && careersDecision.disposition === "reply",
     externalEffectPerformed: false,
   });

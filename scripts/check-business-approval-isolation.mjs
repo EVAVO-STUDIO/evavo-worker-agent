@@ -105,8 +105,9 @@ requireTokens("src/core/businessCareersRoleTruthPort.ts", [
 requireTokens("src/core/businessRelationshipManagerCanonicalCareersContextRuntime.ts", [
   '"business_relationship_manager_canonical_careers_context_runtime_v3"',
   "careersEvidence", "careersSummary", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND",
-  "explicitRoleOpen: roleTruth?.maySayRoleExists === true",
-  "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_ROLE_STAGE_MISMATCH",
+  "const explicitRoleOpen = roleTruth?.maySayRoleExists === true",
+  "candidateRoleAuthorityDerived = true",
+  "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CANDIDATE_ROLE_DERIVATION_MISMATCH",
 ]);
 requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.ts", [
   '"business_relationship_manager_canonical_source_hydration_env_v2"',
@@ -151,6 +152,11 @@ requireTokens("tests/businessRelationshipManagerCanonicalCandidateRuntime.test.t
   "caller role and recruitment flags cannot bypass unavailable canonical careers truth",
   "callerOpportunityAuthoritySuppressed",
 ]);
+requireTokens("tests/businessRelationshipManagerCanonicalCandidateOpenRole.test.ts", [
+  "verified careers opening derives active_process and role referral authority",
+  'candidateStage, "active_process"',
+  "candidateRoleAuthorityDerived",
+]);
 
 const approvalRuntime = requireTokens("src/core/businessRelationshipManagerApprovalRuntime.ts", [
   "readyForCandidatePersistence: true", "readyForHumanApproval: false",
@@ -172,9 +178,10 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v11",
+  contract: "business-approval-storage-isolation-v12",
   callerSuppliedPreviewCannotPersist: true,
   canonicalCareersTruthRequired: true,
+  candidateRoleAuthorityDerivedByCareers: true,
   callerOpportunityAuthoritySuppressed: true,
   openRolePropagatesOnlyFromCareersTruth: true,
   genericCandidateApprovalRejected: true,

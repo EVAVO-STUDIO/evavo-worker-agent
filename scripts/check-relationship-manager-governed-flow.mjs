@@ -23,6 +23,7 @@ const files = {
   dryRun: "tests/businessRelationshipManagerEndToEndDryRun.test.ts",
   candidateTest: "tests/businessRelationshipManagerCanonicalCandidateRuntime.test.ts",
   openRoleTest: "tests/businessRelationshipManagerCanonicalCandidateOpenRole.test.ts",
+  draftBindingTest: "tests/businessRelationshipManagerCanonicalDraftBinding.test.ts",
   bypassTest: "tests/businessRelationshipManagerCanonicalApprovalCandidateBinding.test.ts",
 };
 const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, fs.readFileSync(path.join(root, file), "utf8")]));
@@ -63,11 +64,15 @@ requireToken("candidateTest", "caller role and recruitment flags cannot bypass u
 requireToken("openRoleTest", "verified careers opening derives active_process and role referral authority", "Positive open-role regression must be present");
 requireToken("openRoleTest", "candidateRoleAuthorityDerived", "Positive open-role regression must assert careers-derived role authority");
 
-requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v4", "Generic canonical approval must use v4");
+requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v5", "Generic canonical approval must use v5");
+requireToken("canonicalApproval", "assertCanonicalRelationshipManagerDraftBinding", "Canonical approval must bind drafts to fresh source context");
+requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_SOURCE_CONTEXT_CHANGED_AFTER_DRAFT", "Changed source context must force regeneration");
 requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_SPECIALIZED_RUNTIME_REQUIRED", "Generic canonical approval must reject candidate cycles");
-requireToken("candidateApproval", "business_relationship_manager_canonical_candidate_approval_runtime_v3", "Candidate approval must use v3");
+requireToken("candidateApproval", "business_relationship_manager_canonical_candidate_approval_runtime_v4", "Candidate approval must use v4");
 requireToken("candidateApproval", "runCanonicalRelationshipManagerCandidateResponse", "Candidate approval must rehydrate sources itself");
 requireToken("candidateApproval", "candidateRuntimeInput", "Candidate approval must accept source input, not prebuilt candidate results");
+requireToken("candidateApproval", "assertCanonicalRelationshipManagerDraftBinding", "Candidate approval must reject stale handoff context after rehydration");
+requireToken("candidateApproval", "freshDraftContextBound: true", "Candidate approval must expose successful fresh-draft binding");
 requireToken("candidateApproval", "candidatePolicyEvidenceRef", "Candidate approval must bind deterministic policy evidence");
 requireToken("candidateApproval", "reviewCandidateDraftAgainstPolicy", "Candidate approval must review the exact selected draft");
 requireToken("candidateApproval", "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DRAFT_POLICY_BLOCKED", "Unsafe candidate drafts must fail before approval");
@@ -75,6 +80,7 @@ requireToken("candidateApproval", "prepareRelationshipManagerCommunicationForApp
 forbidToken("candidateApproval", "candidateResult:", "Candidate approval must not accept caller-constructed candidate results");
 requireToken("draftReview", '"business_candidate_draft_policy_review_v1"', "Candidate draft policy review must be explicit and versioned");
 requireToken("draftReview", "unsupported_global_not_hiring_claim", "Draft review must block unsupported global not-hiring claims");
+requireToken("draftBindingTest", "new or removed source evidence after drafting forces regeneration", "Draft binding regression must cover source changes");
 requireToken("bypassTest", "generic canonical approval refuses every candidate cycle and requires the specialized runtime", "Regression must pin generic candidate bypass rejection");
 
 for (const [key, tokens] of Object.entries({
@@ -109,13 +115,14 @@ if (failures.length) {
 }
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v8_careers_derived_role_and_draft_policy",
+  contract: "relationship_manager_governed_flow_check_v9_fresh_draft_source_binding",
   adminPreviewSendCapable: false,
   callerOpportunityAuthoritySuppressed: true,
   candidateRoleAuthorityDerivedByCareers: true,
   openRolePropagatesOnlyFromCareersTruth: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,
+  freshDraftSourceContextRequired: true,
   candidatePolicyEvidenceBound: true,
   candidateDraftPolicyReviewRequired: true,
   approvalRequiresDurableCycle: true,

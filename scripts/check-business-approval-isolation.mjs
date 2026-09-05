@@ -108,13 +108,15 @@ requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.t
 ]);
 
 const candidateRuntime = requireTokens("src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts", [
-  '"business_relationship_manager_canonical_candidate_runtime_v4"',
+  '"business_relationship_manager_canonical_candidate_runtime_v5"',
   'scenario !== "graduate_or_candidate"', "careersRequired: true",
   "explicitRoleOpen: false", "activeRecruitmentProcess: false", "callerOpportunityAuthoritySuppressed: true",
-  "referralPathDerivedFromCareers", "sources.cycle.applicationUrl",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPPORTUNITY_AUTHORITY_NOT_BACKED_BY_CAREERS",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPEN_ROLE_NOT_PROPAGATED",
+  "careersRoleAuthorityDerived", "referralPathDerivedFromCareers", "sources.cycle.applicationUrl",
+  "actualActiveProcess !== expectedActiveProcess",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_NOT_DERIVED",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_DERIVATION_MISMATCH",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_VERIFIED_PATH",
 ]);
 if (/openRoleConfirmed\s*:/.test(candidateRuntime) || /input\.candidate\.relevantRoleConfirmed/.test(candidateRuntime) || /input\.candidate\.referralPathKnown/.test(candidateRuntime)) {
   errors.push("Canonical candidate runtime must derive role/referral authority only from careers truth");
@@ -174,13 +176,14 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v14",
+  contract: "business-approval-storage-isolation-v15",
   callerSuppliedPreviewCannotPersist: true,
   brainStateFingerprintStableAcrossQueries: true,
   canonicalCareersTruthRequired: true,
   candidateRoleAuthorityDerivedByCareers: true,
   candidateReferralPathDerivedByCareers: true,
   callerOpportunityAuthoritySuppressed: true,
+  verifiedOpenRoleMayBecomeActiveProcess: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,
   freshDraftSourceContextRequired: true,

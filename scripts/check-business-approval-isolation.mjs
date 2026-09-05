@@ -128,16 +128,21 @@ if (/openRoleConfirmed\s*:/.test(candidateRuntime) || /input\.candidate\.relevan
 }
 
 requireTokens("src/core/businessRelationshipManagerCanonicalApprovalRuntime.ts", [
-  '"business_relationship_manager_canonical_approval_runtime_v4"',
+  '"business_relationship_manager_canonical_approval_runtime_v5"',
   "assertCanonicalRelationshipManagerApprovalReadiness",
+  "assertCanonicalRelationshipManagerDraftBinding",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CONTEXT_CHANGED_AFTER_DRAFT",
+  "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_SOURCE_CONTEXT_CHANGED_AFTER_DRAFT",
   "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_SPECIALIZED_RUNTIME_REQUIRED",
   'scenario === "graduate_or_candidate"',
 ]);
 const candidateApproval = requireTokens("src/core/businessRelationshipManagerCanonicalCandidateApprovalRuntime.ts", [
-  '"business_relationship_manager_canonical_candidate_approval_runtime_v3"',
+  '"business_relationship_manager_canonical_candidate_approval_runtime_v4"',
   "runCanonicalRelationshipManagerCandidateResponse",
   "candidateRuntimeInput", "assertCanonicalRelationshipManagerApprovalReadiness",
+  "assertCanonicalRelationshipManagerDraftBinding",
   "candidatePolicyEvidenceRef", "reviewCandidateDraftAgainstPolicy",
+  "freshDraftContextBound: true",
   "RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DRAFT_POLICY_BLOCKED",
   "prepareRelationshipManagerCommunicationForApproval",
 ]);
@@ -156,6 +161,11 @@ requireTokens("tests/businessRelationshipManagerCanonicalCandidateOpenRole.test.
   "verified careers opening derives active_process and role referral authority",
   'candidateStage, "active_process"',
   "candidateRoleAuthorityDerived",
+]);
+requireTokens("tests/businessRelationshipManagerCanonicalDraftBinding.test.ts", [
+  "new or removed source evidence after drafting forces regeneration",
+  "SOURCE_CONTEXT_CHANGED_AFTER_DRAFT",
+  "CONTEXT_CHANGED_AFTER_DRAFT",
 ]);
 
 const approvalRuntime = requireTokens("src/core/businessRelationshipManagerApprovalRuntime.ts", [
@@ -178,7 +188,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v12",
+  contract: "business-approval-storage-isolation-v13",
   callerSuppliedPreviewCannotPersist: true,
   canonicalCareersTruthRequired: true,
   candidateRoleAuthorityDerivedByCareers: true,
@@ -186,6 +196,8 @@ console.log(JSON.stringify({
   openRolePropagatesOnlyFromCareersTruth: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,
+  freshDraftSourceContextRequired: true,
+  candidatePolicyEvidenceRequired: true,
   candidateDraftPolicyReviewRequired: true,
   approvalCandidatePersistenceRequired: true,
   externalExecutionEnabled: false,

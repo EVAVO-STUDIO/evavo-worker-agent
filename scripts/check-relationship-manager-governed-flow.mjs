@@ -22,6 +22,7 @@ const files = {
   learning: "src/core/businessCommunicationOutcomeLearningProvenance.ts",
   dryRun: "tests/businessRelationshipManagerEndToEndDryRun.test.ts",
   candidateTest: "tests/businessRelationshipManagerCanonicalCandidateRuntime.test.ts",
+  openRoleTest: "tests/businessRelationshipManagerCanonicalCandidateOpenRole.test.ts",
   bypassTest: "tests/businessRelationshipManagerCanonicalApprovalCandidateBinding.test.ts",
 };
 const source = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, fs.readFileSync(path.join(root, file), "utf8")]));
@@ -52,12 +53,15 @@ for (const token of [
 forbidToken("candidateRuntime", "openRoleConfirmed:", "Canonical candidate runtime must not pass manual role authority");
 forbidToken("candidateRuntime", "input.candidate.relevantRoleConfirmed", "Canonical candidate runtime must not trust caller role relevance");
 requireToken("careersRuntime", '"business_relationship_manager_canonical_careers_context_runtime_v3"', "Careers runtime must use v3 derived-role contract");
-requireToken("careersRuntime", "explicitRoleOpen: roleTruth?.maySayRoleExists === true", "Careers runtime must derive explicitRoleOpen from careers truth");
-requireToken("careersRuntime", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_ROLE_STAGE_MISMATCH", "Careers runtime must verify stage alignment");
+requireToken("careersRuntime", "const explicitRoleOpen = roleTruth?.maySayRoleExists === true", "Careers runtime must derive explicitRoleOpen from careers truth");
+requireToken("careersRuntime", "candidateRoleAuthorityDerived = true", "Careers runtime must mark candidate role authority as source-derived");
+requireToken("careersRuntime", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_CANDIDATE_ROLE_DERIVATION_MISMATCH", "Careers runtime must verify stage alignment");
 requireToken("careersRuntime", "RELATIONSHIP_MANAGER_CANONICAL_CAREERS_EVIDENCE_NOT_BOUND", "Careers evidence must bind through Decision Context");
 requireToken("careersPolicy", "business_careers_relationship_policy_v3", "Careers policy must be evidence-backed v3");
 forbidToken("careersPolicy", "Boolean(input.openRoleConfirmed)", "Careers policy must not trust manual open-role flags");
 requireToken("candidateTest", "caller role and recruitment flags cannot bypass unavailable canonical careers truth", "Candidate regression must pin caller opportunity suppression");
+requireToken("openRoleTest", "verified careers opening derives active_process and role referral authority", "Positive open-role regression must be present");
+requireToken("openRoleTest", "candidateRoleAuthorityDerived", "Positive open-role regression must assert careers-derived role authority");
 
 requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v4", "Generic canonical approval must use v4");
 requireToken("canonicalApproval", "RELATIONSHIP_MANAGER_CANONICAL_APPROVAL_CANDIDATE_SPECIALIZED_RUNTIME_REQUIRED", "Generic canonical approval must reject candidate cycles");
@@ -105,9 +109,10 @@ if (failures.length) {
 }
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v7_careers_derived_role_and_draft_policy",
+  contract: "relationship_manager_governed_flow_check_v8_careers_derived_role_and_draft_policy",
   adminPreviewSendCapable: false,
   callerOpportunityAuthoritySuppressed: true,
+  candidateRoleAuthorityDerivedByCareers: true,
   openRolePropagatesOnlyFromCareersTruth: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,

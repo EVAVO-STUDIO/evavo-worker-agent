@@ -2,7 +2,7 @@ import type { CareersRelationshipDecision } from "./businessCareersRelationshipP
 import type { RoleOpeningTruth } from "./businessRoleOpeningTruth";
 
 export const BUSINESS_CANDIDATE_DRAFT_POLICY_REVIEW_CONTRACT =
-  "business_candidate_draft_policy_review_v1" as const;
+  "business_candidate_draft_policy_review_v2" as const;
 
 export type CandidateDraftPolicyReview = Readonly<{
   contract: typeof BUSINESS_CANDIDATE_DRAFT_POLICY_REVIEW_CONTRACT;
@@ -28,6 +28,7 @@ export function reviewCandidateDraftAgainstPolicy(input: Readonly<{
   portfolioOrCvProvided: boolean;
   materialsActuallyReviewed: boolean;
   suitableFutureInterest: boolean;
+  expectedApplicationUrl?: string | null;
 }>): CandidateDraftPolicyReview {
   const body = input.body.trim();
   if (!body) throw new Error("CANDIDATE_DRAFT_POLICY_BODY_REQUIRED");
@@ -36,6 +37,7 @@ export function reviewCandidateDraftAgainstPolicy(input: Readonly<{
   const checkedRules = [
     "global_not_hiring_claim",
     "evidence_safe_role_wording",
+    "verified_application_path",
     "meeting_invitation_authority",
     "materials_review_claim",
     "future_contact_promise",
@@ -49,6 +51,11 @@ export function reviewCandidateDraftAgainstPolicy(input: Readonly<{
 
   if (input.asksForJobOrInternship && !includesNormalized(body, input.roleTruth.safeExternalWording)) {
     blockers.push("evidence_safe_role_wording_missing");
+  }
+
+  const expectedApplicationUrl = input.expectedApplicationUrl?.trim() || null;
+  if (expectedApplicationUrl && !body.includes(expectedApplicationUrl)) {
+    blockers.push("verified_application_path_missing");
   }
 
   if (!input.careersDecision.meetingRecommended

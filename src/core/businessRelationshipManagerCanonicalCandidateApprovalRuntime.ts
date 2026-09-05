@@ -18,7 +18,7 @@ import {
 import { businessSha256 } from "./businessSha256";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_APPROVAL_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_approval_runtime_v4" as const;
+  "business_relationship_manager_canonical_candidate_approval_runtime_v5" as const;
 
 type ApprovalInput = Parameters<typeof prepareRelationshipManagerCommunicationForApproval>[0];
 
@@ -29,6 +29,7 @@ export type CanonicalCandidateApprovalPreparation = Readonly<{
   careersEvidenceRef: string;
   candidatePolicyEvidenceRef: string;
   roleTruthStatus: NonNullable<CanonicalRelationshipManagerCandidateResult["sources"]["cycle"]["roleTruth"]>["status"];
+  verifiedApplicationUrl: string | null;
   draftPolicyReview: CandidateDraftPolicyReview;
   candidatePolicyBound: true;
   freshDraftContextBound: true;
@@ -45,6 +46,7 @@ function candidatePolicyEvidenceRef(input: Readonly<{
   careersEvidenceRef: string;
   roleTruthStatus: string;
   maySayRoleExists: boolean;
+  verifiedApplicationUrl: string | null;
   careersDisposition: string;
   meetingRecommended: boolean;
   suggestedNextStep: string;
@@ -53,6 +55,7 @@ function candidatePolicyEvidenceRef(input: Readonly<{
     careersEvidenceRef: input.careersEvidenceRef,
     roleTruthStatus: input.roleTruthStatus,
     maySayRoleExists: input.maySayRoleExists,
+    verifiedApplicationUrl: input.verifiedApplicationUrl,
     careersDisposition: input.careersDisposition,
     meetingRecommended: input.meetingRecommended,
     suggestedNextStep: input.suggestedNextStep,
@@ -83,6 +86,11 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_MEETING_WITHOUT_ROLE_TRUTH");
   }
 
+  const verifiedApplicationUrl = candidate.sources.cycle.applicationUrl;
+  if (verifiedApplicationUrl && !roleTruth.maySayRoleExists) {
+    throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_APPLICATION_PATH_WITHOUT_ROLE_AUTHORITY");
+  }
+
   const canonical = candidate.sources.cycle.canonical.brain.canonicalCycle;
   assertCanonicalRelationshipManagerApprovalReadiness(canonical);
   if (canonical.cycle.decision.scenario !== "graduate_or_candidate") {
@@ -94,19 +102,13 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
   if (!canonical.cycle.decision.evidenceIds.includes(careersEvidenceRef)) {
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DECISION_CAREERS_EVIDENCE_NOT_BOUND");
   }
-
-  // The handoff and Writing Studio result may have been produced earlier. Fresh
-  // Brain/Careers evidence must be identical to the draft's bound context, or the
-  // message must be regenerated before approval.
-  assertCanonicalRelationshipManagerDraftBinding({
-    canonical,
-    handoff: input.approval.handoff,
-  });
+  assertCanonicalRelationshipManagerDraftBinding({ canonical, handoff: input.approval.handoff });
 
   const policyEvidenceRef = candidatePolicyEvidenceRef({
     careersEvidenceRef,
     roleTruthStatus: roleTruth.status,
     maySayRoleExists: roleTruth.maySayRoleExists,
+    verifiedApplicationUrl,
     careersDisposition: candidate.careersDecision.disposition,
     meetingRecommended: candidate.careersDecision.meetingRecommended,
     suggestedNextStep: candidate.careersDecision.suggestedNextStep,
@@ -138,6 +140,7 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     portfolioOrCvProvided: input.candidateRuntimeInput.candidate.portfolioOrCvProvided === true,
     materialsActuallyReviewed: callerCandidate.materialsActuallyReviewed,
     suitableFutureInterest: input.candidateRuntimeInput.candidate.suitableFutureInterest === true,
+    expectedApplicationUrl: verifiedApplicationUrl,
   });
   if (!draftPolicyReview.ready) {
     throw new Error(`RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DRAFT_POLICY_BLOCKED:${draftPolicyReview.blockers.join(",")}`);
@@ -150,6 +153,7 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     careersEvidenceRef,
     candidatePolicyEvidenceRef: policyEvidenceRef,
     roleTruthStatus: roleTruth.status,
+    verifiedApplicationUrl,
     draftPolicyReview,
     candidatePolicyBound: true,
     freshDraftContextBound: true,

@@ -12,9 +12,10 @@ function support(mode: "verified" | "not_found" | "unavailable"): SupportRelatio
     async read() {
       if (mode === "unavailable") throw new Error("SUPPORT_RELATIONSHIP_READ_UNAVAILABLE");
       const verified = mode === "verified";
+      const state: "verified" | "not_found" = verified ? "verified" : "not_found";
       return {
         contract: "evavo-relationship-manager-support-snapshot-v1",
-        state: mode,
+        state,
         organisationId: "org_12345678",
         ticketId: "ticket_12345678",
         conversationId: verified ? "conv_12345678" : null,

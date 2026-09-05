@@ -1,14 +1,17 @@
-import { createDocumentRelationshipSnapshotPort, type DocumentRelationshipSnapshotPort } from "./businessDocumentRelationshipSnapshotPort";
+import {
+  BUSINESS_DOCUMENT_RELATIONSHIP_SNAPSHOT_PORT_CONTRACT,
+  createDocumentRelationshipSnapshotPort,
+  type DocumentRelationshipSnapshotPort,
+} from "./businessDocumentRelationshipSnapshotPort";
 import {
   runCanonicalRelationshipManagerCycleWithDocumentContext,
-  type CanonicalRelationshipManagerDocumentContextInput,
   type CanonicalRelationshipManagerDocumentContextResult,
 } from "./businessRelationshipManagerCanonicalDocumentContextRuntime";
 import type { CanonicalRelationshipManagerSourceHydrationEnvInput, RelationshipManagerCanonicalSourceEnv } from "./businessRelationshipManagerCanonicalSourceHydrationEnv";
 import { createSupportRelationshipSnapshotPort, type SupportRelationshipSnapshotPort } from "./businessSupportRelationshipSnapshotPort";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_FULL_SOURCE_HYDRATION_ENV_CONTRACT =
-  "business_relationship_manager_canonical_full_source_hydration_env_v1" as const;
+  "business_relationship_manager_canonical_full_source_hydration_env_v2" as const;
 
 export type RelationshipManagerFullSourceEnv = RelationshipManagerCanonicalSourceEnv & Readonly<{
   OPERATIONS_DOCUMENT_READ_TOKEN?: string;
@@ -54,7 +57,7 @@ function documentPort(env: RelationshipManagerFullSourceEnv): Readonly<{ configu
   if (!baseUrl || !token) return Object.freeze({
     configured: false,
     port: Object.freeze({
-      contract: "business_document_relationship_snapshot_port_v1" as const,
+      contract: BUSINESS_DOCUMENT_RELATIONSHIP_SNAPSHOT_PORT_CONTRACT,
       async read() { throw new Error("DOCUMENT_RELATIONSHIP_READ_UNAVAILABLE"); },
     }),
   });

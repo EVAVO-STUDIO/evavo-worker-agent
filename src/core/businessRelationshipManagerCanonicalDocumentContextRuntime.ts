@@ -5,13 +5,14 @@ import {
   type CanonicalRelationshipManagerSupportContextInput,
   type CanonicalRelationshipManagerSupportContextResult,
 } from "./businessRelationshipManagerCanonicalSupportContextRuntime";
-import type {
-  DocumentRelationshipSnapshot,
-  DocumentRelationshipSnapshotPort,
+import {
+  BUSINESS_DOCUMENT_RELATIONSHIP_SNAPSHOT_PORT_CONTRACT,
+  type DocumentRelationshipSnapshot,
+  type DocumentRelationshipSnapshotPort,
 } from "./businessDocumentRelationshipSnapshotPort";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_DOCUMENT_CONTEXT_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_document_context_runtime_v1" as const;
+  "business_relationship_manager_canonical_document_context_runtime_v2" as const;
 
 export type CanonicalRelationshipManagerDocumentContextInput = Readonly<{
   supportContext: Omit<CanonicalRelationshipManagerSupportContextInput, "support">;
@@ -30,11 +31,11 @@ export type CanonicalRelationshipManagerDocumentContextResult = Readonly<{
 }>;
 
 function withoutDocument(values: readonly RelationshipSourceReadinessItem[] | null | undefined) {
-  const input = values ?? [];
-  if (input.some((item) => item.domain === "document")) {
+  const source = values ?? [];
+  if (source.some((item) => item.domain === "document")) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_DOCUMENT_CALLER_READINESS_FORBIDDEN");
   }
-  return Object.freeze([...input]);
+  return Object.freeze([...source]);
 }
 
 function availabilityFailure(error: unknown) {
@@ -110,7 +111,7 @@ function readiness(snapshot: DocumentRelationshipSnapshot): RelationshipSourceRe
 export async function runCanonicalRelationshipManagerCycleWithDocumentContext(
   input: CanonicalRelationshipManagerDocumentContextInput,
 ): Promise<CanonicalRelationshipManagerDocumentContextResult> {
-  if (input.documents.contract !== "business_document_relationship_snapshot_port_v1") {
+  if (input.documents.contract !== BUSINESS_DOCUMENT_RELATIONSHIP_SNAPSHOT_PORT_CONTRACT) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_DOCUMENT_PORT_CONTRACT_INVALID");
   }
   const context = input.supportContext.sourceHydration.context;
@@ -163,7 +164,7 @@ export async function runCanonicalRelationshipManagerCycleWithDocumentContext(
       ...input.supportContext.sourceHydration,
       context: Object.freeze({
         ...context,
-        ...(snapshot && snapshot.state === "verified" ? { documentsSummary: documentSummary(snapshot) } : {}),
+        ...(snapshot?.state === "verified" ? { documentsSummary: documentSummary(snapshot) } : {}),
         evidenceItems: Object.freeze([...context.evidenceItems, ...(item ? [item] : [])]),
         sourceReadiness: Object.freeze([...baseReadiness, sourceReadiness]),
       }),

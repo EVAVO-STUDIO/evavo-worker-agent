@@ -9,7 +9,7 @@ import {
 } from "./businessRelationshipManagerCanonicalSourceHydrationEnv";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_runtime_v4" as const;
+  "business_relationship_manager_canonical_candidate_runtime_v5" as const;
 
 export type CanonicalCandidatePolicyInput = Readonly<{
   sincereIndividualEnquiry: boolean;
@@ -33,6 +33,7 @@ export type CanonicalRelationshipManagerCandidateResult = Readonly<{
   sources: CanonicalRelationshipManagerSourceHydrationEnvResult;
   careersDecision: CareersRelationshipDecision;
   callerOpportunityAuthoritySuppressed: true;
+  careersRoleAuthorityDerived: boolean;
   referralPathDerivedFromCareers: boolean;
   approvalGradeReady: boolean;
   externalEffectPerformed: false;
@@ -52,8 +53,8 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_CONTEXT_REQUIRED");
   }
 
-  // Caller-provided opportunity flags are never authority. The careers hydration
-  // layer may re-derive explicitRoleOpen from the dedicated careers registry.
+  // Opportunity authority never comes from caller flags. Careers hydration may
+  // re-derive explicitRoleOpen from the dedicated authoritative careers model.
   const sourceHydration = Object.freeze({
     ...input.sourceHydration,
     cycle: Object.freeze({
@@ -65,21 +66,26 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
       }),
     }),
   });
+
   const sources = await runCanonicalRelationshipManagerCycleWithSourcesFromEnv({
     ...sourceHydration,
     careersRequired: true,
   });
   const canonical = sources.cycle.canonical.brain.canonicalCycle;
   const roleTruth = sources.cycle.roleTruth;
-  if (canonical.cycle.decision.candidateStage === "active_process" && !roleTruth?.maySayRoleExists) {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPPORTUNITY_AUTHORITY_NOT_BACKED_BY_CAREERS");
+  const careersRoleAuthorityDerived = sources.cycle.candidateRoleAuthorityDerived;
+  const actualActiveProcess = canonical.cycle.decision.candidateStage === "active_process";
+  const expectedActiveProcess = roleTruth?.maySayRoleExists === true;
+
+  if (!careersRoleAuthorityDerived) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_NOT_DERIVED");
   }
-  if (roleTruth?.maySayRoleExists && canonical.cycle.decision.candidateStage !== "active_process") {
-    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_OPEN_ROLE_NOT_PROPAGATED");
+  if (actualActiveProcess !== expectedActiveProcess) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_DERIVATION_MISMATCH");
   }
 
   const referralPathDerivedFromCareers = Boolean(sources.cycle.applicationUrl);
-  if (referralPathDerivedFromCareers && !roleTruth?.maySayRoleExists) {
+  if (referralPathDerivedFromCareers && !expectedActiveProcess) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY");
   }
 
@@ -92,7 +98,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     asksForAdvice: input.candidate.asksForAdvice,
     asksForMeeting: input.candidate.asksForMeeting,
     portfolioOrCvProvided: input.candidate.portfolioOrCvProvided,
-    relevantRoleConfirmed: Boolean(roleTruth?.maySayRoleExists),
+    relevantRoleConfirmed: expectedActiveProcess,
     roleTruth,
     suitableFutureInterest: input.candidate.suitableFutureInterest,
     referralPathKnown: referralPathDerivedFromCareers,
@@ -104,12 +110,16 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
   if (sources.cycle.careersState === "provider_unavailable" && careersDecision.suggestedNextStep === "refer_to_role") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_WIDENED");
   }
-  if (careersDecision.meetingRecommended && !roleTruth?.maySayRoleExists) {
+  if (careersDecision.meetingRecommended && !expectedActiveProcess) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_MEETING_WITHOUT_ROLE_TRUTH");
   }
-  if (careersDecision.suggestedNextStep === "refer_to_role" && !roleTruth?.maySayRoleExists) {
+  if (careersDecision.suggestedNextStep === "refer_to_role" && !expectedActiveProcess) {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_ROLE_TRUTH");
   }
+  if (careersDecision.suggestedNextStep === "refer_to_role" && !referralPathDerivedFromCareers) {
+    throw new Error("RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_VERIFIED_PATH");
+  }
+
   if (careersDecision.disposition === "reply" && !canonical.approvalGradeReady) {
     return Object.freeze({
       contract: BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_RUNTIME_CONTRACT,
@@ -125,6 +135,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
         suggestedNextStep: "request_missing_context",
       }),
       callerOpportunityAuthoritySuppressed: true,
+      careersRoleAuthorityDerived,
       referralPathDerivedFromCareers,
       approvalGradeReady: false,
       externalEffectPerformed: false,
@@ -136,6 +147,7 @@ export async function runCanonicalRelationshipManagerCandidateResponse(
     sources,
     careersDecision,
     callerOpportunityAuthoritySuppressed: true,
+    careersRoleAuthorityDerived,
     referralPathDerivedFromCareers,
     approvalGradeReady: canonical.approvalGradeReady && careersDecision.disposition === "reply",
     externalEffectPerformed: false,

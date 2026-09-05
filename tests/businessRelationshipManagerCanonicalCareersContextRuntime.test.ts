@@ -197,7 +197,7 @@ test("verified open careers record derives active_process and binds its receipt"
   assert.equal(result.roleTruth?.status, "confirmed_open");
   assert.equal(result.roleTruth?.maySayRoleExists, true);
   assert.equal(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
-  assert.equal(result.roleAuthorityAppliedToCandidateStage, true);
+  assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, true);
   assert.match(result.canonical.brain.canonicalCycle.decisionContext.context360.careers ?? "", /Graduate Designer: open/);
   assert.ok(result.canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(CAREERS_REF));
@@ -209,7 +209,7 @@ test("closed role never derives active_process or a global not-hiring claim", as
   assert.equal(result.roleTruth?.status, "confirmed_not_open");
   assert.equal(result.roleTruth?.maySayNotHiring, false);
   assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
-  assert.equal(result.roleAuthorityAppliedToCandidateStage, false);
+  assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.match(result.roleTruth?.safeExternalWording ?? "", /isn't currently open/i);
 });
 
@@ -219,7 +219,7 @@ test("successful no-role lookup remains approval-safe evidence of no confirmed o
   assert.equal(result.roleTruth?.status, "no_confirmed_open_role");
   assert.equal(result.roleTruth?.maySayNotHiring, false);
   assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
-  assert.equal(result.roleAuthorityAppliedToCandidateStage, false);
+  assert.equal(result.candidateRoleAuthorityDerived, true);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, true);
   assert.match(result.canonical.brain.canonicalCycle.decisionContext.context360.careers ?? "", /does not mean EVAVO is not hiring generally/i);
   assert.ok(result.canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(CAREERS_REF));
@@ -229,7 +229,8 @@ test("careers provider outage blocks approval instead of inferring hiring status
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("transport_error")));
   assert.equal(result.careersState, "provider_unavailable");
   assert.equal(result.roleTruth, null);
-  assert.equal(result.roleAuthorityAppliedToCandidateStage, false);
+  assert.equal(result.candidateRoleAuthorityDerived, true);
+  assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, false);
   assert.ok(result.canonical.brain.canonicalCycle.decisionContext.sourceReadiness?.blockingDomains.includes("careers"));
   assert.ok(!result.canonical.brain.canonicalCycle.decisionContext.context360.currentEvidence.some((item) => item.domain === "careers"));

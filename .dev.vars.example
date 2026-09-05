@@ -24,6 +24,10 @@ OPERATIONS_RELATIONSHIP_READ_TOKEN="replace_me_with_a_distinct_random_operations
 # state and grants no publication, candidate-message, interview or employment authority.
 OPERATIONS_CAREERS_READ_TOKEN="replace_me_with_a_distinct_random_careers_read_token"
 
+# Exact persistent document/version metadata only. Grants no editor, render,
+# export, attachment-byte or external-send authority.
+OPERATIONS_DOCUMENT_READ_TOKEN="replace_me_with_a_distinct_random_document_read_token"
+
 # Support Agent current ticket/service truth. This credential is independently
 # revocable and grants no ticket mutation, outbound-message or workflow authority.
 SUPPORT_AGENT_BASE_URL="http://127.0.0.1:3001"

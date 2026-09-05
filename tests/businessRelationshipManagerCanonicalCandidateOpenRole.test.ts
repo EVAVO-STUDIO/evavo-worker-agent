@@ -7,6 +7,7 @@ const originalFetch = globalThis.fetch;
 const ROLE_ID = "33333333-3333-4333-8333-333333333333";
 const CAREERS_REF = `operations:careers-snapshot:${"c".repeat(64)}`;
 const BRAIN_REF = `brain:memory-context-query:${"b".repeat(64)}`;
+const APPLICATION_URL = "https://evavo.com.au/careers/graduate-designer";
 
 function input() {
   return {
@@ -102,7 +103,7 @@ function input() {
   };
 }
 
-test("verified careers opening derives active_process and role referral authority", async (t) => {
+test("verified careers opening derives active_process, role referral and application path authority", async (t) => {
   t.after(() => { globalThis.fetch = originalFetch; });
   globalThis.fetch = async (url, init) => {
     const href = String(url);
@@ -145,7 +146,7 @@ test("verified careers opening derives active_process and role referral authorit
             locationLabel: "Melbourne / remote",
             locationMode: "hybrid",
             summary: "Current Graduate Designer opening.",
-            applicationUrl: null,
+            applicationUrl: APPLICATION_URL,
             openedAt: "2026-09-01T00:00:00.000Z",
             closesAt: null,
             roleOwnerLabel: "EVAVO",
@@ -168,13 +169,16 @@ test("verified careers opening derives active_process and role referral authorit
   };
 
   const result = await runCanonicalRelationshipManagerCandidateResponse(input());
-  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v3");
-  assert.equal(result.sources.cycle.contract, "business_relationship_manager_canonical_careers_context_runtime_v3");
+  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v4");
+  assert.equal(result.sources.cycle.contract, "business_relationship_manager_canonical_careers_context_runtime_v4");
   assert.equal(result.sources.cycle.candidateRoleAuthorityDerived, true);
   assert.equal(result.sources.cycle.roleTruth?.maySayRoleExists, true);
+  assert.equal(result.sources.cycle.applicationUrl, APPLICATION_URL);
+  assert.equal(result.referralPathDerivedFromCareers, true);
   assert.equal(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.careersDecision.disposition, "reply");
   assert.equal(result.careersDecision.suggestedNextStep, "refer_to_role");
+  assert.ok(result.careersDecision.mustCommunicate.some((item) => /application or referral path/i.test(item)));
   assert.equal(result.careersDecision.meetingRecommended, false);
   assert.equal(result.approvalGradeReady, true);
   assert.ok(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.evidenceIds.includes(CAREERS_REF));

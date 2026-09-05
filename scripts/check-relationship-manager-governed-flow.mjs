@@ -50,10 +50,15 @@ for (const token of ['"business_relationship_manager_canonical_brain_context_run
 requireToken("brainStateTest", "different query receipts with unchanged Brain state produce identical canonical evidence identity", "Brain state/query identity regression must remain present");
 
 for (const token of [
-  '"business_relationship_manager_canonical_candidate_runtime_v4"', "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
+  '"business_relationship_manager_canonical_candidate_runtime_v5"', "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
   "careersRequired: true", "explicitRoleOpen: false", "activeRecruitmentProcess: false",
-  "callerOpportunityAuthoritySuppressed: true", "referralPathDerivedFromCareers",
-  "sources.cycle.applicationUrl", "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY",
+  "callerOpportunityAuthoritySuppressed: true", "careersRoleAuthorityDerived",
+  "referralPathDerivedFromCareers", "sources.cycle.applicationUrl",
+  "actualActiveProcess !== expectedActiveProcess",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_NOT_DERIVED",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_DERIVATION_MISMATCH",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY",
+  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_VERIFIED_PATH",
 ]) requireToken("candidateRuntime", token, `Canonical candidate runtime must retain ${token}`);
 forbidToken("candidateRuntime", "input.candidate.relevantRoleConfirmed", "Candidate runtime must not trust caller role relevance");
 forbidToken("candidateRuntime", "input.candidate.referralPathKnown", "Candidate runtime must not trust caller referral paths");
@@ -115,11 +120,12 @@ if (failures.length) {
 }
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v10_stable_source_and_referral_authority",
+  contract: "relationship_manager_governed_flow_check_v11_verified_role_derivation",
   adminPreviewSendCapable: false,
   brainStateFingerprintStableAcrossQueries: true,
   callerOpportunityAuthoritySuppressed: true,
   candidateRoleAuthorityDerivedByCareers: true,
+  verifiedOpenRoleMayBecomeActiveProcess: true,
   candidateReferralPathDerivedByCareers: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,

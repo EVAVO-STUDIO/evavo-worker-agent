@@ -6,7 +6,8 @@ import { runCanonicalRelationshipManagerCandidateResponse } from "../src/core/bu
 const originalFetch = globalThis.fetch;
 const ROLE_ID = "33333333-3333-4333-8333-333333333333";
 const CAREERS_REF = `operations:careers-snapshot:${"c".repeat(64)}`;
-const BRAIN_REF = `brain:memory-context-query:${"b".repeat(64)}`;
+const BRAIN_STATE_REF = `brain:memory-context-state:${"a".repeat(64)}`;
+const BRAIN_QUERY_REF = `brain:memory-context-query:${"b".repeat(64)}`;
 const APPLICATION_URL = "https://evavo.com.au/careers/graduate-designer";
 
 function input() {
@@ -115,7 +116,8 @@ test("verified careers opening derives active_process, role referral and applica
           protocol: "evavo-memory-fabric-v2",
           generatedAt: "2026-09-05T00:00:45.000Z",
           asOf: "2026-09-05T00:01:00.000Z",
-          queryEvidenceRef: BRAIN_REF,
+          stateEvidenceRef: BRAIN_STATE_REF,
+          queryEvidenceRef: BRAIN_QUERY_REF,
           summary: "No durable EVAVO memory matched this context request.",
           records: [],
           omittedRecordCount: 0,
@@ -175,6 +177,7 @@ test("verified careers opening derives active_process, role referral and applica
   assert.equal(result.sources.cycle.roleTruth?.maySayRoleExists, true);
   assert.equal(result.sources.cycle.applicationUrl, APPLICATION_URL);
   assert.equal(result.referralPathDerivedFromCareers, true);
+  assert.equal(result.sources.cycle.canonical.brain.stateEvidenceRef, BRAIN_STATE_REF);
   assert.equal(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.careersDecision.disposition, "reply");
   assert.equal(result.careersDecision.suggestedNextStep, "refer_to_role");
@@ -182,5 +185,6 @@ test("verified careers opening derives active_process, role referral and applica
   assert.equal(result.careersDecision.meetingRecommended, false);
   assert.equal(result.approvalGradeReady, true);
   assert.ok(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.evidenceIds.includes(CAREERS_REF));
+  assert.ok(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.evidenceIds.includes(BRAIN_STATE_REF));
   assert.equal(result.externalEffectPerformed, false);
 });

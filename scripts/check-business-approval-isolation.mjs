@@ -108,15 +108,15 @@ requireTokens("src/core/businessRelationshipManagerCanonicalSourceHydrationEnv.t
 ]);
 
 const candidateRuntime = requireTokens("src/core/businessRelationshipManagerCanonicalCandidateRuntime.ts", [
-  '"business_relationship_manager_canonical_candidate_runtime_v5"',
+  '"business_relationship_manager_canonical_candidate_runtime_v6"',
   'scenario !== "graduate_or_candidate"', "careersRequired: true",
   "explicitRoleOpen: false", "activeRecruitmentProcess: false", "callerOpportunityAuthoritySuppressed: true",
   "careersRoleAuthorityDerived", "referralPathDerivedFromCareers", "sources.cycle.applicationUrl",
-  "actualActiveProcess !== expectedActiveProcess",
+  "actualActiveProcess !== expectedActiveProcess", "withoutUnverifiedReferral",
+  "The role is confirmed open, but no unique application or referral path is currently verified",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_NOT_DERIVED",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_DERIVATION_MISMATCH",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_VERIFIED_PATH",
 ]);
 if (/openRoleConfirmed\s*:/.test(candidateRuntime) || /input\.candidate\.relevantRoleConfirmed/.test(candidateRuntime) || /input\.candidate\.referralPathKnown/.test(candidateRuntime)) {
   errors.push("Canonical candidate runtime must derive role/referral authority only from careers truth");
@@ -151,6 +151,7 @@ requireTokens("tests/businessRelationshipManagerCanonicalCandidateRuntime.test.t
 ]);
 requireTokens("tests/businessRelationshipManagerCanonicalCandidateOpenRole.test.ts", [
   "verified careers opening derives active_process, role referral and application path authority",
+  "verified open role without a verified application path degrades to safe email reply",
   'candidateStage, "active_process"', "candidateRoleAuthorityDerived", "referralPathDerivedFromCareers",
 ]);
 requireTokens("tests/businessRelationshipManagerCanonicalDraftBinding.test.ts", [
@@ -176,7 +177,7 @@ for (const absolutePath of walk(path.join(root, "src"))) {
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "business-approval-storage-isolation-v15",
+  contract: "business-approval-storage-isolation-v16",
   callerSuppliedPreviewCannotPersist: true,
   brainStateFingerprintStableAcrossQueries: true,
   canonicalCareersTruthRequired: true,
@@ -184,6 +185,7 @@ console.log(JSON.stringify({
   candidateReferralPathDerivedByCareers: true,
   callerOpportunityAuthoritySuppressed: true,
   verifiedOpenRoleMayBecomeActiveProcess: true,
+  openRoleWithoutVerifiedPathDegradesSafely: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,
   freshDraftSourceContextRequired: true,

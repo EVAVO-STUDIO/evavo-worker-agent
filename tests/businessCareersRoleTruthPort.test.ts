@@ -55,7 +55,6 @@ function fetchWith(data: unknown, observed?: { url?: string; init?: RequestInit 
     return { ok: true, status: 200, async json() { return { ok: true, data }; } };
   };
 }
-
 function port(data: unknown) {
   return createCareersRoleTruthPort(
     { baseUrl: "https://operations.example.test", readToken: TOKEN, timeoutMs: 1000 },
@@ -76,6 +75,7 @@ test("reads exact careers role truth through the dedicated scoped endpoint", asy
   assert.equal(observed.init?.cache, "no-store");
   assert.equal(result.state, "verified");
   assert.equal(result.roles[0]?.id, ROLE_ID);
+  assert.equal(result.roles[0]?.applicationUrl, "https://example.com/careers/graduate-designer");
   const evidence = roleOpeningEvidenceFromCareersSnapshot(result);
   assert.equal(evidence[0]?.source, "careers_registry");
   assert.equal(evidence[0]?.authoritative, true);
@@ -91,19 +91,28 @@ test("successful no-role result remains evidence-backed not_found", async () => 
 test("non-boolean authority flags fail closed", async () => {
   const invalid = payload();
   invalid.roles[0]!.authoritative = "true" as unknown as boolean;
-  await assert.rejects(
-    () => port(invalid).read({ workspaceId: "evavo", targetRoleId: ROLE_ID }),
-    /ROLE_AUTHORITY_INVALID/,
-  );
+  await assert.rejects(() => port(invalid).read({ workspaceId: "evavo", targetRoleId: ROLE_ID }), /ROLE_AUTHORITY_INVALID/);
 });
 
 test("role record newer than snapshot fails closed", async () => {
   const invalid = payload();
   invalid.roles[0]!.updatedAt = "2026-09-04T22:00:01.000Z";
-  await assert.rejects(
-    () => port(invalid).read({ workspaceId: "evavo", targetRoleId: ROLE_ID }),
-    /UPDATED_AFTER_SNAPSHOT/,
-  );
+  await assert.rejects(() => port(invalid).read({ workspaceId: "evavo", targetRoleId: ROLE_ID }), /UPDATED_AFTER_SNAPSHOT/);
+});
+
+test("unsafe application URLs fail closed before becoming referral authority", async () => {
+  for (const applicationUrl of [
+    "javascript:alert(1)",
+    "https://user:password@example.com/apply",
+    "file:///tmp/apply",
+  ]) {
+    const invalid = payload();
+    invalid.roles[0]!.applicationUrl = applicationUrl;
+    await assert.rejects(
+      () => port(invalid).read({ workspaceId: "evavo", targetRoleId: ROLE_ID }),
+      /APPLICATION_URL_INVALID/,
+    );
+  }
 });
 
 test("HTTP failure does not leak remote provider details", async () => {
@@ -115,13 +124,10 @@ test("HTTP failure does not leak remote provider details", async () => {
       async json() { return { ok: false, error: { message: "secret database path" } }; },
     }),
   );
-  await assert.rejects(
-    () => truthPort.read({ workspaceId: "evavo", targetRoleId: ROLE_ID }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /READ_FAILED:503/);
-      assert.doesNotMatch(error.message, /database path/);
-      return true;
-    },
-  );
+  await assert.rejects(() => truthPort.read({ workspaceId: "evavo", targetRoleId: ROLE_ID }), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /READ_FAILED:503/);
+    assert.doesNotMatch(error.message, /database path/);
+    return true;
+  });
 });

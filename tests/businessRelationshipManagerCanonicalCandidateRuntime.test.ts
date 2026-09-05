@@ -85,18 +85,17 @@ function sourceHydration() {
   };
 }
 
-test("caller role and recruitment flags cannot bypass canonical careers truth", async () => {
+test("caller role and recruitment flags cannot bypass unavailable canonical careers truth", async () => {
   const result = await runCanonicalRelationshipManagerCandidateResponse({
     sourceHydration: sourceHydration(),
     candidate: {
       sincereIndividualEnquiry: true,
       asksForJobOrInternship: true,
       asksForMeeting: true,
-      relevantRoleConfirmed: true,
     },
   });
 
-  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v2");
+  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v3");
   assert.equal(result.callerOpportunityAuthoritySuppressed, true);
   assert.notEqual(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.sources.cycle.careersState, "provider_unavailable");
@@ -140,7 +139,6 @@ test("suppression never turns missing source truth into outreach", async () => {
       sincereIndividualEnquiry: true,
       asksForJobOrInternship: true,
       suppressionActive: true,
-      relevantRoleConfirmed: true,
     },
   });
   assert.equal(result.careersDecision.disposition, "do_not_reply");

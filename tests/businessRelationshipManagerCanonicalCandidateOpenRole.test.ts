@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { runCanonicalRelationshipManagerCandidateResponse } from "../src/core/businessRelationshipManagerCanonicalCandidateRuntime";
 
@@ -104,7 +104,7 @@ function input() {
   };
 }
 
-function installFetch(t: test.TestContext, applicationUrl: string | null) {
+function installFetch(t: TestContext, applicationUrl: string | null) {
   t.after(() => { globalThis.fetch = originalFetch; });
   globalThis.fetch = async (url, init) => {
     const href = String(url);

@@ -95,8 +95,10 @@ test("caller role and recruitment flags cannot bypass unavailable canonical care
     },
   });
 
-  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v3");
+  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v5");
   assert.equal(result.callerOpportunityAuthoritySuppressed, true);
+  assert.equal(result.careersRoleAuthorityDerived, true);
+  assert.equal(result.referralPathDerivedFromCareers, false);
   assert.notEqual(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
   assert.equal(result.sources.cycle.careersState, "provider_unavailable");
   assert.equal(result.sources.cycle.roleTruth, null);

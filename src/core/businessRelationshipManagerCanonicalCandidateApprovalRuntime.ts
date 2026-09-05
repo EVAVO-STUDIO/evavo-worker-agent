@@ -7,7 +7,10 @@ import {
   reviewCandidateDraftAgainstPolicy,
   type CandidateDraftPolicyReview,
 } from "./businessCandidateDraftPolicyReview";
-import { assertCanonicalRelationshipManagerApprovalReadiness } from "./businessRelationshipManagerCanonicalApprovalRuntime";
+import {
+  assertCanonicalRelationshipManagerApprovalReadiness,
+  assertCanonicalRelationshipManagerDraftBinding,
+} from "./businessRelationshipManagerCanonicalApprovalRuntime";
 import {
   prepareRelationshipManagerCommunicationForApproval,
   type RelationshipManagerApprovalPreparation,
@@ -15,7 +18,7 @@ import {
 import { businessSha256 } from "./businessSha256";
 
 export const BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_APPROVAL_RUNTIME_CONTRACT =
-  "business_relationship_manager_canonical_candidate_approval_runtime_v3" as const;
+  "business_relationship_manager_canonical_candidate_approval_runtime_v4" as const;
 
 type ApprovalInput = Parameters<typeof prepareRelationshipManagerCommunicationForApproval>[0];
 
@@ -28,6 +31,7 @@ export type CanonicalCandidateApprovalPreparation = Readonly<{
   roleTruthStatus: NonNullable<CanonicalRelationshipManagerCandidateResult["sources"]["cycle"]["roleTruth"]>["status"];
   draftPolicyReview: CandidateDraftPolicyReview;
   candidatePolicyBound: true;
+  freshDraftContextBound: true;
   preparation: RelationshipManagerApprovalPreparation;
   externalEffectPerformed: false;
 }>;
@@ -91,6 +95,14 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     throw new Error("RELATIONSHIP_MANAGER_CANDIDATE_APPROVAL_DECISION_CAREERS_EVIDENCE_NOT_BOUND");
   }
 
+  // The handoff and Writing Studio result may have been produced earlier. Fresh
+  // Brain/Careers evidence must be identical to the draft's bound context, or the
+  // message must be regenerated before approval.
+  assertCanonicalRelationshipManagerDraftBinding({
+    canonical,
+    handoff: input.approval.handoff,
+  });
+
   const policyEvidenceRef = candidatePolicyEvidenceRef({
     careersEvidenceRef,
     roleTruthStatus: roleTruth.status,
@@ -140,6 +152,7 @@ export async function prepareCanonicalCandidateCommunicationForApproval(
     roleTruthStatus: roleTruth.status,
     draftPolicyReview,
     candidatePolicyBound: true,
+    freshDraftContextBound: true,
     preparation,
     externalEffectPerformed: false,
   });

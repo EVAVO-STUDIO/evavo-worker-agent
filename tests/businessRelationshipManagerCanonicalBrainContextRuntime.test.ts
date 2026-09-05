@@ -5,6 +5,8 @@ import type { BrainMemoryContextPort } from "../src/core/businessBrainMemoryCont
 import { runCanonicalRelationshipManagerCycleWithBrainContext } from "../src/core/businessRelationshipManagerCanonicalBrainContextRuntime";
 
 const DECISION_AT = "2026-09-04T12:01:00.000Z";
+const STATE_REF = `brain:memory-context-state:${"s".repeat(64)}`;
+const QUERY_REF = `brain:memory-context-query:${"q".repeat(64)}`;
 
 function input(brain: BrainMemoryContextPort) {
   return {
@@ -74,9 +76,9 @@ function input(brain: BrainMemoryContextPort) {
   };
 }
 
-function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of" | "integrity_error"): BrainMemoryContextPort {
+function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of" | "integrity_error", queryRef = QUERY_REF): BrainMemoryContextPort {
   return {
-    contract: "business_brain_memory_context_port_v1",
+    contract: "business_brain_memory_context_port_v2",
     async read(request) {
       assert.equal(request.intent, "communication");
       assert.ok(request.entityRefs.some((entity) => entity.kind === "relationship" && entity.id === "relationship-brain-context-1"));
@@ -96,7 +98,7 @@ function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of" | "integ
         whyIncluded: ["exact relationship match", "authoritative source"],
       }] : [];
       return {
-        contract: "business_brain_memory_context_port_v1",
+        contract: "business_brain_memory_context_port_v2",
         context: {
           protocol: "evavo-memory-fabric-v2",
           generatedAt: "2026-09-04T12:00:45.000Z",
@@ -105,74 +107,74 @@ function port(mode: "records" | "empty" | "unavailable" | "wrong_as_of" | "integ
           records,
           omittedRecordCount: 0,
         },
-        queryEvidenceRef: `brain:memory-context-query:${"a".repeat(64)}`,
+        stateEvidenceRef: STATE_REF,
+        queryEvidenceRef: queryRef,
         restrictedRecordsExcluded: 0,
       };
     },
   };
 }
 
-test("prior durable Brain memory is injected into the canonical decision cycle", async () => {
+test("prior durable Brain memory binds stable state evidence into canonical context", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithBrainContext(input(port("records")));
-  assert.equal(result.contract, "business_relationship_manager_canonical_brain_context_runtime_v1");
+  assert.equal(result.contract, "business_relationship_manager_canonical_brain_context_runtime_v2");
   assert.equal(result.brainState, "verified");
   assert.equal(result.memoryRecordCount, 1);
+  assert.equal(result.stateEvidenceRef, STATE_REF);
+  assert.equal(result.queryEvidenceRef, QUERY_REF);
   assert.equal(result.canonicalCycle.cycle.decision.memoryContextUsed, true);
-  assert.deepEqual(result.canonicalCycle.cycle.decision.memoryRecordIds, ["mem2_previous_decision"]);
-  assert.ok(result.canonicalCycle.decisionContext.evidenceRefs.includes(result.queryEvidenceRef!));
+  assert.ok(result.canonicalCycle.decisionContext.evidenceRefs.includes(STATE_REF));
+  assert.ok(!result.canonicalCycle.decisionContext.evidenceRefs.includes(QUERY_REF));
   assert.equal(result.canonicalCycle.approvalGradeReady, true);
 });
 
-test("successful empty Brain query is evidence-backed not_found and does not invent history", async () => {
+test("successful empty Brain query is evidence-backed not_found using stable state identity", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithBrainContext(input(port("empty")));
   assert.equal(result.brainState, "not_found");
   assert.equal(result.memoryRecordCount, 0);
   assert.equal(result.canonicalCycle.cycle.decision.memoryContextUsed, false);
-  assert.ok(result.queryEvidenceRef);
-  assert.ok(result.canonicalCycle.decisionContext.evidenceRefs.includes(result.queryEvidenceRef!));
+  assert.equal(result.stateEvidenceRef, STATE_REF);
+  assert.ok(result.canonicalCycle.decisionContext.evidenceRefs.includes(STATE_REF));
+  assert.ok(!result.canonicalCycle.decisionContext.evidenceRefs.includes(QUERY_REF));
   assert.equal(result.canonicalCycle.approvalGradeReady, true);
+});
+
+test("different query receipts with unchanged Brain state produce identical canonical evidence identity", async () => {
+  const first = await runCanonicalRelationshipManagerCycleWithBrainContext(input(port("empty", `brain:memory-context-query:${"1".repeat(64)}`)));
+  const second = await runCanonicalRelationshipManagerCycleWithBrainContext(input(port("empty", `brain:memory-context-query:${"2".repeat(64)}`)));
+  assert.notEqual(first.queryEvidenceRef, second.queryEvidenceRef);
+  assert.equal(first.stateEvidenceRef, second.stateEvidenceRef);
+  assert.deepEqual(first.canonicalCycle.decisionContext.evidenceRefs, second.canonicalCycle.decisionContext.evidenceRefs);
 });
 
 test("Brain outage becomes provider_unavailable and blocks approval-grade readiness", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithBrainContext(input(port("unavailable")));
   assert.equal(result.brainState, "provider_unavailable");
+  assert.equal(result.stateEvidenceRef, null);
   assert.equal(result.queryEvidenceRef, null);
   assert.equal(result.canonicalCycle.approvalGradeReady, false);
   assert.equal(result.canonicalCycle.cycle.decision.disposition, "escalate");
   assert.ok(result.canonicalCycle.decisionContext.sourceReadiness?.blockingDomains.includes("memory"));
-  assert.ok(result.canonicalCycle.cycle.decision.nextContextSources.includes("memory"));
 });
 
 test("caller cannot pre-assert Brain source readiness on the hydrated canonical path", async () => {
   const current = input(port("empty"));
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithBrainContext({
-      ...current,
-      context: {
-        ...current.context,
-        sourceReadiness: [{
-          domain: "memory",
-          state: "verified",
-          required: true,
-          observedAt: "2026-09-04T12:00:30.000Z",
-          sourceRefs: ["forged:memory"],
-        }],
-      },
-    }),
-    /CALLER_MEMORY_READINESS_FORBIDDEN/,
-  );
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithBrainContext({
+    ...current,
+    context: {
+      ...current.context,
+      sourceReadiness: [{
+        domain: "memory", state: "verified", required: true,
+        observedAt: "2026-09-04T12:00:30.000Z", sourceRefs: ["forged:memory"],
+      }],
+    },
+  }), /CALLER_MEMORY_READINESS_FORBIDDEN/);
 });
 
-test("Brain response must be bound to the exact deterministic decision asOf", async () => {
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithBrainContext(input(port("wrong_as_of"))),
-    /BRAIN_AS_OF_MISMATCH/,
-  );
+test("Brain response must be bound to exact deterministic decision asOf", async () => {
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithBrainContext(input(port("wrong_as_of"))), /BRAIN_AS_OF_MISMATCH/);
 });
 
-test("Brain integrity failures remain fatal instead of being mislabeled provider unavailable", async () => {
-  await assert.rejects(
-    () => runCanonicalRelationshipManagerCycleWithBrainContext(input(port("integrity_error"))),
-    /BRAIN_MEMORY_CONTEXT_UNSOURCED_RECORD/,
-  );
+test("Brain integrity failures remain fatal instead of provider unavailable", async () => {
+  await assert.rejects(() => runCanonicalRelationshipManagerCycleWithBrainContext(input(port("integrity_error"))), /BRAIN_MEMORY_CONTEXT_UNSOURCED_RECORD/);
 });

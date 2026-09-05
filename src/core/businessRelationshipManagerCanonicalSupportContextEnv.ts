@@ -53,7 +53,7 @@ export async function runCanonicalRelationshipManagerCycleWithSupportContextFrom
     sourceHydration: input.sourceHydration,
     support: support.port,
     supportRequired: input.supportRequired,
-    supportIdentity: input.supportIdentity,
+    ...(input.supportIdentity !== undefined ? { supportIdentity: input.supportIdentity } : {}),
   });
   if (input.supportRequired && !support.configured && result.supportState !== "provider_unavailable") {
     throw new Error("RELATIONSHIP_MANAGER_CANONICAL_SUPPORT_ENV_READINESS_WIDENED");

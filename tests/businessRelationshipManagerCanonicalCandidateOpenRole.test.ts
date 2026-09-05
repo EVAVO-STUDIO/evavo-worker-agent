@@ -104,7 +104,7 @@ function input() {
   };
 }
 
-test("verified careers opening derives active_process, role referral and application path authority", async (t) => {
+function installFetch(t: test.TestContext, applicationUrl: string | null) {
   t.after(() => { globalThis.fetch = originalFetch; });
   globalThis.fetch = async (url, init) => {
     const href = String(url);
@@ -148,7 +148,7 @@ test("verified careers opening derives active_process, role referral and applica
             locationLabel: "Melbourne / remote",
             locationMode: "hybrid",
             summary: "Current Graduate Designer opening.",
-            applicationUrl: APPLICATION_URL,
+            applicationUrl,
             openedAt: "2026-09-01T00:00:00.000Z",
             closesAt: null,
             roleOwnerLabel: "EVAVO",
@@ -169,9 +169,12 @@ test("verified careers opening derives active_process, role referral and applica
     }
     throw new Error(`unexpected fetch ${href}`);
   };
+}
 
+test("verified careers opening derives active_process, role referral and application path authority", async (t) => {
+  installFetch(t, APPLICATION_URL);
   const result = await runCanonicalRelationshipManagerCandidateResponse(input());
-  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v5");
+  assert.equal(result.contract, "business_relationship_manager_canonical_candidate_runtime_v6");
   assert.equal(result.sources.cycle.contract, "business_relationship_manager_canonical_careers_context_runtime_v4");
   assert.equal(result.sources.cycle.candidateRoleAuthorityDerived, true);
   assert.equal(result.careersRoleAuthorityDerived, true);
@@ -188,4 +191,17 @@ test("verified careers opening derives active_process, role referral and applica
   assert.ok(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.evidenceIds.includes(CAREERS_REF));
   assert.ok(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.evidenceIds.includes(BRAIN_STATE_REF));
   assert.equal(result.externalEffectPerformed, false);
+});
+
+test("verified open role without a verified application path degrades to safe email reply", async (t) => {
+  installFetch(t, null);
+  const result = await runCanonicalRelationshipManagerCandidateResponse(input());
+  assert.equal(result.sources.cycle.roleTruth?.maySayRoleExists, true);
+  assert.equal(result.sources.cycle.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
+  assert.equal(result.referralPathDerivedFromCareers, false);
+  assert.equal(result.careersDecision.disposition, "reply");
+  assert.equal(result.careersDecision.suggestedNextStep, "email_reply");
+  assert.equal(result.careersDecision.meetingRecommended, false);
+  assert.ok(result.careersDecision.mustCommunicate.some((item) => /do not invent or guess/i.test(item)));
+  assert.equal(result.approvalGradeReady, true);
 });

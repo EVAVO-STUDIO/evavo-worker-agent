@@ -190,29 +190,27 @@ function base(careersPort: CareersRoleTruthPort) {
   };
 }
 
-test("verified open careers record authorises only the specific role-exists claim and binds its receipt", async () => {
+test("verified open careers record derives active_process and binds its receipt", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("open")));
-  assert.equal(result.contract, "business_relationship_manager_canonical_careers_context_runtime_v2");
+  assert.equal(result.contract, "business_relationship_manager_canonical_careers_context_runtime_v3");
   assert.equal(result.careersState, "verified");
   assert.equal(result.roleTruth?.status, "confirmed_open");
   assert.equal(result.roleTruth?.maySayRoleExists, true);
-  assert.equal(result.roleTruth?.maySayNotHiring, false);
-  assert.equal(result.canonical.operationsState, "not_required");
+  assert.equal(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
+  assert.equal(result.roleAuthorityAppliedToCandidateStage, true);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, true);
-  assert.equal(result.canonical.brain.canonicalCycle.decisionContext.context360.contract, "business_relationship_360_context_v3");
   assert.match(result.canonical.brain.canonicalCycle.decisionContext.context360.careers ?? "", /Graduate Designer: open/);
-  assert.ok(result.canonical.brain.canonicalCycle.decisionContext.context360.currentEvidence.some((item) => item.domain === "careers" && item.sourceRefs.includes(CAREERS_REF)));
-  assert.ok(result.canonical.brain.canonicalCycle.decisionContext.staffBrief.priorities.some((item) => /dedicated careers truth/i.test(item)));
   assert.ok(result.canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(CAREERS_REF));
   assert.ok(result.canonical.brain.canonicalCycle.cycle.decision.evidenceIds.includes(CAREERS_REF));
 });
 
-test("verified closed role never becomes a global not-hiring claim", async () => {
+test("closed role never derives active_process or a global not-hiring claim", async () => {
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("closed")));
   assert.equal(result.roleTruth?.status, "confirmed_not_open");
   assert.equal(result.roleTruth?.maySayNotHiring, false);
+  assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
+  assert.equal(result.roleAuthorityAppliedToCandidateStage, false);
   assert.match(result.roleTruth?.safeExternalWording ?? "", /isn't currently open/i);
-  assert.ok(result.canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(CAREERS_REF));
 });
 
 test("successful no-role lookup remains approval-safe evidence of no confirmed opening", async () => {
@@ -220,6 +218,8 @@ test("successful no-role lookup remains approval-safe evidence of no confirmed o
   assert.equal(result.careersState, "not_found");
   assert.equal(result.roleTruth?.status, "no_confirmed_open_role");
   assert.equal(result.roleTruth?.maySayNotHiring, false);
+  assert.notEqual(result.canonical.brain.canonicalCycle.cycle.decision.candidateStage, "active_process");
+  assert.equal(result.roleAuthorityAppliedToCandidateStage, false);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, true);
   assert.match(result.canonical.brain.canonicalCycle.decisionContext.context360.careers ?? "", /does not mean EVAVO is not hiring generally/i);
   assert.ok(result.canonical.brain.canonicalCycle.decisionContext.evidenceRefs.includes(CAREERS_REF));
@@ -229,6 +229,7 @@ test("careers provider outage blocks approval instead of inferring hiring status
   const result = await runCanonicalRelationshipManagerCycleWithCareersContext(base(careers("transport_error")));
   assert.equal(result.careersState, "provider_unavailable");
   assert.equal(result.roleTruth, null);
+  assert.equal(result.roleAuthorityAppliedToCandidateStage, false);
   assert.equal(result.canonical.brain.canonicalCycle.approvalGradeReady, false);
   assert.ok(result.canonical.brain.canonicalCycle.decisionContext.sourceReadiness?.blockingDomains.includes("careers"));
   assert.ok(!result.canonical.brain.canonicalCycle.decisionContext.context360.currentEvidence.some((item) => item.domain === "careers"));

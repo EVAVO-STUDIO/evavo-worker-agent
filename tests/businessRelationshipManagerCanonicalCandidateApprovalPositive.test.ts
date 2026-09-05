@@ -8,6 +8,7 @@ import { buildStaffCommunicationHandoffV2 } from "../src/core/businessStaffCommu
 const BRAIN_TOKEN = "b".repeat(32);
 const CAREERS_TOKEN = "c".repeat(32);
 const CAREERS_REF = `operations:careers-snapshot:${"d".repeat(64)}`;
+const BRAIN_STATE_REF = `brain:memory-context-state:${"a".repeat(64)}`;
 
 function runtimeInput() {
   return {
@@ -105,19 +106,22 @@ function runtimeInput() {
 }
 
 function mockFetch(calls: string[]) {
+  let brainReads = 0;
   return async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     calls.push(url);
     if (url === "http://brain.local/v1/tools/call") {
+      brainReads += 1;
       const body = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({
         name: body.name,
         ok: true,
         output: {
           protocol: "evavo-memory-fabric-v2",
-          generatedAt: "2026-09-05T00:01:00.000Z",
+          generatedAt: brainReads === 1 ? "2026-09-05T00:00:45.000Z" : "2026-09-05T00:00:55.000Z",
           asOf: "2026-09-05T00:01:00.000Z",
-          queryEvidenceRef: `brain:memory-context-query:${"a".repeat(64)}`,
+          stateEvidenceRef: BRAIN_STATE_REF,
+          queryEvidenceRef: `brain:memory-context-query:${String(brainReads).repeat(64)}`,
           summary: "No durable EVAVO memory matched this context request.",
           records: [],
           omittedRecordCount: 0,
@@ -159,13 +163,16 @@ test("no confirmed opening can reach only persistence-ready candidate approval a
   try {
     const input = runtimeInput();
     const first = await runCanonicalRelationshipManagerCandidateResponse(input);
-    assert.equal(first.contract, "business_relationship_manager_canonical_candidate_runtime_v3");
+    assert.equal(first.contract, "business_relationship_manager_canonical_candidate_runtime_v4");
     assert.equal(first.approvalGradeReady, true);
     assert.equal(first.careersDecision.disposition, "reply");
     assert.equal(first.careersDecision.meetingRecommended, false);
     assert.equal(first.sources.cycle.roleTruth?.status, "no_confirmed_open_role");
     assert.equal(first.sources.cycle.roleTruth?.maySayNotHiring, false);
+    assert.equal(first.sources.cycle.applicationUrl, null);
+    assert.equal(first.referralPathDerivedFromCareers, false);
     assert.equal(first.callerOpportunityAuthoritySuppressed, true);
+    assert.equal(first.sources.cycle.canonical.brain.stateEvidenceRef, BRAIN_STATE_REF);
 
     const canonical = first.sources.cycle.canonical.brain.canonicalCycle;
     const handoff = buildStaffCommunicationHandoffV2({
@@ -242,14 +249,15 @@ test("no confirmed opening can reach only persistence-ready candidate approval a
       },
     });
 
-    assert.equal(result.contract, "business_relationship_manager_canonical_candidate_approval_runtime_v4");
-    assert.equal(result.candidateRuntimeContract, "business_relationship_manager_canonical_candidate_runtime_v3");
+    assert.equal(result.contract, "business_relationship_manager_canonical_candidate_approval_runtime_v5");
+    assert.equal(result.candidateRuntimeContract, "business_relationship_manager_canonical_candidate_runtime_v4");
     assert.equal(result.candidatePolicyBound, true);
     assert.equal(result.freshDraftContextBound, true);
     assert.equal(result.roleTruthStatus, "no_confirmed_open_role");
+    assert.equal(result.verifiedApplicationUrl, null);
     assert.match(result.candidatePolicyEvidenceRef, /^candidate-policy:[a-f0-9]{64}$/);
     assert.ok(result.preparation.approvalCandidate.evidenceIds.includes(result.candidatePolicyEvidenceRef));
-    assert.equal(result.draftPolicyReview.contract, "business_candidate_draft_policy_review_v1");
+    assert.equal(result.draftPolicyReview.contract, "business_candidate_draft_policy_review_v2");
     assert.equal(result.draftPolicyReview.ready, true);
     assert.deepEqual(result.draftPolicyReview.blockers, []);
     assert.equal(result.preparation.readyForCandidatePersistence, true);

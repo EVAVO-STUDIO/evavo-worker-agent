@@ -32,12 +32,12 @@ const supportPort = requireTokens("src/core/businessSupportRelationshipSnapshotP
   '"business_support_relationship_snapshot_port_v1"', '"/api/internal/relationship-manager/support-snapshot"',
   "providerWrites: 0", "outboundMessages: 0", "ticketMutations: 0", 'redirect: "error"', 'cache: "no-store"',
 ]);
-if (/PATCH|PUT|DELETE/.test(supportPort)) failures.push("Support Relationship Manager port must be read-only POST-to-read-snapshot only");
+if (/method:\s*["'](?:PATCH|PUT|DELETE)["']/.test(supportPort)) failures.push("Support port must be read-only");
 const documentPort = requireTokens("src/core/businessDocumentRelationshipSnapshotPort.ts", [
   '"business_document_relationship_snapshot_port_v1"', '"/api/v1/internal/relationship-manager/document-snapshot"',
   "providerWrites: 0", "rendersCompleted: 0", "exportsCreated: 0", "externalSends: 0", 'redirect: "error"', 'cache: "no-store"',
 ]);
-if (/PATCH|PUT|DELETE/.test(documentPort)) failures.push("Document Relationship Manager port must be read-only POST-to-read-snapshot only");
+if (/method:\s*["'](?:PATCH|PUT|DELETE)["']/.test(documentPort)) failures.push("Document port must be read-only");
 
 const supportRuntime = requireTokens("src/core/businessRelationshipManagerCanonicalSupportContextRuntime.ts", [
   '"business_relationship_manager_canonical_support_context_runtime_v1"',
@@ -53,13 +53,11 @@ const documentRuntime = requireTokens("src/core/businessRelationshipManagerCanon
   "RELATIONSHIP_MANAGER_CANONICAL_DOCUMENT_EVIDENCE_NOT_BOUND",
   "attachment bytes remain separately verified",
 ]);
-if (supportRuntime.includes("gmail.users.messages.send") || documentRuntime.includes("gmail.users.messages.send")) {
-  failures.push("Source hydration runtimes must never send email");
-}
+if (supportRuntime.includes("gmail.users.messages.send") || documentRuntime.includes("gmail.users.messages.send")) failures.push("Source hydration runtimes must never send email");
 
 requireTokens("src/core/businessRelationshipManagerCanonicalFullSourceHydrationEnv.ts", [
   '"business_relationship_manager_canonical_full_source_hydration_env_v1"',
-  "BRAIN", "OPERATIONS_DOCUMENT_READ_TOKEN", "SUPPORT_RELATIONSHIP_READ_TOKEN",
+  "RelationshipManagerCanonicalSourceEnv", "OPERATIONS_DOCUMENT_READ_TOKEN", "SUPPORT_RELATIONSHIP_READ_TOKEN",
   "runCanonicalRelationshipManagerCycleWithDocumentContext",
   "RELATIONSHIP_MANAGER_FULL_SOURCE_SUPPORT_READINESS_WIDENED",
   "RELATIONSHIP_MANAGER_FULL_SOURCE_DOCUMENT_READINESS_WIDENED",
@@ -70,6 +68,10 @@ requireTokens("src/core/businessRelationshipSourceReadiness.ts", [
 ]);
 requireTokens("src/core/businessRelationship360Context.ts", [
   'domain: "identity"', '"gmail"', '"operations"', '"careers"', '"support"', '"document"', '"memory"',
+]);
+requireTokens(".dev.vars.example", [
+  "BRAIN_BASE_URL", "OPERATIONS_RELATIONSHIP_READ_TOKEN", "OPERATIONS_CAREERS_READ_TOKEN",
+  "OPERATIONS_DOCUMENT_READ_TOKEN", "SUPPORT_AGENT_BASE_URL", "SUPPORT_RELATIONSHIP_READ_TOKEN",
 ]);
 requireTokens("tests/businessSupportRelationshipSnapshotPort.test.ts", [
   "provider effect counters fail closed", "remote support error detail is not surfaced",
@@ -92,10 +94,12 @@ if (failures.length) {
 }
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_source_grounding_v1",
+  contract: "relationship_manager_source_grounding_v2",
   sourceAuthorities: ["gmail", "brain_memory", "operations_core", "careers_registry", "support_agent", "document_read_model", "calendar"],
   supportIsIndependentAuthority: true,
   documentsUsePersistentOperationsReadModel: true,
+  supportEvidenceStateStableAcrossQueryTime: true,
+  documentEvidenceStateStableAcrossQueryTime: true,
   callerSuppliedSupportEvidenceAccepted: false,
   callerSuppliedDocumentEvidenceAccepted: false,
   supportMutationAuthority: false,

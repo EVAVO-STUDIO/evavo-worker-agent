@@ -50,15 +50,14 @@ for (const token of ['"business_relationship_manager_canonical_brain_context_run
 requireToken("brainStateTest", "different query receipts with unchanged Brain state produce identical canonical evidence identity", "Brain state/query identity regression must remain present");
 
 for (const token of [
-  '"business_relationship_manager_canonical_candidate_runtime_v5"', "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
+  '"business_relationship_manager_canonical_candidate_runtime_v6"', "runCanonicalRelationshipManagerCycleWithSourcesFromEnv",
   "careersRequired: true", "explicitRoleOpen: false", "activeRecruitmentProcess: false",
   "callerOpportunityAuthoritySuppressed: true", "careersRoleAuthorityDerived",
   "referralPathDerivedFromCareers", "sources.cycle.applicationUrl",
-  "actualActiveProcess !== expectedActiveProcess",
+  "actualActiveProcess !== expectedActiveProcess", "withoutUnverifiedReferral",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_AUTHORITY_NOT_DERIVED",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_ROLE_DERIVATION_MISMATCH",
   "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_PATH_WITHOUT_ROLE_AUTHORITY",
-  "RELATIONSHIP_MANAGER_CANONICAL_CANDIDATE_REFERRAL_WITHOUT_VERIFIED_PATH",
 ]) requireToken("candidateRuntime", token, `Canonical candidate runtime must retain ${token}`);
 forbidToken("candidateRuntime", "input.candidate.relevantRoleConfirmed", "Candidate runtime must not trust caller role relevance");
 forbidToken("candidateRuntime", "input.candidate.referralPathKnown", "Candidate runtime must not trust caller referral paths");
@@ -73,6 +72,7 @@ requireToken("careersPort", "nullableHttpUrl", "Careers port must validate appli
 requireToken("careersPort", "CAREERS_ROLE_TRUTH_APPLICATION_URL_INVALID", "Invalid application URLs must fail closed");
 requireToken("candidateTest", "caller role and recruitment flags cannot bypass unavailable canonical careers truth", "Candidate suppression regression must remain present");
 requireToken("openRoleTest", "role referral and application path authority", "Open-role referral regression must remain present");
+requireToken("openRoleTest", "verified open role without a verified application path degrades to safe email reply", "Open-role no-path regression must remain present");
 requireToken("openRoleTest", "referralPathDerivedFromCareers", "Open-role regression must assert referral authority is source-derived");
 
 requireToken("canonicalApproval", "business_relationship_manager_canonical_approval_runtime_v5", "Generic canonical approval must use v5");
@@ -120,13 +120,14 @@ if (failures.length) {
 }
 console.log(JSON.stringify({
   ok: true,
-  contract: "relationship_manager_governed_flow_check_v11_verified_role_derivation",
+  contract: "relationship_manager_governed_flow_check_v12_safe_open_role_degradation",
   adminPreviewSendCapable: false,
   brainStateFingerprintStableAcrossQueries: true,
   callerOpportunityAuthoritySuppressed: true,
   candidateRoleAuthorityDerivedByCareers: true,
   verifiedOpenRoleMayBecomeActiveProcess: true,
   candidateReferralPathDerivedByCareers: true,
+  openRoleWithoutVerifiedPathDegradesSafely: true,
   genericCandidateApprovalRejected: true,
   specializedCandidateApprovalRehydratesSources: true,
   freshDraftSourceContextRequired: true,

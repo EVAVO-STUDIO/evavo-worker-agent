@@ -1,7 +1,10 @@
 import type { Env } from "../db";
 import { requireBrainMemoryIngestionPortFromEnv } from "./businessBrainMemoryIngestionEnv";
 import type { BrainMemoryIngestionPort } from "./businessBrainMemoryIngestionPort";
-import type { CanonicalRelationshipManagerCycle } from "./businessRelationshipManagerCanonicalRuntime";
+import {
+  BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_RUNTIME_CONTRACT,
+  type CanonicalRelationshipManagerCycle,
+} from "./businessRelationshipManagerCanonicalRuntime";
 import {
   persistRelationshipManagerCycleMemory,
   type RelationshipManagerMemoryPersistenceResult,
@@ -25,7 +28,7 @@ export async function persistCanonicalRelationshipManagerCycleToBrain(input: Rea
   brain: BrainMemoryIngestionPort;
 }>): Promise<RelationshipManagerBrainPersistenceRuntimeResult> {
   const canonical = input.canonicalCycle;
-  if (canonical.contract !== "business_relationship_manager_canonical_runtime_v1") {
+  if (String(canonical.contract) !== BUSINESS_RELATIONSHIP_MANAGER_CANONICAL_RUNTIME_CONTRACT) {
     throw new Error("RELATIONSHIP_MANAGER_BRAIN_PERSISTENCE_CANONICAL_CONTRACT_INVALID");
   }
   if (canonical.cycle.contract !== "business_relationship_manager_runtime_v1") {

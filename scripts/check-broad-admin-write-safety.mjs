@@ -22,13 +22,28 @@ if (!implementation) errors.push("Missing broad admin implementation");
 
 for (const token of [
   'import { isAdminRequestAuthorized } from "../core/adminAuthentication"',
+  'boundedJsonFailurePayload,',
+  'isExplicitJsonConfirmation,',
+  'readBoundedJsonObject,',
   'import { handleAdmin as handleAdminImplementation } from "./admin"',
+  'function manualMetadataWriteRequiresConfirmation(pathname: string, method: string): boolean',
+  'pathname === "/admin/leads" || pathname === "/admin/seeds"',
   "await isAdminRequestAuthorized(request, env)",
   'request.method === "OPTIONS"',
-  'pathname === "/admin/leads" && request.method === "POST"',
-  "const body = await request.clone().json()",
-  "if (!confirmed(body))",
+  "if (manualMetadataWriteRequiresConfirmation(pathname, request.method))",
+  "const parsed = await readBoundedJsonObject(request.clone(), {",
+  "maxBytes: 65_536",
+  "maxDepth: 6",
+  "maxNodes: 600",
+  "maxArrayLength: 100",
+  "maxStringLength: 2_048",
+  "maxKeyLength: 96",
+  "if (!parsed.ok) return json(boundedJsonFailurePayload(parsed), { status: parsed.status })",
+  "if (!isExplicitJsonConfirmation(parsed.value))",
   'error: "confirm_required"',
+  "confirmationCoercionAllowed: false",
+  "requestReceipt:",
+  "bodySha256: parsed.bodySha256",
   "internalMetadataOnly: true",
   "scheduled: false",
   "callsNetwork: false",
@@ -42,13 +57,32 @@ for (const token of [
   if (!wrapper.includes(token)) errors.push(`Protected broad admin wrapper is missing: ${token}`);
 }
 
+for (const unsafe of [
+  "const body = await request.clone().json()",
+  "if (!confirmed(body))",
+  'body?.confirm === "1"',
+  "body?.confirm === 1",
+]) {
+  if (wrapper.includes(unsafe)) errors.push(`Protected broad admin wrapper contains stale unsafe confirmation path: ${unsafe}`);
+}
+
 const authPosition = wrapper.indexOf("await isAdminRequestAuthorized(request, env)");
 const optionsPosition = wrapper.indexOf('request.method === "OPTIONS"');
-const bodyPosition = wrapper.indexOf("const body = await request.clone().json()");
-const confirmPosition = wrapper.indexOf("if (!confirmed(body))");
+const predicatePosition = wrapper.indexOf("manualMetadataWriteRequiresConfirmation(pathname, request.method)");
+const boundedBodyPosition = wrapper.indexOf("readBoundedJsonObject(request.clone(), {");
+const boundedFailurePosition = wrapper.indexOf("boundedJsonFailurePayload(parsed)");
+const confirmPosition = wrapper.indexOf("isExplicitJsonConfirmation(parsed.value)");
 const delegatePosition = wrapper.indexOf("return handleAdminImplementation(request, env, pathname, ctx, json)");
-if (!(authPosition >= 0 && optionsPosition > authPosition && bodyPosition > optionsPosition && confirmPosition > bodyPosition && delegatePosition > confirmPosition)) {
-  errors.push("Broad admin wrapper must authenticate before OPTIONS and confirm manual record insertion before delegation");
+if (!(
+  authPosition >= 0 &&
+  optionsPosition > authPosition &&
+  predicatePosition > optionsPosition &&
+  boundedBodyPosition > predicatePosition &&
+  boundedFailurePosition > boundedBodyPosition &&
+  confirmPosition > boundedFailurePosition &&
+  delegatePosition > confirmPosition
+)) {
+  errors.push("Broad admin wrapper must authenticate before OPTIONS, then perform bounded parsing and exact confirmation before delegation");
 }
 
 for (const token of [
@@ -82,10 +116,13 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run admin:
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "protected-broad-admin-write-safety",
+  contract: "protected-broad-admin-write-safety-v2-bounded-json-confirmation",
   dispatcherUsesProtectedWrapper: true,
   directImplementationImportAllowed: false,
   manualRecordInsertionRequiresConfirmation: true,
+  boundedJsonRequiredBeforeDelegation: true,
+  exactBooleanConfirmationRequired: true,
+  confirmationCoercionAllowed: false,
   internalMetadataOnly: true,
   scheduledExecutionAllowed: false,
   externalNetworkAllowed: false,

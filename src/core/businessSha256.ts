@@ -86,7 +86,7 @@ export function businessSha256Bytes(value: Uint8Array): string {
 
 export function businessHmacSha256(secret: string, message: string): string {
   const encoder = new TextEncoder();
-  let key = encoder.encode(secret);
+  let key: Uint8Array = encoder.encode(secret);
   if (!key.length) throw new Error("BUSINESS_HMAC_SECRET_REQUIRED");
   if (key.length > 64) key = hexToBytes(sha256Bytes(key));
 

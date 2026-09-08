@@ -5,6 +5,14 @@ import path from "node:path";
 
 const root = process.cwd();
 const errors = [];
+const CURRENT_CONTRACT = "autonomy-capability-truthfulness-v3-fail-closed-legacy-flags";
+// Structured migration evidence keeps historical aggregate gates able to prove
+// which reviewed contract was superseded without making the old contract active.
+const SUPERSEDED_CONTRACT = Object.freeze({
+  contract: "autonomy-capability-truthfulness-v2-bounded-settings",
+  status: "superseded",
+  supersededBy: CURRENT_CONTRACT,
+});
 const read = (relativePath) => {
   const absolutePath = path.join(root, relativePath);
   if (!fs.existsSync(absolutePath)) {
@@ -172,7 +180,8 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run autono
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "autonomy-capability-truthfulness-v3-fail-closed-legacy-flags",
+  contract: CURRENT_CONTRACT,
+  supersededContract: SUPERSEDED_CONTRACT,
   scheduledExecutionEnabled: false,
   scheduledExternalResearchAllowed: false,
   manualResearchRequiresAuthentication: true,

@@ -33,9 +33,11 @@ All public status output is aggregate and review-first. Protected review routes 
 
 ## Schema and migration rule
 
-`schema.sql` is a legacy bootstrap reference only. It must not be applied to the live or an already-migrated D1 database.
+schema.sql is a legacy bootstrap reference only. It must not be applied to the live or an already-migrated D1 database.
 
-The production schema is the result of the ordered migration history under `migrations/`. Use:
+The production schema is the result of the ordered migration history under `migrations/`. Run migrations in filename order and use the repository checks to prove that complete authoritative order before any execution.
+
+Use:
 
 ```powershell
 npm run db:migrations:check

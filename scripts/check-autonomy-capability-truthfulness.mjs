@@ -86,8 +86,6 @@ for (const forbidden of [
   "function confirmed(",
   "body?.confirm === 1",
   'body?.confirm === "1"',
-  "setSetting(",
-  "logEvent(",
   "canRunScheduledEngine: settings.engineEnabled",
   "canFetchSources: settings.engineEnabled",
   "canSaveOpportunities: settings.opportunityDiscoveryEnabled",
@@ -95,10 +93,72 @@ for (const forbidden of [
   'from "./core/sourceExpansionEngine"',
   "runOpportunityAutonomy(",
   "runSourceExpansion(",
+  "runDraftOnce(",
+  "runSendApproved(",
+  "fetch(",
 ]) {
   if (handler.includes(forbidden) || engine.includes(forbidden)) {
-    errors.push(`Autonomy settings or scheduled engine contains stale capability: ${forbidden}`);
+    errors.push(`Autonomy settings or scheduled engine contains stale execution capability: ${forbidden}`);
   }
+}
+
+for (const token of [
+  'freeSafeOnly: true',
+  'leadDiscoveryEnabled: false',
+  'aiDraftsEnabled: false',
+  'sendingEnabled: false',
+  'await setSetting(env, "engine_enabled", "0")',
+  'await setSetting(env, "crawl_cap_per_day", "0")',
+  'await setSetting(env, "draft_cap_per_day", "0")',
+  'await setSetting(env, "send_cap_per_day", "0")',
+  'await setSetting(env, "drafting_enabled", "0")',
+  'await setSetting(env, "sending_enabled", "0")',
+  '"source_expansion_learning_tick_ok"',
+  '"source_expansion_learning_tick_skip"',
+  '"tick_skip"',
+  '"tick_ok"',
+  "existing D1 review metadata",
+  "it never fetches sources or runs discovery",
+]) {
+  if (!engine.includes(token)) errors.push(`Scheduled autonomy fail-closed posture is missing: ${token}`);
+}
+
+const settingCalls = [...engine.matchAll(/setSetting\(env,\s*"([^"]+)",\s*([^\n;]+)\)/gu)]
+  .map((match) => ({ key: match[1], value: match[2].trim() }));
+const expectedSettings = new Map([
+  ["engine_enabled", '"0"'],
+  ["crawl_cap_per_day", '"0"'],
+  ["draft_cap_per_day", '"0"'],
+  ["send_cap_per_day", '"0"'],
+  ["drafting_enabled", '"0"'],
+  ["sending_enabled", '"0"'],
+]);
+if (settingCalls.length !== expectedSettings.size) {
+  errors.push(`Scheduled autonomy must contain exactly ${expectedSettings.size} reviewed legacy-setting writes; found ${settingCalls.length}`);
+}
+for (const { key, value } of settingCalls) {
+  if (!expectedSettings.has(key)) {
+    errors.push(`Scheduled autonomy writes unreviewed legacy setting: ${key}`);
+    continue;
+  }
+  if (value !== expectedSettings.get(key)) errors.push(`Scheduled autonomy must force ${key}=0; observed ${value}`);
+}
+for (const key of expectedSettings.keys()) {
+  if (!settingCalls.some((entry) => entry.key === key)) errors.push(`Scheduled autonomy is missing fail-closed legacy setting write: ${key}`);
+}
+
+const allowedAuditEvents = new Set([
+  "source_expansion_learning_tick_ok",
+  "source_expansion_learning_tick_skip",
+  "tick_skip",
+  "tick_ok",
+]);
+const auditEvents = [...engine.matchAll(/logEvent\(\s*env,\s*"([^"]+)"/gu)].map((match) => match[1]);
+for (const event of auditEvents) {
+  if (!allowedAuditEvents.has(event)) errors.push(`Scheduled autonomy emits unreviewed audit event: ${event}`);
+}
+for (const event of allowedAuditEvents) {
+  if (!auditEvents.includes(event)) errors.push(`Scheduled autonomy is missing reviewed audit event: ${event}`);
 }
 
 const expectedCommand = "node scripts/check-autonomy-capability-truthfulness.mjs";
@@ -112,7 +172,7 @@ if (!String(packageJson.scripts?.["check:local"] || "").includes("npm run autono
 console.log(JSON.stringify({
   passed: errors.length === 0,
   activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-  contract: "autonomy-capability-truthfulness-v2-bounded-settings",
+  contract: "autonomy-capability-truthfulness-v3-fail-closed-legacy-flags",
   scheduledExecutionEnabled: false,
   scheduledExternalResearchAllowed: false,
   manualResearchRequiresAuthentication: true,
@@ -122,6 +182,8 @@ console.log(JSON.stringify({
   exactBooleanConfirmationRequired: true,
   concurrentSettingsWriteAllowed: false,
   settingsAndAuditAtomic: true,
+  legacyExternalWorkCapsForcedToZero: true,
+  scheduledAuditEventsAllowlisted: true,
   aiAllowed: false,
   sendingAllowed: false,
   externalExecutionAllowed: false,

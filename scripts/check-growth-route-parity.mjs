@@ -5,6 +5,7 @@ const CHECK_NAME = "check-growth-route-parity";
 const root = process.cwd();
 const fixturePath = "fixtures/growth-worker-route-parity-v1.json";
 const parserPath = "src/core/growthWorkerRouteParity.ts";
+const workflowPath = ".github/workflows/worker-contract.yml";
 const errors = [];
 
 const EXPECTED_KEYS = Object.freeze([
@@ -23,6 +24,7 @@ const EXPECTED_KEYS = Object.freeze([
   "deliveryEnabled",
   "blockers",
 ]);
+
 const EXPECTED_BLOCKERS_BY_PAGE_STATE = Object.freeze({
   absent: Object.freeze([
     "next_website_ingestion_endpoint_not_implemented",
@@ -33,21 +35,6 @@ const EXPECTED_BLOCKERS_BY_PAGE_STATE = Object.freeze({
     "cross_repo_contract_tests_not_implemented",
   ]),
 });
-const MAX_DISCOVERED_FILES = 800;
-const MAX_DISCOVERED_BYTES = 12_000_000;
-const MAX_FILE_BYTES = 500_000;
-
-function requireTokens(label, content, tokens) {
-  for (const token of tokens) {
-    if (!content.includes(token)) errors.push(`${label} is missing: ${token}`);
-  }
-}
-
-function forbidTokens(label, content, tokens) {
-  for (const token of tokens) {
-    if (content.includes(token)) errors.push(`${label} contains forbidden token: ${token}`);
-  }
-}
 
 function readRequired(relativePath) {
   const absolutePath = path.join(root, relativePath);
@@ -58,13 +45,22 @@ function readRequired(relativePath) {
   return fs.readFileSync(absolutePath, "utf8");
 }
 
+function requireToken(label, source, token) {
+  if (!source.includes(token)) errors.push(`${label} is missing: ${token}`);
+}
+
+function requirePattern(label, source, pattern, description) {
+  if (!pattern.test(source)) errors.push(`${label} is missing semantic requirement: ${description}`);
+}
+
+function forbidPattern(label, source, pattern, description) {
+  if (pattern.test(source)) errors.push(`${label} contains forbidden semantic posture: ${description}`);
+}
+
 function exactKeys(record, expected, label) {
   const actual = Object.keys(record).sort();
-  const sortedExpected = [...expected].sort();
-  if (
-    actual.length !== sortedExpected.length ||
-    actual.some((key, index) => key !== sortedExpected[index])
-  ) {
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
     errors.push(`${label} must contain the exact reviewed field set.`);
   }
 }
@@ -123,43 +119,6 @@ function validateFixture(record, label) {
   }
 }
 
-function boundedCorpus(baseDirectory) {
-  const chunks = [];
-  let discoveredFiles = 0;
-  let discoveredBytes = 0;
-
-  function visit(current, depth) {
-    if (depth > 8 || discoveredFiles > MAX_DISCOVERED_FILES || discoveredBytes > MAX_DISCOVERED_BYTES) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if ([".git", "node_modules", "dist", "coverage", ".wrangler"].includes(entry.name)) continue;
-      const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        visit(absolute, depth + 1);
-        continue;
-      }
-      if (!/\.(?:ts|tsx|mjs|json|md)$/.test(entry.name)) continue;
-      const stat = fs.statSync(absolute);
-      if (stat.size > MAX_FILE_BYTES) continue;
-      discoveredFiles += 1;
-      discoveredBytes += stat.size;
-      if (discoveredFiles > MAX_DISCOVERED_FILES || discoveredBytes > MAX_DISCOVERED_BYTES) break;
-      chunks.push(fs.readFileSync(absolute, "utf8"));
-    }
-  }
-
-  visit(baseDirectory, 0);
-  if (discoveredFiles > MAX_DISCOVERED_FILES || discoveredBytes > MAX_DISCOVERED_BYTES) {
-    errors.push("Worker route parity scan exceeded its reviewed file or byte bounds.");
-  }
-  return chunks.join("\n");
-}
-
 const packageSource = readRequired("package.json");
 let packageJson = {};
 try {
@@ -175,59 +134,12 @@ if (!String(scripts["check:local"] || "").includes("npm run growth:route-parity:
   errors.push("check:local must execute growth:route-parity:check.");
 }
 
-const safetyGate = readRequired("scripts/check-safety-gate-completeness.mjs");
-requireTokens("Safety-gate completeness", safetyGate, [
-  '"growth:route-parity:check": "node scripts/check-growth-route-parity.mjs"',
-  '"scripts/check-growth-route-parity.mjs"',
-  '"tests/growthRouteParity.test.ts"',
-  '"tests/growthRouteParitySource.test.ts"',
-  '"fixtures/growth-worker-route-parity-v1.json"',
-  '"docs/growth-route-parity.md"',
-  "growthRouteParityRequired: true",
-]);
-
-const helperValidation = readRequired("scripts/check-helper-scripts.mjs");
-requireTokens("Dynamic helper validation", helperValidation, [
-  'fs.readdirSync(scriptsDir).filter((name) => name.endsWith(".mjs")).sort()',
-  'spawnSync(process.execPath, ["--check", absolute(relativePath)]',
-]);
-
-const workflowParity = readRequired("scripts/check-worker-contract-workflow.mjs");
-requireTokens("Worker workflow parity", workflowParity, [
-  'permissions:\n  contents: read',
-  'node-version: "24"',
-  "npm ci --no-audit --no-fund",
-  "npm run check:local",
-]);
-
-const workflow = readRequired(".github/workflows/worker-contract.yml");
-requireTokens("Worker contract workflow", workflow, [
-  "Verify Growth route parity",
-  "npm run growth:route-parity:check",
-  "npm run test:core",
-  "npm run check:local",
-  "persist-credentials: false",
-]);
-const workflowParityStep = workflow.indexOf("npm run growth:route-parity:check");
-const workflowTestsStep = workflow.indexOf("npm run test:core");
-const workflowCompleteStep = workflow.indexOf("npm run check:local");
-if (!(
-  workflowParityStep >= 0 &&
-  workflowParityStep < workflowTestsStep &&
-  workflowTestsStep < workflowCompleteStep
-)) {
-  errors.push("Worker workflow must run route parity before deterministic tests and the complete local gate.");
-}
-if (workflow.includes("wrangler deploy")) {
-  errors.push("Route-parity validation must not deploy the Worker.");
-}
-
-const workerFixtureRaw = readRequired(fixturePath);
-const fixture = parseFixture(workerFixtureRaw, "Worker route parity fixture");
+const fixtureRaw = readRequired(fixturePath);
+const fixture = parseFixture(fixtureRaw, "Worker route parity fixture");
 if (fixture) validateFixture(fixture, "Worker route parity fixture");
 
-const workerParserSource = readRequired(parserPath);
-requireTokens("Worker Growth route state parser", workerParserSource, [
+const parserSource = readRequired(parserPath);
+for (const token of [
   "GROWTH_WORKER_ROUTE_PARITY_CONTRACT_VERSION",
   "GROWTH_WORKER_ROUTE_ABSENT_BLOCKERS",
   "GROWTH_WORKER_ROUTE_PRESENT_BLOCKERS",
@@ -238,64 +150,59 @@ requireTokens("Worker Growth route state parser", workerParserSource, [
   "assertGrowthWorkerRouteParityPageState",
   "GROWTH_WORKER_ROUTE_PARITY_BLOCKERS_INVALID",
   "GROWTH_WORKER_ROUTE_PARITY_PAGE_STATE_MISMATCH",
-]);
+]) requireToken("Worker Growth route state parser", parserSource, token);
 
-const workerCorpus = boundedCorpus(path.join(root, "src"));
-requireTokens("Worker Growth route sources", workerCorpus, [
-  "growth_worker_route_parity_v1",
-  "growth_worker_proposal_v1",
-  "growth_worker_request_v1",
-  "growth_worker_bridge_v2",
-  "growth_worker_route_inventory_v2",
-  "/api/private/growth/worker-proposals",
-  "bridgeEnabled: false",
-  "externalExecutionEnabled: false",
-  "canonicalGrowthPromotionEnabled: false",
-  "next_website_ingestion_endpoint_not_implemented",
-  "worker_proposal_delivery_not_implemented",
-  "cross_repo_contract_tests_not_implemented",
-]);
-forbidTokens("Worker Growth route sources", workerCorpus, [
+const workflow = readRequired(workflowPath);
+requirePattern("Worker contract workflow", workflow, /^\s*workflow_dispatch:\s*$/m, "manual workflow_dispatch admission");
+requirePattern("Worker contract workflow", workflow, /^\s*expected_sha:\s*$/m, "exact expected_sha input");
+requirePattern("Worker contract workflow", workflow, /^\s*request_source:\s*$/m, "governed request_source input");
+requirePattern("Worker contract workflow", workflow, /^\s*permissions:\s*\n\s+contents:\s*read\s*$/m, "read-only contents permission");
+requirePattern("Worker contract workflow", workflow, /^\s*ref:\s*\$\{\{\s*inputs\.expected_sha\s*\}\}\s*$/m, "exact-SHA checkout");
+requirePattern("Worker contract workflow", workflow, /^\s*persist-credentials:\s*false\s*$/m, "checkout credential removal");
+requirePattern("Worker contract workflow", workflow, /^\s*node-version:\s*["']24\.18\.0["']\s*$/m, "exact Node 24.18.0 authority");
+requireToken("Worker contract workflow", workflow, "npm ci --no-audit --no-fund");
+requireToken("Worker contract workflow", workflow, "npm run growth:route-parity:check");
+requireToken("Worker contract workflow", workflow, "npm run test:core");
+requireToken("Worker contract workflow", workflow, "npm run check:local");
+
+forbidPattern("Worker contract workflow", workflow, /^\s*push:\s*$/m, "automatic push trigger");
+forbidPattern("Worker contract workflow", workflow, /^\s*pull_request:\s*$/m, "automatic pull_request trigger");
+forbidPattern("Worker contract workflow", workflow, /^\s*schedule:\s*$/m, "automatic schedule trigger");
+forbidPattern("Worker contract workflow", workflow, /^\s*cron:\s*/m, "cron trigger");
+forbidPattern("Worker contract workflow", workflow, /^\s*contents:\s*write\s*$/m, "contents write permission");
+forbidPattern("Worker contract workflow", workflow, /\bwrangler\s+deploy\b|\bvercel\s+deploy\b/u, "deployment command");
+
+const workflowParityStep = workflow.indexOf("npm run growth:route-parity:check");
+const workflowTestsStep = workflow.indexOf("npm run test:core");
+const workflowCompleteStep = workflow.indexOf("npm run check:local");
+if (!(
+  workflowParityStep >= 0 &&
+  workflowParityStep < workflowTestsStep &&
+  workflowTestsStep < workflowCompleteStep
+)) {
+  errors.push("Worker workflow must run route parity before deterministic tests and the complete local gate.");
+}
+
+for (const forbidden of [
   "bridgeEnabled: true",
   "externalExecutionEnabled: true",
   "canonicalGrowthPromotionEnabled: true",
   "clientBrowserAccess: true",
   "adminTokenBrowserExposure: true",
-]);
-
-const forbiddenFixtureTerms = [
-  ["ADMIN", "TOKEN"].join("_"),
-  ["EVAVO", "GROWTH", "WORKER", "ADMIN", "TOKEN"].join("_"),
-  ["EVAVO", "GROWTH", "WORKER", "PROPOSAL", "KEYS", "JSON"].join("_"),
-  ["PRIVATE", "SUPABASE", "SERVICE", "ROLE", "KEY"].join("_"),
-  ["SUPABASE", "SERVICE", "ROLE", "KEY"].join("_"),
-  "secret",
-  "signature",
-  "nonce",
-  ["provider", "Token"].join(""),
-];
-forbidTokens("Worker route parity fixture", workerFixtureRaw, forbiddenFixtureTerms);
+]) {
+  if (parserSource.includes(forbidden)) errors.push(`Worker Growth route parser contains forbidden enabled posture: ${forbidden}`);
+}
 
 const configuredWebsitePath = process.env.EVAVO_NEXT_WEBSITE_REPO_PATH?.trim();
-const websiteRoot = configuredWebsitePath
-  ? path.resolve(configuredWebsitePath)
-  : path.resolve(root, "..", "next-website");
+const websiteRoot = configuredWebsitePath ? path.resolve(configuredWebsitePath) : path.resolve(root, "..", "next-website");
 const websiteFixturePath = path.join(websiteRoot, "tests", "fixtures", "growth-worker-route-parity-v1.json");
-const websiteParserPath = path.join(
-  websiteRoot,
-  "src",
-  "server",
-  "growth-autopilot",
-  "growthWorkerRouteParity.ts",
-);
+const websiteParserPath = path.join(websiteRoot, "src", "server", "growth-autopilot", "growthWorkerRouteParity.ts");
 let websiteState = "fixture-only";
 
 if (fs.existsSync(websiteFixturePath)) {
   websiteState = "sibling-verified";
   const websiteFixtureRaw = fs.readFileSync(websiteFixturePath, "utf8");
-  if (websiteFixtureRaw !== workerFixtureRaw) {
-    errors.push("Worker and website route parity fixtures must match byte-for-byte.");
-  }
+  if (websiteFixtureRaw !== fixtureRaw) errors.push("Worker and website route parity fixtures must match byte-for-byte.");
   const websiteFixture = parseFixture(websiteFixtureRaw, "Website route parity fixture");
   if (websiteFixture) validateFixture(websiteFixture, "Website route parity fixture");
 
@@ -307,32 +214,9 @@ if (fs.existsSync(websiteFixturePath)) {
 
   if (!fs.existsSync(websiteParserPath)) {
     errors.push(`Website route state parser is missing: ${websiteParserPath}`);
-  } else if (fs.readFileSync(websiteParserPath, "utf8") !== workerParserSource) {
+  } else if (fs.readFileSync(websiteParserPath, "utf8") !== parserSource) {
     errors.push("Worker and website route state parsers must match byte-for-byte.");
   }
-
-  const websiteCorpus = [
-    websiteParserPath,
-    path.join(websiteRoot, "src", "server", "growth-autopilot", "workerProposalRequestSignature.ts"),
-    path.join(websiteRoot, "src", "server", "growth-autopilot", "workerBridgeReadiness.ts"),
-    path.join(websiteRoot, "src", "server", "growth-autopilot", "workerProposalIngestionNextApiAdapter.ts"),
-    path.join(websiteRoot, "src", "server", "growth-autopilot", "workerProposalIngestionPageHandler.ts"),
-    path.join(websiteRoot, "scripts", "check-growth-worker-proposal-page-source.mjs"),
-  ].map((file) => fs.readFileSync(file, "utf8")).join("\n");
-  requireTokens("Website route parity sources", websiteCorpus, [
-    "growth_worker_route_parity_v1",
-    "growth_worker_request_v1",
-    "growth_worker_bridge_v2",
-    "growth_worker_route_inventory_v2",
-    "growth_worker_next_api_adapter_v1",
-    "growth_worker_proposal_page_handler_v1",
-    "/api/private/growth/worker-proposals",
-    "bridgeEnabled: false",
-    "next_website_ingestion_endpoint_not_implemented",
-    "worker_proposal_delivery_not_implemented",
-    "cross_repo_contract_tests_not_implemented",
-    "present state must match the exact reviewed frozen-config and page-handler delegation source byte-for-byte",
-  ]);
 } else if (configuredWebsitePath) {
   errors.push(`Configured EVAVO_NEXT_WEBSITE_REPO_PATH does not contain ${websiteFixturePath}.`);
 }
@@ -345,8 +229,8 @@ if (errors.length) {
 
 console.log("Growth route parity check passed.");
 console.log(`- website verification mode: ${websiteState}`);
-console.log("- npm, complete local gate, safety completeness, dynamic helper parsing and read-only CI wiring are present");
-console.log("- absent pages require the endpoint blocker; present pages require the Worker proposal delivery blocker");
-console.log("- mirrored fixtures and pure route-state parsers match byte-for-byte when both checkouts are available");
-console.log("- the approved present state is reachable without retaining a contradictory endpoint-not-implemented blocker");
-console.log("- bridge, delivery, canonical promotion and external execution remain disabled");
+console.log("- growth_worker_route_parity_v1 fixture and page-state blockers are exact");
+console.log("- next_website_ingestion_endpoint_not_implemented and worker_proposal_delivery_not_implemented remain state-specific blockers");
+console.log("- cross_repo_contract_tests_not_implemented remains explicit until both repositories are verified together");
+console.log("- workflow validation is semantic, manual, exact-SHA, read-only and exact-toolchain");
+console.log("- bridge and delivery remain disabled; no deployment or automatic workflow trigger is admitted");

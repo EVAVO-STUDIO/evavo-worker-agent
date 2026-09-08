@@ -1,6 +1,6 @@
 # D1 migration order
 
-Run migrations in complete filename order against the `evavo_outbound_agent` D1 database.
+Run migrations in filename order against the `evavo_outbound_agent` D1 database. The authoritative order is the complete filename order validated by the repository, not the numeric prefix alone.
 
 The repository intentionally contains two `0006` migrations. Numeric prefixes are therefore not sufficient identifiers; use complete filenames whenever selecting one migration.
 
@@ -76,6 +76,7 @@ npm run db:migration:one -- 0011_source_expansion_strategy_origin_yield_backfill
 - A dry run prints the resolved migration, classification, target and Wrangler command before anything can execute.
 - Do not infer applied state from filenames. Verify the target database first.
 - No repository check or printer mutates D1.
+- Historical migration records and statuses do not enable drafting, sending, crawling, AI calls or any external execution.
 
 ## Reviewed migration inventory
 
@@ -119,4 +120,4 @@ npm run db:migration:one -- 0011_source_expansion_strategy_origin_yield_backfill
 
 ## Growth zero-source autonomous discovery data model
 
-Migration `0020_growth_autonomous_discovery.sql` adds the zero-source autonomous discovery data model used for internal plans, candidate metadata, review decisions and feedback. The migration does not enable crawling, sending, posting, form submission, AI calls, or external execution. Runtime policy and authenticated, exact-confirmation route contracts remain authoritative.
+Migration `0020_growth_autonomous_discovery.sql` adds the historical zero-source discovery data model used for internal plans, candidate metadata, review decisions and feedback. The migration does not enable crawling, sending, posting, form submission, AI calls or external execution. Current runtime policy and authenticated, exact-confirmation route contracts remain authoritative.

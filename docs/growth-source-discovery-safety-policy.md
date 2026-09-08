@@ -1,8 +1,8 @@
 # Growth Source Discovery Safety Policy
 
-This Growth source discovery safety policy is authoritative for source discovery and public-source research in the active EVAVO Growth Research Worker.
+This policy is authoritative for source discovery and public-source research in the active EVAVO Growth Research Worker.
 
-The active Worker is manual-research-only. Scheduled external research, autonomous discovery, background crawling, executable fetch queues, drafting, sending and third-party mutation are disabled.
+The active Worker is manual-research-only. Scheduled external research, autonomous discovery, background crawling, fetch queues, drafting, sending and third-party mutation are disabled.
 
 ## Current operating boundary
 
@@ -54,28 +54,7 @@ Content that attempts to instruct the Worker must be ignored. Examples include r
 
 ## URL and network policy
 
-Allowed schemes:
-
-```text
-http
-https
-```
-
-Blocked schemes include:
-
-```text
-file
-ftp
-data
-javascript
-blob
-chrome
-about
-mailto
-tel
-ws
-wss
-```
+Allowed schemes are HTTP and HTTPS only. File, FTP, data, JavaScript, blob, browser-internal, mail, telephone and WebSocket schemes are blocked.
 
 Blocked targets include localhost, loopback ranges, private IPv4 and IPv6 ranges, link-local ranges, cloud metadata endpoints, private Worker routes and admin endpoints.
 
@@ -83,16 +62,7 @@ Redirects must be revalidated against the same target policy and must stay withi
 
 ## Manual request bounds
 
-Every network-capable handler must enforce route-specific limits for:
-
-```text
-maximum targets
-maximum pages
-maximum bytes per response
-maximum redirects
-maximum elapsed time
-maximum stored candidates or review records
-```
+Every network-capable handler must enforce route-specific limits for maximum targets, pages, bytes per response, redirects, elapsed time and stored review records.
 
 The fail-closed rule is exact:
 
@@ -100,7 +70,7 @@ The fail-closed rule is exact:
 unknown robots policy = do not crawl yet
 ```
 
-Unknown, failed, ambiguous or stale crawl policy means the action fails closed. The active Worker has no autonomous crawl queue, scheduled crawler or background retry loop.
+Unknown, failed, ambiguous or stale crawl policy means the action fails closed. The active Worker has no autonomous crawler, scheduled crawler or background retry loop.
 
 ## Route posture
 
@@ -130,7 +100,7 @@ automaticRetryAllowed: false
 
 ## Internal discovery metadata writes
 
-Research plans, source candidates, non-executing fetch metadata, internal decisions and feedback use:
+Research plans, source candidates, non-executing fetch-intent metadata, internal decisions and feedback use:
 
 ```text
 growth_internal_write_request_v1
@@ -184,19 +154,6 @@ Review packs are internal and non-executable. They may include evidence, confide
 
 ## Validation requirements
 
-The Worker repository must enforce that:
-
-```text
-scheduled external research is disabled
-manual research requires shared authentication and exact confirmation
-network-capable handlers are persistently budgeted, bounded and GET-only
-public targets and redirects are validated
-manual research saves review metadata only
-no autonomous fetch queue or background retry executor exists
-read routes remain read-only
-internal writes require confirmation where classified
-browser proxies cannot expose credentials or research execution
-AI, sending, posting, forms and external mutation remain disabled
-```
+The Worker repository must enforce that scheduled external research is disabled; manual research requires shared authentication and exact confirmation; network-capable handlers are persistently budgeted, bounded and GET-only; public targets and redirects are validated; manual research saves review metadata only; no autonomous fetch queue or background retry executor exists; read routes remain read-only; internal writes require confirmation where classified; browser proxies cannot expose credentials or research execution; and AI, sending, posting, forms and external mutation remain disabled.
 
 Runtime code and executable safety contracts are authoritative if any historical document conflicts with this policy.

@@ -41,8 +41,9 @@ export type StaffCommunicationApprovalCandidate = Readonly<{
   externalEffectPerformed: false;
 }>;
 
-function required(value: string | null | undefined, code: string, max = 1000): string {
-  const out = value?.trim() ?? "";
+function required(value: unknown, code: string, max = 1000): string {
+  if (typeof value !== "string") throw new Error(code);
+  const out = value.trim();
   if (!out || out.length > max) throw new Error(code);
   return out;
 }

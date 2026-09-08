@@ -16,6 +16,7 @@ The active EVAVO Growth Research Worker is manual-research-only. Zero-source sta
 - AI drafting, email, social posting, form submission, browser automation and external mutation are disabled.
 - Automatic source promotion and automatic opportunity execution are disabled.
 - Automatic retries and alternate executors are disabled.
+- When there is no explicit operator request, do not start research automatically.
 
 ## Safe startup order
 

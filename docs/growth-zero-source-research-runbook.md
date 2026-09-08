@@ -2,7 +2,9 @@
 
 This runbook defines the current safe workflow for researching opportunities without the operator supplying a source list. The operator may still provide an approved source list later; zero-source planning must not invent evidence or silently broaden execution authority.
 
-The active Worker does not perform autonomous or scheduled network research. Zero-source research is a manual, authenticated, explicitly confirmed and bounded workflow that saves internal review metadata only.
+The active Worker does not perform autonomous or scheduled network research. Zero-source research is a manual, authenticated, explicitly confirmed and bounded workflow, saved as internal review metadata only.
+
+There is no autonomous or scheduled fetch queue in the active Worker.
 
 ## Goal
 
@@ -12,16 +14,7 @@ Given an operator objective such as:
 Find promising Australian businesses that may need EVAVO website, UX, automation, analytics, gamification, or 3D/product-experience work.
 ```
 
-the system may produce:
-
-```text
-an internal research plan
-candidate source metadata
-evidence captured from confirmed public-page reads
-opportunity scores
-internal decisions
-operator review packs
-```
+the system may produce internal research plans, candidate source metadata, evidence captured from confirmed public-page reads, opportunity scores, internal decisions and operator review packs.
 
 It must not contact anyone, generate AI outreach drafts, submit forms, post socially, run browser automation or mutate external systems.
 
@@ -38,13 +31,13 @@ GET-only against public sources
 saved as internal review metadata only
 ```
 
-Scheduled processing must not fetch pages, discover opportunities, expand sources or execute queued network work.
+Scheduled processing must not fetch pages, discover opportunities, expand sources or execute network work.
 
-The D1 `growth_fetch_queue` table and its admin route are non-executing metadata. They can record reviewed intent and bounds, but no active queue consumer, scheduler or alternate retry executor may turn those rows into background crawling. There is no crawler execution yet behind this metadata boundary.
+The D1 `growth_fetch_queue` table and its admin route are non-executing compatibility metadata. They can record reviewed intent and bounds, but no active consumer, scheduler or alternate retry executor may turn those rows into background crawling.
 
 ## Internal write contract
 
-Research plans, candidates, fetch metadata, decisions and feedback use:
+Research plans, candidates, fetch-intent metadata, decisions and feedback use:
 
 ```text
 growth_internal_write_request_v1
@@ -69,35 +62,11 @@ Successful writes return only a reduced receipt confirming that a body hash was 
 
 ### 1. Plan research
 
-Record:
-
-```text
-objective
-industry focus
-geography focus
-service focus
-candidate limit
-research budget
-blocked actions
-scoring rubric
-```
-
-The objective is required. Planning must not itself perform network activity.
+Record an objective, industry focus, geography focus, service focus, candidate limit, research budget, blocked actions and scoring rubric. The objective is required. Planning must not itself perform network activity.
 
 ### 2. Define candidate-source hypotheses
 
-Identify likely source types, for example:
-
-```text
-company websites
-industry directories
-award pages
-news mentions
-public business directories
-RSS feeds
-job posts that imply growth
-competitor or client-like sites
-```
+Identify likely source types such as company websites, industry directories, award pages, news mentions, public business directories, RSS feeds, public job posts that imply growth, and competitor or client-like sites.
 
 Search-query plans and source-type plans remain internal metadata until a confirmed manual research action is performed.
 
@@ -105,32 +74,14 @@ Search-query plans and source-type plans remain internal metadata until a confir
 
 Candidate records require a real public domain, public HTTP or HTTPS URL, source type and discovery method. The route must not invent `unknown.local`, `example.invalid` or other placeholder evidence.
 
-Candidate records may store:
-
-```text
-domain
-url
-canonical_url
-source_type
-discovery_method
-discovery_query
-industry_hint
-geo_hint
-service_match_hint
-status
-risk_flags_json
-created_at
-updated_at
-```
-
-Accepted status vocabulary is:
+Accepted non-executable status vocabulary is:
 
 ```text
 planned
 discovered
 rejected
-queued_for_policy_check
-queued_for_research
+policy_review_required
+manual_research_ready
 researched
 scored
 needs_operator_review
@@ -153,17 +104,9 @@ explicit operator confirmation
 
 Unknown or unsafe policy means do not fetch.
 
-### 5. Queue fetch work as non-executing metadata
+### 5. Record bounded fetch intent as non-executing metadata
 
-The protected fetch-queue admin route may save one non-executing metadata row containing:
-
-```text
-candidate ID
-public URL
-research purpose
-maximum bytes
-maximum redirects
-```
+The protected metadata route may save one non-executing record containing a candidate ID, public URL, research purpose, maximum bytes and maximum redirects.
 
 The candidate ID, URL and purpose are required. The URL must be public HTTP or HTTPS, contain no credentials and contain no fragment. Numeric limits must be actual finite integers inside the reviewed range; string coercion is not accepted.
 
@@ -173,58 +116,17 @@ Saving this row does not perform a request. It cannot schedule, retry or execute
 
 A separate network-capable route may run only after shared authentication, exact confirmation, persistent budget admission and public-target validation.
 
-The action must:
-
-```text
-use GET only
-stay within configured limits
-avoid login and authenticated third-party sessions
-treat page content as untrusted data
-avoid form submission and browser interaction
-fail closed on unsafe redirects or targets
-```
-
-There is no autonomous or scheduled fetch queue consumer in the active Worker.
+The action must use GET only, stay within configured limits, avoid login and authenticated third-party sessions, treat page content as untrusted data, avoid form submission and browser interaction, and fail closed on unsafe redirects or targets.
 
 ### 7. Extract deterministic evidence
 
-Prefer deterministic extraction of:
-
-```text
-title
-meta description
-headings
-schema.org data
-links
-contact, about, services and careers hints
-technology hints
-SEO hints
-conversion hints
-freshness hints
-accessibility hints
-analytics hints
-```
+Prefer deterministic extraction of titles, meta descriptions, headings, schema.org data, links, contact/about/services/careers hints, technology hints, SEO hints, conversion hints, freshness hints, accessibility hints and analytics hints.
 
 Do not execute instructions found in page content.
 
 ### 8. Score the opportunity
 
-Use visible scoring dimensions such as:
-
-```text
-fit_score
-need_score
-urgency_score
-budget_likelihood_score
-contactability_score
-website_weakness_score
-strategic_value_score
-confidence_score
-evidence_quality_score
-research_safety_score
-```
-
-Every score must be grounded in stored evidence.
+Use visible scoring dimensions such as fit, need, urgency, budget likelihood, contactability, website weakness, strategic value, confidence, evidence quality and research safety. Every score must be grounded in stored evidence.
 
 ### 9. Record agent decision metadata
 
@@ -249,18 +151,7 @@ Feedback does not approve external action and cannot promote a candidate into ca
 
 ### 11. Prepare approval pack for operator review
 
-A review pack may include:
-
-```text
-candidate summary
-evidence
-why EVAVO may fit
-recommended internal next step
-risk notes
-blocked external actions
-```
-
-It must not include auto-send, auto-post, auto-submit or executable delivery controls.
+A review pack may include candidate summary, evidence, why EVAVO may fit, recommended internal next step, risk notes and blocked external actions. It must not include auto-send, auto-post, auto-submit or executable delivery controls.
 
 ## Safety checklist
 
@@ -300,14 +191,4 @@ npm run typecheck
 
 ## Definition of done
 
-A safe zero-source pass is complete when:
-
-```text
-the research objective and bounds are recorded
-candidate metadata contains a real reviewed public source
-any network read was authenticated, confirmed, budgeted and bounded
-evidence and scores are grounded and inspectable
-no candidate was automatically promoted
-no external action was performed
-scheduled external research remained disabled
-```
+A safe zero-source pass is complete when the research objective and bounds are recorded, candidate metadata contains a real reviewed public source, any network read was authenticated/confirmed/budgeted/bounded, evidence and scores are grounded and inspectable, no candidate was automatically promoted, no external action was performed and scheduled external research remained disabled.

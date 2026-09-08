@@ -38,15 +38,21 @@ const documentation = read(documentationPath);
 
 requireTokens("workflow", workflow, [
   "name: Worker repository confidentiality",
+  "workflow_dispatch:",
+  "expected_sha:",
+  "request_source:",
+  "default: evavo-development-studio",
   "contents: read",
+  "cancel-in-progress: false",
   "persist-credentials: false",
-  "node-version: \"24\"",
+  "node-version: \"24.18.0\"",
+  "node scripts/check-repository-toolchain.mjs",
   "GITHUB_TOKEN: ${{ github.token }}",
   "node scripts/check-worker-repository-visibility.mjs --live",
-  "schedule:",
-  "cron: \"17 3 * * *\"",
 ]);
 forbidTokens("workflow", workflow, [
+  "schedule:",
+  "cron:",
   "contents: write",
   "pull-requests: write",
   "id-token: write",
@@ -56,6 +62,7 @@ forbidTokens("workflow", workflow, [
   "npm ci",
   "secrets.",
   "ADMIN_TOKEN",
+  "package-manager-cache:",
 ]);
 
 requireTokens("documentation", documentation, [

@@ -45,19 +45,23 @@ jobs:
   growth-backend-check:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     name: Growth backend local contract check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           persist-credentials: false
 
-      - name: Setup Node
+      - name: Setup exact Worker Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version: "24.18.0"
           cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Verify exact Worker toolchain before dependency install
+        run: node scripts/check-repository-toolchain.mjs
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -86,21 +90,13 @@ jobs:
             fi
           }
 
-          # Check Growth backend aggregate wiring
           run_check aggregate-wiring npm run growth:backend:aggregate:check
-          # Check Business people docs
           run_check business-people-docs npm run business:people:docs:check
-          # Check Business website page docs
           run_check business-website-page-docs npm run business:website-pages:docs:check
-          # Check Worker PowerShell runners
           run_check worker-powershell npm run worker:powershell:check
-          # Check generated route wiring clean
           run_check generated-routes npm run growth:generated-routes:check
-          # Print Worker final local gate
           run_check final-gate-print npm run worker:final-gate:print
-          # Run Growth backend aggregate check
           run_check complete-local-gate npm run growth:backend:check:local
-          # Print Growth backend validation runbook
           run_check validation-runbook npm run growth:backend:final:print
           run_check typecheck npm run typecheck
 

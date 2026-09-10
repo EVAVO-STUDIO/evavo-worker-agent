@@ -26,7 +26,9 @@ test("normalises a Gmail thread and creates material memory candidates", () => {
   assert.equal(result.normalizedMessages[0]?.sender.address, "ashley@example.com");
   assert.equal(result.analysis.replyNeeded, true);
   assert.ok(result.memoryCandidates.some((candidate) => candidate.kind === "message" && candidate.material));
-  assert.ok(result.memoryCandidates.some((candidate) => candidate.kind === "obligation"));
+  const obligation = result.memoryCandidates.find((candidate) => candidate.kind === "obligation");
+  assert.ok(obligation);
+  assert.equal(obligation?.occurredAt, "2026-09-04T01:00:00.000Z");
 });
 
 test("quoted history is removed before latest-message analysis", () => {

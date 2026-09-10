@@ -137,3 +137,32 @@ test("blocked identity or attachment evidence overrides an otherwise valid reply
   assert.equal(result.evidenceReadinessStatus, "blocked");
   assert.ok(result.reasons.some((item) => /attachment/i.test(item)));
 });
+
+test("escalation cannot be downgraded to do-not-reply merely because no live response target remains", () => {
+  const result = buildCommunicationDecisionPackage({
+    packageId: "pkg-escalation-precedence",
+    scenario: "general",
+    objective: "Do not act on blocked evidence.",
+    thread: {
+      threadId: "thread-escalation-precedence",
+      previousState: [],
+      latestObservedState: [],
+    },
+    obligations: [],
+    channel: { currentChannel: "email", canResolveInWriting: true },
+    evidenceIds: ["gmail:message:blocker"],
+    evidenceConfidence: 95,
+    decisionAt: NOW,
+    evidenceReadiness: {
+      contract: "business_communication_evidence_readiness_v1",
+      status: "blocked",
+      identityReady: false,
+      artifactsReady: true,
+      calendarReady: true,
+      blockers: ["Recipient identity is ambiguous."],
+      warnings: [],
+      evidenceIds: ["gmail:message:blocker"],
+    },
+  });
+  assert.equal(result.disposition, "escalate");
+});

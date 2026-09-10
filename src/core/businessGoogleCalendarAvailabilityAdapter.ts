@@ -4,11 +4,22 @@ export const BUSINESS_GOOGLE_CALENDAR_AVAILABILITY_ADAPTER_CONTRACT = "business_
 
 export type GoogleCalendarBusyWindow = Readonly<{ start: string; end: string }>;
 
+function iso(value: string, field: string): string {
+  const parsed = new Date(value);
+  if (!value || Number.isNaN(parsed.getTime())) throw new Error(`GOOGLE_CALENDAR_${field.toUpperCase()}_INVALID`);
+  return parsed.toISOString();
+}
+
 export function googleCalendarAvailabilityToSlotEvidence(input: Readonly<{
   calendarId: string;
   proposedStart: string;
   proposedEnd: string;
   timezone: string;
+  querySucceeded: boolean;
+  calendarAccessible: boolean;
+  queryStart: string;
+  queryEnd: string;
+  queriedAt: string;
   busyWindows: readonly GoogleCalendarBusyWindow[];
   providerEvidenceRef: string;
 }>): CalendarSlotEvidence {
@@ -18,6 +29,16 @@ export function googleCalendarAvailabilityToSlotEvidence(input: Readonly<{
   if (!input.calendarId.trim()) throw new Error("GOOGLE_CALENDAR_ID_REQUIRED");
   if (!input.timezone.trim()) throw new Error("GOOGLE_CALENDAR_TIMEZONE_REQUIRED");
   if (!input.providerEvidenceRef.trim()) throw new Error("GOOGLE_CALENDAR_EVIDENCE_REF_REQUIRED");
+  if (!input.querySucceeded) throw new Error("GOOGLE_CALENDAR_QUERY_NOT_SUCCESSFUL");
+  if (!input.calendarAccessible) throw new Error("GOOGLE_CALENDAR_CALENDAR_NOT_ACCESSIBLE");
+
+  const queryStart = new Date(input.queryStart);
+  const queryEnd = new Date(input.queryEnd);
+  if (Number.isNaN(queryStart.getTime()) || Number.isNaN(queryEnd.getTime()) || queryStart >= queryEnd) {
+    throw new Error("GOOGLE_CALENDAR_QUERY_WINDOW_INVALID");
+  }
+  if (queryStart > start || queryEnd < end) throw new Error("GOOGLE_CALENDAR_QUERY_DOES_NOT_COVER_PROPOSAL");
+  const queriedAt = iso(input.queriedAt, "queried_at");
 
   const overlaps = input.busyWindows.some((window) => {
     const busyStart = new Date(window.start);
@@ -33,6 +54,7 @@ export function googleCalendarAvailabilityToSlotEvidence(input: Readonly<{
     end: end.toISOString(),
     timezone: input.timezone.trim(),
     available: !overlaps,
+    observedAt: queriedAt,
     sourceEvidenceIds: Object.freeze([`google_calendar:${input.providerEvidenceRef.trim()}`]),
   });
 }

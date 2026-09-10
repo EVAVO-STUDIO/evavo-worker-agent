@@ -79,5 +79,6 @@ export function assertArtifactReadyForSend(resolution: ArtifactResolution): Arti
   if (!resolution.selected.current) throw new Error("ARTIFACT_NOT_CURRENT");
   if (!resolution.selected.sourceEvidenceIds.length) throw new Error("ARTIFACT_SOURCE_EVIDENCE_REQUIRED");
   if (!resolution.selected.contentHash) throw new Error("ARTIFACT_CONTENT_HASH_REQUIRED");
+  if (!/^[a-f0-9]{64}$/i.test(resolution.selected.contentHash.trim())) throw new Error("ARTIFACT_CONTENT_HASH_INVALID");
   return resolution.selected;
 }

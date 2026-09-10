@@ -27,7 +27,7 @@ const artifact = {
     purpose: "candidate cv",
     canonicalOwner: "gmail" as const,
     current: true,
-    contentHash: "sha256:abc",
+    contentHash: "a".repeat(64),
     sourceEvidenceIds: ["gmail:attachment:m1:cv.pdf"],
   },
   reasons: ["one match"],
@@ -67,4 +67,20 @@ test("all required evidence produces one approval-ready package", () => {
   const result = assessCommunicationEvidenceReadiness({ identity, attachmentsRequired: true, artifactResolutions: [artifact], calendarPromiseRequired: true, calendarCommitments: [calendar] });
   assert.equal(result.status, "ready_for_approval");
   assert.ok(result.evidenceIds.length >= 3);
+});
+
+test("already-prefixed identity evidence is not double-prefixed", () => {
+  const result = assessCommunicationEvidenceReadiness({ identity });
+  assert.ok(result.evidenceIds.includes("gmail:message:m1"));
+  assert.equal(result.evidenceIds.some((id) => id.startsWith("gmail:gmail:")), false);
+});
+
+test("an unavailable calendar slot does not block communication when no time promise is being made", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity,
+    calendarPromiseRequired: false,
+    calendarCommitments: [{ ...calendar, status: "verified_unavailable", canPromise: false }],
+  });
+  assert.equal(result.status, "ready_for_approval");
+  assert.equal(result.calendarReady, true);
 });

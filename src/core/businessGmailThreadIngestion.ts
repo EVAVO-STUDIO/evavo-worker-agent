@@ -111,10 +111,12 @@ export function ingestGmailThreadForRelationship(input: Readonly<{
   }
 
   for (const obligation of analysis.obligations) {
+    const evidenceMessage = normalizedMessages.find((message) => message.id === obligation.evidenceMessageId);
+    if (!evidenceMessage) throw new Error("GMAIL_INGESTION_OBLIGATION_EVIDENCE_MESSAGE_MISSING");
     memoryCandidates.push(Object.freeze({
       sourceSystem: "gmail",
       sourceRef: `gmail:message:${obligation.evidenceMessageId}`,
-      occurredAt: normalizedMessages.find((message) => message.id === obligation.evidenceMessageId)?.sentAt ?? latest?.sentAt ?? new Date(0).toISOString(),
+      occurredAt: evidenceMessage.sentAt,
       kind: "obligation",
       summary: obligation.description,
       material: true,

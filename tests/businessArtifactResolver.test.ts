@@ -9,7 +9,7 @@ const current = {
   purpose: "controlling contractor forecast",
   canonicalOwner: "docs_suite" as const,
   version: "Issue 02",
-  contentHash: "sha256:abc123",
+  contentHash: "a".repeat(64),
   current: true,
   sourceEvidenceIds: ["docs:artifact:issue02"],
 };
@@ -37,4 +37,9 @@ test("stale-only matches stay unresolved", () => {
 test("send binding requires a content hash", () => {
   const result = resolveBusinessArtifact({ requestedPurpose: current.purpose, candidates: [{ ...current, contentHash: null }] });
   assert.throws(() => assertArtifactReadyForSend(result), /CONTENT_HASH/);
+});
+
+test("send binding rejects malformed content hashes", () => {
+  const result = resolveBusinessArtifact({ requestedPurpose: current.purpose, candidates: [{ ...current, contentHash: "sha256:not-a-real-hash" }] });
+  assert.throws(() => assertArtifactReadyForSend(result), /CONTENT_HASH_INVALID/);
 });

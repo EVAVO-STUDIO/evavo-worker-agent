@@ -45,9 +45,30 @@ function rate(count: number, total: number): number {
   return total ? count / total : 0;
 }
 
+function validateObservation(item: CommunicationQualityObservation, index: number): void {
+  for (const [field, value] of [
+    ["missedQuestionCount", item.missedQuestionCount],
+    ["unsupportedClaimCount", item.unsupportedClaimCount],
+    ["unauthorisedCommitmentCount", item.unauthorisedCommitmentCount],
+  ] as const) {
+    if (!Number.isInteger(value) || value < 0) throw new Error(`COMMUNICATION_QUALITY_${field.toUpperCase()}_INVALID:${index}`);
+  }
+  if (item.humanEditDistance !== undefined && item.humanEditDistance !== null) {
+    if (!Number.isFinite(item.humanEditDistance) || item.humanEditDistance < 0 || item.humanEditDistance > 1) {
+      throw new Error(`COMMUNICATION_QUALITY_HUMAN_EDIT_DISTANCE_INVALID:${index}`);
+    }
+  }
+  if (item.confidence !== undefined && item.confidence !== null) {
+    if (!Number.isFinite(item.confidence) || item.confidence < 0 || item.confidence > 100) {
+      throw new Error(`COMMUNICATION_QUALITY_CONFIDENCE_INVALID:${index}`);
+    }
+  }
+}
+
 export function calculateCommunicationQualityMetrics(
   observations: readonly CommunicationQualityObservation[],
 ): CommunicationQualityMetrics {
+  observations.forEach(validateObservation);
   const total = observations.length;
   const count = (predicate: (item: CommunicationQualityObservation) => boolean) => observations.filter(predicate).length;
   const severeErrorCount = observations.reduce((sum, item) => sum
@@ -60,7 +81,7 @@ export function calculateCommunicationQualityMetrics(
   const expectedEscalations = observations.filter((item) => item.escalationExpected === true);
   const escalations = observations.filter((item) => item.escalated === true);
   const correctEscalations = observations.filter((item) => item.escalationExpected === true && item.escalated === true).length;
-  const editDistances = observations.map((item) => item.humanEditDistance).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const editDistances = observations.map((item) => item.humanEditDistance).filter((value): value is number => typeof value === "number");
   const approvable = observations.filter((item) => item.finalApproved !== undefined);
   const calibration = observations
     .filter((item) => typeof item.confidence === "number" && item.decisionCorrect !== null && item.decisionCorrect !== undefined)
@@ -103,4 +124,5 @@ export function assertNoCriticalCommunicationErrors(metrics: CommunicationQualit
   if (metrics.wrongAttachmentRate > 0) throw new Error("COMMUNICATION_QUALITY_WRONG_ATTACHMENT_PRESENT");
   if (metrics.approvalDriftRate > 0) throw new Error("COMMUNICATION_QUALITY_APPROVAL_DRIFT_PRESENT");
   if (metrics.unauthorisedCommitmentRate > 0) throw new Error("COMMUNICATION_QUALITY_UNAUTHORISED_COMMITMENT_PRESENT");
+  if (metrics.unsupportedClaimRate > 0) throw new Error("COMMUNICATION_QUALITY_UNSUPPORTED_CLAIM_PRESENT");
 }

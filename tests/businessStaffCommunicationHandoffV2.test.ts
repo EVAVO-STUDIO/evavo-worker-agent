@@ -43,8 +43,10 @@ function readyContext() {
 
 function readyDecision() {
   return {
-    contract: "business_communication_decision_package_v3" as const,
+    contract: "business_communication_decision_package_v4" as const,
     packageId: "pkg-1",
+    origin: "direct" as const,
+    relationshipCycleId: null,
     scenario: "graduate_or_candidate" as const,
     objective: "Reply respectfully.",
     decisionAt: "2026-09-04T02:50:00.000Z",
@@ -59,6 +61,10 @@ function readyDecision() {
     prohibitedImplications: ["Do not imply a role exists."],
     evidenceIds: ["gmail:m1"],
     evidenceConfidence: 95,
+    memoryContextUsed: false,
+    memoryRecordIds: [],
+    memorySourceRefs: [],
+    memoryConflictRecordIds: [],
     approvalGradeReady: true,
     nextContextSources: [],
     staffPriorities: ["Answer directly."],
@@ -83,6 +89,8 @@ test("wraps a ready v1 handoff with canonical staff context", () => {
     communicationDecision: readyDecision(),
   });
   assert.equal(result.staffContext.relationshipId, "rel-ashley");
+  assert.equal(result.staffContext.decisionPackageId, "pkg-1");
+  assert.equal(result.staffContext.decisionOrigin, "direct");
   assert.equal(result.staffContext.approvalGradeReady, true);
   assert.ok(result.staffContext.sourceRefs.includes("gmail:m1"));
   assert.ok(result.staffContext.mustNotAssume.some((item) => /role exists/i.test(item)));
@@ -113,4 +121,19 @@ test("refuses relationship mismatch between embedded handoff and staff context",
     }),
     /RELATIONSHIP_MISMATCH/,
   );
+});
+
+test("canonical cycle provenance is carried into the Writing Studio handoff", () => {
+  const decision = {
+    ...readyDecision(),
+    origin: "relationship_manager_cycle" as const,
+    relationshipCycleId: "cycle-1",
+  };
+  const result = buildStaffCommunicationHandoffV2({
+    handoffV1,
+    relationshipContext: readyContext(),
+    communicationDecision: decision,
+  });
+  assert.equal(result.staffContext.decisionOrigin, "relationship_manager_cycle");
+  assert.equal(result.staffContext.relationshipCycleId, "cycle-1");
 });

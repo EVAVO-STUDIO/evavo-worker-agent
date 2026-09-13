@@ -1,21 +1,21 @@
 # Growth Autonomous Discovery Architecture
 
-This document describes the guarded research architecture for EVAVO Growth discovery.
+This document records a future-state design vocabulary for EVAVO Growth discovery. It is not an active-runtime contract, implementation authorisation or evidence that autonomous execution exists.
 
-The long-term product principle is **Autonomous research, supervised action.** That phrase describes a target design, not the active runtime. The current Worker performs no autonomous or scheduled network research. Public research is manual, authenticated, explicitly confirmed, persistently budgeted and bounded.
+The active Worker is manual-research-only. Public research is manual, authenticated, explicitly confirmed, persistently budgeted and bounded. Cron must not fetch public pages, discover opportunities, expand sources or enqueue network work. No autonomous fetch queue or scheduled research mode is enabled.
 
-The Growth autonomous discovery architecture must keep planning, public evidence collection, internal reasoning and external action as separate capabilities. Increasing activity intensity must never silently grant delivery authority.
+The architecture must keep planning, public evidence collection, internal reasoning and external action as separate capabilities. Future design vocabulary must never silently grant runtime authority.
 
 ## Current runtime posture
 
 The active Worker can:
 
-- plan research from an operator objective;
+- plan research from an operator objective without network activity;
 - register reviewed source candidate metadata;
-- save non-executing fetch queue metadata;
-- perform a separately confirmed bounded public research read through the approved public-fetch boundary;
+- save non-executing fetch-intent metadata;
+- perform one separately confirmed bounded public research read through the approved public-fetch boundary;
 - store evidence, opportunity scores, internal decisions and operator feedback;
-- prepare review-only approval packs.
+- prepare review-only operator packs.
 
 The active Worker cannot:
 
@@ -37,7 +37,7 @@ The active Worker cannot:
 Worker D1
   discovery plans
   source candidate registry
-  non-executing fetch queue metadata
+  non-executing fetch-intent metadata
   evidence and opportunity scores
   internal decisions and feedback
 
@@ -56,47 +56,21 @@ A future bridge may move reviewed proposal packets from Worker D1 into a separat
 
 ### 1. Research planner
 
-The research planner accepts an internal objective and produces bounded metadata such as:
-
-```text
-industry focus
-geography focus
-service focus
-candidate limit
-crawl budget
-blocked actions
-scoring rubric
-```
-
-Planning performs no network request.
+The research planner accepts an internal objective and produces bounded metadata such as industry focus, geography focus, service focus, candidate limit, research budget, blocked actions and scoring rubric. Planning performs no network request.
 
 ### 2. Source candidate registry
 
-The source candidate registry records real reviewed public domains and URLs together with source type, discovery method, policy posture and evidence hints.
-
-It must not invent placeholder domains or pretend that an unverified candidate is evidence.
+The source candidate registry records real reviewed public domains and URLs together with source type, discovery method, policy posture and evidence hints. It must not invent placeholder domains or pretend that an unverified candidate is evidence.
 
 ### 3. Policy and robots gate
 
-Before any public read, the system checks:
+Before any public read, the system checks public URL posture, private-network exclusion, robots and crawl-policy state, redirect bounds, byte bounds, operator confirmation and persistent activity-budget admission. Unknown or unsafe policy fails closed.
 
-```text
-public URL posture
-private-network exclusion
-robots and crawl-policy state
-redirect bounds
-byte bounds
-operator confirmation
-persistent activity-budget admission
-```
+### 4. Non-executing fetch-intent metadata
 
-Unknown or unsafe policy fails closed.
+The `growth_fetch_queue` family is historical naming for reviewed internal intent metadata. It is not connected to a queue consumer, scheduler or browser runtime.
 
-### 4. Fetch queue metadata
-
-The `growth_fetch_queue` family records reviewed internal intent only. It is not connected to a queue consumer, scheduler or browser runtime.
-
-A row may contain a candidate ID, public URL, purpose, byte limit and redirect limit. Saving it performs no external request.
+A row may contain a candidate ID, public URL, purpose, byte limit and redirect limit. Saving it performs no external request and creates no follow-on authority.
 
 ### 5. Public research fetch boundary
 
@@ -136,15 +110,11 @@ Those decisions are metadata only.
 
 ### 8. Approval pack builder
 
-The approval pack builder can prepare a bounded review packet containing evidence, reasoning, missing facts, risks, blocked actions and a recommended internal next step.
-
-It cannot generate or deliver outreach.
+The approval pack builder can prepare a bounded review packet containing evidence, reasoning, missing facts, risks, blocked actions and a recommended internal next step. It cannot generate or deliver outreach.
 
 ### 9. Read-only Next dashboard
 
-The read-only Next dashboard may display reduced Worker readiness, internal artifact packs and proposal evidence through owner-authenticated server proxies.
-
-Browser code must never receive the Worker admin token or call Worker admin routes directly.
+The read-only Next dashboard may display reduced Worker readiness, internal artifact packs and proposal evidence through owner-authenticated server proxies. Browser code must never receive the Worker admin token or call Worker admin routes directly.
 
 ## Activity intensity versus capability authority
 
@@ -155,7 +125,7 @@ Balanced
 High
 ```
 
-These profiles change bounded throughput only. They do not change whether a capability is allowed.
+These profiles change bounded internal throughput only. They do not change whether a capability is allowed.
 
 The current authority model remains:
 
@@ -168,7 +138,7 @@ Level 4: internal evidence scoring and review metadata
 Level 5: external actions blocked
 ```
 
-The active Worker remains at a manual, confirmation-gated research posture. No autonomous fetch queue or scheduled research mode is enabled.
+The active Worker remains at a manual, confirmation-gated research posture.
 
 ## Data-model families
 
@@ -198,16 +168,9 @@ Network-capable routes must additionally be manual, authenticated, confirmed, pe
 
 ## Future implementation rule
 
-Before any broader discovery capability is introduced, the repository must first include:
+Any proposal for broader discovery capability is a separate future design decision. Before such a capability could be considered, it would require a typed route policy, dedicated fail-closed checks, truthful capability reporting, explicit current-versus-future documentation, complete local/CI coverage and continued prohibition of email, posting, form submission, browser automation and third-party mutation unless separately authorised by a future reviewed contract.
 
-1. A typed route policy defining authentication, confirmation, bounds and prohibited capabilities.
-2. A dedicated fail-closed contract check.
-3. Truthful capability reporting.
-4. Explicit documentation that distinguishes current runtime from future-state design.
-5. Local and CI gate coverage.
-6. No email, posting, form submission, browser automation or third-party mutation path.
-
-A future automated research loop additionally requires account-wide free-quota metering, durable leases, per-domain cooldowns, circuit breakers, kill switches, source-policy evidence and owner-visible audit history before any schedule is enabled.
+No future-oriented paragraph in this document enables current runtime behaviour.
 
 ## Definition of safe
 

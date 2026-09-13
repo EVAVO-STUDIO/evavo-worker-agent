@@ -38,9 +38,10 @@ test("Gmail provider content stays authoritative while extracted obligation is s
   assert.ok(observations.every((item) => item.entities.some((entity) => entity.kind === "relationship")));
 });
 
-test("decision memory becomes a canonical Memory Fabric ingestion observation", () => {
-  const decision = buildCommunicationDecisionPackage({
-    packageId: "decision-memory-1",
+function decision(origin: "direct" | "relationship_manager_cycle" = "direct") {
+  return buildCommunicationDecisionPackage({
+    packageId: origin === "direct" ? "decision-memory-1" : "decision-memory-cycle-1",
+    ...(origin === "relationship_manager_cycle" ? { origin, relationshipCycleId: "cycle-memory-1" } : {}),
     scenario: "general",
     objective: "Answer current delivery status.",
     thread: {
@@ -61,9 +62,13 @@ test("decision memory becomes a canonical Memory Fabric ingestion observation", 
     evidenceConfidence: 95,
     decisionAt: "2026-09-04T00:32:00Z",
   });
+}
+
+test("direct decision memory becomes a canonical Memory Fabric ingestion observation", () => {
+  const current = decision();
   const candidate = communicationDecisionToMemoryCandidate({
-    decision,
-    decidedAt: decision.decisionAt,
+    decision: current,
+    decidedAt: current.decisionAt,
     relationshipId: "relationship-client",
     threadId: "gmail-thread-1",
   });
@@ -73,5 +78,15 @@ test("decision memory becomes a canonical Memory Fabric ingestion observation", 
   assert.equal(observation.authority, "canonical");
   assert.equal(observation.confidence, "verified");
   assert.equal(observation.material, true);
+  assert.ok(observation.tags.includes("decision-origin:direct"));
   assert.ok(observation.entities.some((entity) => entity.kind === "agent" && entity.id === "evavo-worker-agent"));
+});
+
+test("canonical cycle provenance becomes queryable durable observation tags", () => {
+  const current = decision("relationship_manager_cycle");
+  const candidate = communicationDecisionToMemoryCandidate({ decision: current, decidedAt: current.decisionAt });
+  const observation = communicationDecisionCandidateToMemoryObservation(candidate);
+  assert.ok(observation.tags.includes("decision-origin:relationship_manager_cycle"));
+  assert.ok(observation.tags.includes("relationship-cycle:cycle-memory-1"));
+  assert.match(observation.details ?? "", /Relationship cycle: cycle-memory-1/);
 });

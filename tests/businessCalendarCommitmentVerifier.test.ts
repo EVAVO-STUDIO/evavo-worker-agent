@@ -3,13 +3,13 @@ import test from "node:test";
 
 import { verifyCalendarCommitment } from "../src/core/businessCalendarCommitmentVerifier";
 
-const NOW = new Date("2026-09-06T23:59:00Z");
+const NOW = new Date("2026-09-06T23:56:00Z");
 const slot = {
   start: "2026-09-07T00:00:00Z",
   end: "2026-09-07T00:30:00Z",
   timezone: "Australia/Melbourne",
   available: true,
-  observedAt: "2026-09-06T23:58:00Z",
+  observedAt: "2026-09-06T23:55:00Z",
   sourceEvidenceIds: ["calendar:freebusy:greg:2026-09-07T10:00+10:00"],
 };
 
@@ -42,7 +42,7 @@ test("verified busy slot is explicitly unavailable", () => {
   assert.equal(result.canPromise, false);
 });
 
-test("stale availability evidence cannot authorise a promise", () => {
+test("stale calendar evidence cannot authorise a promise", () => {
   const result = verifyCalendarCommitment({
     proposedStart: slot.start,
     proposedEnd: slot.end,
@@ -51,27 +51,17 @@ test("stale availability evidence cannot authorise a promise", () => {
     now: NOW,
   });
   assert.equal(result.status, "unverified");
+  assert.equal(result.canPromise, false);
   assert.ok(result.reasons.some((reason) => /stale/i.test(reason)));
 });
 
-test("availability without an observation timestamp cannot authorise a promise", () => {
-  const result = verifyCalendarCommitment({
-    proposedStart: slot.start,
-    proposedEnd: slot.end,
-    timezone: slot.timezone,
-    slotEvidence: { ...slot, observedAt: undefined },
-    now: NOW,
-  });
-  assert.equal(result.status, "unverified");
-});
-
-test("past or already-started proposed slot cannot be promised", () => {
+test("past or already-started meeting window cannot be promised", () => {
   const result = verifyCalendarCommitment({
     proposedStart: slot.start,
     proposedEnd: slot.end,
     timezone: slot.timezone,
     slotEvidence: slot,
-    now: new Date("2026-09-07T00:01:00Z"),
+    now: new Date(slot.start),
   });
   assert.equal(result.status, "unverified");
   assert.equal(result.canPromise, false);

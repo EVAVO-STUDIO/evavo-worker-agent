@@ -3,21 +3,25 @@ import test from "node:test";
 
 import { assertArtifactReadyForSend, resolveBusinessArtifact } from "../src/core/businessArtifactResolver";
 
+const HASH = "a".repeat(64);
 const current = {
   artifactId: "artifact_issue_02",
   filename: "Contractor_Forecast_Issue_02.xlsx",
   purpose: "controlling contractor forecast",
   canonicalOwner: "docs_suite" as const,
   version: "Issue 02",
-  contentHash: "a".repeat(64),
+  contentHash: `sha256:${HASH}`,
   current: true,
   sourceEvidenceIds: ["docs:artifact:issue02"],
 };
 
-test("resolves one evidence-backed current artifact", () => {
+test("resolves one evidence-backed current artifact and normalizes SHA-256 for send binding", () => {
   const result = resolveBusinessArtifact({ requestedPurpose: current.purpose, candidates: [current] });
+  assert.equal(result.contract, "business_artifact_resolver_v2");
   assert.equal(result.status, "verified");
-  assert.equal(assertArtifactReadyForSend(result).artifactId, current.artifactId);
+  const sendable = assertArtifactReadyForSend(result);
+  assert.equal(sendable.artifactId, current.artifactId);
+  assert.equal(sendable.contentHash, HASH);
 });
 
 test("does not choose between multiple current versions by filename guess", () => {
@@ -34,12 +38,34 @@ test("stale-only matches stay unresolved", () => {
   assert.match(result.reasons[0]!, /non-current/i);
 });
 
+test("blank-only source evidence cannot make an artifact verified", () => {
+  const result = resolveBusinessArtifact({
+    requestedPurpose: current.purpose,
+    candidates: [{ ...current, sourceEvidenceIds: [" ", ""] }],
+  });
+  assert.equal(result.status, "unresolved");
+});
+
+test("duplicate artifact identities fail closed", () => {
+  assert.throws(() => resolveBusinessArtifact({
+    requestedPurpose: current.purpose,
+    candidates: [current, { ...current, filename: "duplicate.xlsx" }],
+  }), /DUPLICATE_ID/);
+});
+
 test("send binding requires a content hash", () => {
   const result = resolveBusinessArtifact({ requestedPurpose: current.purpose, candidates: [{ ...current, contentHash: null }] });
   assert.throws(() => assertArtifactReadyForSend(result), /CONTENT_HASH/);
 });
 
-test("send binding rejects malformed content hashes", () => {
-  const result = resolveBusinessArtifact({ requestedPurpose: current.purpose, candidates: [{ ...current, contentHash: "sha256:not-a-real-hash" }] });
+test("malformed or truncated hashes can never become send-ready", () => {
+  const result = resolveBusinessArtifact({ requestedPurpose: current.purpose, candidates: [{ ...current, contentHash: "sha256:abc123" }] });
   assert.throws(() => assertArtifactReadyForSend(result), /CONTENT_HASH_INVALID/);
+});
+
+test("artifact metadata timestamps are validated when supplied", () => {
+  assert.throws(() => resolveBusinessArtifact({
+    requestedPurpose: current.purpose,
+    candidates: [{ ...current, createdAt: "not-a-date" }],
+  }), /CREATED_AT_INVALID/);
 });

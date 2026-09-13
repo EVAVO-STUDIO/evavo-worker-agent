@@ -92,6 +92,10 @@ export function gmailRelationshipProjectionToMemoryObservations(
 export function communicationDecisionCandidateToMemoryObservation(
   candidate: CommunicationDecisionMemoryCandidate,
 ): BusinessMemoryIngestionObservation {
+  const provenanceTags = [
+    `decision-origin:${candidate.origin}`,
+    ...(candidate.relationshipCycleId ? [`relationship-cycle:${candidate.relationshipCycleId}`] : []),
+  ];
   return Object.freeze({
     contract: BUSINESS_MEMORY_INGESTION_OBSERVATION_CONTRACT,
     sourceSystem: candidate.sourceSystem,
@@ -102,7 +106,7 @@ export function communicationDecisionCandidateToMemoryObservation(
     summary: text(candidate.summary, "summary"),
     details: candidate.details,
     entities: entities(candidate.entityRefs),
-    tags: Object.freeze(["relationship", "communication", "decision", "evavo-worker-agent"]),
+    tags: Object.freeze(["relationship", "communication", "decision", "evavo-worker-agent", ...provenanceTags]),
     authority: "canonical",
     confidence: candidate.confidence,
     classification: "internal",

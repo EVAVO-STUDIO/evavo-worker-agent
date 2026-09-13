@@ -1,9 +1,15 @@
-export const BUSINESS_COMMERCIAL_AUTHORITY_CONTRACT = "business_commercial_authority_v1" as const;
+export const BUSINESS_COMMERCIAL_AUTHORITY_CONTRACT = "business_commercial_authority_v3" as const;
 
 export type CommercialCommitmentKind = "price" | "discount" | "scope" | "deadline" | "payment_terms" | "liability" | "contract_term" | "refund" | "credit" | "other";
+export type CommercialAuthorityScope = "relationship" | "project" | "global";
+
+const KNOWN_KINDS = new Set<CommercialCommitmentKind>(["price", "discount", "scope", "deadline", "payment_terms", "liability", "contract_term", "refund", "credit", "other"]);
+const KNOWN_SCOPES = new Set<CommercialAuthorityScope>(["relationship", "project", "global"]);
+const NONDELEGABLE_KINDS = new Set<CommercialCommitmentKind>(["liability", "contract_term"]);
 
 export type CommercialAuthorityGrant = Readonly<{
   kind: CommercialCommitmentKind;
+  scope?: CommercialAuthorityScope;
   relationshipId?: string | null;
   projectId?: string | null;
   maximumAud?: number | null;
@@ -27,6 +33,7 @@ export type CommercialAuthorityDecision = Readonly<{
   contract: typeof BUSINESS_COMMERCIAL_AUTHORITY_CONTRACT;
   authorised: boolean;
   matchingGrant: CommercialAuthorityGrant | null;
+  humanReviewRequired: boolean;
   reasons: readonly string[];
 }>;
 
@@ -36,42 +43,120 @@ function time(value: string, field: string): number {
   return parsed;
 }
 
+function text(value: string, field: string): string {
+  const cleaned = value.trim();
+  if (!cleaned) throw new Error(`COMMERCIAL_AUTHORITY_${field}_REQUIRED`);
+  return cleaned;
+}
+
+function cleanIds(values: readonly string[]): readonly string[] {
+  return Object.freeze([...new Set(values.map((value) => value.trim()).filter(Boolean))]);
+}
+
+function finiteAmount(value: number | null | undefined, field: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Number.isFinite(value) || value < 0) throw new Error(`COMMERCIAL_AUTHORITY_${field}_INVALID`);
+  return value;
+}
+
+function cleanOptionalId(value: string | null | undefined): string | null {
+  const clean = value?.trim() ?? "";
+  return clean || null;
+}
+
+function normalizedScope(grant: CommercialAuthorityGrant): CommercialAuthorityScope | null {
+  if (grant.scope !== undefined) return KNOWN_SCOPES.has(grant.scope) ? grant.scope : null;
+  if (cleanOptionalId(grant.projectId)) return "project";
+  if (cleanOptionalId(grant.relationshipId)) return "relationship";
+  return null;
+}
+
+function grantMatches(
+  grant: CommercialAuthorityGrant,
+  request: CommercialCommitmentRequest,
+  requestedAt: number,
+  requestAmount: number | undefined,
+): boolean {
+  try {
+    if (!KNOWN_KINDS.has(grant.kind) || grant.kind !== request.kind) return false;
+    const evidenceIds = cleanIds(grant.evidenceIds);
+    if (!evidenceIds.length || !grant.grantedBy.trim()) return false;
+
+    const scope = normalizedScope(grant);
+    if (!scope) return false;
+    const grantRelationshipId = cleanOptionalId(grant.relationshipId);
+    const grantProjectId = cleanOptionalId(grant.projectId);
+    const requestRelationshipId = cleanOptionalId(request.relationshipId);
+    const requestProjectId = cleanOptionalId(request.projectId);
+
+    if (scope === "global") {
+      if (grantRelationshipId || grantProjectId) return false;
+    } else if (scope === "relationship") {
+      if (!grantRelationshipId || grantRelationshipId !== requestRelationshipId || grantProjectId) return false;
+    } else if (scope === "project") {
+      if (!grantProjectId || grantProjectId !== requestProjectId) return false;
+      if (grantRelationshipId && grantRelationshipId !== requestRelationshipId) return false;
+    } else {
+      return false;
+    }
+
+    const from = time(grant.validFrom, "VALID_FROM");
+    const through = grant.validThrough ? time(grant.validThrough, "VALID_THROUGH") : Number.POSITIVE_INFINITY;
+    if (through < from || requestedAt < from || requestedAt > through) return false;
+
+    const maximum = finiteAmount(grant.maximumAud, "GRANT_MAXIMUM");
+    const minimum = finiteAmount(grant.minimumAud, "GRANT_MINIMUM");
+    if (maximum !== undefined && minimum !== undefined && minimum > maximum) return false;
+    if ((maximum !== undefined || minimum !== undefined) && requestAmount === undefined) return false;
+    if (requestAmount !== undefined) {
+      if (maximum !== undefined && requestAmount > maximum) return false;
+      if (minimum !== undefined && requestAmount < minimum) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function decideCommercialAuthority(
   request: CommercialCommitmentRequest,
   grants: readonly CommercialAuthorityGrant[],
 ): CommercialAuthorityDecision {
+  if (!KNOWN_KINDS.has(request.kind)) throw new Error("COMMERCIAL_AUTHORITY_REQUEST_KIND_INVALID");
   const requestedAt = time(request.requestedAt, "REQUESTED_AT");
-  const candidates = grants.filter((grant) => {
-    if (!grant.evidenceIds.length) return false;
-    if (grant.kind !== request.kind) return false;
-    if (grant.relationshipId && grant.relationshipId !== request.relationshipId) return false;
-    if (grant.projectId && grant.projectId !== request.projectId) return false;
-    const from = time(grant.validFrom, "VALID_FROM");
-    const through = grant.validThrough ? time(grant.validThrough, "VALID_THROUGH") : Number.POSITIVE_INFINITY;
-    if (requestedAt < from || requestedAt > through) return false;
-    if (typeof request.amountAud === "number") {
-      if (typeof grant.maximumAud === "number" && request.amountAud > grant.maximumAud) return false;
-      if (typeof grant.minimumAud === "number" && request.amountAud < grant.minimumAud) return false;
-    }
-    return true;
-  });
+  text(request.statement, "STATEMENT");
+  const requestAmount = finiteAmount(request.amountAud, "REQUEST_AMOUNT");
 
+  if (NONDELEGABLE_KINDS.has(request.kind)) {
+    return Object.freeze({
+      contract: BUSINESS_COMMERCIAL_AUTHORITY_CONTRACT,
+      authorised: false,
+      matchingGrant: null,
+      humanReviewRequired: true,
+      reasons: Object.freeze([`${request.kind} commitments are nondelegable and require explicit human/legal review.`]),
+    });
+  }
+
+  const candidates = grants.filter((grant) => grantMatches(grant, request, requestedAt, requestAmount));
   if (candidates.length !== 1) {
     return Object.freeze({
       contract: BUSINESS_COMMERCIAL_AUTHORITY_CONTRACT,
       authorised: false,
       matchingGrant: null,
+      humanReviewRequired: true,
       reasons: Object.freeze([candidates.length > 1
         ? "Multiple authority grants match; resolve the authoritative grant before committing externally."
-        : "No evidence-backed authority grant covers this commercial commitment." ]),
+        : "No valid evidence-backed authority grant covers this commercial commitment." ]),
     });
   }
 
+  const selected = candidates[0];
   return Object.freeze({
     contract: BUSINESS_COMMERCIAL_AUTHORITY_CONTRACT,
     authorised: true,
-    matchingGrant: candidates[0],
-    reasons: Object.freeze([`Authority is explicitly evidenced by ${candidates[0].evidenceIds.join(", ")}.`]),
+    matchingGrant: selected,
+    humanReviewRequired: false,
+    reasons: Object.freeze([`Authority is explicitly evidenced by ${cleanIds(selected.evidenceIds).join(", ")}.`]),
   });
 }
 

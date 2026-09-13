@@ -1,9 +1,10 @@
-export const BUSINESS_RELATIONSHIP_CONTEXT_RESOLUTION_PLAN_CONTRACT = "business_relationship_context_resolution_plan_v1" as const;
+export const BUSINESS_RELATIONSHIP_CONTEXT_RESOLUTION_PLAN_CONTRACT = "business_relationship_context_resolution_plan_v3" as const;
 
 export type RelationshipContextSource =
   | "gmail"
   | "calendar"
   | "operations_core"
+  | "careers_registry"
   | "docs_suite"
   | "support_agent"
   | "brain_memory"
@@ -29,25 +30,28 @@ export type RelationshipContextResolutionPlan = Readonly<{
 
 function route(issue: string): RelationshipContextResolutionItem {
   const text = issue.toLowerCase();
-  if (/identity|sender|person|recipient/.test(text)) {
+  if (/^identity:|identity|sender|person|recipient/.test(text)) {
     return { issue, source: "identity_directory", purpose: "Resolve the exact person, address and relationship identity before external communication.", blocking: true, evidenceRequired: true };
   }
-  if (/thread|email|communication|message/.test(text)) {
+  if (/^gmail:|thread|email|communication|message/.test(text)) {
     return { issue, source: "gmail", purpose: "Read the canonical Gmail thread and derive the current live communication state.", blocking: true, evidenceRequired: true };
   }
-  if (/calendar|meeting|availability|time slot|schedule/.test(text)) {
+  if (/^calendar:|calendar|meeting|availability|time slot|schedule/.test(text)) {
     return { issue, source: "calendar", purpose: "Check authoritative calendar availability before proposing or confirming a time.", blocking: true, evidenceRequired: true };
   }
-  if (/document|attachment|artifact|version|file|controlling/.test(text)) {
+  if (/^document:|document|attachment|artifact|version|file|controlling/.test(text)) {
     return { issue, source: "docs_suite", purpose: "Resolve the exact canonical document/version and content identity before claiming review or attaching it.", blocking: true, evidenceRequired: true };
   }
-  if (/project|scope|delivery|commercial|price|pricing|invoice|payment|contract|role|hiring/.test(text)) {
-    return { issue, source: "operations_core", purpose: "Retrieve canonical project, commercial, hiring or operational truth rather than infer it from correspondence.", blocking: true, evidenceRequired: true };
+  if (/^careers:|career|hiring|hire|role opening|open role|vacancy|job opening|position open/.test(text)) {
+    return { issue, source: "careers_registry", purpose: "Retrieve dedicated current careers/role-opening truth. Commercial or project state must not be used as evidence that a role exists or that EVAVO is not hiring.", blocking: true, evidenceRequired: true };
   }
-  if (/support|incident|ticket|service|complaint/.test(text)) {
+  if (/^operations:|operations core|project|scope|delivery|commercial|price|pricing|invoice|payment|contract/.test(text)) {
+    return { issue, source: "operations_core", purpose: "Retrieve canonical project, commercial or operational truth rather than infer it from correspondence.", blocking: true, evidenceRequired: true };
+  }
+  if (/^support:|support|incident|ticket|service|complaint/.test(text)) {
     return { issue, source: "support_agent", purpose: "Retrieve current support/service state and relationship-risk context.", blocking: true, evidenceRequired: true };
   }
-  if (/history|prior|memory|previous|decision|preference/.test(text)) {
+  if (/^memory:|history|prior|memory|previous|decision|preference/.test(text)) {
     return { issue, source: "brain_memory", purpose: "Retrieve relevant durable history, prior decisions and evidence-backed relationship memory.", blocking: false, evidenceRequired: true };
   }
   if (/conflict|contradict|disagree|uncertain/.test(text)) {
@@ -60,6 +64,7 @@ const SOURCE_ORDER: readonly RelationshipContextSource[] = [
   "identity_directory",
   "gmail",
   "operations_core",
+  "careers_registry",
   "docs_suite",
   "support_agent",
   "calendar",

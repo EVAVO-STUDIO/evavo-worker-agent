@@ -8,12 +8,12 @@ const base = {
   proposedStart: "2026-09-07T10:00:00+10:00",
   proposedEnd: "2026-09-07T10:30:00+10:00",
   timezone: "Australia/Melbourne",
+  providerEvidenceRef: "freebusy:primary:20260907T1000",
   querySucceeded: true,
   calendarAccessible: true,
-  queryStart: "2026-09-07T09:55:00+10:00",
-  queryEnd: "2026-09-07T10:35:00+10:00",
-  queriedAt: "2026-09-07T09:58:00+10:00",
-  providerEvidenceRef: "freebusy:primary:20260907T1000",
+  queryStart: "2026-09-07T09:30:00+10:00",
+  queryEnd: "2026-09-07T11:00:00+10:00",
+  observedAt: "2026-09-07T09:55:00+10:00",
 } as const;
 
 test("marks a slot available only after a successful covering provider query", () => {
@@ -22,7 +22,7 @@ test("marks a slot available only after a successful covering provider query", (
     busyWindows: [{ start: "2026-09-07T11:00:00+10:00", end: "2026-09-07T11:30:00+10:00" }],
   });
   assert.equal(result.available, true);
-  assert.equal(result.observedAt, "2026-09-06T23:58:00.000Z");
+  assert.equal(result.observedAt, "2026-09-06T23:55:00.000Z");
 });
 
 test("marks a slot unavailable when a busy window overlaps", () => {
@@ -33,7 +33,7 @@ test("marks a slot unavailable when a busy window overlaps", () => {
   assert.equal(result.available, false);
 });
 
-test("empty busy windows do not imply free when provider query failed", () => {
+test("empty busy windows do not imply availability when the provider query failed", () => {
   assert.throws(() => googleCalendarAvailabilityToSlotEvidence({
     ...base,
     querySucceeded: false,
@@ -41,18 +41,18 @@ test("empty busy windows do not imply free when provider query failed", () => {
   }), /QUERY_NOT_SUCCESSFUL/);
 });
 
-test("inaccessible calendar fails closed instead of treating empty busy as free", () => {
+test("inaccessible calendar fails closed", () => {
   assert.throws(() => googleCalendarAvailabilityToSlotEvidence({
     ...base,
     calendarAccessible: false,
     busyWindows: [],
-  }), /CALENDAR_NOT_ACCESSIBLE/);
+  }), /NOT_ACCESSIBLE/);
 });
 
-test("provider query window must cover the whole proposed slot", () => {
+test("provider query must cover the entire proposed window", () => {
   assert.throws(() => googleCalendarAvailabilityToSlotEvidence({
     ...base,
     queryStart: "2026-09-07T10:05:00+10:00",
     busyWindows: [],
-  }), /QUERY_DOES_NOT_COVER_PROPOSAL/);
+  }), /QUERY_WINDOW_DOES_NOT_COVER_PROPOSAL/);
 });

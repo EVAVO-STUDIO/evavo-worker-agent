@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "evavo.repo-manifest.v1",
+  "identity": {
+    "key": "evavo-worker-agent",
+    "name": "EVAVO Worker Agent",
+    "owner": "EVAVO-STUDIO",
+    "category": "worker-agent-foundation",
+    "status": "active"
+  },
+  "runtime": {
+    "language": "typescript",
+    "shape": "cloudflare-worker",
+    "localFirst": false,
+    "requiresPaidHostedControlPlane": false
+  },
+  "summary": "Canonical EVAVO bounded Worker-agent foundation. Provider metadata currently requires visibility remediation before it matches governed estate policy.",
+  "defaultBranch": "main",
+  "providerDrift": {
+    "observedVisibility": "public",
+    "expectedVisibility": "private",
+    "visibilityRemediationRequired": true,
+    "observedAt": "2026-09-05",
+    "source": "github-provider-metadata"
+  },
+  "authority": {
+    "readOnly": [
+      "inspect-worker-contract",
+      "inspect-health-and-capability-state"
+    ],
+    "reversible": [
+      "run-bounded-worker-validation"
+    ],
+    "consequential": [
+      "deploy-reviewed-worker-runtime"
+    ],
+    "neverImplicit": [
+      "expose-worker-secrets",
+      "public-generic-execution",
+      "change-repository-visibility",
+      "change-billing",
+      "production-data-mutation"
+    ]
+  },
+  "boundaries": [
+    "Repository source classification does not itself change GitHub visibility.",
+    "The current public provider state must not be interpreted as intended publication authority.",
+    "Visibility remediation requires an administration-capable provider lane and post-change provider re-read."
+  ],
+  "reviewedAt": "2026-09-05"
+}

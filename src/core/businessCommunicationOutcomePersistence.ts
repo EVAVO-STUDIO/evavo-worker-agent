@@ -3,10 +3,11 @@ import { businessSha256 } from "./businessSha256";
 import type { CommunicationOutcomeAssessment } from "./businessCommunicationOutcome";
 import {
   communicationOutcomeToMemoryRecord,
+  type CommunicationOutcomeLearningProvenance,
   type CommunicationOutcomeMemoryRecord,
 } from "./businessCommunicationOutcomeMemory";
 
-export const BUSINESS_COMMUNICATION_OUTCOME_PERSISTENCE_CONTRACT = "business_communication_outcome_persistence_v1" as const;
+export const BUSINESS_COMMUNICATION_OUTCOME_PERSISTENCE_CONTRACT = "business_communication_outcome_persistence_v3" as const;
 
 export type BusinessOutcomeMemoryWriteRequest = Readonly<{
   protocol: "evavo-memory-write-request-v1";
@@ -48,10 +49,26 @@ function stableId(input: readonly string[]): string {
   return businessSha256(input.join("\n")).slice(0, 24);
 }
 
+function provenanceIdentity(value: CommunicationOutcomeLearningProvenance | null | undefined): readonly string[] {
+  if (!value) return Object.freeze([]);
+  return Object.freeze([
+    value.decisionPackageId.trim(),
+    value.decisionOrigin,
+    value.relationshipCycleId?.trim() ?? "",
+    value.handoffId?.trim() ?? "",
+    value.writingRequestId?.trim() ?? "",
+    value.approvalCandidateId?.trim() ?? "",
+    value.approvalCandidateSha256?.trim().toLowerCase() ?? "",
+    value.approvalCandidateRecordId?.trim() ?? "",
+    value.providerMessageId?.trim() ?? "",
+  ]);
+}
+
 export function buildBusinessOutcomeMemoryWriteRequest(
   assessment: CommunicationOutcomeAssessment,
+  provenance?: CommunicationOutcomeLearningProvenance | null,
 ): BusinessOutcomeMemoryWriteRequest | null {
-  const record = communicationOutcomeToMemoryRecord(assessment);
+  const record = communicationOutcomeToMemoryRecord(assessment, provenance);
   if (!record) return null;
   const requestedAt = assessment.assessedAt;
   const idempotencyKey = `communication-outcome:${stableId([
@@ -60,6 +77,7 @@ export function buildBusinessOutcomeMemoryWriteRequest(
     assessment.outcome,
     assessment.relationshipEffect,
     ...assessment.evidenceRefs.slice().sort(),
+    ...provenanceIdentity(provenance),
   ])}`;
   const requestId = `memory-write:${stableId([assessment.communicationId, requestedAt, idempotencyKey])}`;
   return Object.freeze({

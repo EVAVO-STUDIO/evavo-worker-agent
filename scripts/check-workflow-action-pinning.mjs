@@ -5,175 +5,70 @@ import path from "node:path";
 
 const root = process.cwd();
 const errors = [];
-const CHECKOUT_SHA = "08eba0b27e820071cde6df949e0beb9ba4906955";
-const SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020";
-const UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02";
-const EXACT_NODE_VERSION = "24.18.0";
-const automaticEvents = Object.freeze([
-  "push",
-  "pull_request",
-  "pull_request_target",
-  "schedule",
-  "workflow_run",
-  "repository_dispatch",
-  "merge_group",
-]);
+const workflowDirectory = path.join(root, ".github", "workflows");
+const packagePath = path.join(root, "package.json");
+const visibilityCheckerPath = path.join(
+  root,
+  "scripts",
+  "check-worker-repository-visibility.mjs",
+);
 
-const commonRequired = Object.freeze([
-  "workflow_dispatch:",
-  "expected_sha:",
-  "request_source:",
-  "cancel-in-progress: false",
-  "permissions:\n  contents: read",
-  `actions/checkout@${CHECKOUT_SHA} # v4.3.0`,
-  "ref: ${{ inputs.expected_sha }}",
-  "fetch-depth: 0",
-  "persist-credentials: false",
-  'ACTUAL_SHA="$(git rev-parse HEAD)"',
-  'test "$ACTUAL_SHA" = "$EXPECTED_SHA"',
-  'git merge-base --is-ancestor "$EXPECTED_SHA" origin/main',
-  `actions/setup-node@${SETUP_NODE_SHA} # v4.4.0`,
-  `node-version: "${EXACT_NODE_VERSION}"`,
-  "node scripts/check-repository-toolchain.mjs",
-  `actions/upload-artifact@${UPLOAD_ARTIFACT_SHA} # v4.6.2`,
-  "retention-days: 14",
-]);
+const activeWorkflowFiles = fs.existsSync(workflowDirectory)
+  ? fs
+      .readdirSync(workflowDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.ya?ml$/iu.test(entry.name))
+      .map((entry) => entry.name)
+      .sort()
+  : [];
 
-const workflows = Object.freeze([
-  {
-    label: "Worker contract workflow",
-    relativePath: ".github/workflows/worker-contract.yml",
-    readOnlyRepositoryTokenAllowed: false,
-    required: Object.freeze([
-      "name: Worker contract",
-      "group: worker-contract-${{ inputs.expected_sha }}",
-      "cache: npm",
-      "cache-dependency-path: package-lock.json",
-      "node scripts/test-repository-toolchain.mjs",
-      "npm ci --no-audit --no-fund",
-      "npm run worker:source-secret-safety:check",
-      "npm run worker:package-identity:check",
-      "node scripts/check-worker-contract-workflow.mjs",
-      "npm run check:local",
-      '"deployment":"disabled"',
-    ]),
-  },
-  {
-    label: "Worker repository confidentiality workflow",
-    relativePath: ".github/workflows/worker-repository-confidentiality.yml",
-    readOnlyRepositoryTokenAllowed: true,
-    required: Object.freeze([
-      "name: Worker repository confidentiality",
-      "group: worker-confidentiality-${{ inputs.expected_sha }}",
-      "package-manager-cache: false",
-      "GITHUB_TOKEN: ${{ github.token }}",
-      "node scripts/check-worker-repository-visibility.mjs --live",
-      '"repositoryMutation":"disabled"',
-    ]),
-  },
-  {
-    label: "Growth zero-cost source selection workflow",
-    relativePath: ".github/workflows/growth-zero-cost-source-selection.yml",
-    readOnlyRepositoryTokenAllowed: false,
-    required: Object.freeze([
-      "name: Growth zero-cost source selection",
-      "group: growth-zero-cost-${{ inputs.expected_sha }}",
-      "cache: npm",
-      "cache-dependency-path: package-lock.json",
-      "node scripts/test-repository-toolchain.mjs",
-      "npm ci --ignore-scripts --no-audit --no-fund",
-      "node scripts/check-growth-activity-budget.mjs",
-      "node --test tests/growthActivityBudgetSettings.test.ts tests/opportunitySourceSelection.test.ts",
-      "npm run typecheck",
-      '"externalSpend":"disabled"',
-      '"deployment":"disabled"',
-    ]),
-  },
-  {
-    label: "EVAVO mainline confirmation workflow",
-    relativePath: ".github/workflows/evavo-mainline-confirmation.yml",
-    readOnlyRepositoryTokenAllowed: true,
-    required: Object.freeze([
-      "name: EVAVO mainline confirmation",
-      "group: evavo-mainline-${{ inputs.expected_sha }}",
-      "cache: npm",
-      "cache-dependency-path: package-lock.json",
-      "node scripts/test-repository-toolchain.mjs",
-      "GITHUB_TOKEN: ${{ github.token }}",
-      "node scripts/check-worker-repository-visibility.mjs --live",
-      "npm ci --no-audit --no-fund",
-      "npm run check:local",
-      "npm exec wrangler -- deploy --dry-run",
-      '"deployment":"dry-run-only"',
-    ]),
-  },
-]);
-
-const forbidden = Object.freeze([
-  "uses: actions/checkout@v",
-  "uses: actions/setup-node@v",
-  "uses: actions/upload-artifact@v",
-  "uses: actions/checkout@main",
-  "uses: actions/setup-node@main",
-  "persist-credentials: true",
-  "permissions: write-all",
-  "contents: write",
-  "pull-requests: write",
-  "packages: write",
-  "id-token: write",
-  "wrangler deploy",
-  "npm run deploy",
-  "npm install ",
-  "ADMIN_TOKEN",
-  "EVAVO_GROWTH_WORKER_ADMIN_TOKEN",
-  "secrets.",
-]);
-
-for (const contract of workflows) {
-  const workflowPath = path.join(root, contract.relativePath);
-  const workflow = fs.existsSync(workflowPath)
-    ? fs.readFileSync(workflowPath, "utf8")
-    : "";
-  if (!workflow) {
-    errors.push(`Missing ${contract.label}: ${contract.relativePath}`);
-    continue;
-  }
-
-  for (const token of [...commonRequired, ...contract.required]) {
-    if (!workflow.includes(token)) {
-      errors.push(`${contract.label} is missing release safety token: ${token}`);
-    }
-  }
-  for (const event of automaticEvents) {
-    if (new RegExp(`^  ${event}:`, "m").test(workflow)) {
-      errors.push(`${contract.label} contains prohibited automatic event: ${event}`);
-    }
-  }
-  for (const token of forbidden) {
-    if (workflow.includes(token)) {
-      errors.push(`${contract.label} contains mutable or unsafe token: ${token}`);
-    }
-  }
-  if (/^\s*node-version:\s*"24"\s*$/m.test(workflow)) {
-    errors.push(`${contract.label} contains an active floating Node.js major.`);
-  }
-
-  const actionUses = [...workflow.matchAll(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)].map(
-    (match) => match[1],
+if (activeWorkflowFiles.length > 0) {
+  errors.push(
+    `Hosted GitHub Actions are not part of the active zero-cost execution architecture: ${activeWorkflowFiles.join(", ")}`,
   );
-  for (const action of actionUses) {
-    const at = action.lastIndexOf("@");
-    const ref = at >= 0 ? action.slice(at + 1) : "";
-    if (!/^[0-9a-f]{40}$/i.test(ref)) {
-      errors.push(
-        `${contract.label} action must be pinned to a full 40-character commit SHA: ${action}`,
-      );
-    }
-  }
+}
 
-  if (!contract.readOnlyRepositoryTokenAllowed && workflow.includes("GITHUB_TOKEN")) {
-    errors.push(`${contract.label} must not request the built-in repository token.`);
-  }
+if (!fs.existsSync(packagePath)) {
+  errors.push("Missing package.json.");
+}
+if (!fs.existsSync(visibilityCheckerPath)) {
+  errors.push("Missing local/provider repository visibility checker.");
+}
+
+const packageJson = fs.existsSync(packagePath)
+  ? JSON.parse(fs.readFileSync(packagePath, "utf8"))
+  : {};
+const scripts = packageJson.scripts ?? {};
+const checkLocal = String(scripts["check:local"] ?? "");
+const predeploy = String(scripts.predeploy ?? "");
+
+if (
+  scripts["worker:workflow-action-pinning:check"] !==
+  "node scripts/check-workflow-action-pinning.mjs"
+) {
+  errors.push(
+    "package.json must retain worker:workflow-action-pinning:check as the compatibility name for the local-first hosted-execution policy.",
+  );
+}
+if (
+  scripts["worker:repository-visibility:check"] !==
+  "node scripts/check-worker-repository-visibility.mjs"
+) {
+  errors.push(
+    "package.json must expose the repository visibility checker locally.",
+  );
+}
+if (!checkLocal.includes("npm run worker:workflow-action-pinning:check")) {
+  errors.push(
+    "check:local must enforce the hosted-execution absence policy.",
+  );
+}
+if (!checkLocal.includes("npm run worker:repository-visibility:check")) {
+  errors.push(
+    "check:local must include the repository visibility policy check.",
+  );
+}
+if (!predeploy.includes("npm run check:local")) {
+  errors.push("predeploy must run the complete local validation gate.");
 }
 
 console.log(
@@ -181,21 +76,20 @@ console.log(
     {
       passed: errors.length === 0,
       activeRepository: "EVAVO-STUDIO/evavo-worker-agent",
-      contract: "worker-workflow-release-policy-v5-exact-runtime",
-      guardedWorkflows: workflows.map((workflow) => workflow.relativePath),
-      checkoutPinnedCommit: CHECKOUT_SHA,
-      setupNodePinnedCommit: SETUP_NODE_SHA,
-      uploadArtifactPinnedCommit: UPLOAD_ARTIFACT_SHA,
-      exactNodeVersion: EXACT_NODE_VERSION,
+      contract: "worker-hosted-execution-policy-v1-local-first",
+      activeWorkflowDirectory: ".github/workflows",
+      activeWorkflowCount: activeWorkflowFiles.length,
+      activeWorkflowFiles,
+      githubActionsRequired: false,
+      hostedRunnerRequired: false,
       automaticWorkflowTriggersAllowed: false,
-      exactMainShaRequired: true,
-      persistedCheckoutCredentialsAllowed: false,
-      workflowWritePermissionsAllowed: false,
-      oidcWritePermissionAllowed: false,
-      deploymentAllowed: false,
-      applicationCredentialsRequired: false,
-      builtInReadOnlyRepositoryTokenAllowedOnlyForVisibilityChecks: true,
-      evidenceRetentionDays: 14,
+      manualHostedWorkflowDispatchRequired: false,
+      localValidationAuthoritative: true,
+      providerVisibilityReadUsesLocalChecker: true,
+      providerVisibilityMutationAllowed: false,
+      predeployUsesCompleteLocalGate: true,
+      cloudflareRuntimeSchedulingSeparateFromGithubActions: true,
+      compatibilityScriptNameRetained: true,
       errors,
     },
     null,

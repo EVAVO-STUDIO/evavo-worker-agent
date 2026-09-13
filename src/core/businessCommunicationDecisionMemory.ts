@@ -1,6 +1,6 @@
 import type { CommunicationDecisionPackage } from "./businessCommunicationDecisionPackage";
 
-export const BUSINESS_COMMUNICATION_DECISION_MEMORY_CONTRACT = "business_communication_decision_memory_v1" as const;
+export const BUSINESS_COMMUNICATION_DECISION_MEMORY_CONTRACT = "business_communication_decision_memory_v2" as const;
 
 export type CommunicationDecisionMemoryCandidate = Readonly<{
   sourceSystem: "evavo-worker-agent";
@@ -11,6 +11,8 @@ export type CommunicationDecisionMemoryCandidate = Readonly<{
   details: string;
   material: true;
   confidence: "verified" | "supported" | "uncertain";
+  origin: CommunicationDecisionPackage["origin"];
+  relationshipCycleId: string | null;
   entityRefs: readonly Readonly<{ kind: "relationship" | "person" | "organization" | "project" | "communication_thread" | "agent"; id: string }>[];
   evidenceRefs: readonly string[];
 }>;
@@ -27,6 +29,9 @@ export function communicationDecisionToMemoryCandidate(input: Readonly<{
   const decidedAt = new Date(input.decidedAt);
   if (Number.isNaN(decidedAt.getTime())) throw new Error("COMMUNICATION_DECISION_MEMORY_DECIDED_AT_INVALID");
   if (!input.decision.evidenceIds.length) throw new Error("COMMUNICATION_DECISION_MEMORY_EVIDENCE_REQUIRED");
+  if (input.decision.origin === "relationship_manager_cycle" && !input.decision.relationshipCycleId) {
+    throw new Error("COMMUNICATION_DECISION_MEMORY_RELATIONSHIP_CYCLE_ID_REQUIRED");
+  }
   const entities = [
     { kind: "agent" as const, id: "evavo-worker-agent" },
     ...(input.relationshipId ? [{ kind: "relationship" as const, id: input.relationshipId }] : []),
@@ -41,6 +46,8 @@ export function communicationDecisionToMemoryCandidate(input: Readonly<{
       ? "supported" as const
       : "uncertain" as const;
   const details = [
+    `Origin: ${input.decision.origin}`,
+    ...(input.decision.relationshipCycleId ? [`Relationship cycle: ${input.decision.relationshipCycleId}`] : []),
     `Objective: ${input.decision.objective}`,
     `Disposition: ${input.decision.disposition}`,
     `Channel: ${input.decision.recommendedChannel}`,
@@ -60,6 +67,8 @@ export function communicationDecisionToMemoryCandidate(input: Readonly<{
     details,
     material: true,
     confidence,
+    origin: input.decision.origin,
+    relationshipCycleId: input.decision.relationshipCycleId,
     entityRefs: Object.freeze(entities),
     evidenceRefs: Object.freeze([...new Set(input.decision.evidenceIds)]),
   });

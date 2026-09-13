@@ -1,5 +1,4 @@
-export function businessSha256(value: string): string {
-  const bytes = new TextEncoder().encode(value);
+function sha256Bytes(bytes: Uint8Array): string {
   const bitLength = bytes.length * 8;
   const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
   const data = new Uint8Array(paddedLength);
@@ -57,4 +56,48 @@ export function businessSha256(value: string): string {
   }
 
   return Array.from(h, (part) => part.toString(16).padStart(8, "0")).join("");
+}
+
+function hexToBytes(value: string): Uint8Array {
+  if (!/^[a-f0-9]+$/i.test(value) || value.length % 2 !== 0) throw new Error("BUSINESS_SHA256_HEX_INVALID");
+  const out = new Uint8Array(value.length / 2);
+  for (let i = 0; i < out.length; i += 1) out[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function concatBytes(...values: readonly Uint8Array[]): Uint8Array {
+  const length = values.reduce((sum, value) => sum + value.length, 0);
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const value of values) {
+    out.set(value, offset);
+    offset += value.length;
+  }
+  return out;
+}
+
+export function businessSha256(value: string): string {
+  return sha256Bytes(new TextEncoder().encode(value));
+}
+
+export function businessSha256Bytes(value: Uint8Array): string {
+  return sha256Bytes(value);
+}
+
+export function businessHmacSha256(secret: string, message: string): string {
+  const encoder = new TextEncoder();
+  let key: Uint8Array = encoder.encode(secret);
+  if (!key.length) throw new Error("BUSINESS_HMAC_SECRET_REQUIRED");
+  if (key.length > 64) key = hexToBytes(sha256Bytes(key));
+
+  const block = new Uint8Array(64);
+  block.set(key);
+  const innerPad = new Uint8Array(64);
+  const outerPad = new Uint8Array(64);
+  for (let i = 0; i < 64; i += 1) {
+    innerPad[i] = block[i]! ^ 0x36;
+    outerPad[i] = block[i]! ^ 0x5c;
+  }
+  const innerDigest = hexToBytes(sha256Bytes(concatBytes(innerPad, encoder.encode(message))));
+  return sha256Bytes(concatBytes(outerPad, innerDigest));
 }

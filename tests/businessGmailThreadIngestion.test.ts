@@ -16,7 +16,7 @@ function gmail(body: string, id = "m1") {
   };
 }
 
-test("normalises a Gmail thread and creates material memory candidates", () => {
+test("normalises a Gmail thread and creates material memory candidates with real evidence timestamps", () => {
   const result = ingestGmailThreadForRelationship({
     threadId: "t1",
     relationshipId: "rel-ashley",
@@ -29,6 +29,7 @@ test("normalises a Gmail thread and creates material memory candidates", () => {
   const obligation = result.memoryCandidates.find((candidate) => candidate.kind === "obligation");
   assert.ok(obligation);
   assert.equal(obligation?.occurredAt, "2026-09-04T01:00:00.000Z");
+  assert.notEqual(obligation?.occurredAt, "1970-01-01T00:00:00.000Z");
 });
 
 test("quoted history is removed before latest-message analysis", () => {

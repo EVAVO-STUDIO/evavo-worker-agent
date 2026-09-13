@@ -18,12 +18,16 @@ import {
   type ObligationOwner,
 } from "./businessObligationLedger";
 
-export const BUSINESS_GMAIL_RELATIONSHIP_STATE_PROJECTION_CONTRACT = "business_gmail_relationship_state_projection_v1" as const;
+export const BUSINESS_GMAIL_RELATIONSHIP_STATE_PROJECTION_CONTRACT = "business_gmail_relationship_state_projection_v2" as const;
 
 export type GmailRelationshipStateProjection = Readonly<{
   contract: typeof BUSINESS_GMAIL_RELATIONSHIP_STATE_PROJECTION_CONTRACT;
   threadId: string;
   observedAt: string;
+  relationshipId: string | null;
+  personId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
   normalizedMessageIds: readonly string[];
   latestObservedThreadState: readonly ThreadStateItem[];
   threadDelta: ThreadDelta;
@@ -40,6 +44,11 @@ function stableId(prefix: string, parts: readonly string[]): string {
 
 function statement(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function optionalId(value: string | null | undefined): string | null {
+  const out = value?.trim() ?? "";
+  return out || null;
 }
 
 function obligationOwner(owner: "evavo" | "external" | "shared" | "unknown"): ObligationOwner {
@@ -117,11 +126,15 @@ export function projectGmailThreadToCanonicalRelationshipState(input: Readonly<{
   const observedAt = new Date(input.observedAt);
   if (Number.isNaN(observedAt.getTime())) throw new Error("GMAIL_RELATIONSHIP_OBSERVED_AT_INVALID");
 
+  const relationshipId = optionalId(input.relationshipId);
+  const personId = optionalId(input.personId);
+  const organizationId = optionalId(input.organizationId);
+  const projectId = optionalId(input.projectId);
   const ingestion = ingestGmailThreadForRelationship({
     threadId: input.threadId,
     messages: input.messages,
-    relationshipId: input.relationshipId,
-    personId: input.personId,
+    relationshipId,
+    personId,
     knownRelationshipSensitive: input.knownRelationshipSensitive,
     senderSuppressed: input.senderSuppressed,
   });
@@ -138,10 +151,10 @@ export function projectGmailThreadToCanonicalRelationshipState(input: Readonly<{
   });
 
   const observedObligations = projectObligations({
-    relationshipId: input.relationshipId,
-    personId: input.personId,
-    organizationId: input.organizationId,
-    projectId: input.projectId,
+    relationshipId,
+    personId,
+    organizationId,
+    projectId,
     messages: ingestion.normalizedMessages,
     analysis: ingestion.analysis,
   });
@@ -156,6 +169,10 @@ export function projectGmailThreadToCanonicalRelationshipState(input: Readonly<{
     contract: BUSINESS_GMAIL_RELATIONSHIP_STATE_PROJECTION_CONTRACT,
     threadId: input.threadId.trim(),
     observedAt: observedAt.toISOString(),
+    relationshipId,
+    personId,
+    organizationId,
+    projectId,
     normalizedMessageIds: Object.freeze(ingestion.normalizedMessages.map((message) => message.id)),
     latestObservedThreadState,
     threadDelta,

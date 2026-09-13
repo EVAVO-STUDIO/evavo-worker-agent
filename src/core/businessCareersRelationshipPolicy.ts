@@ -1,6 +1,6 @@
 import type { RoleOpeningTruth } from "./businessRoleOpeningTruth";
 
-export const BUSINESS_CAREERS_RELATIONSHIP_POLICY_CONTRACT = "business_careers_relationship_policy_v2" as const;
+export const BUSINESS_CAREERS_RELATIONSHIP_POLICY_CONTRACT = "business_careers_relationship_policy_v3" as const;
 
 export type CareersRelationshipInput = Readonly<{
   senderIdentityVerified: boolean;
@@ -9,6 +9,7 @@ export type CareersRelationshipInput = Readonly<{
   asksForAdvice?: boolean;
   asksForMeeting?: boolean;
   portfolioOrCvProvided?: boolean;
+  /** Legacy hint only. Never sufficient to authorise a role-exists claim. */
   openRoleConfirmed?: boolean;
   relevantRoleConfirmed?: boolean;
   roleTruth?: RoleOpeningTruth | null;
@@ -63,14 +64,22 @@ export function decideCareersRelationshipResponse(input: CareersRelationshipInpu
 
   const mustCommunicate: string[] = [];
   const mustNotCommunicate = [
-    "Do not say or imply that EVAVO is hiring unless a current role is confirmed by authoritative role-state evidence.",
+    "Do not say or imply that EVAVO is hiring unless a current role is confirmed by authoritative dedicated careers role-state evidence.",
     "Do not turn absence of a confirmed opening into the broader claim that EVAVO is not hiring.",
     "Do not promise an interview, internship, referral, paid work or future contact unless it is actually authorised.",
     "Do not ask for a meeting merely to be polite.",
     "Do not over-praise work or credentials that have not actually been reviewed.",
   ];
 
-  const roleConfirmedOpen = input.roleTruth ? input.roleTruth.status === "confirmed_open" && input.roleTruth.maySayRoleExists : Boolean(input.openRoleConfirmed);
+  if (input.openRoleConfirmed && !input.roleTruth) {
+    mustNotCommunicate.push("Ignore legacy caller assertions that a role is open unless canonical role truth is attached to this decision.");
+  }
+
+  const roleConfirmedOpen = Boolean(
+    input.roleTruth
+    && input.roleTruth.status === "confirmed_open"
+    && input.roleTruth.maySayRoleExists,
+  );
   const relevantRoleConfirmed = Boolean(input.relevantRoleConfirmed);
 
   if (roleConfirmedOpen && relevantRoleConfirmed) {
@@ -81,7 +90,7 @@ export function decideCareersRelationshipResponse(input: CareersRelationshipInpu
   mustCommunicate.push("Acknowledge the enquiry and answer honestly about the current situation.");
   if (input.asksForJobOrInternship) {
     if (input.roleTruth) mustCommunicate.push(`Use the evidence-safe role wording: ${input.roleTruth.safeExternalWording}`);
-    else mustCommunicate.push("If no role is confirmed, say only that there is no confirmed current opening in the available evidence; do not infer a company-wide hiring position.");
+    else mustCommunicate.push("If no canonical role truth is available, say only that a current opening has not been verified; do not infer a company-wide hiring position.");
   }
   if (input.specificUsefulAdviceAvailable && input.asksForAdvice) mustCommunicate.push("Offer the specific useful advice that is actually known, briefly and without turning the response into a lecture.");
   if (input.referralPathKnown) mustCommunicate.push("Provide the genuine application or referral path if one exists.");

@@ -1,7 +1,7 @@
 import type { CommunicationDecisionPackage } from "./businessCommunicationDecisionPackage";
 import type { RelationshipDecisionContext } from "./businessRelationshipDecisionContext";
 
-export const BUSINESS_STAFF_COMMUNICATION_HANDOFF_V2_CONTRACT = "business_staff_communication_handoff_v2" as const;
+export const BUSINESS_STAFF_COMMUNICATION_HANDOFF_V2_CONTRACT = "business_staff_communication_handoff_v3" as const;
 
 export type StaffCommunicationHandoffV1Like = Readonly<{
   schema: "evavo-writing/staff-communication-handoff";
@@ -19,6 +19,9 @@ export type StaffCommunicationHandoffV2Like = Readonly<{
   staffContext: Readonly<{
     relationshipId: string;
     generatedAt: string;
+    decisionPackageId: string;
+    decisionOrigin: CommunicationDecisionPackage["origin"];
+    relationshipCycleId?: string;
     approvalGradeReady: true;
     blockingVerificationOutstanding: false;
     whatChanged: string;
@@ -52,6 +55,16 @@ export function buildStaffCommunicationHandoffV2(input: Readonly<{
   }
   if (input.relationshipContext.resolutionPlan.blockingIssues.length) throw new Error("STAFF_HANDOFF_V2_BLOCKING_VERIFICATION_OUTSTANDING");
 
+  const decisionPackageId = input.communicationDecision.packageId.trim();
+  if (!decisionPackageId) throw new Error("STAFF_HANDOFF_V2_DECISION_PACKAGE_REQUIRED");
+  const relationshipCycleId = input.communicationDecision.relationshipCycleId?.trim();
+  if (input.communicationDecision.origin === "relationship_manager_cycle" && !relationshipCycleId) {
+    throw new Error("STAFF_HANDOFF_V2_RELATIONSHIP_CYCLE_REQUIRED");
+  }
+  if (input.communicationDecision.origin === "direct" && relationshipCycleId) {
+    throw new Error("STAFF_HANDOFF_V2_DIRECT_DECISION_CYCLE_FORBIDDEN");
+  }
+
   const brief = input.relationshipContext.staffBrief;
   const sourceRefs = [...new Set([
     ...input.relationshipContext.evidenceRefs,
@@ -68,6 +81,9 @@ export function buildStaffCommunicationHandoffV2(input: Readonly<{
     staffContext: Object.freeze({
       relationshipId,
       generatedAt: input.relationshipContext.generatedAt,
+      decisionPackageId,
+      decisionOrigin: input.communicationDecision.origin,
+      ...(relationshipCycleId ? { relationshipCycleId } : {}),
       approvalGradeReady: true,
       blockingVerificationOutstanding: false,
       whatChanged: brief.whatChanged,

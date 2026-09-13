@@ -53,6 +53,9 @@ export interface Env {
   PUBLIC_ENGINE_NAME?: string;
   ADMIN_TOKEN?: string;
   CAP_CRAWL_PER_DAY?: string;
+  BRAIN_BASE_URL?: string;
+  BRAIN_API_TOKEN?: string;
+  BRAIN_RELATIONSHIP_MEMORY_WRITE_TOKEN?: string;
 }
 
 export interface LeadSignals {

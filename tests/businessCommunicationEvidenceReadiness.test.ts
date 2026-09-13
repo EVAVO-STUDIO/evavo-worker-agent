@@ -4,7 +4,7 @@ import test from "node:test";
 import { assessCommunicationEvidenceReadiness } from "../src/core/businessCommunicationEvidenceReadiness";
 
 const identity = {
-  contract: "business_relationship_identity_resolver_v1" as const,
+  contract: "business_relationship_identity_resolver_v2" as const,
   status: "verified" as const,
   selected: {
     personId: "person_ashley",
@@ -19,7 +19,7 @@ const identity = {
 };
 
 const artifact = {
-  contract: "business_artifact_resolver_v1" as const,
+  contract: "business_artifact_resolver_v2" as const,
   status: "verified" as const,
   selected: {
     artifactId: "artifact_cv",
@@ -35,7 +35,7 @@ const artifact = {
 };
 
 const calendar = {
-  contract: "business_calendar_commitment_verifier_v1" as const,
+  contract: "business_calendar_commitment_verifier_v2" as const,
   status: "verified_available" as const,
   canPromise: true,
   reasons: ["available"],
@@ -44,7 +44,26 @@ const calendar = {
 
 test("verified identity with no optional attachment or calendar requirement is approval ready", () => {
   const result = assessCommunicationEvidenceReadiness({ identity });
+  assert.equal(result.contract, "business_communication_evidence_readiness_v2");
   assert.equal(result.status, "ready_for_approval");
+  assert.ok(result.evidenceIds.includes("gmail:message:m1"));
+  assert.ok(!result.evidenceIds.includes("gmail:gmail:message:m1"));
+});
+
+test("forged verified identity without provenance is blocked", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity: { ...identity, selected: { ...identity.selected, evidence: [] } },
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.identityReady, false);
+});
+
+test("legacy identity contract cannot masquerade as approval-ready", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity: { ...identity, contract: "business_relationship_identity_resolver_v1" as never },
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.identityReady, false);
 });
 
 test("required attachment ambiguity blocks communication", () => {
@@ -57,10 +76,41 @@ test("required attachment ambiguity blocks communication", () => {
   assert.equal(result.artifactsReady, false);
 });
 
+test("forged verified artifact with blank provenance cannot satisfy a required attachment", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity,
+    attachmentsRequired: true,
+    artifactResolutions: [{ ...artifact, selected: { ...artifact.selected, sourceEvidenceIds: [" "] } }],
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.artifactsReady, false);
+});
+
 test("calendar promise requires exact verified availability", () => {
   const result = assessCommunicationEvidenceReadiness({ identity, calendarPromiseRequired: true, calendarCommitments: [{ ...calendar, status: "unverified", canPromise: false }] });
   assert.equal(result.status, "blocked");
   assert.equal(result.calendarReady, false);
+});
+
+test("forged available calendar result without evidence cannot authorize a promise", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity,
+    calendarPromiseRequired: true,
+    calendarCommitments: [{ ...calendar, evidenceIds: [" "] }],
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.calendarReady, false);
+});
+
+test("unavailable calendar evidence does not block a communication with no time promise", () => {
+  const result = assessCommunicationEvidenceReadiness({
+    identity,
+    calendarPromiseRequired: false,
+    calendarCommitments: [{ ...calendar, status: "verified_unavailable", canPromise: false }],
+  });
+  assert.equal(result.status, "ready_for_approval");
+  assert.equal(result.calendarReady, true);
+  assert.ok(result.warnings.some((warning) => /unavailable slot/i.test(warning)));
 });
 
 test("all required evidence produces one approval-ready package", () => {

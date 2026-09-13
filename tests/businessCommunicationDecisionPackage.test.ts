@@ -138,19 +138,15 @@ test("blocked identity or attachment evidence overrides an otherwise valid reply
   assert.ok(result.reasons.some((item) => /attachment/i.test(item)));
 });
 
-test("escalation cannot be downgraded to do-not-reply merely because no live response target remains", () => {
+test("safety escalation cannot be overwritten by the general no-live-target rule", () => {
   const result = buildCommunicationDecisionPackage({
-    packageId: "pkg-escalation-precedence",
+    packageId: "pkg-5",
     scenario: "general",
-    objective: "Do not act on blocked evidence.",
-    thread: {
-      threadId: "thread-escalation-precedence",
-      previousState: [],
-      latestObservedState: [],
-    },
+    objective: "Do not guess when context is blocked.",
+    thread: { threadId: "thread-5", previousState: [], latestObservedState: [] },
     obligations: [],
     channel: { currentChannel: "email", canResolveInWriting: true },
-    evidenceIds: ["gmail:message:blocker"],
+    evidenceIds: ["gmail:message:5"],
     evidenceConfidence: 95,
     decisionAt: NOW,
     evidenceReadiness: {
@@ -161,8 +157,10 @@ test("escalation cannot be downgraded to do-not-reply merely because no live res
       calendarReady: true,
       blockers: ["Recipient identity is ambiguous."],
       warnings: [],
-      evidenceIds: ["gmail:message:blocker"],
+      evidenceIds: ["gmail:message:5"],
     },
   });
+
   assert.equal(result.disposition, "escalate");
+  assert.ok(result.reasons.some((item) => /ambiguous/i.test(item)));
 });

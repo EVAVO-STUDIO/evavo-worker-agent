@@ -1,0 +1,80 @@
+{
+  "contractVersion": "evavo_repository_capabilities_v1",
+  "repository": "EVAVO-STUDIO/evavo-worker-agent",
+  "authority": "growth-research-worker",
+  "summary": "EVAVO's governed review-first Growth/Business research Worker for bounded public-source opportunity intelligence, internal scoring, source/opportunity review, strategy memory and private operational reporting. Despite the historical generic repository name, it is not the generic agent execution fabric and grants no AI generation, outbound messaging, email, social posting, form submission, browser automation, external-state mutation, repository publication or deployment authority.",
+  "capabilities": [
+    {
+      "id": "growth-research.public-source.fetch",
+      "title": "Fetch bounded public research sources",
+      "description": "Perform explicitly authenticated, confirmation-gated, read-only public-source research with public-only URL policy, redirect revalidation, full-operation timeout, byte limits and SHA-256 evidence receipts.",
+      "interfaces": ["api", "automation"],
+      "effects": ["read", "compute", "network", "write"],
+      "tags": ["growth", "research", "public-web", "evidence", "review-only"],
+      "requires": ["Server-side Worker authentication", "Exact JSON boolean confirmation", "Public-only source URL"]
+    },
+    {
+      "id": "growth-research.sources.manage",
+      "title": "Manage internal research-source metadata",
+      "description": "Create and review bounded internal source candidates, health/cooldown metadata and research evidence in D1; changes remain internal and cannot trigger third-party mutation or outreach.",
+      "interfaces": ["api", "automation"],
+      "effects": ["read", "compute", "write"],
+      "tags": ["growth", "sources", "d1", "review", "metadata"],
+      "requires": ["Authenticated confirmed admin request", "Bounded JSON request contract"]
+    },
+    {
+      "id": "growth-research.opportunities.extract",
+      "title": "Extract evidence-bounded opportunity candidates",
+      "description": "Deterministically extract and score opportunity candidates from admitted public evidence while preserving missing deadlines, values, currencies, eligibility and scope as unknown rather than guessing them.",
+      "interfaces": ["api", "library", "automation"],
+      "effects": ["read", "compute", "write"],
+      "tags": ["growth", "opportunities", "scoring", "evidence-quality", "review"],
+      "requires": ["Admitted bounded public-source evidence", "Opportunity evidence-quality policy"]
+    },
+    {
+      "id": "growth-research.learning.calibrate",
+      "title": "Calibrate review scoring from historical evidence",
+      "description": "Use existing review/source metadata to calibrate grounded internal evidence scoring without allowing historical learning to promote weak or missing evidence into high confidence.",
+      "interfaces": ["library", "automation"],
+      "effects": ["read", "compute", "write"],
+      "tags": ["growth", "learning", "review-history", "calibration"],
+      "requires": ["Existing bounded review metadata", "Evidence-strength gates"]
+    },
+    {
+      "id": "growth-research.report.private",
+      "title": "Produce private operational research reports",
+      "description": "Expose authenticated internal source, opportunity, strategy and audit reporting plus aggregate non-sensitive public status without exposing admin credentials or converting records into drafts or outbound actions.",
+      "interfaces": ["api", "web-app"],
+      "effects": ["read", "compute"],
+      "tags": ["growth", "reporting", "audit", "private", "review"],
+      "requires": ["Authentication for protected report routes"]
+    },
+    {
+      "id": "growth-research.scheduled.internal-maintenance",
+      "title": "Run internal-only scheduled maintenance",
+      "description": "Synchronize defensive flags, refresh learning from existing D1 review metadata and record internal audit events; scheduled execution cannot fetch public sources, discover opportunities, generate drafts or perform external actions.",
+      "interfaces": ["automation"],
+      "effects": ["read", "compute", "write"],
+      "tags": ["growth", "scheduled", "maintenance", "internal-only"],
+      "requires": ["Internal Worker schedule", "No external network/outbound capability"]
+    },
+    {
+      "id": "growth-research.security.validate",
+      "title": "Validate source-secret and request-boundary safety",
+      "description": "Scan tracked source for deployable credential patterns without printing matched secrets and validate media-type, byte, UTF-8, JSON structure, nesting, node, string/key and prototype-pollution request boundaries.",
+      "interfaces": ["cli", "testing", "automation"],
+      "effects": ["read", "compute", "execute"],
+      "tags": ["growth", "security", "secrets", "bounded-json", "validation"],
+      "requires": ["Repository source", "Node/npm validation toolchain"]
+    },
+    {
+      "id": "growth-research.repository-confidentiality.check",
+      "title": "Check required private repository posture",
+      "description": "Validate that the provider repository is private, unarchived and matches the expected EVAVO identity; the check is read-only and cannot itself change GitHub visibility.",
+      "interfaces": ["cli", "testing", "automation"],
+      "effects": ["read", "compute", "network", "execute"],
+      "tags": ["growth", "github", "visibility", "confidentiality", "governance"],
+      "requires": ["Read-only GitHub provider evidence", "Separate GitHub administration authority for visibility changes"]
+    }
+  ]
+}

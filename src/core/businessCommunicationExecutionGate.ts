@@ -15,8 +15,9 @@ import {
   type CommunicationSendEnvelope,
   type CommunicationSendMaterial,
 } from "./businessCommunicationSendEnvelope";
+import type { RelationshipManagerMemoryPersistenceResult } from "./businessRelationshipManagerMemoryPersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT = "business_communication_execution_gate_v2" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT = "business_communication_execution_gate_v3" as const;
 
 export type CommunicationExecutionGateResult = Readonly<{
   contract: typeof BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT;
@@ -28,6 +29,7 @@ export type CommunicationExecutionGateResult = Readonly<{
   operatorApprovalValid: boolean;
   approvalContextValid: boolean;
   decisionValid: boolean;
+  memoryCheckpointValid: boolean;
   mailboxValid: boolean;
 }>;
 
@@ -47,6 +49,43 @@ function assessBoundDecision(
   const decisionAt = Date.parse(decision.decisionAt);
   const approvedAt = Date.parse(approval.approvedAt);
   if (!Number.isFinite(decisionAt) || !Number.isFinite(approvedAt) || decisionAt > approvedAt) reasons.push("decision_timestamp_invalid_for_approval");
+  if (decision.origin === "relationship_manager_cycle" && !decision.relationshipCycleId) reasons.push("decision_relationship_cycle_id_missing");
+  if (decision.origin === "direct" && decision.relationshipCycleId) reasons.push("decision_direct_origin_has_cycle_id");
+
+  const writing = binding.writingProvenance;
+  if (decision.origin === "relationship_manager_cycle") {
+    if (!writing) reasons.push("decision_writing_provenance_missing");
+    else {
+      if (writing.decisionOrigin !== "relationship_manager_cycle") reasons.push("decision_writing_origin_mismatch");
+      if (writing.relationshipCycleId !== decision.relationshipCycleId) reasons.push("decision_writing_relationship_cycle_mismatch");
+      if (!writing.handoffId.trim()) reasons.push("decision_writing_handoff_id_missing");
+      if (!writing.writingRequestId.trim()) reasons.push("decision_writing_request_id_missing");
+    }
+  } else if (writing) {
+    if (writing.decisionOrigin !== "direct") reasons.push("decision_writing_origin_mismatch");
+    if (writing.relationshipCycleId) reasons.push("decision_writing_direct_origin_has_cycle_id");
+  }
+
+  return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
+}
+
+function assessRelationshipManagerMemoryCheckpoint(
+  decision: CommunicationDecisionPackage | null | undefined,
+  persistence: RelationshipManagerMemoryPersistenceResult | null | undefined,
+): Readonly<{ valid: boolean; reasons: readonly string[] }> {
+  if (!decision || decision.origin !== "relationship_manager_cycle") {
+    return Object.freeze({ valid: true, reasons: Object.freeze([]) });
+  }
+  const expectedCycleId = decision.relationshipCycleId;
+  const reasons: string[] = [];
+  if (!expectedCycleId) reasons.push("relationship_manager_memory_checkpoint_cycle_id_missing");
+  if (!persistence) reasons.push("relationship_manager_memory_checkpoint_missing");
+  else {
+    if (persistence.contract !== "business_relationship_manager_memory_persistence_v1") reasons.push("relationship_manager_memory_checkpoint_contract_invalid");
+    if (!expectedCycleId || persistence.cycleId !== expectedCycleId) reasons.push("relationship_manager_memory_checkpoint_cycle_mismatch");
+    if (!persistence.durable) reasons.push("relationship_manager_memory_checkpoint_not_durable");
+    if (persistence.blockers.length) reasons.push("relationship_manager_memory_checkpoint_has_blockers");
+  }
   return Object.freeze({ valid: reasons.length === 0, reasons: Object.freeze(reasons) });
 }
 
@@ -56,6 +95,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
   approval: CommunicationSendEnvelope;
   operatorApprovalReceipt?: OperatorCommunicationApprovalReceipt | null;
   decisionPackage?: CommunicationDecisionPackage | null;
+  relationshipManagerMemoryPersistence?: RelationshipManagerMemoryPersistenceResult | null;
   review: Omit<CommunicationDraftReviewInput, "sendingEnabled" | "subject" | "body" | "recipients" | "attachments">;
   runtimeSendingEnabled: boolean;
   contextChangesSinceDecision?: readonly ApprovalContextChange[];
@@ -98,6 +138,9 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
   const decision = assessBoundDecision(input.approval, input.decisionPackage);
   if (!decision.valid) reasons.push(...decision.reasons);
 
+  const memoryCheckpoint = assessRelationshipManagerMemoryCheckpoint(input.decisionPackage, input.relationshipManagerMemoryPersistence);
+  if (!memoryCheckpoint.valid) reasons.push(...memoryCheckpoint.reasons);
+
   const approval = verifyCommunicationSendEnvelope(input.approval, input.material, now);
   if (!approval.ok) reasons.push(...approval.reasons);
 
@@ -126,7 +169,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_GATE_CONTRACT,
-    allowed: mailboxValid && binding.ok && operatorApproval.valid && decision.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
+    allowed: mailboxValid && binding.ok && operatorApproval.valid && decision.valid && memoryCheckpoint.valid && approval.ok && approvalContext.valid && preSend.sendAllowed && input.runtimeSendingEnabled,
     reasons: Object.freeze([...new Set(reasons)]),
     preSend,
     approvalValid: approval.ok,
@@ -134,6 +177,7 @@ export function evaluateCommunicationExecutionGate(input: Readonly<{
     operatorApprovalValid: operatorApproval.valid,
     approvalContextValid: approvalContext.valid,
     decisionValid: decision.valid,
+    memoryCheckpointValid: memoryCheckpoint.valid,
     mailboxValid,
   });
 }

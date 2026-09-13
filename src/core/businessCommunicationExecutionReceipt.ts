@@ -1,6 +1,7 @@
 import type { AuthorizedCommunicationExecutionRequest } from "./businessCommunicationExecutionRequest";
+import { approvalCandidatePersistenceEvidenceRef } from "./businessStaffCommunicationApprovalCandidatePersistence";
 
-export const BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT = "business_communication_execution_receipt_v1" as const;
+export const BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT = "business_communication_execution_receipt_v4" as const;
 
 export type GmailObservedSendResult = Readonly<{
   providerMessageId: string;
@@ -54,7 +55,7 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
   request: AuthorizedCommunicationExecutionRequest;
   observed: GmailObservedSendResult;
 }>): CommunicationExecutionReceipt {
-  if (input.request.contract !== "business_communication_execution_request_v1" || input.request.provider !== "gmail") {
+  if (input.request.contract !== "business_communication_execution_request_v4" || input.request.provider !== "gmail") {
     throw new Error("COMMUNICATION_EXECUTION_RECEIPT_REQUEST_CONTRACT_INVALID");
   }
   const sentAt = iso(input.observed.sentAt, "sent_at");
@@ -72,6 +73,43 @@ export function reconcileAuthorizedCommunicationExecution(input: Readonly<{
   if (!sourceEvidenceRefs.length) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_EVIDENCE_REQUIRED");
   const providerMessageId = text(input.observed.providerMessageId, "provider_message_id", 500);
   if (!sourceEvidenceRefs.some((ref) => ref.includes(providerMessageId))) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MESSAGE_EVIDENCE_MISSING");
+
+  if (input.request.authorization.decisionOrigin === "relationship_manager_cycle") {
+    const checkpoint = input.request.authorization.memoryCheckpoint;
+    const writingProvenance = input.request.authorization.writingProvenance;
+    const approvalCandidate = input.request.authorization.approvalCandidate;
+    if (!checkpoint || !input.request.authorization.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MEMORY_CHECKPOINT_MISSING");
+    }
+    if (checkpoint.cycleId !== input.request.authorization.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_MEMORY_CHECKPOINT_CYCLE_MISMATCH");
+    }
+    if (!writingProvenance) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_PROVENANCE_MISSING");
+    if (writingProvenance.decisionOrigin !== "relationship_manager_cycle") {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_ORIGIN_INVALID");
+    }
+    if (writingProvenance.relationshipCycleId !== input.request.authorization.relationshipCycleId) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_CYCLE_MISMATCH");
+    }
+    if (!writingProvenance.handoffId.trim() || !writingProvenance.writingRequestId.trim()) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_WRITING_IDENTITY_INVALID");
+    }
+    if (!approvalCandidate) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_MISSING");
+    const candidateId = approvalCandidate.candidateId.trim();
+    const recordId = approvalCandidate.recordId.trim();
+    const candidateSha256 = approvalCandidate.candidateSha256.trim().toLowerCase();
+    if (!candidateId || !recordId) throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_IDENTITY_INVALID");
+    if (!/^[a-f0-9]{64}$/.test(candidateSha256)) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_HASH_INVALID");
+    }
+    const expectedEvidenceRef = approvalCandidatePersistenceEvidenceRef({ candidateId, candidateSha256, recordId });
+    if (approvalCandidate.evidenceRef !== expectedEvidenceRef) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_EVIDENCE_MISMATCH");
+    }
+    if (!input.request.authorization.approvalEvidenceIds.includes(expectedEvidenceRef)) {
+      throw new Error("COMMUNICATION_EXECUTION_RECEIPT_APPROVAL_CANDIDATE_EVIDENCE_MISSING");
+    }
+  }
 
   return Object.freeze({
     contract: BUSINESS_COMMUNICATION_EXECUTION_RECEIPT_CONTRACT,

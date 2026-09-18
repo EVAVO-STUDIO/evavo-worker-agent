@@ -51,6 +51,10 @@ export type BusinessObligationExecutionAssessment = Readonly<{
 }>;
 
 const ACTIVE_FRESHNESS_MS = 15 * 60 * 1000;
+const EXECUTION_STATUSES = new Set<BusinessObligationExecutionStatus>([
+  "unrouted", "planned", "executor_selected", "admission_pending", "admitted", "executing",
+  "blocked", "verification_required", "succeeded", "failed", "unknown_after_effect",
+]);
 
 function required(value: string | null | undefined, field: string, max = 500): string {
   const clean = value?.trim() ?? "";
@@ -83,6 +87,7 @@ export function assessBusinessObligationExecutionState(
   if (Number.isNaN(now.getTime())) throw new Error("OBLIGATION_EXECUTION_NOW_INVALID");
 
   const obligationId = required(input.obligationId, "obligation_id", 240);
+  if (!EXECUTION_STATUSES.has(input.status)) throw new Error("OBLIGATION_EXECUTION_STATUS_INVALID");
   required(input.actionClass, "action_class", 240);
   required(input.canonicalExecutionOwner, "canonical_execution_owner", 240);
   required(input.idempotencyKey, "idempotency_key", 500);

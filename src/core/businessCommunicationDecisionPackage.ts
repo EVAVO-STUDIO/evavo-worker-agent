@@ -6,6 +6,10 @@ import type { RelationshipContextResolutionPlan } from "./businessRelationshipCo
 import { buildBusinessThreadDelta, type ThreadDeltaInput } from "./businessThreadDelta";
 import { assessBusinessObligation, type BusinessObligation } from "./businessObligationLedger";
 import {
+  assessBusinessObligationExecutionState,
+  type BusinessObligationExecutionState,
+} from "./businessObligationExecutionState";
+import {
   assertMemoryContextUsable,
   memoryContextEvidenceRefs,
   type BrainMemoryContextResponse,
@@ -22,6 +26,7 @@ export type CommunicationDecisionPackageInput = Readonly<{
   objective: string;
   thread: ThreadDeltaInput;
   obligations: readonly BusinessObligation[];
+  obligationExecutions?: readonly BusinessObligationExecutionState[];
   channel: ChannelDecisionInput;
   candidate?: CandidateRelationshipInput | null;
   evidenceIds: readonly string[];
@@ -50,6 +55,15 @@ export type CommunicationDecisionPackage = Readonly<{
   conductInstructions: readonly string[];
   liveResponseTargets: readonly string[];
   activeEvavoObligations: readonly string[];
+  obligationExecutionAssessments: readonly Readonly<{
+    obligationId: string;
+    status: BusinessObligationExecutionState["status"];
+    current: boolean;
+    mayClaimActiveExecution: boolean;
+    mayClaimCompletion: boolean;
+    requiresReconciliation: boolean;
+    blocker: string | null;
+  }>[];
   candidateStage?: ReturnType<typeof decideCandidateRelationship>["stage"];
   prohibitedImplications: readonly string[];
   evidenceIds: readonly string[];
@@ -105,9 +119,24 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
   const delta = buildBusinessThreadDelta(input.thread);
   const channel = decideRelationshipCommunicationChannel(input.channel);
   const obligationAssessments = input.obligations.map((item) => assessBusinessObligation(item, clock.date));
-  const activeEvavoObligations = obligationAssessments
-    .filter((assessment) => assessment.obligation.owner === "evavo" && (assessment.obligation.status === "open" || assessment.obligation.status === "uncertain"))
-    .map((assessment) => assessment.obligation.statement);
+  const activeEvavoAssessments = obligationAssessments
+    .filter((assessment) => assessment.obligation.owner === "evavo" && (assessment.obligation.status === "open" || assessment.obligation.status === "uncertain"));
+  const activeEvavoObligations = activeEvavoAssessments.map((assessment) => assessment.obligation.statement);
+
+  const executionByObligation = new Map<string, ReturnType<typeof assessBusinessObligationExecutionState>>();
+  for (const state of input.obligationExecutions ?? []) {
+    if (executionByObligation.has(state.obligationId)) throw new Error(`COMMUNICATION_DECISION_DUPLICATE_EXECUTION_STATE:${state.obligationId}`);
+    executionByObligation.set(state.obligationId, assessBusinessObligationExecutionState(state, clock.date));
+  }
+  const obligationExecutionAssessments = Object.freeze([...executionByObligation.values()].map((assessment) => Object.freeze({
+    obligationId: assessment.obligationId,
+    status: assessment.status,
+    current: assessment.current,
+    mayClaimActiveExecution: assessment.mayClaimActiveExecution,
+    mayClaimCompletion: assessment.mayClaimCompletion,
+    requiresReconciliation: assessment.requiresReconciliation,
+    blocker: assessment.blocker,
+  })));
 
   const reasons: string[] = [];
   const prohibitedImplications: string[] = [];
@@ -116,6 +145,34 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
   const staffPriorities = [...(input.staffBrief?.priorities ?? [])];
   let disposition: CommunicationDecisionPackage["disposition"] = "reply";
   let candidateStage: CommunicationDecisionPackage["candidateStage"];
+
+  for (const active of activeEvavoAssessments) {
+    const execution = executionByObligation.get(active.obligation.id);
+    if (!execution) {
+      if (input.obligationExecutions) {
+        prohibitedImplications.push(
+          `Do not imply EVAVO-owned work is actively executing or complete without a bound executor/admission/provider receipt for obligation ${active.obligation.id}.`,
+        );
+      }
+      continue;
+    }
+    if (!execution.mayClaimActiveExecution && !execution.mayClaimCompletion) {
+      prohibitedImplications.push(
+        `Do not describe obligation ${active.obligation.id} as currently being completed; current admitted execution evidence is not present.`,
+      );
+    }
+    if (!execution.mayClaimCompletion) {
+      prohibitedImplications.push(
+        `Do not describe obligation ${active.obligation.id} as done, ready or complete until execution and provider postconditions are independently verified.`,
+      );
+    }
+    if (execution.requiresReconciliation) {
+      mustVerify.push(`Reconcile execution outcome for obligation ${active.obligation.id} before retrying or claiming completion.`);
+    }
+    if (execution.blocker) {
+      mustVerify.push(`Execution blocker for obligation ${active.obligation.id}: ${execution.blocker}.`);
+    }
+  }
 
   if (!clock.replayDeterministic) reasons.push("Legacy decision path omitted decisionAt; exact replay timing is not guaranteed.");
 
@@ -173,6 +230,10 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
   const evidenceIds = new Set(input.evidenceIds);
   for (const id of input.evidenceReadiness?.evidenceIds ?? []) evidenceIds.add(id);
   for (const id of input.staffBrief?.sourceRefs ?? []) evidenceIds.add(id);
+  for (const state of input.obligationExecutions ?? []) {
+    const execution = assessBusinessObligationExecutionState(state, clock.date);
+    for (const id of execution.evidenceIds) evidenceIds.add(id);
+  }
   const memorySourceRefs: readonly string[] = input.memoryContext ? memoryContextEvidenceRefs(input.memoryContext) : Object.freeze([]);
   for (const id of memorySourceRefs) evidenceIds.add(id);
 
@@ -200,6 +261,7 @@ export function buildCommunicationDecisionPackage(input: CommunicationDecisionPa
     conductInstructions: relationshipConductInstructions(),
     liveResponseTargets: Object.freeze(delta.liveResponseTargets.map((item) => item.statement)),
     activeEvavoObligations: Object.freeze(activeEvavoObligations),
+    obligationExecutionAssessments,
     ...(candidateStage ? { candidateStage } : {}),
     prohibitedImplications: Object.freeze([...new Set(prohibitedImplications)]),
     evidenceIds: Object.freeze([...evidenceIds]),

@@ -17,6 +17,7 @@ import type { RelationshipContextResolutionPlan } from "./businessRelationshipCo
 import type { BrainMemoryContextResponse } from "./businessMemoryContextBridge";
 import type { IdentityResolution } from "./businessRelationshipIdentityResolver";
 import type { BusinessObligation } from "./businessObligationLedger";
+import type { BusinessObligationExecutionState } from "./businessObligationExecutionState";
 import type { ThreadStateItem } from "./businessThreadDelta";
 import type { GmailProviderMessage } from "./businessGmailThreadIngestion";
 import {
@@ -58,6 +59,7 @@ export type RelationshipManagerCommunicationCycleInput = Readonly<{
   calendarPromiseRequired?: boolean;
   evidenceConfidence: number;
   additionalEvidenceIds?: readonly string[];
+  obligationExecutions?: readonly BusinessObligationExecutionState[];
   staffBrief?: RelationshipStaffBrief | null;
   contextResolutionPlan?: RelationshipContextResolutionPlan | null;
   memoryContext?: BrainMemoryContextResponse | null;
@@ -135,6 +137,7 @@ export function runRelationshipManagerCommunicationCycle(
       latestObservedState: projection.latestObservedThreadState,
     },
     obligations: projection.obligations,
+    obligationExecutions: input.obligationExecutions,
     channel: input.channel,
     candidate: input.candidate,
     evidenceIds,

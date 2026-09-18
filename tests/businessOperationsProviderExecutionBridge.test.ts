@@ -37,6 +37,7 @@ function projection(overrides: Partial<OperationsProviderExecutionProjectionV1> 
 test("unrouted Operations provider plan remains blocked and cannot support progress language", () => {
   const state = businessObligationExecutionStateFromOperationsProviderTruth({
     obligationId: "obl-naomi-domain",
+    storedObligationId: "obl-naomi-domain",
     projection: projection(),
   });
   const assessment = assessBusinessObligationExecutionState(
@@ -79,4 +80,13 @@ test("Operations provider bridge never accepts credentials or treats queue state
   assert.equal(operationsProviderExecutionBridgeSafetyContract.queuedIsActiveExecution, false);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.providerReadbackRequiredForCompletion, true);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.automaticReplayOfUnknownEffect, false);
+});
+
+
+test("stored Operations obligation identity cannot be rebound to another relationship obligation", () => {
+  assert.throws(() => businessObligationExecutionStateFromOperationsProviderTruth({
+    obligationId: "obl-naomi-domain",
+    storedObligationId: "obl-other-domain",
+    projection: projection(),
+  }), /OBLIGATION_ID_MISMATCH/);
 });

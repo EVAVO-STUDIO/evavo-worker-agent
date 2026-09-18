@@ -35,6 +35,7 @@ test("active EVAVO obligation prepares one fixed provider-plan request with no e
   assert.equal(request.endpointPath, "/api/v1/internal/provider-execution/plan");
   assert.equal(request.method, "POST");
   assert.equal(request.body.intent.actionKey, "vercel.desired-state.reconcile");
+  assert.equal(request.body.binding.obligationId, "obl-naomi-domain");
   assert.equal(request.body.binding.relationshipId, "relationship:naomi");
   assert.equal(request.body.binding.projectId, "project:naomis30th");
   assert.deepEqual(request.body.intent.planningEvidenceIds, [

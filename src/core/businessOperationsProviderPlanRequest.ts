@@ -13,6 +13,7 @@ export type OperationsProviderPlanPreparedRequest = Readonly<{
     binding: Readonly<{
       organisationId: string;
       workspaceId: string;
+      obligationId: string;
       taskId?: string | null;
       stepId?: string | null;
       relationshipId?: string | null;
@@ -142,6 +143,7 @@ export function prepareOperationsProviderPlanRequest(input: Readonly<{
       binding: Object.freeze({
         organisationId,
         workspaceId,
+        obligationId,
         taskId: optional(input.taskId, "task_id"),
         stepId: optional(input.stepId, "step_id"),
         relationshipId,

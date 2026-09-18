@@ -62,10 +62,15 @@ function evidence(values: readonly string[], field: string): readonly string[] {
 
 export function businessObligationExecutionStateFromOperationsProviderTruth(input: Readonly<{
   obligationId: string;
+  storedObligationId?: string | null;
   projection: OperationsProviderExecutionProjectionV1;
 }>): BusinessObligationExecutionState {
   const obligationId = bounded(input.obligationId, "obligation_id", 240);
   if (!obligationId) throw new Error("OPERATIONS_PROVIDER_EXECUTION_OBLIGATION_ID_REQUIRED");
+  const storedObligationId = bounded(input.storedObligationId, "stored_obligation_id", 500);
+  if (storedObligationId && storedObligationId !== obligationId) {
+    throw new Error("OPERATIONS_PROVIDER_EXECUTION_OBLIGATION_ID_MISMATCH");
+  }
   if (input.projection.contract !== OPERATIONS_PROVIDER_EXECUTION_TRUTH_CONTRACT) {
     throw new Error("OPERATIONS_PROVIDER_EXECUTION_CONTRACT_INVALID");
   }
@@ -105,6 +110,7 @@ export function businessObligationExecutionStateFromOperationsProviderTruth(inpu
 export const operationsProviderExecutionBridgeSafetyContract = Object.freeze({
   canonicalSourceContract: OPERATIONS_PROVIDER_EXECUTION_TRUTH_CONTRACT,
   exactObligationBindingRequired: true,
+  storedObligationMismatchRejected: true,
   fuzzyRelationshipMatchingAllowed: false,
   providerCredentialsAccepted: false,
   queuedIsActiveExecution: false,

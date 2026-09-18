@@ -3,6 +3,7 @@ export const BUSINESS_OBLIGATION_EXECUTION_STATE_CONTRACT = "business_obligation
 export type BusinessObligationExecutionStatus =
   | "unrouted"
   | "planned"
+  | "queued"
   | "executor_selected"
   | "admission_pending"
   | "admitted"
@@ -52,7 +53,7 @@ export type BusinessObligationExecutionAssessment = Readonly<{
 
 const ACTIVE_FRESHNESS_MS = 15 * 60 * 1000;
 const EXECUTION_STATUSES = new Set<BusinessObligationExecutionStatus>([
-  "unrouted", "planned", "executor_selected", "admission_pending", "admitted", "executing",
+  "unrouted", "planned", "queued", "executor_selected", "admission_pending", "admitted", "executing",
   "blocked", "verification_required", "succeeded", "failed", "unknown_after_effect",
 ]);
 
@@ -134,7 +135,7 @@ export function assessBusinessObligationExecutionState(
     if (active && !current) blocker = "execution_evidence_stale";
     else if (active && !activeEvidenceReady) blocker = "active_execution_evidence_missing";
     else if (input.status === "unrouted") blocker = "executor_route_missing";
-    else if (input.status === "planned" || input.status === "executor_selected" || input.status === "admission_pending") blocker = "execution_not_admitted";
+    else if (input.status === "planned" || input.status === "queued" || input.status === "executor_selected" || input.status === "admission_pending") blocker = "execution_not_admitted";
     else if (input.status === "blocked") blocker = "execution_blocked";
     else if (input.status === "verification_required") blocker = "provider_postcondition_not_verified";
     else if (input.status === "failed") blocker = "execution_failed";

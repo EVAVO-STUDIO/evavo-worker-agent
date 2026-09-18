@@ -164,3 +164,66 @@ test("safety escalation cannot be overwritten by the general no-live-target rule
   assert.equal(result.disposition, "escalate");
   assert.ok(result.reasons.some((item) => /ambiguous/i.test(item)));
 });
+
+
+test("admission-pending owed work prohibits unsupported progress and completion claims", () => {
+  const result = buildCommunicationDecisionPackage({
+    packageId: "pkg-execution-truth",
+    scenario: "general",
+    objective: "Give Naomi a truthful status update.",
+    thread: {
+      threadId: "thread-naomi",
+      previousState: [],
+      latestObservedState: [
+        { id: "q1", kind: "question", statement: "Is the birthday domain ready?", status: "open", owner: "evavo", sourceEvidenceIds: ["email-naomi"] },
+      ],
+    },
+    obligations: [
+      {
+        id: "obl-naomi-domain",
+        owner: "evavo",
+        statement: "Configure the canonical Naomi Vercel project and domains.",
+        status: "open",
+        importance: "high",
+        createdAt: "2026-09-18T20:00:00Z",
+        sourceEvidenceIds: ["email-naomi"],
+        satisfactionEvidenceIds: [],
+      },
+    ],
+    obligationExecutions: [
+      {
+        contract: "business_obligation_execution_state_v1",
+        obligationId: "obl-naomi-domain",
+        actionClass: "vercel.domain.ensure",
+        provider: "vercel",
+        canonicalExecutionOwner: "EVAVO-STUDIO/evavo-development-studio",
+        requestId: "provider-action:naomi-domain",
+        jobId: "queue:2573",
+        idempotencyKey: "vercel:naomis30th:domains",
+        executorRoute: "vercel-provider-cloud-mcp",
+        status: "admission_pending",
+        observedAt: NOW,
+        admissionEvidenceIds: ["queue:2573"],
+        executionEvidenceIds: [],
+        postconditionEvidenceIds: [],
+        executionAttempted: false,
+        postconditionVerified: false,
+        providerReadbackVerified: false,
+        automaticReplayAllowed: false,
+        blocker: "cloud_provider_relay_not_commissioned",
+      },
+    ],
+    channel: { currentChannel: "email", canResolveInWriting: true },
+    evidenceIds: ["email-naomi"],
+    evidenceConfidence: 98,
+    decisionAt: NOW,
+  });
+
+  assert.equal(result.obligationExecutionAssessments.length, 1);
+  assert.equal(result.obligationExecutionAssessments[0].mayClaimActiveExecution, false);
+  assert.equal(result.obligationExecutionAssessments[0].mayClaimCompletion, false);
+  assert.equal(result.obligationExecutionAssessments[0].blocker, "cloud_provider_relay_not_commissioned");
+  assert.ok(result.prohibitedImplications.some((item) => /currently being completed/i.test(item)));
+  assert.ok(result.prohibitedImplications.some((item) => /done, ready or complete/i.test(item)));
+  assert.ok(result.mustVerify.some((item) => /cloud_provider_relay_not_commissioned/i.test(item)));
+});

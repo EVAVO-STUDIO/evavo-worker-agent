@@ -24,6 +24,7 @@ function state(overrides: Partial<BusinessObligationExecutionState> = {}): Busin
     executorRoute: "vercel-provider-cloud-mcp",
     status: "admission_pending",
     observedAt: "2026-09-19T08:44:00+12:00",
+    routingEvidenceIds: ["route:github-issue-queue"],
     admissionEvidenceIds: [],
     executionEvidenceIds: [],
     postconditionEvidenceIds: [],
@@ -126,4 +127,17 @@ test("planning evidence is retained without becoming admission evidence", () => 
   assert.equal(result.mayClaimActiveExecution, false);
   assert.equal(result.mayClaimCompletion, false);
   assert.equal(result.blocker, "executor_route_not_selected");
+});
+
+
+test("routing evidence does not authorize an active execution claim", () => {
+  const result = assessBusinessObligationExecutionState(state({
+    status: "executor_selected",
+    executorRoute: "github-issue-queue",
+    admissionEvidenceIds: [],
+  }), NOW);
+  assert.ok(result.evidenceIds.includes("route:github-issue-queue"));
+  assert.equal(result.mayClaimActiveExecution, false);
+  assert.equal(result.mayClaimCompletion, false);
+  assert.equal(result.blocker, "execution_not_admitted");
 });

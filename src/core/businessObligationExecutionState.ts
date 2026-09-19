@@ -29,6 +29,7 @@ export type BusinessObligationExecutionState = Readonly<{
   executorRoute?: string | null;
   status: BusinessObligationExecutionStatus;
   observedAt: string;
+  routingEvidenceIds?: readonly string[];
   admissionEvidenceIds: readonly string[];
   executionEvidenceIds: readonly string[];
   postconditionEvidenceIds: readonly string[];
@@ -104,6 +105,7 @@ export function assessBusinessObligationExecutionState(
 
   const at = observedAt(input.observedAt);
   const planningEvidenceIds = ids(input.planningEvidenceIds);
+  const routingEvidenceIds = ids(input.routingEvidenceIds);
   const admissionEvidenceIds = ids(input.admissionEvidenceIds);
   const executionEvidenceIds = ids(input.executionEvidenceIds);
   const postconditionEvidenceIds = ids(input.postconditionEvidenceIds);
@@ -111,6 +113,7 @@ export function assessBusinessObligationExecutionState(
   const allEvidence = Object.freeze([
     ...new Set([
       ...planningEvidenceIds,
+      ...routingEvidenceIds,
       ...admissionEvidenceIds,
       ...executionEvidenceIds,
       ...postconditionEvidenceIds,

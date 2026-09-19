@@ -11,6 +11,9 @@ export type OperationsProviderExecutionProjectionV1 = Readonly<{
   handoffId: string;
   providerKey: string;
   action: string;
+  capability?: string | null;
+  desiredStateRef?: string | null;
+  planningEvidenceIds?: readonly string[];
   canonicalExecutionOwner: string;
   route: string | null;
   requestId: string | null;
@@ -77,6 +80,8 @@ export function businessObligationExecutionStateFromOperationsProviderTruth(inpu
 
   const providerKey = bounded(input.projection.providerKey, "provider_key", 240);
   const action = bounded(input.projection.action, "action", 240);
+  const capability = bounded(input.projection.capability, "capability", 240);
+  const desiredStateRef = bounded(input.projection.desiredStateRef, "desired_state_ref", 1_000);
   const owner = bounded(input.projection.canonicalExecutionOwner, "canonical_execution_owner", 240);
   const idempotencyKey = bounded(input.projection.idempotencyKey, "idempotency_key", 500);
   if (!providerKey || !action || !owner || !idempotencyKey) {
@@ -87,6 +92,9 @@ export function businessObligationExecutionStateFromOperationsProviderTruth(inpu
     contract: BUSINESS_OBLIGATION_EXECUTION_STATE_CONTRACT,
     obligationId,
     actionClass: action,
+    capability,
+    desiredStateRef,
+    planningEvidenceIds: evidence(input.projection.planningEvidenceIds ?? [], "planning_evidence"),
     provider: providerKey,
     canonicalExecutionOwner: owner,
     requestId: bounded(input.projection.requestId, "request_id", 500),
@@ -113,6 +121,7 @@ export const operationsProviderExecutionBridgeSafetyContract = Object.freeze({
   storedObligationMismatchRejected: true,
   fuzzyRelationshipMatchingAllowed: false,
   providerCredentialsAccepted: false,
+  planningEvidenceIsExecutionEvidence: false,
   queuedIsActiveExecution: false,
   completionRecomputedLocally: true,
   providerReadbackRequiredForCompletion: true,

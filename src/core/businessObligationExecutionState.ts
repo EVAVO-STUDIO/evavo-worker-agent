@@ -18,6 +18,9 @@ export type BusinessObligationExecutionState = Readonly<{
   contract: typeof BUSINESS_OBLIGATION_EXECUTION_STATE_CONTRACT;
   obligationId: string;
   actionClass: string;
+  capability?: string | null;
+  desiredStateRef?: string | null;
+  planningEvidenceIds?: readonly string[];
   provider?: string | null;
   canonicalExecutionOwner: string;
   requestId?: string | null;
@@ -90,6 +93,8 @@ export function assessBusinessObligationExecutionState(
   const obligationId = required(input.obligationId, "obligation_id", 240);
   if (!EXECUTION_STATUSES.has(input.status)) throw new Error("OBLIGATION_EXECUTION_STATUS_INVALID");
   required(input.actionClass, "action_class", 240);
+  optional(input.capability, 240);
+  optional(input.desiredStateRef, 1000);
   required(input.canonicalExecutionOwner, "canonical_execution_owner", 240);
   required(input.idempotencyKey, "idempotency_key", 500);
   optional(input.provider, 240);
@@ -98,12 +103,14 @@ export function assessBusinessObligationExecutionState(
   optional(input.executorRoute, 500);
 
   const at = observedAt(input.observedAt);
+  const planningEvidenceIds = ids(input.planningEvidenceIds);
   const admissionEvidenceIds = ids(input.admissionEvidenceIds);
   const executionEvidenceIds = ids(input.executionEvidenceIds);
   const postconditionEvidenceIds = ids(input.postconditionEvidenceIds);
   const replaySafetyEvidenceIds = ids(input.replaySafetyEvidenceIds);
   const allEvidence = Object.freeze([
     ...new Set([
+      ...planningEvidenceIds,
       ...admissionEvidenceIds,
       ...executionEvidenceIds,
       ...postconditionEvidenceIds,

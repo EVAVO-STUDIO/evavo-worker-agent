@@ -14,6 +14,9 @@ function projection(overrides: Partial<OperationsProviderExecutionProjectionV1> 
     handoffId: "naomi-vercel-v2",
     providerKey: "vercel",
     action: "vercel.desired-state.reconcile",
+    capability: "vercel.configure",
+    desiredStateRef: "EVAVO-STUDIO/evavo-agent-infrastructure:config/vercel-provider-desired-state-v1.json",
+    planningEvidenceIds: ["operations:obligation:naomi-domain", "agent-infrastructure:desired-state:v1"],
     canonicalExecutionOwner: "EVAVO-STUDIO/evavo-development-studio",
     route: null,
     requestId: null,
@@ -47,10 +50,15 @@ test("unrouted Operations provider plan remains blocked and cannot support progr
 
   assert.equal(state.status, "unrouted");
   assert.equal(state.executorRoute, null);
+  assert.equal(state.capability, "vercel.configure");
+  assert.equal(state.desiredStateRef, "EVAVO-STUDIO/evavo-agent-infrastructure:config/vercel-provider-desired-state-v1.json");
+  assert.deepEqual(state.planningEvidenceIds, ["operations:obligation:naomi-domain", "agent-infrastructure:desired-state:v1"]);
   assert.equal(state.executionAttempted, false);
   assert.equal(assessment.mayClaimActiveExecution, false);
   assert.equal(assessment.mayClaimCompletion, false);
   assert.equal(assessment.blocker, "executor_route_not_selected");
+  assert.ok(assessment.evidenceIds.includes("operations:obligation:naomi-domain"));
+  assert.equal(assessment.mayClaimActiveExecution, false);
 });
 
 test("queue acceptance from Operations remains non-active until actual admission evidence exists", () => {
@@ -77,6 +85,7 @@ test("queue acceptance from Operations remains non-active until actual admission
 
 test("Operations provider bridge never accepts credentials or treats queue state as execution", () => {
   assert.equal(operationsProviderExecutionBridgeSafetyContract.providerCredentialsAccepted, false);
+  assert.equal(operationsProviderExecutionBridgeSafetyContract.planningEvidenceIsExecutionEvidence, false);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.queuedIsActiveExecution, false);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.providerReadbackRequiredForCompletion, true);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.automaticReplayOfUnknownEffect, false);

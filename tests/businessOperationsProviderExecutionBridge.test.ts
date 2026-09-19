@@ -24,6 +24,7 @@ function projection(overrides: Partial<OperationsProviderExecutionProjectionV1> 
     idempotencyKey: "vercel:desired-state:naomis30th:v2",
     status: "unrouted",
     observedAt: "2026-09-19T09:30:00+12:00",
+    routingEvidenceIds: ["github:EVAVO-STUDIO/evavo-local-compute#2577"],
     admissionEvidenceIds: [],
     executionEvidenceIds: [],
     postconditionEvidenceIds: [],
@@ -53,6 +54,7 @@ test("unrouted Operations provider plan remains blocked and cannot support progr
   assert.equal(state.capability, "vercel.configure");
   assert.equal(state.desiredStateRef, "EVAVO-STUDIO/evavo-agent-infrastructure:config/vercel-provider-desired-state-v1.json");
   assert.deepEqual(state.planningEvidenceIds, ["operations:obligation:naomi-domain", "agent-infrastructure:desired-state:v1"]);
+  assert.deepEqual(state.routingEvidenceIds, ["github:EVAVO-STUDIO/evavo-local-compute#2577"]);
   assert.equal(state.executionAttempted, false);
   assert.equal(assessment.mayClaimActiveExecution, false);
   assert.equal(assessment.mayClaimCompletion, false);
@@ -86,6 +88,7 @@ test("queue acceptance from Operations remains non-active until actual admission
 test("Operations provider bridge never accepts credentials or treats queue state as execution", () => {
   assert.equal(operationsProviderExecutionBridgeSafetyContract.providerCredentialsAccepted, false);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.planningEvidenceIsExecutionEvidence, false);
+  assert.equal(operationsProviderExecutionBridgeSafetyContract.routingEvidenceIsAdmissionEvidence, false);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.queuedIsActiveExecution, false);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.providerReadbackRequiredForCompletion, true);
   assert.equal(operationsProviderExecutionBridgeSafetyContract.automaticReplayOfUnknownEffect, false);

@@ -13,6 +13,9 @@ function state(overrides: Partial<BusinessObligationExecutionState> = {}): Busin
     contract: "business_obligation_execution_state_v1",
     obligationId: "obl-vercel-domain",
     actionClass: "vercel.domain.ensure",
+    capability: "vercel.configure",
+    desiredStateRef: "EVAVO-STUDIO/evavo-agent-infrastructure:config/vercel-provider-desired-state-v1.json",
+    planningEvidenceIds: ["operations:obligation:naomi-domain"],
     provider: "vercel",
     canonicalExecutionOwner: "EVAVO-STUDIO/evavo-development-studio",
     requestId: "req-vercel-domain",
@@ -108,4 +111,19 @@ test("stale active evidence cannot support a current progress claim", () => {
   assert.equal(result.current, false);
   assert.equal(result.mayClaimActiveExecution, false);
   assert.equal(result.blocker, "execution_evidence_stale");
+});
+
+
+test("planning evidence is retained without becoming admission evidence", () => {
+  const result = assessBusinessObligationExecutionState(state({
+    status: "unrouted",
+    executorRoute: null,
+    requestId: null,
+    jobId: null,
+    blocker: "executor_route_not_selected",
+  }), NOW);
+  assert.ok(result.evidenceIds.includes("operations:obligation:naomi-domain"));
+  assert.equal(result.mayClaimActiveExecution, false);
+  assert.equal(result.mayClaimCompletion, false);
+  assert.equal(result.blocker, "executor_route_not_selected");
 });

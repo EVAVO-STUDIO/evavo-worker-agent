@@ -32,6 +32,7 @@ export type OperationsProviderExecutionProjectionV1 = Readonly<{
     | "failed"
     | "unknown_after_effect";
   observedAt: string;
+  routingEvidenceIds?: readonly string[];
   admissionEvidenceIds: readonly string[];
   executionEvidenceIds: readonly string[];
   postconditionEvidenceIds: readonly string[];
@@ -103,6 +104,7 @@ export function businessObligationExecutionStateFromOperationsProviderTruth(inpu
     executorRoute: bounded(input.projection.route, "route", 500),
     status: input.projection.status,
     observedAt: input.projection.observedAt,
+    routingEvidenceIds: evidence(input.projection.routingEvidenceIds ?? [], "routing_evidence"),
     admissionEvidenceIds: evidence(input.projection.admissionEvidenceIds, "admission_evidence"),
     executionEvidenceIds: evidence(input.projection.executionEvidenceIds, "execution_evidence"),
     postconditionEvidenceIds: evidence(input.projection.postconditionEvidenceIds, "postcondition_evidence"),
@@ -122,6 +124,7 @@ export const operationsProviderExecutionBridgeSafetyContract = Object.freeze({
   fuzzyRelationshipMatchingAllowed: false,
   providerCredentialsAccepted: false,
   planningEvidenceIsExecutionEvidence: false,
+  routingEvidenceIsAdmissionEvidence: false,
   queuedIsActiveExecution: false,
   completionRecomputedLocally: true,
   providerReadbackRequiredForCompletion: true,
